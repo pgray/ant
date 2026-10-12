@@ -133,7 +133,13 @@ void vstack_free(jit_vstack_t *vs) {
   free(vs->known_bool);
   free(vs->known_builtin);
   free(vs->integer_range);
-  *vs = (jit_vstack_t){0};
+  
+  vs->regs = vs->d_regs = NULL;
+  vs->known_func = NULL;
+  vs->slot_type = vs->known_bool = vs->known_builtin = NULL;
+  vs->known_const = NULL;
+  vs->has_const = NULL;
+  vs->integer_range = NULL;
 }
 
 void vstack_forget_facts(jit_vstack_t *vs) {
@@ -624,7 +630,7 @@ int jit_constant_object_span(sv_func_t *func, sv_obj_site_cache_t *site, jit_lab
 }
 
 void mir_emit_branch_if_object(
-    MIR_context_t ctx, MIR_item_t fn, MIR_label_t target, MIR_reg_t value, MIR_reg_t scratch) {
+    MIR_context_t ctx, MIR_item_t fn, MIR_reg_t value, MIR_reg_t scratch, MIR_label_t target) {
   MIR_label_t not_object = MIR_new_label(ctx);
   MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_UBLE,
       MIR_new_label_op(ctx, not_object), MIR_new_reg_op(ctx, value), MIR_new_uint_op(ctx, NANBOX_PREFIX)));

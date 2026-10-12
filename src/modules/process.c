@@ -1356,8 +1356,12 @@ static ant_value_t process_initgroups(ant_params_t) {
 }
 #endif
 
+static bool env_name_ok(const char *key, size_t key_len) {
+  return key_len > 0 && !memchr(key, '=', key_len) && !memchr(key, '\0', key_len);
+}
+
 static ant_value_t env_get(ant_t *js, ant_value_t target, const char *key, size_t key_len) {
-  if (memchr(key, '\0', key_len)) return js_mkundef();
+  if (!env_name_ok(key, key_len)) return js_mkundef();
   
   CSTR_BUF(buf, 256);
   char *key_str = CSTR_INIT(buf, key, key_len);
@@ -1381,7 +1385,7 @@ static ant_value_t env_set(ant_t *js, ant_value_t target, const char *key, size_
   const char *val_str = js_getstr(js, str_val, &val_len);
   
   if (!val_str) return js_mkerr(js, "out of memory");
-  if (key_len == 0 || memchr(key, '=', key_len) || memchr(key, '\0', key_len)) return js_true;
+  if (!env_name_ok(key, key_len)) return js_true;
   
   CSTR_BUF(buf, 256);
   char *key_str = CSTR_INIT(buf, key, key_len);
@@ -1396,7 +1400,7 @@ static ant_value_t env_set(ant_t *js, ant_value_t target, const char *key, size_
 }
 
 static ant_value_t env_del(ant_t *js, ant_value_t target, const char *key, size_t key_len) {
-  if (memchr(key, '\0', key_len)) return js_true;
+  if (!env_name_ok(key, key_len)) return js_true;
   
   CSTR_BUF(buf, 256);
   char *key_str = CSTR_INIT(buf, key, key_len);

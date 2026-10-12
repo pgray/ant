@@ -5248,16 +5248,8 @@ static void emit_build_object_rest(sv_compiler_t *c, sv_ast_t *pat, int rest_idx
     sv_ast_t *prev = pat->args.items[j];
     if (!prev || prev->type != N_PROPERTY || !prev->left) continue;
     
-    sv_ast_t *key = prev->left;
     if (prev->flags & FN_COMPUTED) emit_get_local(c, key_locals[j]);
-    else if (key->type == N_IDENT) emit_constant(c, sv_const_str(c, key->str, key->len));
-    else if (key->type == N_STRING) emit_constant(c, ast_string_const(c, key));
-    
-    else {
-      compile_expr(c, key);
-      emit_op(c, OP_TO_PROPKEY);
-    }
-    
+    else compile_static_property_key(c, prev->left);
     excluded++;
   }
   
@@ -5409,7 +5401,7 @@ static void compile_destructure_pattern(
       reads_property = pat->args.items[i] && pat->args.items[i]->type == N_PROPERTY;
     
     if (!reads_property) emit_require_destructurable(c);
-    int key_locals[pat->args.count ? pat->args.count : 1];
+    int key_locals[has_rest ? pat->args.count : 1];
     
     for (int i = 0; i < pat->args.count; i++) {
       sv_ast_t *prop = pat->args.items[i];

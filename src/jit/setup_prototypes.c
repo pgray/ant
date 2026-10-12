@@ -741,7 +741,7 @@ void jit_setup_prototypes(jit_compile_t *c, MIR_type_t ret_type) {
   c->imp_throw = MIR_new_import(c->ctx, "jit_helper_throw");
   c->imp_throw_error = MIR_new_import(c->ctx, "jit_helper_throw_error");
   c->imp_set_proto = MIR_new_import(c->ctx, "jit_helper_set_proto");
-  c->imp_copy_data_props = MIR_new_import(c->ctx, "jit_helper_copy_data_props");
+  c->imp_copy_data_props = MIR_new_import(c->ctx, "js_copy_data_props");
   c->imp_get_elem2 = MIR_new_import(c->ctx, "jit_helper_get_elem2");
   c->imp_get_elem_inline = MIR_new_import(c->ctx, "jit_helper_get_elem_inline");
   c->imp_band = MIR_new_import(c->ctx, "jit_helper_band");

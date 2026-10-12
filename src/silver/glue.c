@@ -1731,17 +1731,11 @@ ant_value_t jit_helper_get_elem_inline(ant_t *js, ant_value_t obj, ant_value_t k
 
   ant_offset_t key_len = 0;
   ant_offset_t key_off = vstr(js, key_str, &key_len);
+  
   const char *key_ptr = (const char *)(uintptr_t)key_off;
   ant_value_t out = js_mkundef();
-  return sv_try_get_data_prop_no_effect(js, obj, key_ptr, (size_t)key_len, &out)
-    ? out : SV_JIT_BAILOUT;
-}
-
-ant_value_t jit_helper_copy_data_props(
-  ant_t *js, ant_value_t dst, ant_value_t src,
-  ant_value_t *excluded, int32_t excluded_count
-) {
-  return js_copy_data_props(js, dst, src, excluded, excluded_count);
+  
+  return sv_try_get_data_prop_no_effect(js, obj, key_ptr, (size_t)key_len, &out) ? out : SV_JIT_BAILOUT;
 }
 
 ant_value_t jit_helper_set_proto(sv_vm_t *vm, ant_t *js, ant_value_t obj, ant_value_t proto) {

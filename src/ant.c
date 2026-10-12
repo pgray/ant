@@ -8418,7 +8418,7 @@ static ant_value_t proxy_host_own_keys(
 
 static ant_value_t proxy_key_enumerable(ant_t *js, ant_value_t proxy, ant_value_t key) {
   ant_proxy_state_t *data = get_proxy_data(proxy);
-  if (data && data->host && !data->revoked && vtype(key) == kTypeString) {
+  if (data && data->host && vtype(key) == kTypeString) {
     size_t key_len = 0;
     const char *key_str = js_getstr(js, key, &key_len);
     if (key_str && !lkp(js, data->target, key_str, key_len).obj) return js_true;
@@ -8545,7 +8545,7 @@ static ant_value_t proxy_own_keys_raw(ant_t *js, ant_value_t obj) {
 
 static ant_value_t proxy_own_keys_filtered(ant_t *js, ant_value_t obj, bool include_symbols, bool enumerable_only) {
   ant_proxy_state_t *data = get_proxy_data(obj);
-  if (data && data->host && !data->revoked) return proxy_host_own_keys(js, data, include_symbols, enumerable_only);
+  if (data && data->host) return proxy_host_own_keys(js, data, include_symbols, enumerable_only);
   
   ant_value_t keys = proxy_own_keys_raw(js, obj);
   if (is_err(keys) || (include_symbols && !enumerable_only)) return keys;

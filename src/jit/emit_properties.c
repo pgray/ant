@@ -1247,7 +1247,8 @@ void jit_emit_properties(jit_compile_t *c) {
 
     case OP_COPY_DATA_PROPS: {
       uint16_t excluded = sv_get_u16(c->ip + 1);
-      vstack_flush_to_boxed(&c->vs, c->ctx, c->jit_func, c->r_d_slot);
+      for (int i = c->vs.sp - (int)excluded - 2; i < c->vs.sp; i++)
+        vstack_ensure_boxed(&c->vs, i, c->ctx, c->jit_func, c->r_d_slot);
       
       for (int i = (int)excluded - 1; i >= 0; i--) {
         MIR_reg_t key = vstack_pop(&c->vs);

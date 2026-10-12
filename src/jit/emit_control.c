@@ -156,7 +156,7 @@ void jit_emit_control(jit_compile_t *c) {
         char rn_dt[32];
         snprintf(rn_dt, sizeof(rn_dt), "dctor%d", c->upval_n++);
         MIR_reg_t r_dt = MIR_new_func_reg(c->ctx, c->jit_func->u.func, MIR_T_I64, rn_dt);
-        mir_emit_branch_if_object(c->ctx, c->jit_func, dctor_keep, ret_val, r_dt);
+        mir_emit_branch_if_object(c->ctx, c->jit_func, ret_val, r_dt, dctor_keep);
         MIR_append_insn(c->ctx, c->jit_func,
                         MIR_new_insn(c->ctx, MIR_MOV,
                                      MIR_new_reg_op(c->ctx, ret_val),
