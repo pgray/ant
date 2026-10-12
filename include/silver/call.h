@@ -123,8 +123,10 @@ static inline ant_value_t sv_construct_prototype_from_object(
 static inline bool sv_construct_prototype_data(
   ant_t *js, ant_object_t *ptr, sv_func_t *func, ant_value_t *out
 ) {
-  sv_func_sidecar_t *sidecar = func ? sv_func_sidecar(func) : NULL;
-  if (!sidecar || !ptr || ptr->flags.is_exotic || !ptr->shape) return false;
+  if (!func || !ptr || ptr->flags.is_exotic || !ptr->shape) return false;
+  
+  sv_func_sidecar_t *sidecar = sv_func_ensure_sidecar(func);
+  if (!sidecar) return false;
 
   if (ptr->shape != sidecar->ctor_proto_shape) {
     int32_t found = ant_shape_lookup_interned(ptr->shape, js->intern.prototype);
@@ -174,29 +176,25 @@ static inline ant_value_t sv_construct_prototype_from(
 }
 
 static inline ant_value_t sv_prepare_construct_meta(
-  ant_t *js,
-  ant_value_t func,
-  ant_value_t requested_new_target,
-  ant_value_t *effective_new_target,
-  ant_value_t *record_func
+  ant_t *js, ant_value_t func, ant_value_t requested_new_target, ant_value_t *effective_new_target
 ) {
-  sv_closure_t *closure = NULL;
-  if (vtype(func) == kTypeFunction) {
-    closure = js_func_closure(func);
-    if (closure && !(closure->call_flags & (SV_CALL_HAS_BOUND_THIS | SV_CALL_HAS_BOUND_ARGS))) {
-      if (effective_new_target) *effective_new_target = requested_new_target;
-      if (record_func) *record_func = func;
-      return sv_construct_prototype_from(js, requested_new_target);
-    }
+  sv_closure_t *closure = vtype(func) == kTypeFunction ? js_func_closure(func) : NULL;
+  bool bound = closure && (closure->call_flags & (SV_CALL_HAS_BOUND_THIS | SV_CALL_HAS_BOUND_ARGS));
+
+  if (closure && !bound) {
+    if (effective_new_target) *effective_new_target = requested_new_target;
+    if (requested_new_target != func) return sv_construct_prototype_from(js, requested_new_target);
+
+    ant_value_t func_obj = js_func_obj(func);
+    ant_object_t *ptr = is_object_type(func_obj) ? js_obj_ptr(func_obj) : NULL;
+    
+    return sv_construct_prototype_cached(js, func, ptr, closure->func);
   }
 
-  ant_value_t target = closure
-    ? js_resolve_bound_target_known_bound(func) : func;
-  ant_value_t new_target =
-    requested_new_target == func ? target : requested_new_target;
+  ant_value_t target = bound ? js_resolve_bound_target_known_bound(func) : func;
+  ant_value_t new_target = requested_new_target == func ? target : requested_new_target;
 
   if (effective_new_target) *effective_new_target = new_target;
-  if (record_func && vtype(target) == kTypeFunction) *record_func = target;
 
   if (
     requested_new_target == func &&

@@ -145,6 +145,7 @@ OP_DEF(  GT,                1,   2,   1, none)
 OP_DEF(  GE,                1,   2,   1, none)
 OP_DEF(  INSTANCEOF,        3,   2,   1, u16)       /* l r -> bool (ic_idx:u16) */
 OP_DEF(  IN,                1,   2,   1, none)
+OP_DEF(  IN_FIELD,          7,   1,   1, atom)      /* obj -> bool (atom in obj; atom + ic_idx:u16) */
 OP_DEF(  IS_NULLISH,        1,   1,   1, none)      /* TOS is null|undefined? */
 OP_DEF(  IS_UNDEF_OR_NULL,  1,   1,   1, none)      /* same, for ?? chains */
 
@@ -256,7 +257,7 @@ OP_DEF(  SET_NAME_COMP,     1,   2,   2, none)      /* set .name from computed k
 OP_DEF(  SET_PROTO,         1,   2,   1, none)      /* obj proto -> obj */
 OP_DEF(  SET_HOME_OBJ,      1,   2,   2, none)      /* func home -> func home */
 OP_DEF(  APPEND,            1,   3,   2, none)      /* append to array, update length */
-OP_DEF(  COPY_DATA_PROPS,   2,   2,   2, u8)        /* dst src -> dst src (Object.assign-like) */
+OP_DEF(  COPY_DATA_PROPS,   3,   2,   2, npop)      /* dst src excluded... -> dst src (CopyDataProperties) */
 
 OP_DEF(  DEFINE_CLASS,      14,  2,   2, atom_u8)   /* parent ctor -> ctor proto */
 OP_DEF(  DEFINE_CLASS_COMP, 14,  3,   3, atom_u8)   /* computed name variant */
@@ -404,6 +405,7 @@ OP_FLAG(GT                    , SV_OPF_JIT_ELIGIBLE | SV_OPF_JIT_INLINEABLE | SV
 OP_FLAG(GE                    , SV_OPF_JIT_ELIGIBLE | SV_OPF_JIT_INLINEABLE | SV_OPF_JIT_NEEDS_BAILOUT)
 OP_FLAG(INSTANCEOF            , SV_OPF_JIT_ELIGIBLE | SV_OPF_JIT_NEEDS_IC_EPOCH)
 OP_FLAG(IN                    , SV_OPF_JIT_ELIGIBLE)
+OP_FLAG(IN_FIELD              , SV_OPF_JIT_ELIGIBLE)
 OP_FLAG(IS_UNDEF_OR_NULL      , SV_OPF_JIT_ELIGIBLE | SV_OPF_JIT_INLINEABLE)
 
 OP_FLAG(BAND                  , SV_OPF_JIT_ELIGIBLE | SV_OPF_JIT_INLINEABLE | SV_OPF_JIT_NEEDS_BAILOUT)
@@ -476,6 +478,7 @@ OP_FLAG(DESTRUCTURE_CLOSE     , SV_OPF_JIT_ELIGIBLE | SV_OPF_JIT_NEEDS_ARGS_BUF 
 OP_FLAG(DEFINE_METHOD_COMP    , SV_OPF_JIT_ELIGIBLE)
 OP_FLAG(SET_NAME              , SV_OPF_JIT_ELIGIBLE)
 OP_FLAG(SET_PROTO             , SV_OPF_JIT_ELIGIBLE)
+OP_FLAG(COPY_DATA_PROPS       , SV_OPF_JIT_ELIGIBLE | SV_OPF_JIT_NEEDS_ARGS_BUF)
 OP_FLAG(TO_PROPKEY            , SV_OPF_JIT_ELIGIBLE)
 OP_FLAG(IS_UNDEF              , SV_OPF_JIT_ELIGIBLE | SV_OPF_JIT_INLINEABLE)
 OP_FLAG(IS_NULL               , SV_OPF_JIT_ELIGIBLE | SV_OPF_JIT_INLINEABLE)
@@ -498,6 +501,7 @@ OP_IC_SLOT(GET_EVAL_GLOBAL_UNDEF)
 OP_IC_SLOT(GET_FIELD)
 OP_IC_SLOT(GET_FIELD2)
 OP_IC_SLOT(GET_FIELD_OPT)
+OP_IC_SLOT(IN_FIELD)
 OP_IC_SLOT(PUT_FIELD)
 #undef OP_IC_SLOT
 #endif

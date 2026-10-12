@@ -1,7 +1,7 @@
 # OSR Size-Scaled Tiering
 
 Status: active
-Last reviewed: 2026-09-11
+Last reviewed: 2026-10-11
 Owner: theMackabu
 
 ## Goal
@@ -447,3 +447,42 @@ It predates this plan and is independent of the OSR entry change.
   run-to-run noise on the kernels or bench-v8.
 - Pre-existing failures on the release binary too: `test_hono_adapter`,
   `test_throw_stack`, `test_wasm_exported_memory_grow`, `test_with_strict`.
+
+## Base-Level Call-Path Retier: Tried and Removed (2026-10-11, PR #136)
+
+PR #136 first gave every call-path function compiled at the base level
+(MIR level 1) an entry counter that recompiled it hot after 1000 calls, and
+raised `JIT_BIG_HOT_INSN_LIMIT` (the level-3 ceiling) from 2000 to 3000 MIR
+insns. A later cut retiered loops after 1000 calls and loop-free functions
+after 50000. Both are gone: call-path code retiers only for skipped inline
+paths (`SV_JIT_THRESHOLD`), as before, and the ceiling is back at 2000.
+
+Why, measured in cycles against base (d64742c5), 3 rotating rounds, machine
+load ~5:
+
+| Workload                     | base retier, ceiling 3000 | no retier, ceiling 2000 |
+| ---------------------------- | ------------------------- | ----------------------- |
+| fixed-work bench-v8 total    | +1.0%                     | -3.2%                   |
+| fixed-work DeltaBlue         | +25.1%                    | -5.7%                   |
+| Richards score (2 s run)     | +16.2%                    | +9.0%                   |
+| RayTrace score               | +12.2%                    | +8.5%                   |
+| DeltaBlue score              | -7.1%                     | +1.2%                   |
+| bench_ssr cycles             | +12.6%                    | +0.1%                   |
+| newt-prelude cycles          | +6.8%                     | -2.5%                   |
+
+Hot recompiles of 2000-3000 insn functions cost 9-16 ms each at level 3, and
+DeltaBlue paid 110 ms of extra JIT time in a 500-600 ms run. The retier only
+repaid that on long runs of Richards and RayTrace; everywhere else, including
+startup-shaped apps, it lost. A retier worth reviving needs a budget based on
+time spent in base code (like the cold tier's promotion budget), not calls.
+
+Kept from that work: `jit_helper_tier_up` resets `call_count` when no hot code
+comes back, so code whose tier-up failed stops calling the helper on every
+entry.
+
+The same review found the first-await capture in `sv_await_value`
+(`src/silver/ops/async.h`) never joined the coroutine remembered set, so an
+async function waiting on an old pending promise lost its young locals at the
+next minor collection (2000 of 2000 corrupted, master too). It now calls
+`gc_remember_coroutine` like the generator and resume capture sites.
+Test: `tests/test_async_await_old_promise_gc.cjs`.

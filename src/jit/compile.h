@@ -25,6 +25,7 @@ typedef struct {
 typedef struct jit_compile {
   MIR_item_t self_proto;
   MIR_item_t helper2_proto;
+  MIR_item_t copy_props_proto;
   MIR_item_t private_put_proto;
   MIR_item_t call_proto;
   MIR_item_t cfunc_proto;
@@ -88,7 +89,6 @@ typedef struct jit_compile {
   MIR_item_t throw_error_proto;
   MIR_item_t new_proto;
   MIR_item_t new_this_proto;
-  MIR_item_t new_result_proto;
   MIR_item_t special_obj_proto;
   MIR_item_t strict_arguments_proto;
   MIR_item_t forward_arguments_proto;
@@ -137,6 +137,7 @@ typedef struct jit_compile {
   MIR_item_t imp_put_eval_global;
   MIR_item_t imp_delete_eval_var;
   MIR_item_t imp_get_field;
+  MIR_item_t imp_in_field;
   MIR_item_t imp_get_field_inline;
   MIR_item_t imp_import_default;
   MIR_item_t imp_import_named;
@@ -186,6 +187,7 @@ typedef struct jit_compile {
   MIR_item_t imp_throw;
   MIR_item_t imp_throw_error;
   MIR_item_t imp_set_proto;
+  MIR_item_t imp_copy_data_props;
   MIR_item_t imp_get_elem2;
   MIR_item_t imp_get_elem_inline;
   MIR_item_t imp_band;
@@ -200,7 +202,6 @@ typedef struct jit_compile {
   MIR_item_t imp_typeof;
   MIR_item_t imp_new;
   MIR_item_t imp_new_this;
-  MIR_item_t imp_new_result;
   MIR_item_t imp_instanceof;
   MIR_item_t imp_call_is_proto;
   MIR_item_t imp_delete;

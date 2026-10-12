@@ -48,7 +48,6 @@ ant_value_t jit_helper_to_propkey(sv_vm_t *vm, ant_t *js, ant_value_t v);
 ant_value_t jit_helper_stack_overflow_error(sv_vm_t *vm, ant_t *js);
 
 ant_value_t jit_helper_new_this(ant_t *js, ant_value_t func, ant_value_t new_target, int32_t checked);
-ant_value_t jit_helper_new_result(ant_value_t func, ant_value_t obj, ant_value_t result);
 
 ant_value_t jit_helper_strict_arguments(sv_vm_t *vm, ant_t *js, ant_value_t *args, int argc);
 ant_value_t jit_helper_delete(sv_vm_t *vm, ant_t *js, ant_value_t obj, ant_value_t key);
@@ -205,6 +204,12 @@ ant_value_t jit_helper_rest(
 );
 
 ant_value_t jit_helper_get_field(
+  ant_t *js, ant_value_t obj,
+  const char *str, uint32_t len,
+  sv_func_t *func, int32_t bc_off
+);
+
+ant_value_t jit_helper_in_field(
   ant_t *js, ant_value_t obj,
   const char *str, uint32_t len,
   sv_func_t *func, int32_t bc_off
@@ -387,6 +392,11 @@ ant_value_t jit_helper_get_elem2(
 ant_value_t jit_helper_set_proto(
   sv_vm_t *vm, ant_t *js,
   ant_value_t obj, ant_value_t proto
+);
+
+ant_value_t jit_helper_copy_data_props(
+  ant_t *js, ant_value_t dst, ant_value_t src,
+  ant_value_t *excluded, int32_t excluded_count
 );
 
 ant_value_t jit_helper_new(

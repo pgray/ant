@@ -572,11 +572,15 @@ void jit_setup_prototypes(jit_compile_t *c, MIR_type_t ret_type) {
                                     MIR_JSVAL, "func",
                                     MIR_JSVAL, "new_target",
                                     MIR_T_I32, "checked");
-  c->new_result_proto = MIR_new_proto(c->ctx, "new_result_proto",
-                                      1, &nw_ret, 3,
-                                      MIR_JSVAL, "func",
-                                      MIR_JSVAL, "obj",
-                                      MIR_JSVAL, "result");
+
+  MIR_type_t copy_props_ret = MIR_JSVAL;
+  c->copy_props_proto = MIR_new_proto(c->ctx, "copy_props_proto",
+                                      1, &copy_props_ret, 5,
+                                      MIR_T_I64, "js",
+                                      MIR_JSVAL, "dst",
+                                      MIR_JSVAL, "src",
+                                      MIR_T_P, "excluded",
+                                      MIR_T_I32, "excluded_count");
 
   MIR_type_t special_obj_ret = MIR_JSVAL;
   c->special_obj_proto = MIR_new_proto(c->ctx, "soj_proto",
@@ -683,6 +687,7 @@ void jit_setup_prototypes(jit_compile_t *c, MIR_type_t ret_type) {
   c->imp_delete_eval_var =
       MIR_new_import(c->ctx, "jit_helper_delete_eval_var");
   c->imp_get_field = MIR_new_import(c->ctx, "jit_helper_get_field");
+  c->imp_in_field = MIR_new_import(c->ctx, "jit_helper_in_field");
   c->imp_get_field_inline =
       MIR_new_import(c->ctx, "jit_helper_get_field_inline");
   c->imp_import_default = MIR_new_import(c->ctx, "jit_helper_import_default");
@@ -736,6 +741,7 @@ void jit_setup_prototypes(jit_compile_t *c, MIR_type_t ret_type) {
   c->imp_throw = MIR_new_import(c->ctx, "jit_helper_throw");
   c->imp_throw_error = MIR_new_import(c->ctx, "jit_helper_throw_error");
   c->imp_set_proto = MIR_new_import(c->ctx, "jit_helper_set_proto");
+  c->imp_copy_data_props = MIR_new_import(c->ctx, "jit_helper_copy_data_props");
   c->imp_get_elem2 = MIR_new_import(c->ctx, "jit_helper_get_elem2");
   c->imp_get_elem_inline = MIR_new_import(c->ctx, "jit_helper_get_elem_inline");
   c->imp_band = MIR_new_import(c->ctx, "jit_helper_band");
@@ -750,7 +756,6 @@ void jit_setup_prototypes(jit_compile_t *c, MIR_type_t ret_type) {
   c->imp_typeof = MIR_new_import(c->ctx, "jit_helper_typeof");
   c->imp_new = MIR_new_import(c->ctx, "jit_helper_new");
   c->imp_new_this = MIR_new_import(c->ctx, "jit_helper_new_this");
-  c->imp_new_result = MIR_new_import(c->ctx, "jit_helper_new_result");
   c->imp_instanceof = MIR_new_import(c->ctx, "jit_helper_instanceof");
   c->imp_call_is_proto = MIR_new_import(c->ctx, "jit_helper_call_is_proto");
   c->imp_delete = MIR_new_import(c->ctx, c->func->is_strict ? "jit_helper_delete_strict" : "jit_helper_delete");

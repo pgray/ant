@@ -298,16 +298,7 @@ static sv_jit_func_t jit_compile_tier(ant_t *js, sv_func_t *func, sv_closure_t *
       }
       MIR_append_insn(c->ctx, c->jit_func, c->lm.entries[i].label);
       c->vs.sp = c->depth[c->bc_off];
-      if (c->vs.slot_type)
-        memset(c->vs.slot_type, SLOT_BOXED, (size_t)c->vs.max);
-      if (c->vs.known_func)
-        memset(c->vs.known_func, 0, (size_t)c->vs.max * sizeof(sv_func_t *));
-      if (c->vs.has_const)
-        memset(c->vs.has_const, 0, (size_t)c->vs.max * sizeof(bool));
-      if (c->vs.known_bool)
-        memset(c->vs.known_bool, 0, (size_t)c->vs.max);
-      if (c->vs.known_builtin)
-        memset(c->vs.known_builtin, 0, (size_t)c->vs.max);
+      vstack_forget_facts(&c->vs);
       if (c->known_func_locals)
         memset(c->known_func_locals, 0,
                (size_t)c->n_locals * sizeof(sv_func_t *));
@@ -491,6 +482,7 @@ static sv_jit_func_t jit_compile_tier(ant_t *js, sv_func_t *func, sv_closure_t *
       case OP_GET_FIELD:
       case OP_GET_FIELD2:
       case OP_GET_FIELD_OPT:
+      case OP_IN_FIELD:
       case OP_PUT_FIELD:
       case OP_DEFINE_FIELD:
       case OP_DEFINE_SLOT:
@@ -504,6 +496,7 @@ static sv_jit_func_t jit_compile_tier(ant_t *js, sv_func_t *func, sv_closure_t *
       case OP_GET_LENGTH:
       case OP_DELETE:
       case OP_SET_PROTO:
+      case OP_COPY_DATA_PROPS:
         jit_emit_properties(c);
         break;
       case OP_GET_UPVAL:
@@ -577,6 +570,7 @@ static sv_jit_func_t jit_compile_tier(ant_t *js, sv_func_t *func, sv_closure_t *
     jit_emit_exit_ret(c, MIR_new_uint_op(c->ctx, mkval(kTypeUndefined, 0)));
   }
 
+  bool hot_ctx = c->ctx == c->jc->ctx_hot;
   bool retier = c->skipped_inline_paths && !c->cold_tier && c->call_entry;
   if (retier) jit_emit_entry_counter(c, "call", c->call_entry);
 
@@ -586,21 +580,16 @@ static sv_jit_func_t jit_compile_tier(ant_t *js, sv_func_t *func, sv_closure_t *
   if (c->needs_promote) jit_emit_resume_tramp(c, &c->promote_ctx, c->imp_promote_resume, "promote_res");
   jit_call_tagging = NULL;
 
-  if (c->ctx == c->jc->ctx_hot) jit_unroll_numeric_loops(c);
+  if (hot_ctx) jit_unroll_numeric_loops(c);
+  
   jit_sink_cold_blocks(c, body_tail);
   MIR_finish_func(c->ctx);
   MIR_finish_module(c->ctx);
+  
   if (sv_dump_jit_unlikely) MIR_output_module(c->ctx, stderr, c->mod);
 
-  free(c->vs.regs);
-  free(c->vs.d_regs);
-  free(c->vs.known_func);
-  free(c->vs.slot_type);
-  free(c->vs.known_const);
-  free(c->vs.has_const);
-  free(c->vs.known_bool);
-  free(c->vs.known_builtin);
-  free(c->vs.integer_range);
+  bool vstack_overflow = c->vs.overflow;
+  vstack_free(&c->vs);
   free(c->local_regs);
   free(c->integer_locals);
   free(c->local_by_reg);
@@ -628,7 +617,7 @@ static sv_jit_func_t jit_compile_tier(ant_t *js, sv_func_t *func, sv_closure_t *
     if (sv_jit_warn_unlikely) fprintf(
       stderr, "jit: compile-failed func=%s code_len=%d%s\n",
       c->func->debug->name ? c->func->debug->name : "<anonymous>",
-      c->func->code_len, c->vs.overflow ? " reason=vstack-overflow" : ""
+      c->func->code_len, vstack_overflow ? " reason=vstack-overflow" : ""
     );
     
     MIR_remove_module(c->ctx, c->mod);
@@ -639,7 +628,6 @@ static sv_jit_func_t jit_compile_tier(ant_t *js, sv_func_t *func, sv_closure_t *
     return NULL;
   }
 
-  bool hot_ctx = c->ctx == c->jc->ctx_hot;
   int insns = 0;
   if (hot_ctx || sv_jit_warn_unlikely)
     for (MIR_insn_t insn = DLIST_HEAD(MIR_insn_t, c->jit_func->u.func->insns); insn; insn = DLIST_NEXT(MIR_insn_t, insn))

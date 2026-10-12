@@ -17,6 +17,8 @@
 #include <stdint.h>
 #include <stddef.h>
 
+extern _Thread_local sv_func_t *jit_compile_owner;
+
 static constexpr int JIT_VSTACK_SLACK = 4;
 static constexpr int JIT_PARAM_HOIST_CAP = 8;
 static constexpr int JIT_OSR_COLD_COMPILE_MIN_BYTES = 512;
@@ -32,8 +34,6 @@ static constexpr int JIT_BASE_OPT_LEVEL = 1;
 static constexpr int JIT_HOT_OPT_LEVEL = 3;
 static constexpr int JIT_BIG_HOT_OPT_LEVEL = 1;
 static constexpr int JIT_BIG_HOT_INSN_LIMIT = 2000;
-
-extern _Thread_local sv_func_t *jit_compile_owner;
 
 typedef struct {
   MIR_context_t ctx;
@@ -245,6 +245,9 @@ typedef struct {
 void jit_load_externals_once(sv_jit_ctx_t *jc);
 void jit_release_gen_scratch(sv_jit_ctx_t *jc, MIR_context_t ctx);
 int jit_hot_loop_upvalue(const sv_func_t *func);
+bool vstack_alloc(jit_vstack_t *vs, int max);
+void vstack_free(jit_vstack_t *vs);
+void vstack_forget_facts(jit_vstack_t *vs);
 jit_value_info_t vstack_value_info(const jit_vstack_t *vs, int idx);
 void vstack_set_value_info(
     jit_vstack_t *vs, int idx, jit_value_info_t info);
@@ -270,6 +273,8 @@ MIR_label_t label_for_offset(MIR_context_t ctx, jit_label_map_t *lm,
                              int bc_off);
 int jit_constant_object_span(sv_func_t *func, sv_obj_site_cache_t *site, jit_label_map_t *lm);
 
+void mir_emit_branch_if_object(
+    MIR_context_t ctx, MIR_item_t fn, MIR_label_t target, MIR_reg_t value, MIR_reg_t scratch);
 void mir_emit_decode_ref(
     MIR_context_t ctx, MIR_item_t fn, MIR_reg_t dst, MIR_reg_t value);
 void mir_emit_truthy_branch(

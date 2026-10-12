@@ -172,39 +172,17 @@ static inline void sv_op_append(sv_vm_t *vm, ant_t *js) {
   js_arr_push(js, arr, val);
 }
 
-static inline void sv_op_copy_data_props(
-  sv_vm_t *vm, ant_t *js,
-  uint8_t *ip
-) {
-  if (vm->sp < 2) return;
-  ant_value_t src = vm->stack[vm->sp - 1];
-  ant_value_t dst = vm->stack[vm->sp - 2];
+static inline ant_value_t sv_op_copy_data_props(sv_vm_t *vm, ant_t *js, uint8_t *ip) {
+  uint16_t excluded_count = sv_get_u16(ip + 1);
+  ant_value_t *excluded = &vm->stack[vm->sp - excluded_count];
   
-  if (!is_object_type(src) || !is_object_type(dst)) return;
-  ant_object_t *source_ptr = js_obj_ptr(js_as_obj(src));
+  ant_value_t src = vm->stack[vm->sp - excluded_count - 1];
+  ant_value_t dst = vm->stack[vm->sp - excluded_count - 2];
   
-  if (source_ptr && source_ptr->flags.is_exotic && js_copy_exotic_own_props(js, dst, src)) return;
-  ant_iter_t iter = js_prop_iter_begin(js, src);
+  ant_value_t result = js_copy_data_props(js, dst, src, excluded, excluded_count);
+  vm->sp -= excluded_count;
   
-  ant_iter_key_t key = {0};
-  ant_value_t val = js_mkundef();
-  GC_ROOT_SAVE(root_mark, js);
-  GC_ROOT_PIN(js, val);
-
-  while (js_prop_iter_next_key(&iter, &key, NULL)) {
-    if (!js_is_own_enumerable_prop(js, src, source_ptr, &key)) continue;
-    if (key.is_symbol) {
-      ant_value_t prop_key = mkval(kTypeSymbol, key.sym_off);
-      val = js_get_sym(js, src, prop_key);
-      js_setprop(js, dst, prop_key, val);
-    } else {
-      val = js_get(js, src, key.str);
-      js_setprop(js, dst, js_mkstr(js, key.str, key.key_len), val);
-    }
-  }
-
-  GC_ROOT_RESTORE(js, root_mark);
-  js_prop_iter_end(&iter);
+  return result;
 }
 
 static inline ant_value_t sv_op_spread(sv_vm_t *vm, ant_t *js) {
@@ -329,12 +307,15 @@ static inline ant_value_t sv_op_define_class(
   GC_ROOT_PIN(js, ctor);
   GC_ROOT_PIN(js, proto);
 
-  if (vtype(ctor) == kTypeUndefined) {
+  bool default_ctor = vtype(ctor) == kTypeUndefined;
+  if (default_ctor) {
     ant_value_t ctor_obj = mkobj(js, 0);
+    
     ctor = js_obj_to_func_ex(js, ctor_obj, SV_CALL_IS_DEFAULT_CTOR);
     ant_value_t func_proto = js_get_slot(js->global, SLOT_FUNC_PROTO);
-    if (vtype(func_proto) == kTypeFunction)
-      js_set_proto_init(ctor_obj, func_proto);
+    
+    if (vtype(func_proto) == kTypeFunction) js_set_proto_init(ctor_obj, func_proto);
+    mkprop_interned_exact(js, ctor_obj, js->intern.length, tov(0), ANT_PROP_ATTR_CONFIGURABLE);
   }
 
   proto = mkobj(js, 0);
@@ -392,12 +373,11 @@ static inline ant_value_t sv_op_define_class(
     );
   }
   
-  setprop_interned(js, proto, "constructor", 11, ctor);
+  defhidden(js, proto, "constructor", 11, ctor);
   ant_value_t ctor_obj = (vtype(ctor) == kTypeFunction) ? js_func_obj(ctor) : ctor;
-  js_mkprop_fast(js, ctor_obj, "prototype", 9, proto);
   
-  if (has_name) 
-    js_set_function_name(js, ctor, a ? a->str : "", a ? a->len : 0);
+  if (has_name || default_ctor) js_set_function_name(js, ctor, a ? a->str : "", a ? a->len : 0);
+  mkprop_exact_attrs(js, ctor_obj, ANT_STRING("prototype"), proto, 0);
 
   vm->stack[vm->sp - 2] = ctor;
   vm->stack[vm->sp - 1] = proto;

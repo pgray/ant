@@ -24,11 +24,9 @@ static ant_value_t reflect_get(ant_params_t) {
     if (is_err(prop_key)) return prop_key;
   }
 
-  if (vtype(prop_key) == kTypeSymbol) {
-    return has_receiver
-      ? js_get_sym_with_receiver(js, target, prop_key, receiver)
-      : js_get_sym(js, target, prop_key);
-  }
+  if (vtype(prop_key) == kTypeSymbol) return has_receiver
+    ? js_get_sym_with_receiver(js, target, prop_key, receiver)
+    : js_get_sym(js, target, prop_key);
 
   if (vtype(prop_key) != kTypeString) {
     prop_key = js_tostring_val(js, prop_key);
@@ -78,42 +76,10 @@ static ant_value_t reflect_set(ant_params_t) {
 }
 
 static ant_value_t reflect_has(ant_params_t) {
-  if (nargs < 2) return js_false;
-
-  ant_value_t target = args[0];
-  ant_value_t key = args[1];
-  int t = vtype(target);
-  
-  if (t == kTypeBuiltin) {
-    target = js_cfunc_promote(js, target);
-    if (is_err(target)) return target;
-    t = kTypeFunction;
-  }
-
-  if (t == kTypeArray && vtype(key) == kTypeString) {
-    size_t key_len;
-    char *key_str = js_getstr(js, key, &key_len);
-    if (key_str && is_length_key(key_str, key_len)) return js_true;
-  }
-
-  ant_value_t proxy_target = target;
-  bool target_is_proxy = false;
-  
-  if (t == kTypeObject) target_is_proxy = is_proxy(target);
-  else if (t == kTypeFunction) {
-    proxy_target = js_func_obj(target);
-    target_is_proxy = is_proxy(proxy_target);
-  }
-
-  if (t == kTypeArray || target_is_proxy || vtype(key) != kTypeString)
-    return do_in(js, key, target_is_proxy ? proxy_target : target);
-  if (t != kTypeObject && t != kTypeFunction) return js_false;
-
-  size_t key_len;
-  char *key_str = js_getstr(js, key, &key_len);
-  if (!key_str) return js_false;
-  
-  return js_bool(lkp_proto(js, target, key_str, key_len).obj);
+  ant_value_t target = nargs >= 1 ? args[0] : js_mkundef();
+  if (!is_object_type(target) && vtype(target) != kTypeBuiltin)
+    return js_mkerr_typed(js, JS_ERR_TYPE, "Reflect.has called on non-object");
+  return do_in(js, nargs >= 2 ? args[1] : js_mkundef(), target);
 }
 
 static ant_value_t reflect_delete_property(ant_params_t) {
@@ -180,9 +146,8 @@ static ant_value_t reflect_construct(ant_params_t) {
     result = js_proxy_construct(js, target, list.args, list.argc, new_target);
   } else {
     ant_value_t effective_new_target = new_target;
-    ant_value_t record_func = target;
+    ant_value_t proto = sv_prepare_construct_meta(js, target, new_target, &effective_new_target);
     
-    ant_value_t proto = sv_prepare_construct_meta(js, target, new_target, &effective_new_target, &record_func);
     if (is_err(proto)) {
       js_arg_list_release(&list);
       return proto;
@@ -193,8 +158,10 @@ static ant_value_t reflect_construct(ant_params_t) {
 
     ant_value_t ctor_this = new_obj;
     result = sv_vm_call(
-      js->vm, js, target, new_obj, list.args, list.argc, &ctor_this, effective_new_target
+      js->vm, js, target, new_obj, list.args, 
+      list.argc, &ctor_this, effective_new_target
     );
+    
     if (!is_err(result) && !is_object_type(result))
       result = is_object_type(ctor_this) ? ctor_this : new_obj;
   }
@@ -312,7 +279,9 @@ static ant_value_t reflect_prevent_extensions(ant_params_t) {
   
   ant_value_t target = args[0];
   int t = vtype(target);
+  
   if (t != kTypeObject && t != kTypeFunction) return js_false;
+  if (is_proxy(js_as_obj(target))) return js_proxy_prevent_extensions(js, js_as_obj(target));
 
   ant_object_t *obj = js_obj_ptr(js_as_obj(target));
   if (!obj) return js_false;

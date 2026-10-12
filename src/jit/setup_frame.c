@@ -327,29 +327,7 @@ bool jit_setup_frame(jit_compile_t *c) {
     MIR_append_insn(c->ctx, c->jit_func, no_overflow);
   }
 
-  c->vs = (jit_vstack_t){0};
-  c->vs.max = c->func->max_stack + JIT_VSTACK_SLACK;
-  c->vs.regs = calloc((size_t)c->vs.max, sizeof(MIR_reg_t));
-  c->vs.known_func = calloc((size_t)c->vs.max, sizeof(sv_func_t *));
-  c->vs.d_regs = calloc((size_t)c->vs.max, sizeof(MIR_reg_t));
-  c->vs.slot_type = calloc((size_t)c->vs.max, sizeof(uint8_t));
-  c->vs.known_const = calloc((size_t)c->vs.max, sizeof(uint64_t));
-  c->vs.has_const = calloc((size_t)c->vs.max, sizeof(bool));
-  c->vs.known_bool = calloc((size_t)c->vs.max, sizeof(uint8_t));
-  c->vs.known_builtin = calloc((size_t)c->vs.max, sizeof(uint8_t));
-  c->vs.integer_range = calloc((size_t)c->vs.max, sizeof(jit_integer_range_t));
-
-  if (!c->vs.regs || !c->vs.known_func || !c->vs.d_regs || !c->vs.slot_type || !c->vs.known_const || !c->vs.has_const || !c->vs.known_bool || !c->vs.known_builtin || !c->vs.integer_range) {
-    free(c->vs.regs);
-    free(c->vs.known_func);
-    free(c->vs.d_regs);
-    free(c->vs.slot_type);
-    free(c->vs.known_const);
-    free(c->vs.has_const);
-    free(c->vs.known_bool);
-    free(c->vs.known_builtin);
-    free(c->vs.integer_range);
-
+  if (!vstack_alloc(&c->vs, c->func->max_stack + JIT_VSTACK_SLACK)) {
     jit_discard_setup_module(c);
 
     c->func->jit_compiling = false;
@@ -379,15 +357,7 @@ bool jit_setup_frame(jit_compile_t *c) {
     c->known_type_locals = calloc((size_t)c->n_locals, sizeof(uint8_t));
 
     if (!c->local_regs || !c->local_d_regs || !c->known_func_locals || !c->known_type_locals) {
-      free(c->vs.regs);
-      free(c->vs.known_func);
-      free(c->vs.d_regs);
-      free(c->vs.slot_type);
-      free(c->vs.known_const);
-      free(c->vs.has_const);
-      free(c->vs.known_bool);
-      free(c->vs.known_builtin);
-      free(c->vs.integer_range);
+      vstack_free(&c->vs);
       free(c->local_regs);
       free(c->local_d_regs);
       free(c->known_func_locals);
@@ -426,6 +396,9 @@ bool jit_setup_frame(jit_compile_t *c) {
   c->r_tmp = MIR_new_func_reg(c->ctx, c->jit_func->u.func, MIR_JSVAL, "tmp");
   c->r_tmp2 = MIR_new_func_reg(c->ctx, c->jit_func->u.func, MIR_JSVAL, "tmp2");
   c->r_bool = MIR_new_func_reg(c->ctx, c->jit_func->u.func, MIR_T_I64, "bool_tmp");
+  MIR_new_func_reg(c->ctx, c->jit_func->u.func, MIR_T_I64, "str_eq_l");
+  MIR_new_func_reg(c->ctx, c->jit_func->u.func, MIR_T_I64, "str_eq_r");
+  MIR_new_func_reg(c->ctx, c->jit_func->u.func, MIR_T_I64, "str_eq_n");
   c->r_err_tmp = MIR_new_func_reg(c->ctx, c->jit_func->u.func, MIR_JSVAL, "err_tmp");
   mir_load_imm(c->ctx, c->jit_func, c->r_tmp2, 0);
 

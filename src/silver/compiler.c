@@ -733,6 +733,13 @@ static void compile_expr_with_inferred_name(
   c->inferred_name_len = saved_len;
 }
 
+static void emit_throw_type_error(sv_compiler_t *c, const char *msg, uint32_t len) {
+  int atom = add_atom(c, msg, len);
+  emit_op(c, OP_THROW_ERROR);
+  emit_u32(c, (uint32_t)atom);
+  emit(c, (uint8_t)JS_ERR_TYPE);
+}
+
 static void emit_const_assign_error(sv_compiler_t *c, const char *name, uint32_t len) {
   static const char prefix[] = "Assignment to constant variable '";
   static const char suffix[] = "'";
@@ -3236,8 +3243,20 @@ void compile_binary(sv_compiler_t *c, sv_ast_t *node) {
     return;
   }
 
+  sv_ast_t *key = node->left;
+  if (
+    op == TOK_IN && key->type == N_STRING && key->str &&
+    !(key->len > 0 && key->str[0] >= '0' && key->str[0] <= '9') &&
+    !(key->len == 6 && !memcmp(key->str, "length", 6))
+  ) {
+    compile_expr(c, node->right);
+    emit_atom_op(c, OP_IN_FIELD, key->str, key->len);
+    return;
+  }
+
   uint8_t left_type = SV_TI_UNKNOWN;
   uint8_t right_type = SV_TI_UNKNOWN;
+  
   if (op == TOK_PLUS || op == TOK_MINUS || op == TOK_MUL || op == TOK_DIV) {
     left_type = infer_expr_type(c, node->left);
     right_type = infer_expr_type(c, node->right);
@@ -5115,7 +5134,7 @@ void compile_object(sv_compiler_t *c, sv_ast_t *node) {
     if (prop->type == N_SPREAD) {
       compile_expr(c, prop->right);
       emit_op(c, OP_COPY_DATA_PROPS);
-      emit(c, 0);
+      emit_u16(c, 0);
       emit_op(c, OP_POP);
       continue;
     }
@@ -5208,28 +5227,59 @@ typedef enum {
   DESTRUCTURE_BIND   = 1,
 } sv_destructure_mode_t;
 
-static void emit_build_object_rest(sv_compiler_t *c) {
+static void emit_build_object_rest(sv_compiler_t *c, sv_ast_t *pat, int rest_idx, const int *key_locals) {
   emit_op(c, OP_DUP);
   emit_op(c, OP_OBJECT);
   emit_op(c, OP_SWAP);
+  
+  int named = 0;
+  for (int j = 0; j < rest_idx; j++) {
+    sv_ast_t *prev = pat->args.items[j];
+    if (prev && prev->type == N_PROPERTY && prev->left) named++;
+  }
+  
+  if (named > UINT16_MAX) {
+    js_mkerr_typed(c->js, JS_ERR_SYNTAX, "too many properties before the rest element");
+    rest_idx = 0;
+  }
+  
+  uint16_t excluded = 0;
+  for (int j = 0; j < rest_idx; j++) {
+    sv_ast_t *prev = pat->args.items[j];
+    if (!prev || prev->type != N_PROPERTY || !prev->left) continue;
+    
+    sv_ast_t *key = prev->left;
+    if (prev->flags & FN_COMPUTED) emit_get_local(c, key_locals[j]);
+    else if (key->type == N_IDENT) emit_constant(c, sv_const_str(c, key->str, key->len));
+    else if (key->type == N_STRING) emit_constant(c, ast_string_const(c, key));
+    
+    else {
+      compile_expr(c, key);
+      emit_op(c, OP_TO_PROPKEY);
+    }
+    
+    excluded++;
+  }
+  
   emit_op(c, OP_COPY_DATA_PROPS);
-  emit(c, 0);
+  emit_u16(c, excluded);
   emit_op(c, OP_POP);
 }
 
-static void emit_delete_rest_key(sv_compiler_t *c, sv_ast_t *key) {
+static void emit_require_destructurable(sv_compiler_t *c) {
+  static const char undef_msg[] = "Cannot destructure 'undefined' as it is undefined.";
+  static const char null_msg[] = "Cannot destructure 'null' as it is null.";
+  
+  int ok = emit_jump(c, OP_JMP_NOT_NULLISH);
   emit_op(c, OP_DUP);
-  if (key->type == N_IDENT) {
-    emit_constant(c, sv_const_str(c, key->str, key->len));
-  } else if (key->type == N_STRING) {
-    emit_constant(c, ast_string_const(c, key));
-  } else if (key->type == N_NUMBER) {
-    emit_number(c, key->num);
-  } else {
-    compile_expr(c, key);
-  }
-  emit_op(c, OP_DELETE);
-  emit_op(c, OP_POP);
+  emit_op(c, OP_IS_UNDEF);
+  
+  int is_null = emit_jump(c, OP_JMP_FALSE);
+  emit_throw_type_error(c, undef_msg, sizeof(undef_msg) - 1);
+  
+  patch_jump(c, is_null);
+  emit_throw_type_error(c, null_msg, sizeof(null_msg) - 1);
+  patch_jump(c, ok);
 }
 
 static bool is_destructure_pattern_node(sv_ast_t *node) {
@@ -5351,17 +5401,22 @@ static void compile_destructure_pattern(
     
     return;
   } else if (pat->type == N_OBJECT_PAT || pat->type == N_OBJECT) {
+    sv_ast_t *last = pat->args.count ? pat->args.items[pat->args.count - 1] : NULL;
+    bool has_rest = last && (last->type == N_REST || last->type == N_SPREAD);
+    
+    bool reads_property = false;
+    for (int i = 0; i < pat->args.count && !reads_property; i++)
+      reads_property = pat->args.items[i] && pat->args.items[i]->type == N_PROPERTY;
+    
+    if (!reads_property) emit_require_destructurable(c);
+    int key_locals[pat->args.count ? pat->args.count : 1];
+    
     for (int i = 0; i < pat->args.count; i++) {
       sv_ast_t *prop = pat->args.items[i];
       if (!prop) continue;
 
       if (prop->type == N_REST || prop->type == N_SPREAD) {
-        emit_build_object_rest(c);
-        for (int j = 0; j < i; j++) {
-          sv_ast_t *prev = pat->args.items[j];
-          if (!prev || prev->type != N_PROPERTY || !prev->left) continue;
-          emit_delete_rest_key(c, prev->left);
-        }
+        emit_build_object_rest(c, pat, i, key_locals);
         compile_destructure_store(c, prop->right, mode, kind);
         continue;
       }
@@ -5379,10 +5434,15 @@ static void compile_destructure_pattern(
       emit_op(c, OP_DUP);
       if ((prop->flags & FN_COMPUTED)) {
         compile_expr(c, key);
+        if (has_rest) {
+          key_locals[i] = add_local(c, "", 0, false, c->scope_depth);
+          emit_op(c, OP_TO_PROPKEY);
+          emit_op(c, OP_DUP);
+          emit_put_local(c, key_locals[i]);
+        }
         emit_op(c, OP_GET_ELEM);
-      } else if (key->type == N_IDENT) {
-        emit_atom_op(c, OP_GET_FIELD, key->str, key->len);
-      } else {
+      } else if (key->type == N_IDENT) emit_atom_op(c, OP_GET_FIELD, key->str, key->len);
+      else {
         compile_expr(c, key);
         emit_op(c, OP_GET_ELEM);
       }

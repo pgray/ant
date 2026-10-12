@@ -1842,9 +1842,10 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
   L_GE:  { sv_tfb_record2(func, ip, vm->stack[vm->sp-2], vm->stack[vm->sp-1]); VM_CHECK(sv_op_ge(vm, js));  NEXT(OP_GE); }
   
   L_INSTANCEOF:        { VM_CHECK(sv_op_instanceof(vm, js, func, ip));  NEXT(OP_INSTANCEOF); }
-  L_IN:                { VM_CHECK(sv_op_in(vm, js));          NEXT(OP_IN); }
-  L_IS_NULLISH:        { sv_op_is_nullish(vm);                NEXT(OP_IS_NULLISH); }
-  L_IS_UNDEF_OR_NULL:  { sv_op_is_undef_or_null(vm);          NEXT(OP_IS_UNDEF_OR_NULL); }
+  L_IN:                { VM_CHECK(sv_op_in(vm, js));                    NEXT(OP_IN); }
+  L_IN_FIELD:          { VM_CHECK(sv_op_in_field(vm, js, func, ip));    NEXT(OP_IN_FIELD); }
+  L_IS_NULLISH:        { sv_op_is_nullish(vm);                          NEXT(OP_IS_NULLISH); }
+  L_IS_UNDEF_OR_NULL:  { sv_op_is_undef_or_null(vm);                    NEXT(OP_IS_UNDEF_OR_NULL); }
 
   L_BAND: {
     ant_value_t l = vm->stack[vm->sp - 2];
@@ -2849,10 +2850,10 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
   L_SET_PROTO:           { sv_op_set_proto(vm, js);                NEXT(OP_SET_PROTO); }
   L_SET_HOME_OBJ:        { sv_op_set_home_obj(vm, js);             NEXT(OP_SET_HOME_OBJ); }
   L_APPEND:              { sv_op_append(vm, js);                   NEXT(OP_APPEND); }
-  L_COPY_DATA_PROPS:     { sv_op_copy_data_props(vm, js, ip);      NEXT(OP_COPY_DATA_PROPS); }
-
-  L_DEFINE_CLASS:       { VM_CHECK(sv_op_define_class(vm, js, func, ip));      NEXT(OP_DEFINE_CLASS); }
-  L_DEFINE_CLASS_COMP:  { VM_CHECK(sv_op_define_class_comp(vm, js, func, ip)); NEXT(OP_DEFINE_CLASS_COMP); }
+  
+  L_COPY_DATA_PROPS:   { VM_CHECK(sv_op_copy_data_props(vm, js, ip));         NEXT(OP_COPY_DATA_PROPS); }
+  L_DEFINE_CLASS:      { VM_CHECK(sv_op_define_class(vm, js, func, ip));      NEXT(OP_DEFINE_CLASS); }
+  L_DEFINE_CLASS_COMP: { VM_CHECK(sv_op_define_class_comp(vm, js, func, ip)); NEXT(OP_DEFINE_CLASS_COMP); }
 
   L_TO_OBJECT:   { VM_CHECK(sv_op_to_object(vm, js));  NEXT(OP_TO_OBJECT); }
   L_TO_PROPKEY:  { sv_op_to_propkey(vm, js);           NEXT(OP_TO_PROPKEY); }
