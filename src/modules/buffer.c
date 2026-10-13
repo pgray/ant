@@ -1007,6 +1007,17 @@ ant_value_t create_arraybuffer_obj(ant_t *js, ArrayBufferData *buffer) {
   return ab_obj;
 }
 
+ant_value_t create_arraybuffer_copy(ant_t *js, const void *bytes, size_t length) {
+  ArrayBufferData *buffer = create_array_buffer_data(js, length);
+  if (!buffer) return js_mkerr(js, "out of memory");
+  if (bytes && length) memcpy(buffer->data, bytes, length);
+  
+  ant_value_t ab_obj = create_arraybuffer_obj(js, buffer);
+  free_array_buffer_data(js, buffer);
+  
+  return ab_obj;
+}
+
 static const ant_exotic_ops_t typedarray_exotic_ops = {
   .getter = typedarray_index_getter,
   .setter = typedarray_index_setter,
@@ -3988,42 +3999,12 @@ static ant_value_t buffer_read_bigint64(ant_native_params_t, bool little_endian,
   return is_signed ? bigint_from_int64(js, (int64_t)bits) : bigint_from_uint64(js, bits);
 }
 
-static ant_value_t js_buffer_writeBigInt64LE(ant_params_t) {
-  return buffer_write_bigint64(js, args, nargs, true, true);
-}
-
-static ant_value_t js_buffer_writeBigInt64BE(ant_params_t) {
-  return buffer_write_bigint64(js, args, nargs, false, true);
-}
-
-static ant_value_t js_buffer_writeBigUInt64LE(ant_params_t) {
-  return buffer_write_bigint64(js, args, nargs, true, false);
-}
-
-static ant_value_t js_buffer_writeBigUInt64BE(ant_params_t) {
-  return buffer_write_bigint64(js, args, nargs, false, false);
-}
-
-static ant_value_t js_buffer_readBigInt64LE(ant_params_t) {
-  return buffer_read_bigint64(js, args, nargs, true, true);
-}
-
-static ant_value_t js_buffer_readBigInt64BE(ant_params_t) {
-  return buffer_read_bigint64(js, args, nargs, false, true);
-}
-
-static ant_value_t js_buffer_readBigUInt64LE(ant_params_t) {
-  return buffer_read_bigint64(js, args, nargs, true, false);
-}
-
-static ant_value_t js_buffer_readBigUInt64BE(ant_params_t) {
-  return buffer_read_bigint64(js, args, nargs, false, false);
-}
-
 typedef enum {
   BUFFER_NUM_UINT,
   BUFFER_NUM_INT,
   BUFFER_NUM_FLOAT,
+  BUFFER_NUM_BIGINT,
+  BUFFER_NUM_BIGUINT,
 } buffer_num_kind_t;
 
 typedef enum {
@@ -4042,6 +4023,9 @@ static ant_value_t buffer_num_width(ant_t *js, ant_value_t value, size_t *width)
 static inline __attribute__((always_inline)) ant_value_t buffer_read_num(
   ant_native_params_t, buffer_num_kind_t kind, size_t width, buffer_num_endian_t endian
 ) {
+  if (kind == BUFFER_NUM_BIGINT || kind == BUFFER_NUM_BIGUINT)
+    return buffer_read_bigint64(js, args, nargs, endian == BUFFER_NUM_LE, kind == BUFFER_NUM_BIGINT);
+  
   if (!width) {
     ant_value_t r = buffer_num_width(js, nargs > 1 ? args[1] : js_mkundef(), &width);
     if (is_err(r)) return r;
@@ -4074,6 +4058,9 @@ static inline __attribute__((always_inline)) ant_value_t buffer_read_num(
 }
 
 static inline __attribute__((always_inline)) ant_value_t buffer_write_num(ant_native_params_t, buffer_num_kind_t kind, size_t width, buffer_num_endian_t endian) {
+  if (kind == BUFFER_NUM_BIGINT || kind == BUFFER_NUM_BIGUINT)
+    return buffer_write_bigint64(js, args, nargs, endian == BUFFER_NUM_LE, kind == BUFFER_NUM_BIGINT);
+  
   ant_value_t arg = nargs > 0 ? args[0] : js_mkundef();
   double value = vtype(arg) == kTypeNumber ? js_getnum(arg) : js_to_number(js, arg);
   
@@ -4120,8 +4107,10 @@ typedef struct {
 #define BUFFER_NUM_ALIAS_UINT(op, suffix) op "Uint" #suffix
 #define BUFFER_NUM_ALIAS_INT(op, suffix) NULL
 #define BUFFER_NUM_ALIAS_FLOAT(op, suffix) NULL
+#define BUFFER_NUM_ALIAS_BIGINT(op, suffix) NULL
+#define BUFFER_NUM_ALIAS_BIGUINT(op, suffix) op "BigUint" #suffix
 
-#define BUFFER_NUM_LENGTH_read(kind, width) (BUFFER_NUM_##kind == BUFFER_NUM_FLOAT ? 0 : (width) ? 1 : 2)
+#define BUFFER_NUM_LENGTH_read(kind, width) (BUFFER_NUM_##kind >= BUFFER_NUM_FLOAT ? 0 : (width) ? 1 : 2)
 #define BUFFER_NUM_LENGTH_write(kind, width) ((width) ? 1 : 3)
 
 #define BUFFER_NUM_ENTRY(op, type, suffix, kind, width) { \
@@ -4380,14 +4369,12 @@ void init_buffer_module(ant_t *js) {
   
   js_set_slot(arraybuffer_ctor_obj, SLOT_CFUNC, js_mkfun(js_arraybuffer_constructor));
   mkprop_exact_attrs(js, arraybuffer_ctor_obj, ANT_STRING("prototype"), arraybuffer_proto, 0);
-  js_mkprop_fast(js, arraybuffer_ctor_obj, "name", 4, ANT_STRING("ArrayBuffer"));
-  js_set_descriptor(js, arraybuffer_ctor_obj, "name", 4, 0);
+  mkprop_exact_attrs(js, arraybuffer_ctor_obj, ANT_STRING("name"), ANT_STRING("ArrayBuffer"), ANT_PROP_ATTR_CONFIGURABLE);
   defmethod(js, arraybuffer_ctor_obj, "isView", 6, js_mkfun(js_arraybuffer_isView));
   js_define_species_getter(js, arraybuffer_ctor_obj);
   
   ant_value_t arraybuffer_ctor = js_obj_to_func(js, arraybuffer_ctor_obj);
   defmethod(js, arraybuffer_proto, "constructor", 11, arraybuffer_ctor);
-  js_set_descriptor(js, arraybuffer_proto, "constructor", 11, JS_DESC_W | JS_DESC_C);
   js_set_global_builtin(js, "ArrayBuffer", arraybuffer_ctor);
   
   ant_value_t typedarray_proto = js_mkobj(js);
@@ -4438,7 +4425,6 @@ void init_buffer_module(ant_t *js) {
   
   ant_value_t typedarray_ctor = js_obj_to_func(js, typedarray_ctor_obj);
   defmethod(js, typedarray_proto, "constructor", 11, typedarray_ctor);
-  js_set_descriptor(js, typedarray_proto, "constructor", 11, JS_DESC_W | JS_DESC_C);
 
   js->builtins.typedarray_iter_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.typedarray_iter_proto, js->sym.iterator_proto);
@@ -4495,12 +4481,10 @@ void init_buffer_module(ant_t *js) {
 
   js_set_slot(dataview_ctor_obj, SLOT_CFUNC, js_mkfun(js_dataview_constructor));
   mkprop_exact_attrs(js, dataview_ctor_obj, ANT_STRING("prototype"), dataview_proto, 0);
-  js_mkprop_fast(js, dataview_ctor_obj, "name", 4, ANT_STRING("DataView"));
-  js_set_descriptor(js, dataview_ctor_obj, "name", 4, 0);
+  mkprop_exact_attrs(js, dataview_ctor_obj, ANT_STRING("name"), ANT_STRING("DataView"), ANT_PROP_ATTR_CONFIGURABLE);
   
   ant_value_t dataview_ctor = js_obj_to_func(js, dataview_ctor_obj);
   defmethod(js, dataview_proto, "constructor", 11, dataview_ctor);
-  js_set_descriptor(js, dataview_proto, "constructor", 11, JS_DESC_W | JS_DESC_C);
   js_set_global_builtin(js, "DataView", dataview_ctor);
   
   ant_value_t sharedarraybuffer_ctor_obj = js_mkobj(js);
@@ -4513,13 +4497,11 @@ void init_buffer_module(ant_t *js) {
   
   js_set_slot(sharedarraybuffer_ctor_obj, SLOT_CFUNC, js_mkfun(js_sharedarraybuffer_constructor));
   mkprop_exact_attrs(js, sharedarraybuffer_ctor_obj, ANT_STRING("prototype"), sharedarraybuffer_proto, 0);
-  js_mkprop_fast(js, sharedarraybuffer_ctor_obj, "name", 4, ANT_STRING("SharedArrayBuffer"));
-  js_set_descriptor(js, sharedarraybuffer_ctor_obj, "name", 4, 0);
+  mkprop_exact_attrs(js, sharedarraybuffer_ctor_obj, ANT_STRING("name"), ANT_STRING("SharedArrayBuffer"), ANT_PROP_ATTR_CONFIGURABLE);
   js_define_species_getter(js, sharedarraybuffer_ctor_obj);
   
   ant_value_t sharedarraybuffer_ctor = js_obj_to_func(js, sharedarraybuffer_ctor_obj);
   defmethod(js, sharedarraybuffer_proto, "constructor", 11, sharedarraybuffer_ctor);
-  js_set_descriptor(js, sharedarraybuffer_proto, "constructor", 11, JS_DESC_W | JS_DESC_C);
   js_set_global_builtin(js, "SharedArrayBuffer", sharedarraybuffer_ctor);
   
   ant_value_t buffer_ctor_obj = js_mkobj(js);
@@ -4550,46 +4532,6 @@ void init_buffer_module(ant_t *js) {
     js_set(js, buffer_proto, m->meta.name, fn);
     if (m->alias) js_set(js, buffer_proto, m->alias, fn);
   }
-  js_set(js, buffer_proto, "writeBigInt64LE", js_mkfun(js_buffer_writeBigInt64LE));
-  js_set(js, buffer_proto, "writeBigInt64BE", js_mkfun(js_buffer_writeBigInt64BE));
-  
-  ant_value_t write_biguint64_le = js_cfunc_expose_named(
-    js, js_mkfun(js_buffer_writeBigUInt64LE),
-    "writeBigUInt64LE", sizeof("writeBigUInt64LE") - 1
-  );
-  
-  write_biguint64_le = js_cfunc_promote(js, write_biguint64_le);
-  js_set(js, buffer_proto, "writeBigUInt64LE", write_biguint64_le);
-  js_set(js, buffer_proto, "writeBigUint64LE", write_biguint64_le);
-  
-  ant_value_t write_biguint64_be = js_cfunc_expose_named(
-    js, js_mkfun(js_buffer_writeBigUInt64BE),
-    "writeBigUInt64BE", sizeof("writeBigUInt64BE") - 1
-  );
-  
-  write_biguint64_be = js_cfunc_promote(js, write_biguint64_be);
-  js_set(js, buffer_proto, "writeBigUInt64BE", write_biguint64_be);
-  js_set(js, buffer_proto, "writeBigUint64BE", write_biguint64_be);
-  js_set(js, buffer_proto, "readBigInt64LE", js_mkfun(js_buffer_readBigInt64LE));
-  js_set(js, buffer_proto, "readBigInt64BE", js_mkfun(js_buffer_readBigInt64BE));
-  
-  ant_value_t read_biguint64_le = js_cfunc_expose_named(
-    js, js_mkfun(js_buffer_readBigUInt64LE),
-    "readBigUInt64LE", sizeof("readBigUInt64LE") - 1
-  );
-  
-  read_biguint64_le = js_cfunc_promote(js, read_biguint64_le);
-  js_set(js, buffer_proto, "readBigUInt64LE", read_biguint64_le);
-  js_set(js, buffer_proto, "readBigUint64LE", read_biguint64_le);
-  
-  ant_value_t read_biguint64_be = js_cfunc_expose_named(
-    js, js_mkfun(js_buffer_readBigUInt64BE),
-    "readBigUInt64BE", sizeof("readBigUInt64BE") - 1
-  );
-  
-  read_biguint64_be = js_cfunc_promote(js, read_biguint64_be);
-  js_set(js, buffer_proto, "readBigUInt64BE", read_biguint64_be);
-  js_set(js, buffer_proto, "readBigUint64BE", read_biguint64_be);
   
   js_set(js, buffer_proto, "values", js_get(js, typedarray_proto, "values"));
   js_set_sym(js, buffer_proto, js->sym.iterator_sym, js_get(js, buffer_proto, "values"));
@@ -4611,12 +4553,10 @@ void init_buffer_module(ant_t *js) {
 
   js_set_slot(buffer_ctor_obj, SLOT_CFUNC, js_mkfun(js_buffer_from));
   mkprop_exact_attrs(js, buffer_ctor_obj, ANT_STRING("prototype"), buffer_proto, ANT_PROP_ATTR_WRITABLE);
-  js_mkprop_fast(js, buffer_ctor_obj, "name", 4, ANT_STRING("Buffer"));
-  js_set_descriptor(js, buffer_ctor_obj, "name", 4, 0);
+  mkprop_exact_attrs(js, buffer_ctor_obj, ANT_STRING("name"), ANT_STRING("Buffer"), ANT_PROP_ATTR_CONFIGURABLE);
   
   ant_value_t buffer_ctor = js_obj_to_func(js, buffer_ctor_obj);
-  js_set(js, buffer_proto, "constructor", buffer_ctor);
-  js_set_descriptor(js, buffer_proto, "constructor", 11, JS_DESC_W | JS_DESC_C);
+  defmethod(js, buffer_proto, "constructor", 11, buffer_ctor);
   js_set_global_builtin(js, "Buffer", buffer_ctor);
 }
 

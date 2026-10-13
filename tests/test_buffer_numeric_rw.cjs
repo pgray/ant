@@ -45,4 +45,18 @@ assert.throws(() => w.readUIntLE(0, '2'), TypeError);
 assert.throws(() => w.writeUInt32LE(1, 7), RangeError);
 assert.throws(() => P.readUInt8.call({}), Error);
 
+for (const name of ['readBigInt64LE', 'readBigInt64BE', 'readBigUInt64LE', 'readBigUInt64BE']) assert.strictEqual(P[name].length, 0, name);
+for (const name of ['writeBigInt64LE', 'writeBigInt64BE', 'writeBigUInt64LE', 'writeBigUInt64BE']) assert.strictEqual(P[name].length, 1, name);
+assert.strictEqual(P.readBigUint64LE, P.readBigUInt64LE);
+assert.strictEqual(P.writeBigUint64BE, P.writeBigUInt64BE);
+assert.strictEqual(P.readBigUint64BE.name, 'readBigUInt64BE');
+
+const big = Buffer.alloc(16);
+assert.strictEqual(big.writeBigInt64LE(-5n, 0), 8);
+assert.strictEqual(big.writeBigUInt64BE(2n ** 63n, 8), 16);
+assert.strictEqual(big.readBigInt64LE(0), -5n);
+assert.strictEqual(big.readBigUInt64BE(8), 2n ** 63n);
+assert.throws(() => big.readBigInt64LE(10), RangeError);
+assert.throws(() => big.writeBigInt64LE(1, 0), TypeError);
+
 console.log('buffer numeric read/write OK');

@@ -1806,7 +1806,8 @@ void jit_emit_inline_body(
             r_js, *p_d_slot,
             ext->get_length_proto, seen_effect ? ext->imp_get_length : ext->imp_get_length_inline,
             false,
-            id, inl_bc_off);
+            id, inl_bc_off,
+            NULL, NULL);
         mir_emit_inline_read_guard(
             ctx, jit_func, gl_dst, result, r_bool, slow, join, gl_ok);
         MIR_append_insn(ctx, jit_func, gl_ok);

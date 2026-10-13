@@ -1717,11 +1717,11 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
     NEXT(OP_PUT_ELEM);
   }
   
-  L_DEFINE_FIELD:  { sv_op_define_field(vm, js, func, ip); NEXT(OP_DEFINE_FIELD); }
-  L_DEFINE_SLOT:   { sv_op_define_slot(vm, js, func, ip);  NEXT(OP_DEFINE_SLOT); }
-  L_GET_LENGTH:    { VM_CHECK(sv_op_get_length(vm, js));   NEXT(OP_GET_LENGTH); }
+  L_DEFINE_FIELD:  { sv_op_define_field(vm, js, func, ip);         NEXT(OP_DEFINE_FIELD); }
+  L_DEFINE_SLOT:   { sv_op_define_slot(vm, js, func, ip);          NEXT(OP_DEFINE_SLOT); }
+  L_GET_LENGTH:    { VM_CHECK(sv_op_get_length(vm, js, func, ip)); NEXT(OP_GET_LENGTH); }
 
-  L_GET_FIELD_OPT:  { VM_CHECK(sv_op_get_field_opt(vm, js, func, ip));   NEXT(OP_GET_FIELD_OPT); }
+  L_GET_FIELD_OPT:  { VM_CHECK(sv_op_get_field_opt(vm, js, func, ip));  NEXT(OP_GET_FIELD_OPT); }
   L_GET_ELEM_OPT:   { VM_CHECK(sv_op_get_elem_opt(vm, js, func, ip));   NEXT(OP_GET_ELEM_OPT); }
 
   L_GET_PRIVATE:      { VM_CHECK(sv_op_get_private(vm, js));       NEXT(OP_GET_PRIVATE); }

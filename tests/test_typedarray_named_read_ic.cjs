@@ -69,4 +69,32 @@ const sub = new (class extends Uint8Array { get length() { return 99; } })(3);
 for (let i = 0; i < 3000; i++) len(sub);
 assert.strictEqual(len(sub), 99);
 
+const lengthOnly = new Function('x', 'return x.length');
+const plainTyped = new Uint8Array(3);
+for (let i = 0; i < 3000; i++) lengthOnly(plainTyped);
+assert.strictEqual(lengthOnly(plainTyped), 3);
+
+const tagged = [];
+for (let i = 0; i < 20; i++) {
+  const view = new Uint8Array(i + 1);
+  view['p' + i] = i;
+  tagged.push(view);
+}
+for (let i = 0; i < 3000; i++) lengthOnly(tagged[i % tagged.length]);
+assert.deepStrictEqual(tagged.slice(0, 4).map(lengthOnly), [1, 2, 3, 4]);
+
+const shadowed = new Uint8Array(4);
+Object.defineProperty(shadowed, 'length', { value: 42 });
+for (let i = 0; i < 3000; i++) lengthOnly(i % 2 ? shadowed : plainTyped);
+assert.strictEqual(lengthOnly(shadowed), 42);
+assert.strictEqual(lengthOnly({ length: 7 }), 7);
+assert.strictEqual(lengthOnly([1, 2]), 2);
+assert.strictEqual(lengthOnly('héllo'), 5);
+
+const detachable = new ArrayBuffer(8);
+const detachView = new Uint8Array(detachable);
+for (let i = 0; i < 3000; i++) lengthOnly(detachView);
+detachable.transfer();
+assert.strictEqual(lengthOnly(detachView), 0);
+
 console.log('typed array named read ic OK');

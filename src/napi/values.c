@@ -30,41 +30,32 @@ static bool napi_get_typedarray_data(
   return true;
 }
 
-static bool napi_to_ant_typedarray_type(
-  napi_typedarray_type in,
-  TypedArrayType *out
-) {
-  switch (in) {
-    case napi_int8_array: *out = TYPED_ARRAY_INT8; return true;
-    case napi_uint8_array: *out = TYPED_ARRAY_UINT8; return true;
-    case napi_uint8_clamped_array: *out = TYPED_ARRAY_UINT8_CLAMPED; return true;
-    case napi_int16_array: *out = TYPED_ARRAY_INT16; return true;
-    case napi_uint16_array: *out = TYPED_ARRAY_UINT16; return true;
-    case napi_int32_array: *out = TYPED_ARRAY_INT32; return true;
-    case napi_uint32_array: *out = TYPED_ARRAY_UINT32; return true;
-    case napi_float32_array: *out = TYPED_ARRAY_FLOAT32; return true;
-    case napi_float64_array: *out = TYPED_ARRAY_FLOAT64; return true;
-    case napi_bigint64_array: *out = TYPED_ARRAY_BIGINT64; return true;
-    case napi_biguint64_array: *out = TYPED_ARRAY_BIGUINT64; return true;
-    default: return false;
-  }
+static const TypedArrayType napi_typedarray_kinds[] = {
+  [napi_int8_array]          = TYPED_ARRAY_INT8,
+  [napi_uint8_array]         = TYPED_ARRAY_UINT8,
+  [napi_uint8_clamped_array] = TYPED_ARRAY_UINT8_CLAMPED,
+  [napi_int16_array]         = TYPED_ARRAY_INT16,
+  [napi_uint16_array]        = TYPED_ARRAY_UINT16,
+  [napi_int32_array]         = TYPED_ARRAY_INT32,
+  [napi_uint32_array]        = TYPED_ARRAY_UINT32,
+  [napi_float32_array]       = TYPED_ARRAY_FLOAT32,
+  [napi_float64_array]       = TYPED_ARRAY_FLOAT64,
+  [napi_bigint64_array]      = TYPED_ARRAY_BIGINT64,
+  [napi_biguint64_array]     = TYPED_ARRAY_BIGUINT64,
+};
+
+static constexpr unsigned NAPI_TYPEDARRAY_KIND_COUNT = sizeof(napi_typedarray_kinds) / sizeof(napi_typedarray_kinds[0]);
+
+static bool napi_to_ant_typedarray_type(napi_typedarray_type in, TypedArrayType *out) {
+  if ((unsigned)in >= NAPI_TYPEDARRAY_KIND_COUNT) return false;
+  *out = napi_typedarray_kinds[in];
+  return true;
 }
 
 static napi_typedarray_type napi_from_ant_typedarray_type(TypedArrayType in) {
-  switch (in) {
-    case TYPED_ARRAY_INT8: return napi_int8_array;
-    case TYPED_ARRAY_UINT8: return napi_uint8_array;
-    case TYPED_ARRAY_UINT8_CLAMPED: return napi_uint8_clamped_array;
-    case TYPED_ARRAY_INT16: return napi_int16_array;
-    case TYPED_ARRAY_UINT16: return napi_uint16_array;
-    case TYPED_ARRAY_INT32: return napi_int32_array;
-    case TYPED_ARRAY_UINT32: return napi_uint32_array;
-    case TYPED_ARRAY_FLOAT32: return napi_float32_array;
-    case TYPED_ARRAY_FLOAT64: return napi_float64_array;
-    case TYPED_ARRAY_BIGINT64: return napi_bigint64_array;
-    case TYPED_ARRAY_BIGUINT64: return napi_biguint64_array;
-    default: return napi_uint8_array;
-  }
+  for (unsigned i = 0; i < NAPI_TYPEDARRAY_KIND_COUNT; i++)
+    if (napi_typedarray_kinds[i] == in) return (napi_typedarray_type)i;
+  return napi_uint8_array;
 }
 
 static ant_value_t napi_make_string(ant_t *js, const char *s, size_t len) {
@@ -592,14 +583,12 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_create_arraybuffer(
   ant_napi_env_t *nenv = (ant_napi_env_t *)env;
   if (!nenv || !nenv->js || !result) return napi_set_last(env, napi_invalid_arg, "invalid argument");
 
-  ArrayBufferData *ab = create_array_buffer_data(nenv->js, byte_length);
-  if (!ab) return napi_set_last(env, napi_generic_failure, "allocation failed");
+  ant_value_t ab_obj = create_arraybuffer_copy(nenv->js, NULL, byte_length);
+  if (is_err(ab_obj)) return napi_set_last(env, napi_generic_failure, "allocation failed");
 
-  ant_value_t ab_obj = create_arraybuffer_obj(nenv->js, ab);
-  free_array_buffer_data(nenv->js, ab);
-
-  if (data) *data = ab->data;
+  if (data) *data = buffer_get_arraybuffer_data(ab_obj)->data;
   *result = NAPI_RETURN(nenv, ab_obj);
+  
   return napi_set_last(env, napi_ok, NULL);
 }
 

@@ -1812,12 +1812,21 @@ static inline ant_value_t sv_get_length_value(ant_t *js, ant_value_t obj) {
   return js_getprop_fallback(js, obj, "length");
 }
 
-static inline ant_value_t sv_op_get_length(sv_vm_t *vm, ant_t *js) {
-  ant_value_t obj = vm->stack[--vm->sp];
-  ant_value_t res = sv_get_length_value(js, obj);
-  if (is_err(res)) return res;
+static inline ant_value_t sv_get_length_at(ant_t *js, ant_value_t obj, sv_atom_t *atom, sv_func_t *func, uint8_t *ip) {
+  ant_object_t *ptr = vtype(obj) == kTypeObject ? js_obj_ptr(obj) : NULL;
   
-  vm->stack[vm->sp++] = res;
+  return ptr && ptr->shape && ptr->type_tag == kTypeObject && sv_ic_numeric_exotic(ptr)
+    ? sv_prop_get_field_ic(js, obj, atom, func, ip)
+    : sv_get_length_value(js, obj);
+}
+
+static inline ant_value_t sv_op_get_length(sv_vm_t *vm, ant_t *js, sv_func_t *func, uint8_t *ip) {
+  sv_atom_t *atom = &func->atoms[sv_get_u32(ip + 1)];
+  ant_value_t res = sv_get_length_at(js, vm->stack[vm->sp - 1], atom, func, ip);
+  
+  if (is_err(res)) return res;
+  vm->stack[vm->sp - 1] = res;
+  
   return js_mkundef();
 }
 

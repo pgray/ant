@@ -162,6 +162,7 @@ typedef struct jit_compile {
   MIR_item_t imp_closure;
   MIR_item_t imp_in;
   MIR_item_t imp_get_length;
+  MIR_item_t imp_get_length_at;
   MIR_item_t imp_get_length_inline;
   MIR_item_t imp_define_field;
   MIR_item_t imp_define_method_comp;

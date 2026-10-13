@@ -573,15 +573,6 @@ static ant_value_t crypto_get_hmac_digest(
   return js_mkundef();
 }
 
-static ant_value_t crypto_make_arraybuffer(ant_t *js, const uint8_t *data, size_t len) {
-  ArrayBufferData *buffer = create_array_buffer_data(js, len);
-  if (!buffer) return js_mkerr(js, "Out of memory");
-  if (len > 0 && data) memcpy(buffer->data, data, len);
-  ant_value_t ab_obj = create_arraybuffer_obj(js, buffer);
-  free_array_buffer_data(js, buffer);
-  return ab_obj;
-}
-
 static bool crypto_algorithm_is(ant_t *js, ant_value_t algorithm, const char *expected) {
   ant_value_t name_val = crypto_subtle_get_algorithm_name(js, algorithm);
   if (is_err(name_val)) return false;
@@ -899,7 +890,7 @@ static ant_value_t crypto_subtle_digest_impl(
     return js_mkerr(js, "Digest failed");
   }
 
-  return crypto_make_arraybuffer(js, digest, digest_len);
+  return create_arraybuffer_copy(js, digest, digest_len);
 }
 
 static ant_value_t crypto_subtle_call(
@@ -1363,7 +1354,7 @@ static ant_value_t crypto_subtle_export_key_impl(ant_params_t) {
 
   if (!raw)
     return crypto_dom_exception_error(js, "Only raw key export is supported", "NotSupportedError");
-  return crypto_make_arraybuffer(js, key->key, key->key_len);
+  return create_arraybuffer_copy(js, key->key, key->key_len);
 }
 
 static ant_value_t js_crypto_subtle_export_key(ant_params_t) {
@@ -1422,7 +1413,7 @@ static ant_value_t crypto_subtle_derive_bits_impl(ant_params_t) {
     return js_mkerr(js, "PBKDF2 failed");
   }
 
-  ant_value_t result = crypto_make_arraybuffer(js, out, (size_t)keylen);
+  ant_value_t result = create_arraybuffer_copy(js, out, (size_t)keylen);
   free(out);
   return result;
 }
@@ -1446,7 +1437,7 @@ static ant_value_t crypto_hmac_once(
   unsigned char *res = HMAC(key->md, key->key, (int)key->key_len, bytes, len, out, &out_len);
   if (owned) free(owned);
   if (!res) return js_mkerr(js, "HMAC failed");
-  return arraybuffer_result ? crypto_make_arraybuffer(js, out, out_len) : crypto_make_buffer(js, out, out_len);
+  return arraybuffer_result ? create_arraybuffer_copy(js, out, out_len) : crypto_make_buffer(js, out, out_len);
 }
 
 static ant_value_t crypto_subtle_sign_impl(ant_params_t) {
@@ -1590,7 +1581,7 @@ static ant_value_t crypto_aes_gcm_crypt(
     return js_mkerr_typed(js, JS_ERR_TYPE, "AES-GCM operation failed");
   }
 
-  ant_value_t result = crypto_make_arraybuffer(js, out, (size_t)total);
+  ant_value_t result = create_arraybuffer_copy(js, out, (size_t)total);
   free(out);
   return result;
 }

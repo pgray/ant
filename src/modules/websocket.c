@@ -499,13 +499,7 @@ static void websocket_emit_message(websocket_state_t *ws, const uint8_t *data, s
 
   if (binary) {
     if (ws->binary_type_blob) data_val = blob_create(js, data, len, "");
-    else {
-      ArrayBufferData *ab = create_array_buffer_data(js, len);
-      if (!ab) return;
-      if (len > 0) memcpy(ab->data, data, len);
-      data_val = create_arraybuffer_obj(js, ab);
-      free_array_buffer_data(js, ab);
-    }
+    else data_val = create_arraybuffer_copy(js, data, len);
   } else data_val = js_mkstr(js, data, len);
 
   if (is_err(data_val)) return;

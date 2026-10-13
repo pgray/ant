@@ -752,7 +752,8 @@ void mir_emit_get_length(
     MIR_reg_t r_js, MIR_reg_t r_d_slot,
     MIR_item_t get_length_proto, MIR_item_t imp_get_length,
     bool builder_slot,
-    int owner_id, int bc_off) {
+    int owner_id, int bc_off,
+    MIR_label_t slow_out, MIR_label_t done_out) {
   char tag_name[48], ptr_name[48], len_name[48], dbl_name[48];
   snprintf(tag_name, sizeof(tag_name), "gl_tag_%d_%d", owner_id, bc_off);
   snprintf(ptr_name, sizeof(ptr_name), "gl_ptr_%d_%d", owner_id, bc_off);
@@ -765,8 +766,8 @@ void mir_emit_get_length(
   MIR_label_t array = MIR_new_label(ctx);
   MIR_label_t ascii = MIR_new_label(ctx);
   MIR_label_t encode = MIR_new_label(ctx);
-  MIR_label_t slow = MIR_new_label(ctx);
-  MIR_label_t done = MIR_new_label(ctx);
+  MIR_label_t slow = slow_out ? slow_out : MIR_new_label(ctx);
+  MIR_label_t done = done_out ? done_out : MIR_new_label(ctx);
   MIR_label_t builder = builder_slot ? MIR_new_label(ctx) : slow;
 
   MIR_append_insn(ctx, fn,
@@ -917,6 +918,7 @@ void mir_emit_get_length(
     MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, done)));
   }
 
+  if (slow_out) return;
   MIR_append_insn(ctx, fn, slow);
   MIR_append_insn(ctx, fn,
                   MIR_new_call_insn(ctx, 5,

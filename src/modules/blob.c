@@ -211,13 +211,10 @@ static ant_value_t js_blob_array_buffer(ant_params_t) {
   ant_value_t promise = js_mkpromise(js);
 
   size_t sz = (bd && bd->data) ? bd->size : 0;
-  ArrayBufferData *abd = create_array_buffer_data(js, sz);
-  if (!abd) { js_reject_promise(js, promise, js_mkerr(js, "out of memory")); return promise; }
-  if (sz > 0 && bd) memcpy(abd->data, bd->data, sz);
-
-  ant_value_t ab_obj = create_arraybuffer_obj(js, abd);
-  free_array_buffer_data(js, abd);
-  js_resolve_promise(js, promise, ab_obj);
+  ant_value_t ab = create_arraybuffer_copy(js, sz ? bd->data : NULL, sz);
+  
+  if (is_err(ab)) js_reject_promise(js, promise, ab);
+  else js_resolve_promise(js, promise, ab);
 
   return promise;
 }

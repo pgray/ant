@@ -755,6 +755,11 @@ void jit_emit_properties(jit_compile_t *c) {
     }
 
     case OP_GET_LENGTH: {
+      uint32_t idx = sv_get_u32(c->ip + 1);
+      if (idx >= (uint32_t)c->func->atom_count) {
+        c->ok = false;
+        break;
+      }
       bool builder_length = false;
       int raw_slot_size = sv_op_size[OP_GET_SLOT_RAW];
       if (c->builder_target_slots && c->bc_off >= raw_slot_size) {
@@ -767,15 +772,32 @@ void jit_emit_properties(jit_compile_t *c) {
         }
       }
       vstack_ensure_boxed(&c->vs, c->vs.sp - 1, c->ctx, c->jit_func, c->r_d_slot);
+      int pre_op_sp = c->vs.sp;
       MIR_reg_t obj = vstack_pop(&c->vs);
       MIR_reg_t dst = vstack_push(&c->vs);
+      MIR_label_t object_path = MIR_new_label(c->ctx);
+      MIR_label_t done = MIR_new_label(c->ctx);
       mir_emit_get_length(
           c->ctx, c->jit_func, c->js, obj, dst,
           c->r_js, c->r_d_slot,
           c->get_length_proto, c->imp_get_length,
           builder_length,
-          -1, c->bc_off);
+          -1, c->bc_off,
+          object_path, done);
+      MIR_append_insn(c->ctx, c->jit_func, object_path);
+      jit_emit_get_field_fast(c, sv_get_u16(c->ip + 5), &c->func->atoms[idx], obj, dst, MIR_new_label(c->ctx), done, pre_op_sp);
+      MIR_append_insn(c->ctx, c->jit_func,
+                      MIR_new_call_insn(c->ctx, 8,
+                                        MIR_new_ref_op(c->ctx, c->gf_proto),
+                                        MIR_new_ref_op(c->ctx, c->imp_get_length_at),
+                                        MIR_new_reg_op(c->ctx, dst),
+                                        MIR_new_reg_op(c->ctx, c->r_js),
+                                        MIR_new_reg_op(c->ctx, obj),
+                                        MIR_new_uint_op(c->ctx, (uint64_t)(uintptr_t)&c->func->atoms[idx]),
+                                        MIR_new_uint_op(c->ctx, (uint64_t)(uintptr_t)c->func),
+                                        MIR_new_int_op(c->ctx, (int64_t)c->bc_off)));
       jit_emit_throw_if_error(c, dst);
+      MIR_append_insn(c->ctx, c->jit_func, done);
       break;
     }
 

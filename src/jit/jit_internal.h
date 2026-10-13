@@ -300,7 +300,8 @@ void mir_emit_get_length(
     MIR_reg_t r_js, MIR_reg_t r_d_slot,
     MIR_item_t get_length_proto, MIR_item_t imp_get_length,
     bool builder_slot,
-    int owner_id, int bc_off);
+    int owner_id, int bc_off,
+    MIR_label_t slow_out, MIR_label_t done_out);
 void mir_emit_slot_boxed(MIR_context_t ctx, MIR_item_t fn,
                          MIR_reg_t boxed, MIR_reg_t number,
                          uint8_t slot_type, MIR_reg_t d_slot);

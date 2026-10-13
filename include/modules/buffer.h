@@ -66,6 +66,7 @@ size_t buffer_get_external_memory(ant_t *js);
 void free_array_buffer_data(ant_t *js, ArrayBufferData *data);
 
 ant_value_t create_arraybuffer_obj(ant_t *js, ArrayBufferData *buffer);
+ant_value_t create_arraybuffer_copy(ant_t *js, const void *bytes, size_t length);
 const char *buffer_typedarray_type_name(TypedArrayType type);
 
 ArrayBufferData *create_array_buffer_data(ant_t *js, size_t length);

@@ -4988,7 +4988,7 @@ void compile_member(sv_compiler_t *c, sv_ast_t *node) {
     emit_private_token(c, node->right);
     emit_op(c, OP_GET_PRIVATE);
   } else {
-    if (direct_length) emit_op(c, OP_GET_LENGTH);
+    if (direct_length) emit_atom_op(c, OP_GET_LENGTH, "length", 6);
     else {
       emit_srcpos(c, node->right);
       emit_atom_op(c, OP_GET_FIELD, node->right->str, node->right->len);
@@ -6642,7 +6642,7 @@ static void compile_for_each(sv_compiler_t *c, sv_ast_t *node, bool is_for_of) {
   } else {
     emit_get_local(c, idx_local);
     emit_get_local(c, iter_local);
-    emit_op(c, OP_GET_LENGTH);
+    emit_atom_op(c, OP_GET_LENGTH, "length", 6);
     emit_op(c, OP_LT);
     exit_jump = emit_jump(c, OP_JMP_FALSE);
 

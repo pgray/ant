@@ -821,7 +821,6 @@ static ant_value_t js_wasm_module_custom_sections(ant_params_t) {
     uint8_t section_id = handle->bytes[offset++];
     uint32_t section_size, name_len;
     size_t section_start, section_end, name_start, data_start;
-    ArrayBufferData *buffer;
 
     if (!wasm_read_leb_u32(handle->bytes, handle->bytes_len, &offset, &section_size)) break;
     section_start = offset;
@@ -835,11 +834,9 @@ static ant_value_t js_wasm_module_custom_sections(ant_params_t) {
       data_start = name_start + name_len;
       if (data_start <= section_end && name_len == wanted_len
           && memcmp(handle->bytes + name_start, wanted, wanted_len) == 0) {
-        buffer = create_array_buffer_data(js, section_end - data_start);
-        if (!buffer) return js_mkerr(js, "out of memory");
-        memcpy(buffer->data, handle->bytes + data_start, section_end - data_start);
-        js_arr_push(js, result, create_arraybuffer_obj(js, buffer));
-        free_array_buffer_data(js, buffer);
+        ant_value_t section = create_arraybuffer_copy(js, handle->bytes + data_start, section_end - data_start);
+        if (is_err(section)) return section;
+        js_arr_push(js, result, section);
       }
     }
 

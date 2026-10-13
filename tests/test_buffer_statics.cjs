@@ -19,4 +19,11 @@ assert.throws(() => Buffer.copyBytesFrom(new Uint8Array(2), '1'), TypeError);
 assert.throws(() => Buffer.copyBytesFrom(new Uint8Array(2), 1.5), RangeError);
 assert.throws(() => Buffer.copyBytesFrom(new Uint8Array(2), 0, -1), RangeError);
 
+for (const C of [ArrayBuffer, DataView, SharedArrayBuffer, Buffer, Object.getPrototypeOf(Uint8Array)]) {
+  const name = Object.getOwnPropertyDescriptor(C, 'name');
+  assert.deepStrictEqual([name.writable, name.enumerable, name.configurable], [false, false, true], C.name);
+  const ctor = Object.getOwnPropertyDescriptor(C.prototype, 'constructor');
+  assert.deepStrictEqual([ctor.value, ctor.writable, ctor.enumerable, ctor.configurable], [C, true, false, true], C.name);
+}
+
 console.log('buffer statics OK');

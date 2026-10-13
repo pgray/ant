@@ -97,7 +97,7 @@ OP_DEF(  GET_ELEM2,         1,   2,   2, none)      /* obj key -> obj val */
 OP_DEF(  PUT_ELEM,          1,   3,   0, none)      /* obj key val -> */
 OP_DEF(  DEFINE_FIELD,      5,   2,   1, atom)      /* obj val -> obj (own prop) */
 OP_DEF(  DEFINE_SLOT,       7,   2,   1, atom)      /* obj val -> obj (atom + slot:u16) */
-OP_DEF(  GET_LENGTH,        1,   1,   1, none)      /* obj -> length */
+OP_DEF(  GET_LENGTH,        7,   1,   1, atom)      /* obj -> length (atom + ic_idx:u16) */
 
 OP_DEF(  GET_FIELD_OPT,    7,   1,   1, atom)       /* null-safe obj -> val (atom + ic_idx:u16) */
 OP_DEF(  GET_ELEM_OPT,     1,   2,   1, none)       /* null-safe obj key -> val */
@@ -368,7 +368,7 @@ OP_FLAG(GET_ELEM2             , SV_OPF_JIT_ELIGIBLE)
 OP_FLAG(PUT_ELEM              , SV_OPF_JIT_ELIGIBLE | SV_OPF_JIT_NEEDS_BAILOUT)
 OP_FLAG(DEFINE_FIELD          , SV_OPF_JIT_ELIGIBLE)
 OP_FLAG(DEFINE_SLOT           , SV_OPF_JIT_ELIGIBLE)
-OP_FLAG(GET_LENGTH            , SV_OPF_JIT_ELIGIBLE | SV_OPF_JIT_INLINEABLE)
+OP_FLAG(GET_LENGTH            , SV_OPF_JIT_ELIGIBLE | SV_OPF_JIT_INLINEABLE | SV_OPF_JIT_NEEDS_IC_EPOCH)
 OP_FLAG(GET_FIELD_OPT         , SV_OPF_JIT_ELIGIBLE | SV_OPF_JIT_INLINEABLE | SV_OPF_JIT_NEEDS_IC_EPOCH)
 OP_FLAG(GET_ELEM_OPT          , SV_OPF_JIT_ELIGIBLE)
 OP_FLAG(GET_PRIVATE           , SV_OPF_JIT_ELIGIBLE)
@@ -499,6 +499,7 @@ OP_IC_SLOT(GET_GLOBAL_UNDEF)
 OP_IC_SLOT(GET_EVAL_GLOBAL)
 OP_IC_SLOT(GET_EVAL_GLOBAL_UNDEF)
 OP_IC_SLOT(GET_FIELD)
+OP_IC_SLOT(GET_LENGTH)
 OP_IC_SLOT(GET_FIELD2)
 OP_IC_SLOT(GET_FIELD_OPT)
 OP_IC_SLOT(IN_FIELD)

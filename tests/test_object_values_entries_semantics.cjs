@@ -56,6 +56,30 @@ assert.deepStrictEqual(Object.values(new Int16Array([1, -2, 3])), [1, -2, 3]);
 assert.deepStrictEqual(Object.values({ a: 1, b: 2 }), [1, 2]);
 assert.deepStrictEqual((function () { return Object.values(arguments); })(1, 'b'), [1, 'b']);
 
+const wide = {};
+for (let i = 0; i < 40; i++) wide[i % 2 ? 'k' + i : String(1000 - i)] = i;
+const wideKeys = Object.entries(wide).map(([key]) => key);
+assert.deepStrictEqual(wideKeys.slice(0, 3), ['962', '964', '966']);
+assert.deepStrictEqual(wideKeys.slice(20, 23), ['k1', 'k3', 'k5']);
+
+const descending = {};
+for (let i = 300; i > 0; i--) descending[i] = i;
+assert.deepStrictEqual(Object.values(descending).slice(0, 3), [1, 2, 3]);
+
+const shuffled = {};
+for (let i = 70000; i > 0; i -= 7) shuffled[i * 9973 % 100003] = i;
+const shuffledKeys = Object.keys(shuffled).map(Number);
+assert.ok(shuffledKeys.every((key, i) => i === 0 || shuffledKeys[i - 1] < key));
+assert.deepStrictEqual(Object.values(shuffled).length, shuffledKeys.length);
+
+const wideGetter = {};
+Object.defineProperty(wideGetter, 'g', { get() { delete this.k30; return 'G'; }, enumerable: true });
+for (let i = 0; i < 40; i++) wideGetter['k' + i] = i;
+const wideGetterValues = Object.values(wideGetter);
+assert.strictEqual(wideGetterValues.length, 40);
+assert.strictEqual(wideGetterValues[0], 'G');
+assert.ok(!wideGetterValues.includes(30));
+
 function churn() {
   let junk = null;
   for (let i = 0; i < 20000; i++) junk = { i, s: 'x' + i, next: i % 32 ? junk : null };

@@ -400,15 +400,9 @@ static void resolve_body_promise(
     break;
   }
   case BODY_ARRAYBUFFER: {
-    ArrayBufferData *ab = create_array_buffer_data(js, size);
-    if (!ab) {
-      js_reject_promise(js, promise, js_mkerr(js, "out of memory"));
-      break;
-    }
-    if (data && size > 0) memcpy(ab->data, data, size);
-    ant_value_t ab_obj = create_arraybuffer_obj(js, ab);
-    free_array_buffer_data(js, ab);
-    js_resolve_promise(js, promise, ab_obj);
+    ant_value_t ab = create_arraybuffer_copy(js, data, size);
+    if (is_err(ab)) js_reject_promise(js, promise, ab);
+    else js_resolve_promise(js, promise, ab);
     break;
   }
   case BODY_BLOB: {

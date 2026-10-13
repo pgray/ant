@@ -715,6 +715,7 @@ void jit_setup_prototypes(jit_compile_t *c, MIR_type_t ret_type) {
   c->imp_closure = MIR_new_import(c->ctx, "jit_helper_closure");
   c->imp_in = MIR_new_import(c->ctx, "jit_helper_in");
   c->imp_get_length = MIR_new_import(c->ctx, "jit_helper_get_length");
+  c->imp_get_length_at = MIR_new_import(c->ctx, "jit_helper_get_length_at");
   c->imp_get_length_inline = MIR_new_import(c->ctx, "jit_helper_get_length_inline");
   c->imp_define_field = MIR_new_import(c->ctx, "jit_helper_define_field");
   c->imp_define_method_comp = MIR_new_import(c->ctx, "jit_helper_define_method_comp");
