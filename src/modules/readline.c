@@ -1377,12 +1377,12 @@ static ant_value_t rl_create_interface_promises(ant_params_t) {
 ant_value_t readline_library(ant_t *js) {
   ant_value_t lib = js_mkobj(js);
 
-  js_set(js, lib, "createInterface", js_mkfun(rl_create_interface));
-  js_set(js, lib, "clearLine", js_mkfun(rl_clear_line));
-  js_set(js, lib, "clearScreenDown", js_mkfun(rl_clear_screen_down));
-  js_set(js, lib, "cursorTo", js_mkfun(rl_cursor_to));
-  js_set(js, lib, "moveCursor", js_mkfun(rl_move_cursor));
-  js_set(js, lib, "emitKeypressEvents", js_mkfun(rl_emit_keypress_events));
+  js_set(js, lib, "createInterface", js_mkfun_arity(rl_create_interface, 4));
+  js_set(js, lib, "clearLine", js_mkfun_arity(rl_clear_line, 3));
+  js_set(js, lib, "clearScreenDown", js_mkfun_arity(rl_clear_screen_down, 2));
+  js_set(js, lib, "cursorTo", js_mkfun_arity(rl_cursor_to, 4));
+  js_set(js, lib, "moveCursor", js_mkfun_arity(rl_move_cursor, 4));
+  js_set(js, lib, "emitKeypressEvents", js_mkfun_arity(rl_emit_keypress_events, 1));
   js_set_tostringtag(js, lib, js_mkstr(js, "readline", 8));
   
   return lib;
@@ -1392,11 +1392,11 @@ ant_value_t readline_promises_library(ant_t *js) {
   ant_value_t lib = js_mkobj(js);
 
   js_set(js, lib, "createInterface", js_mkfun(rl_create_interface_promises));
-  js_set(js, lib, "clearLine", js_mkfun(rl_clear_line));
-  js_set(js, lib, "clearScreenDown", js_mkfun(rl_clear_screen_down));
-  js_set(js, lib, "cursorTo", js_mkfun(rl_cursor_to));
-  js_set(js, lib, "moveCursor", js_mkfun(rl_move_cursor));
-  js_set(js, lib, "emitKeypressEvents", js_mkfun(rl_emit_keypress_events));
+  js_set(js, lib, "clearLine", js_mkfun_arity(rl_clear_line, 3));
+  js_set(js, lib, "clearScreenDown", js_mkfun_arity(rl_clear_screen_down, 2));
+  js_set(js, lib, "cursorTo", js_mkfun_arity(rl_cursor_to, 4));
+  js_set(js, lib, "moveCursor", js_mkfun_arity(rl_move_cursor, 4));
+  js_set(js, lib, "emitKeypressEvents", js_mkfun_arity(rl_emit_keypress_events, 1));
   js_set_tostringtag(js, lib, js_mkstr(js, "readline/promises", 17));
   
   return lib;

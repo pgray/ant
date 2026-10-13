@@ -419,7 +419,7 @@ static void resolve_body_promise(
       break;
     }
     if (data && size > 0) memcpy(ab->data, data, size);
-    ant_value_t bytes = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, size, "Uint8Array");
+    ant_value_t bytes = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, size, js->builtins.typedarray_protos[TYPED_ARRAY_UINT8]);
     if (is_err(bytes)) js_reject_promise(js, promise, bytes);
     else js_resolve_promise(js, promise, bytes);
     break;
@@ -1031,7 +1031,7 @@ static ant_value_t res_body_pull(ant_params_t) {
     if (!ab) return js_mkerr(js, "out of memory");
     memcpy(ab->data, d->body_data, d->body_size);
 
-    ant_value_t chunk = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, d->body_size, "Uint8Array");
+    ant_value_t chunk = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, d->body_size, js->builtins.typedarray_protos[TYPED_ARRAY_UINT8]);
     if (is_err(chunk)) return chunk;
 
     ant_value_t enqueued = rs_controller_enqueue(js, ctrl, chunk);
@@ -1317,10 +1317,10 @@ void init_response_module(ant_t *js) {
 
   js_set_sym(js, js->builtins.response_proto, js->sym.inspect_sym, js_mkfun(response_inspect));
   js_set_tostringtag(js, js->builtins.response_proto, js_mkstr(js, "Response", 8));
-  ctor = js_make_ctor(js, js_response_ctor, js->builtins.response_proto, "Response", 8);
+  ctor = js_make_ctor(js, js_response_ctor, js->builtins.response_proto, "Response", 8, 0);
   js_set(js, ctor, "error", js_mkfun(js_response_error));
-  js_set(js, ctor, "redirect", js_mkfun(js_response_redirect));
-  js_set(js, ctor, "json", js_mkfun(js_response_json_static));
+  js_set(js, ctor, "redirect", js_mkfun_arity(js_response_redirect, 1));
+  js_set(js, ctor, "json", js_mkfun_arity(js_response_json_static, 1));
   js_set(js, g, "Response", ctor);
   js_set_descriptor(js, g, "Response", 8, JS_DESC_W | JS_DESC_C);
 }

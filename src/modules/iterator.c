@@ -1787,16 +1787,16 @@ void init_iterator_module(ant_t *js) {
   js_set_proto_init(js->builtins.wrap_iter_proto, iter_proto);
   js_set(js, js->builtins.wrap_iter_proto, "next", js_mkfun(wrap_iter_next));
 
-  js_set(js, iter_proto, "map",     js_mkfun(iter_map));
-  js_set(js, iter_proto, "filter",  js_mkfun(iter_filter));
-  js_set(js, iter_proto, "take",    js_mkfun(iter_take));
-  js_set(js, iter_proto, "drop",    js_mkfun(iter_drop));
-  js_set(js, iter_proto, "flatMap", js_mkfun(iter_flatMap));
-  js_set(js, iter_proto, "every",   js_mkfun(iter_every));
-  js_set(js, iter_proto, "some",    js_mkfun(iter_some));
-  js_set(js, iter_proto, "find",    js_mkfun(iter_find));
-  js_set(js, iter_proto, "forEach", js_mkfun(iter_forEach));
-  js_set(js, iter_proto, "reduce",  js_mkfun(iter_reduce));
+  js_set(js, iter_proto, "map",     js_mkfun_arity(iter_map, 1));
+  js_set(js, iter_proto, "filter",  js_mkfun_arity(iter_filter, 1));
+  js_set(js, iter_proto, "take",    js_mkfun_arity(iter_take, 1));
+  js_set(js, iter_proto, "drop",    js_mkfun_arity(iter_drop, 1));
+  js_set(js, iter_proto, "flatMap", js_mkfun_arity(iter_flatMap, 1));
+  js_set(js, iter_proto, "every",   js_mkfun_arity(iter_every, 1));
+  js_set(js, iter_proto, "some",    js_mkfun_arity(iter_some, 1));
+  js_set(js, iter_proto, "find",    js_mkfun_arity(iter_find, 1));
+  js_set(js, iter_proto, "forEach", js_mkfun_arity(iter_forEach, 1));
+  js_set(js, iter_proto, "reduce",  js_mkfun_arity(iter_reduce, 1));
   js_set(js, iter_proto, "toArray", js_mkfun(iter_toArray));
   
   js_set_sym_getter_desc(js, iter_proto, js->sym.toStringTag_sym, js_mkfun(iterator_tag_get), JS_DESC_C);
@@ -1808,11 +1808,10 @@ void init_iterator_module(ant_t *js) {
   ant_value_t ctor_obj = js_mkobj(js);
   js_set_slot(ctor_obj, SLOT_CFUNC, js_mkfun(iter_ctor));
   js_mkprop_fast(js, ctor_obj, "prototype", 9, iter_proto);
-  js_mkprop_fast(js, ctor_obj, "name", 4, js_mkstr(js, "Iterator", 8));
-  js_set_descriptor(js, ctor_obj, "name", 4, 0);
+  js_set_function_name(js, ctor_obj, "Iterator", sizeof("Iterator") - 1);
   
   ant_value_t ctor = js_obj_to_func(js, ctor_obj);
-  js_set(js, ctor, "from", js_mkfun(iter_from));
+  js_set(js, ctor, "from", js_mkfun_arity(iter_from, 1));
   js_set(js, iter_proto, "constructor", ctor);
   js_set_global_builtin(js, "Iterator", ctor);
 
@@ -1833,8 +1832,7 @@ void init_iterator_module(ant_t *js) {
   ant_value_t async_ctor_obj = js_mkobj(js);
   js_set_slot(async_ctor_obj, SLOT_CFUNC, js_mkfun(async_iter_ctor));
   js_mkprop_fast(js, async_ctor_obj, "prototype", 9, async_iter_proto);
-  js_mkprop_fast(js, async_ctor_obj, "name", 4, js_mkstr(js, "AsyncIterator", 13));
-  js_set_descriptor(js, async_ctor_obj, "name", 4, 0);
+  js_set_function_name(js, async_ctor_obj, "AsyncIterator", sizeof("AsyncIterator") - 1);
   
   ant_value_t async_ctor = js_obj_to_func(js, async_ctor_obj);
   js_set(js, async_iter_proto, "constructor", async_ctor);

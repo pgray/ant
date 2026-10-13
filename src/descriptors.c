@@ -214,22 +214,49 @@ static bool ensure_symbol_shape_slot(ant_t *js, ant_value_t obj, ant_offset_t sy
   return true;
 }
 
-static ant_shape_prop_t *ensure_string_shape_prop(ant_t *js, ant_value_t obj, const char *key, size_t klen) {
+static ant_shape_prop_t *ensure_string_shape_prop_at(
+  ant_t *js, ant_value_t obj, const char *key, size_t klen, uint32_t *slot_out
+) {
   uint32_t slot = 0;
   if (!ensure_string_shape_slot(js, obj, key, klen, &slot)) return NULL;
+  if (slot_out) *slot_out = slot;
+  
   ant_object_t *ptr = js_obj_ptr(obj);
   if (!ptr || !ptr->shape) return NULL;
   if (!js_obj_ensure_unique_shape(ptr)) return NULL;
+  
   return ant_shape_prop_mut_at(ptr->shape, slot);
 }
 
-static ant_shape_prop_t *ensure_symbol_shape_prop(ant_t *js, ant_value_t obj, ant_offset_t sym_off) {
+static ant_shape_prop_t *ensure_symbol_shape_prop_at(
+  ant_t *js, ant_value_t obj, ant_offset_t sym_off, uint32_t *slot_out
+) {
   uint32_t slot = 0;
   if (!ensure_symbol_shape_slot(js, obj, sym_off, &slot)) return NULL;
+  if (slot_out) *slot_out = slot;
+  
   ant_object_t *ptr = js_obj_ptr(obj);
   if (!ptr || !ptr->shape) return NULL;
   if (!js_obj_ensure_unique_shape(ptr)) return NULL;
+  
   return ant_shape_prop_mut_at(ptr->shape, slot);
+}
+
+static inline ant_shape_prop_t *ensure_string_shape_prop(
+  ant_t *js, ant_value_t obj, const char *key, size_t klen
+) {
+  return ensure_string_shape_prop_at(js, obj, key, klen, NULL);
+}
+
+static inline ant_shape_prop_t *ensure_symbol_shape_prop(
+  ant_t *js, ant_value_t obj, ant_offset_t sym_off
+) {
+  return ensure_symbol_shape_prop_at(js, obj, sym_off, NULL);
+}
+
+static void clear_accessor_slot(ant_value_t obj, uint32_t slot) {
+  ant_object_t *ptr = js_obj_ptr(obj);
+  if (ptr && slot < ptr->prop_count) ant_object_prop_set_unchecked(ptr, slot, js_mkundef());
 }
 
 static void apply_shape_desc_update(
@@ -340,7 +367,8 @@ void js_set_getter_desc(ant_t *js, ant_value_t obj, const char *key, size_t klen
   assert(is_canonical_desc_obj(obj) && "js_set_getter_desc expects js_as_obj(...)");
 
   if (!is_canonical_desc_obj(obj)) return;
-  ant_shape_prop_t *prop = ensure_string_shape_prop(js, obj, key, klen);
+  uint32_t slot = 0;
+  ant_shape_prop_t *prop = ensure_string_shape_prop_at(js, obj, key, klen, &slot);
 
   if (prop) {
     apply_shape_desc_update(
@@ -348,6 +376,7 @@ void js_set_getter_desc(ant_t *js, ant_value_t obj, const char *key, size_t klen
       true, true, getter,
       false, false, js_mkundef()
     );
+    clear_accessor_slot(obj, slot);
 
     ant_property_mutation_invalidate(
       js, js_obj_ptr(obj),
@@ -372,9 +401,10 @@ void js_set_getter_desc(ant_t *js, ant_value_t obj, const char *key, size_t klen
 
 void js_set_setter_desc(ant_t *js, ant_value_t obj, const char *key, size_t klen, ant_value_t setter, int flags) {
   assert(is_canonical_desc_obj(obj) && "js_set_setter_desc expects js_as_obj(...)");
-
   if (!is_canonical_desc_obj(obj)) return;
-  ant_shape_prop_t *prop = ensure_string_shape_prop(js, obj, key, klen);
+  
+  uint32_t slot = 0;
+  ant_shape_prop_t *prop = ensure_string_shape_prop_at(js, obj, key, klen, &slot);
 
   if (prop) {
     apply_shape_desc_update(
@@ -382,7 +412,9 @@ void js_set_setter_desc(ant_t *js, ant_value_t obj, const char *key, size_t klen
       false, false, js_mkundef(),
       true, true, setter
     );
-
+    
+    clear_accessor_slot(obj, slot);
+    
     ant_property_mutation_invalidate(
       js, js_obj_ptr(obj),
       prop->key.interned
@@ -430,7 +462,8 @@ void js_set_accessor_desc(ant_t *js, ant_value_t obj, const char *key, size_t kl
   assert(is_canonical_desc_obj(obj) && "js_set_accessor_desc expects js_as_obj(...)");
 
   if (!is_canonical_desc_obj(obj)) return;
-  ant_shape_prop_t *prop = ensure_string_shape_prop(js, obj, key, klen);
+  uint32_t slot = 0;
+  ant_shape_prop_t *prop = ensure_string_shape_prop_at(js, obj, key, klen, &slot);
 
   if (prop) {
     apply_shape_desc_update(
@@ -438,6 +471,7 @@ void js_set_accessor_desc(ant_t *js, ant_value_t obj, const char *key, size_t kl
       true, true, getter,
       true, true, setter
     );
+    clear_accessor_slot(obj, slot);
 
     ant_property_mutation_invalidate(
       js, js_obj_ptr(obj),
@@ -468,7 +502,8 @@ void js_set_sym_getter_desc(ant_t *js, ant_value_t obj, ant_value_t sym, ant_val
   if (vtype(sym) != kTypeSymbol) return;
 
   ant_offset_t sym_off = (ant_offset_t)vdata(sym);
-  ant_shape_prop_t *prop = ensure_symbol_shape_prop(js, obj, sym_off);
+  uint32_t slot = 0;
+  ant_shape_prop_t *prop = ensure_symbol_shape_prop_at(js, obj, sym_off, &slot);
 
   if (prop) {
     apply_shape_desc_update(
@@ -476,6 +511,7 @@ void js_set_sym_getter_desc(ant_t *js, ant_value_t obj, ant_value_t sym, ant_val
       true, true, getter,
       false, false, js_mkundef()
     );
+    clear_accessor_slot(obj, slot);
 
     ant_symbol_property_mutation_invalidate(js, js_obj_ptr(obj), sym_off);
     ant_ic_epoch_bump(js);
@@ -501,7 +537,8 @@ void js_set_sym_setter_desc(ant_t *js, ant_value_t obj, ant_value_t sym, ant_val
   if (vtype(sym) != kTypeSymbol) return;
 
   ant_offset_t sym_off = (ant_offset_t)vdata(sym);
-  ant_shape_prop_t *prop = ensure_symbol_shape_prop(js, obj, sym_off);
+  uint32_t slot = 0;
+  ant_shape_prop_t *prop = ensure_symbol_shape_prop_at(js, obj, sym_off, &slot);
 
   if (prop) {
     apply_shape_desc_update(
@@ -509,6 +546,7 @@ void js_set_sym_setter_desc(ant_t *js, ant_value_t obj, ant_value_t sym, ant_val
       false, false, js_mkundef(),
       true, true, setter
     );
+    clear_accessor_slot(obj, slot);
 
     ant_symbol_property_mutation_invalidate(js, js_obj_ptr(obj), sym_off);
     ant_ic_epoch_bump(js);

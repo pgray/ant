@@ -446,10 +446,7 @@ void init_builtin_module(ant_t *js) {
   js_set(js, ant_obj, "usleep", js_mkfun(js_usleep));
   js_set(js, ant_obj, "suppressReporting", js_mkfun(js_suppress_reporting));
   
-  ant_value_t hl_obj = js_newobj(js);
-  ant_value_t hl_fn = js_obj_to_func(js, hl_obj);
-  
-  js_set_slot(hl_obj, SLOT_CFUNC, js_mkfun(js_highlight));
+  ant_value_t hl_fn = js_heavy_mkfun_named(js, js_highlight, "highlight", 1, js_mkundef());
   js_set(js, hl_fn, "render", js_mkfun(js_highlight_render));
   js_set(js, hl_fn, "tags", js_mkfun(js_highlight_tags));
   js_set(js, ant_obj, "highlight", hl_fn);

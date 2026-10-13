@@ -101,4 +101,10 @@ for (let round = 0; round < 60; round++) {
   ]);
 }
 
+for (const method of ['keys', 'values', 'entries']) {
+  assert.throws(() => Object[method](null), TypeError);
+  assert.throws(() => Object[method](undefined), TypeError);
+  assert.throws(() => Object[method](), TypeError);
+}
+
 console.log('Object.values/entries semantics OK');

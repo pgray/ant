@@ -1686,7 +1686,7 @@ static ant_value_t builtin_RegExp(ant_params_t) {
     if (is_err(regexp_obj)) return regexp_obj;
   }
 
-  ant_value_t regexp_proto = js_get_ctor_proto(js, "RegExp", 6);
+  ant_value_t regexp_proto = js->builtins.regexp_proto;
   ant_value_t instance_proto = js_instance_proto_from_new_target(js, regexp_proto, call_new_target);
 
   if (is_object_type(instance_proto)) js_set_proto_init(regexp_obj, instance_proto);
@@ -3356,7 +3356,7 @@ ant_value_t regexp_create_literal(ant_t *js, ant_value_t pattern, ant_value_t fl
   ant_value_t regexp_obj = mkobj(js, 0);
   if (is_err(regexp_obj)) return regexp_obj;
 
-  ant_value_t regexp_proto = js_get_ctor_proto(js, "RegExp", 6);
+  ant_value_t regexp_proto = js->builtins.regexp_proto;
   if (is_object_type(regexp_proto)) js_set_proto_init(regexp_obj, regexp_proto);
 
   ant_offset_t pattern_len; vstr(js, pattern, &pattern_len);
@@ -4414,9 +4414,10 @@ void init_regex_module(ant_t *js) {
 
   ant_value_t regexp_proto = js_mkobj(js);
   js_set_proto_init(regexp_proto, object_proto);
+  js->builtins.regexp_proto = regexp_proto;
   
-  defmethod(js, regexp_proto, "test", 4, js_mkfun(builtin_regexp_test));
-  defmethod(js, regexp_proto, "exec", 4, js_mkfun(builtin_regexp_exec));
+  defmethod(js, regexp_proto, "test", 4, js_mkfun_arity(builtin_regexp_test, 1));
+  defmethod(js, regexp_proto, "exec", 4, js_mkfun_arity(builtin_regexp_exec, 1));
   defmethod(js, regexp_proto, "toString", 8, js_mkfun(builtin_regexp_toString));
 
   js_mkprop_fast(js, regexp_proto, "global", 6, js_false);
@@ -4441,13 +4442,12 @@ void init_regex_module(ant_t *js) {
   js_set_sym(js, regexp_proto, js->sym.search_sym, js_mkfun(builtin_regexp_symbol_search));
   js_set_tostringtag(js, regexp_proto, js_mkstr(js, "RegExp", 6));
   js_set_getter_desc(js, regexp_proto, "flags", 5, js_mkfun(builtin_regexp_flags_getter), JS_DESC_C);
-  defmethod(js, regexp_proto, "compile", 7, js_mkfun(builtin_regexp_compile));
+  defmethod(js, regexp_proto, "compile", 7, js_mkfun_arity(builtin_regexp_compile, 2));
 
   ant_value_t regexp_ctor = js_mkobj(js);
-  js_set_slot(regexp_ctor, SLOT_CFUNC, js_mkfun(builtin_RegExp));
+  js_set_slot(regexp_ctor, SLOT_CFUNC, js_mkfun_arity(builtin_RegExp, 2));
   js_mkprop_fast(js, regexp_ctor, "prototype", 9, regexp_proto);
-  js_mkprop_fast(js, regexp_ctor, "name", 4, js_mkstr(js, "RegExp", 6));
-  js_set_descriptor(js, regexp_ctor, "name", 4, 0);
+  js_set_function_name(js, regexp_ctor, "RegExp", sizeof("RegExp") - 1);
   js_define_species_getter(js, regexp_ctor);
 
   ant_value_t regexp_func = js_obj_to_func(js, regexp_ctor);
@@ -4455,7 +4455,7 @@ void init_regex_module(ant_t *js) {
   js_setprop(js, regexp_proto, js_mkstr(js, "constructor", 11), regexp_func);
   js_set_descriptor(js, regexp_proto, "constructor", 11, JS_DESC_W | JS_DESC_C);
 
-  js_set(js, regexp_ctor, "escape", js_mkfun(builtin_regexp_escape));
+  js_set(js, regexp_ctor, "escape", js_mkfun_arity(builtin_regexp_escape, 1));
 
   ant_value_t empty = js_mkstr_permanent(js, "", 0);
   js->builtins.regexp_empty_string = empty;
@@ -4516,11 +4516,11 @@ void init_regex_module(ant_t *js) {
   ant_value_t string_ctor = js_get(js, glob, "String");
   ant_value_t string_proto = js_get(js, string_ctor, "prototype");
   
-  defmethod(js, string_proto, "search", 6, js_mkfun(builtin_string_search));
-  defmethod(js, string_proto, "match", 5, js_mkfun(builtin_string_match));
-  defmethod(js, string_proto, "matchAll", 8, js_mkfun(builtin_string_matchAll));
-  defmethod(js, string_proto, "replace", 7, js_mkfun(builtin_string_replace));
-  defmethod(js, string_proto, "replaceAll", 10, js_mkfun(builtin_string_replaceAll));
+  defmethod(js, string_proto, "search", 6, js_mkfun_arity(builtin_string_search, 1));
+  defmethod(js, string_proto, "match", 5, js_mkfun_arity(builtin_string_match, 1));
+  defmethod(js, string_proto, "matchAll", 8, js_mkfun_arity(builtin_string_matchAll, 1));
+  defmethod(js, string_proto, "replace", 7, js_mkfun_arity(builtin_string_replace, 2));
+  defmethod(js, string_proto, "replaceAll", 10, js_mkfun_arity(builtin_string_replaceAll, 2));
   
   if (state) {
     state->exec_property_written = false;

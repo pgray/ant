@@ -1457,7 +1457,7 @@ ant_value_t sandbox_library(ant_t *js) {
     js_set_getter_desc(js, js->builtins.sandbox_proto, "messages", 8, js_mkfun(sandbox_messages_getter), JS_DESC_C);
     js_set_sym(js, js->builtins.sandbox_proto, js->sym.asyncIterator_sym, js_mkfun(sym_this_cb));
     js_set_tostringtag(js, js->builtins.sandbox_proto, js_mkstr(js, "Sandbox", 7));
-    js->builtins.sandbox_ctor = js_make_ctor(js, sandbox_ctor, js->builtins.sandbox_proto, "Sandbox", 7);
+    js->builtins.sandbox_ctor = js_make_ctor(js, sandbox_ctor, js->builtins.sandbox_proto, "Sandbox", 7, 0);
     gc_register_root(&js->builtins.sandbox_ctor);
   }
 

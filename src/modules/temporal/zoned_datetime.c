@@ -706,8 +706,8 @@ void temporal_init_zdt(ant_t *js, ant_value_t temporal) {
   TEMPORAL_METHOD(js, proto, "withPlainTime", temporal_zdt_with_plain_time, 0);
   TEMPORAL_METHOD(js, proto, "withTimeZone", temporal_zdt_with_timezone, 1);
   temporal_set_to_string_tag(js, proto, "Temporal.ZonedDateTime");
-  ant_value_t ctor = js_make_ctor(js, temporal_zdt_ctor, proto, "ZonedDateTime", 13);
-  temporal_set_length(js, ctor, 2);
+  ant_value_t ctor = js_make_ctor(js, temporal_zdt_ctor, proto, "ZonedDateTime", 13, 2);
+  temporal_lock_prototype(js, ctor);
   TEMPORAL_METHOD(js, ctor, "compare", temporal_zdt_compare, 2);
   TEMPORAL_METHOD(js, ctor, "from", temporal_zdt_from, 1);
   temporal_set_namespace_property(js, temporal, "ZonedDateTime", ctor);

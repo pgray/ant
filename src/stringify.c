@@ -29,7 +29,7 @@ static size_t stringify_typed_element(ant_t *js, const TypedArrayData *ta, size_
 
 static bool stringify_is_buffer(ant_t *js, ant_value_t obj) {
   ant_value_t proto = js_get_proto(js, obj);
-  ant_value_t buffer_proto = js_get_ctor_proto(js, "Buffer", 6);
+  ant_value_t buffer_proto = js->builtins.buffer_proto;
   return vtype(proto) == kTypeObject && vtype(buffer_proto) == kTypeObject && vdata(proto) == vdata(buffer_proto);
 }
 

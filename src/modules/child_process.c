@@ -179,7 +179,7 @@ static ant_value_t make_buffer_chunk(ant_t *js, const char *data, size_t len) {
   ArrayBufferData *ab = create_array_buffer_data(js, len);
   if (!ab) return js_mkerr(js, "Out of memory");
   if (len > 0 && data) memcpy(ab->data, data, len);
-  return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, "Buffer");
+  return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, js->builtins.buffer_proto);
 }
 
 static uv_pipe_t *child_pipe(child_process_t *cp, child_stream_kind_t kind) {
@@ -745,14 +745,13 @@ static void child_process_init_constructor(ant_t *js) {
 
   js->builtins.child_process_proto = js_mkobj(js);
   if (is_object_type(ee_proto)) js_set_proto_init(js->builtins.child_process_proto, ee_proto);
-  js_set(js, js->builtins.child_process_proto, "kill", js_mkfun(child_kill));
+  js_set(js, js->builtins.child_process_proto, "kill", js_mkfun_arity(child_kill, 1));
   js_set(js, js->builtins.child_process_proto, "ref", js_mkfun(child_ref));
   js_set(js, js->builtins.child_process_proto, "unref", js_mkfun(child_unref));
 
   js->builtins.child_process_ctor = js_make_ctor(
     js, child_process_ctor,
-    js->builtins.child_process_proto, "ChildProcess", 12
-  );
+    js->builtins.child_process_proto, "ChildProcess", 12, 0);
 }
 
 static uv_handle_t *child_stream_handle(child_process_t *cp, child_stream_kind_t kind) {
@@ -969,7 +968,7 @@ static ant_value_t create_child_object(ant_t *js, child_process_t *cp) {
   
   js_set(js, obj, "ref", js_mkfun(child_ref));
   js_set(js, obj, "unref", js_mkfun(child_unref));
-  js_set(js, obj, "kill", js_mkfun(child_kill));
+  js_set(js, obj, "kill", js_mkfun_arity(child_kill, 1));
   js_set(js, obj, "write", js_mkfun(child_write));
   js_set(js, obj, "end", js_mkfun(child_end));
   
@@ -1763,7 +1762,7 @@ static ant_value_t sync_make_output(ant_t *js, const char *bytes, size_t len, bo
   if (!buffer) return js_mkerr(js, "Out of memory");
   if (bytes && len > 0) memcpy(buffer->data, bytes, len);
 
-  return create_typed_array(js, TYPED_ARRAY_UINT8, buffer, 0, len, "Buffer");
+  return create_typed_array(js, TYPED_ARRAY_UINT8, buffer, 0, len, js->builtins.buffer_proto);
 }
 
 #ifdef _WIN32
@@ -2656,8 +2655,8 @@ static ant_value_t builtin_fork(ant_params_t) {
 ant_value_t child_process_library(ant_t *js) {
   ant_value_t lib = js_mkobj(js);
   
-  ant_value_t exec_fn = js_heavy_mkfun(js, builtin_exec, js_mkundef());
-  ant_value_t exec_file_fn = js_heavy_mkfun(js, builtin_execFile, js_mkundef());
+  ant_value_t exec_fn = js_heavy_mkfun_named(js, builtin_exec, "exec", 3, js_mkundef());
+  ant_value_t exec_file_fn = js_heavy_mkfun_named(js, builtin_execFile, "execFile", 4, js_mkundef());
   
   child_process_init_constructor(js);
   
@@ -2672,13 +2671,13 @@ ant_value_t child_process_library(ant_t *js) {
   );
   
   js_set(js, lib, "ChildProcess", js->builtins.child_process_ctor);
-  js_set(js, lib, "spawn", js_mkfun(builtin_spawn));
+  js_set(js, lib, "spawn", js_mkfun_arity(builtin_spawn, 3));
   js_set(js, lib, "exec", exec_fn);
   js_set(js, lib, "execFile", exec_file_fn);
-  js_set(js, lib, "execSync", js_mkfun(builtin_execSync));
-  js_set(js, lib, "execFileSync", js_mkfun(builtin_execFileSync));
-  js_set(js, lib, "spawnSync", js_mkfun(builtin_spawnSync));
-  js_set(js, lib, "fork", js_mkfun(builtin_fork));
+  js_set(js, lib, "execSync", js_mkfun_arity(builtin_execSync, 2));
+  js_set(js, lib, "execFileSync", js_mkfun_arity(builtin_execFileSync, 3));
+  js_set(js, lib, "spawnSync", js_mkfun_arity(builtin_spawnSync, 3));
+  js_set(js, lib, "fork", js_mkfun_arity(builtin_fork, 1));
   js_set_tostringtag(js, lib, js_mkstr(js, "child_process", 13));
   
   return lib;

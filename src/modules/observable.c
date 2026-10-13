@@ -317,7 +317,7 @@ static ant_value_t js_observable_constructor(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Observable subscriber must be a function");
   }
   
-  ant_value_t proto = js_get_ctor_proto(js, "Observable", 10);
+  ant_value_t proto = js->builtins.observable_proto;
   ant_value_t observable = js_mkobj(js);
   
   js_set_proto_init(observable, proto);
@@ -477,15 +477,15 @@ static ant_value_t js_observable_from(ant_params_t) {
 void init_observable_module(ant_t *js) {  
   ant_value_t observable_ctor = js_mkobj(js);
   ant_value_t observable_proto = js_mkobj(js);
+  js->builtins.observable_proto = observable_proto;
   
   js_set(js, observable_proto, "subscribe", js_mkfun(js_observable_subscribe));
   js_set_sym(js, observable_proto, js->sym.observable_sym, js_mkfun(js_observable_symbol_observable));
   js_set_tostringtag(js, observable_proto, js_mkstr(js, "Observable", 10));
   
-  js_set_slot(observable_ctor, SLOT_CFUNC, js_mkfun(js_observable_constructor));
+  js_set_slot(observable_ctor, SLOT_CFUNC, js_mkfun_arity(js_observable_constructor, 1));
   js_mkprop_fast(js, observable_ctor, "prototype", 9, observable_proto);
-  js_mkprop_fast(js, observable_ctor, "name", 4, ANT_STRING("Observable"));
-  js_set_descriptor(js, observable_ctor, "name", 4, 0);
+  js_set_function_name(js, observable_ctor, "Observable", sizeof("Observable") - 1);
   js_set(js, observable_ctor, "of", js_mkfun(js_observable_of));
   js_set(js, observable_ctor, "from", js_mkfun(js_observable_from));
   

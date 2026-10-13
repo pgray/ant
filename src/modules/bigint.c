@@ -1804,10 +1804,10 @@ void init_bigint_module(ant_t *js) {
 
   ant_value_t bigint_ctor_obj = mkobj(js, 0);
   js_set_proto_init(bigint_ctor_obj, function_proto);
-  js_set_slot(bigint_ctor_obj, SLOT_CFUNC, js_mkfun(builtin_BigInt));
-  js_setprop(js, bigint_ctor_obj, js_mkstr(js, "asIntN", 6), js_mkfun(builtin_BigInt_asIntN));
-  js_setprop(js, bigint_ctor_obj, js_mkstr(js, "asUintN", 7), js_mkfun(builtin_BigInt_asUintN));
+  js_set_slot(bigint_ctor_obj, SLOT_CFUNC, js_mkfun_arity(builtin_BigInt, 1));
+  defmethod(js, bigint_ctor_obj, "asIntN", 6, js_mkfun_arity(builtin_BigInt_asIntN, 2));
+  defmethod(js, bigint_ctor_obj, "asUintN", 7, js_mkfun_arity(builtin_BigInt_asUintN, 2));
   js_setprop_nonconfigurable(js, bigint_ctor_obj, "prototype", 9, bigint_proto);
-  js_setprop(js, bigint_ctor_obj, ANT_STRING("name"), ANT_STRING("BigInt"));
+  js_set_function_name(js, bigint_ctor_obj, "BigInt", sizeof("BigInt") - 1);
   js_set_global_builtin(js, "BigInt", js_obj_to_func(js, bigint_ctor_obj));
 }

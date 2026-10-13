@@ -83,7 +83,7 @@ static ant_value_t sc_clone_typed_array(
   
   ant_value_t clone = create_typed_array_with_buffer(
     js, ta_data->type, buffer, ta_data->byte_offset, ta_data->length,
-    buffer_typedarray_type_name(ta_data->type), ab_obj
+    js->builtins.typedarray_protos[ta_data->type], ab_obj
   );
   
   if (!is_err(clone)) sc_add(seen, key, clone);
@@ -167,7 +167,7 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
     ant_value_t clone = js_mkobj(js);
     js_obj_ptr(clone)->type_tag = kTypeMap;
 
-    ant_value_t map_proto = js_get_ctor_proto(js, "Map", 3);
+    ant_value_t map_proto = js->builtins.map_proto;
     if (is_special_object(map_proto)) js_set_proto_init(clone, map_proto);
     
     map_entry_t **new_head = calloc(1, sizeof(map_entry_t *));
@@ -198,7 +198,7 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
     ant_value_t clone = js_mkobj(js);
     js_obj_ptr(clone)->type_tag = kTypeSet;
     
-    ant_value_t set_proto = js_get_ctor_proto(js, "Set", 3);
+    ant_value_t set_proto = js->builtins.set_proto;
     if (is_special_object(set_proto)) js_set_proto_init(clone, set_proto);
     
     set_entry_t **new_head = calloc(1, sizeof(set_entry_t *));
@@ -257,7 +257,7 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
 
   if (is_date_instance(val)) {
     ant_value_t clone = js_mkobj(js);
-    ant_value_t date_proto = js_get_ctor_proto(js, "Date", 4);
+    ant_value_t date_proto = js->builtins.date_proto;
     if (is_object_type(date_proto)) js_set_proto_init(clone, date_proto);
     
     js_set_slot(clone, SLOT_DATA, js_get_slot(val, SLOT_DATA));
@@ -359,7 +359,7 @@ ant_value_t js_structured_clone(ant_params_t) {
 void init_structured_clone_module(ant_t *js) {
   ant_value_t global = js_glob(js);
 
-  js_set(js, global, "structuredClone", js_mkfun(js_structured_clone));
+  js_set(js, global, "structuredClone", js_mkfun_arity(js_structured_clone, 2));
   js_set_descriptor(
     js, global, "structuredClone", 15,
     JS_DESC_W | JS_DESC_E | JS_DESC_C

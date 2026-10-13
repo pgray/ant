@@ -88,7 +88,7 @@ static ant_value_t enqueue_buffer(ant_t *js, ant_value_t ctrl_obj, const uint8_t
   ArrayBufferData *ab = create_array_buffer_data(js, len);
   if (!ab) return js_mkerr(js, "out of memory");
   memcpy(ab->data, data, len);
-  ant_value_t arr = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, "Uint8Array");
+  ant_value_t arr = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, js->builtins.typedarray_protos[TYPED_ARRAY_UINT8]);
   if (!ts_is_controller(ctrl_obj))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid TransformStreamDefaultController");
   return ts_ctrl_enqueue(js, ctrl_obj, arr);
@@ -368,7 +368,7 @@ void init_compression_stream_module(ant_t *js) {
   js_set_getter_desc(js, js->builtins.cs_proto, "writable", 8, js_mkfun(js_cs_get_writable), JS_DESC_C);
   js_set_tostringtag(js, js->builtins.cs_proto, js_mkstr(js, "CompressionStream", 17));
 
-  ant_value_t cs_ctor = js_make_ctor(js, js_cs_ctor, js->builtins.cs_proto, "CompressionStream", 17);
+  ant_value_t cs_ctor = js_make_ctor(js, js_cs_ctor, js->builtins.cs_proto, "CompressionStream", 17, 1);
   js_set(js, g, "CompressionStream", cs_ctor);
   js_set_descriptor(js, g, "CompressionStream", 17, JS_DESC_W | JS_DESC_C);
 
@@ -377,7 +377,7 @@ void init_compression_stream_module(ant_t *js) {
   js_set_getter_desc(js, js->builtins.ds_proto, "writable", 8, js_mkfun(js_ds_get_writable), JS_DESC_C);
   js_set_tostringtag(js, js->builtins.ds_proto, js_mkstr(js, "DecompressionStream", 19));
 
-  ant_value_t ds_ctor = js_make_ctor(js, js_ds_ctor, js->builtins.ds_proto, "DecompressionStream", 19);
+  ant_value_t ds_ctor = js_make_ctor(js, js_ds_ctor, js->builtins.ds_proto, "DecompressionStream", 19, 1);
   js_set(js, g, "DecompressionStream", ds_ctor);
   js_set_descriptor(js, g, "DecompressionStream", 19, JS_DESC_W | JS_DESC_C);
 }

@@ -341,6 +341,7 @@ ant_value_t js_delete_sym_prop(ant_t *js, ant_value_t obj, ant_value_t sym);
 ant_value_t js_cfunc_promote(ant_t *js, ant_value_t cfunc);
 ant_value_t js_cfunc_expose_named(ant_t *js, ant_value_t cfunc, const char *name, size_t name_len);
 ant_value_t js_set_function_name(ant_t *js, ant_value_t fn, const char *name, size_t name_len);
+ant_value_t js_define_function_length(ant_t *js, ant_value_t fn, int length);
 
 typedef enum {
   JS_FUNC_SOURCE_COPY,
@@ -611,12 +612,13 @@ static inline ant_value_t js_cfunc_lookup_promoted(ant_t *js, ant_value_t cfunc)
   return cfunc;
 }
 
-static inline ant_value_t js_make_ctor(ant_t *js, ant_cfunc_t fn, ant_value_t proto, const char *name, size_t nlen) {
+static inline ant_value_t js_make_ctor(ant_t *js, ant_cfunc_t fn, ant_value_t proto, const char *name, size_t nlen, int length) {
   ant_value_t obj = js_mkobj(js);
   js_set_slot(obj, SLOT_CFUNC, js_mkfun_dyn(fn));
+  
+  js_define_function_length(js, obj, length);
+  js_set_function_name(js, obj, name, nlen);
   js_mkprop_fast(js, obj, "prototype", 9, proto);
-  js_mkprop_fast(js, obj, "name", 4, js_mkstr(js, name, nlen));
-  js_set_descriptor(js, obj, "name", 4, 0);
 
   ant_value_t fn_val = js_obj_to_func(js, obj);
   js_set(js, proto, "constructor", fn_val);

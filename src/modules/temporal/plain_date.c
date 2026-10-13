@@ -403,8 +403,8 @@ void temporal_init_plain_date(ant_t *js, ant_value_t temporal) {
   TEMPORAL_METHOD(js, proto, "with", temporal_plain_date_with, 1);
   TEMPORAL_METHOD(js, proto, "withCalendar", temporal_plain_date_with_calendar, 1);
   temporal_set_to_string_tag(js, proto, "Temporal.PlainDate");
-  ant_value_t ctor = js_make_ctor(js, temporal_plain_date_ctor, proto, "PlainDate", 9);
-  temporal_set_length(js, ctor, 3);
+  ant_value_t ctor = js_make_ctor(js, temporal_plain_date_ctor, proto, "PlainDate", 9, 3);
+  temporal_lock_prototype(js, ctor);
   TEMPORAL_METHOD(js, ctor, "compare", temporal_plain_date_compare, 2);
   TEMPORAL_METHOD(js, ctor, "from", temporal_plain_date_from, 1);
   temporal_set_namespace_property(js, temporal, "PlainDate", ctor);

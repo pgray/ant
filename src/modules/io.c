@@ -1490,10 +1490,10 @@ static void console_apply_methods(ant_t *js, ant_value_t console_obj) {
   js_set(js, console_obj, "warn", js_mkfun(js_console_warn));
   js_set(js, console_obj, "info", js_mkfun(js_console_info));
   js_set(js, console_obj, "debug", js_mkfun(js_console_debug));
-  js_set(js, console_obj, "assert", js_mkfun(js_console_assert));
-  js_set(js, console_obj, "dir", js_mkfun(js_console_dir));
+  js_set(js, console_obj, "assert", js_mkfun_arity(js_console_assert, 1));
+  js_set(js, console_obj, "dir", js_mkfun_arity(js_console_dir, 2));
   js_set(js, console_obj, "dirxml", js_mkfun(js_console_dirxml));
-  js_set(js, console_obj, "table", js_mkfun(js_console_table));
+  js_set(js, console_obj, "table", js_mkfun_arity(js_console_table, 2));
   js_set(js, console_obj, "trace", js_mkfun(js_console_trace));
   js_set(js, console_obj, "count", js_mkfun(js_console_count));
   js_set(js, console_obj, "countReset", js_mkfun(js_console_countReset));
@@ -1546,7 +1546,7 @@ static void console_ensure_constructor(ant_t *js) {
   console_apply_methods(js, js->builtins.console_proto);
   
   js_set_tostringtag(js, js->builtins.console_proto, js_mkstr(js, "console", 7));
-  js->builtins.console_ctor = js_make_ctor(js, js_console_constructor, js->builtins.console_proto, "Console", 7);
+  js->builtins.console_ctor = js_make_ctor(js, js_console_constructor, js->builtins.console_proto, "Console", 7, 1);
 }
 
 static ant_value_t console_create_default(ant_t *js) {

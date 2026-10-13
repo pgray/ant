@@ -438,7 +438,7 @@ static ant_value_t fetch_create_chunk(ant_t *js, const uint8_t *data, size_t len
   ArrayBufferData *ab = create_array_buffer_data(js, len);
   if (!ab) return js_mkerr(js, "out of memory");
   if (len > 0) memcpy(ab->data, data, len);
-  return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, "Uint8Array");
+  return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, js->builtins.typedarray_protos[TYPED_ARRAY_UINT8]);
 }
 
 static bool fetch_get_upload_chunk(ant_value_t value, const uint8_t **out, size_t *len) {
@@ -1015,7 +1015,7 @@ ant_value_t ant_fetch(ant_params_t) {
 
 void init_fetch_module(ant_t *js) {
   utarray_new(pending_requests, &ut_ptr_icd);
-  js_set(js, js->global, "fetch", js_mkfun_flags(ant_fetch, CFUNC_HAS_PROTOTYPE));
+  js_set(js, js->global, "fetch", js_mkfun_arity_flags(ant_fetch, 1, CFUNC_HAS_PROTOTYPE));
 }
 
 int has_pending_fetches(void) {

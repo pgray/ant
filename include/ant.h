@@ -138,6 +138,7 @@ ant_value_t js_mkfun_meta(const ant_cfunc_meta_t *meta);
 ant_value_t js_mkfun_dyn(ant_cfunc_t fn);
 
 ant_value_t js_heavy_mkfun(ant_t *js, ant_value_t (*fn)(ant_params_t), ant_value_t data);
+ant_value_t js_heavy_mkfun_meta(ant_t *js, const ant_cfunc_meta_t *meta, ant_value_t data);
 ant_value_t js_heavy_mkfun_native(ant_t *js, ant_value_t (*fn)(ant_params_t), void *ptr, uint32_t tag);
 ant_value_t js_mkprop_fast(ant_t *js, ant_value_t obj, const char *key, size_t len, ant_value_t v);
 
@@ -149,6 +150,11 @@ ant_value_t js_mkprop_fast(ant_t *js, ant_value_t obj, const char *key, size_t l
 #define js_mkfun_arity(fn, arity) ({                                          \
   static const ant_cfunc_meta_t _ant_cfunc_meta = { (fn), NULL, (arity), 0 }; \
   js_mkfun_meta(&_ant_cfunc_meta);                                            \
+})
+
+#define js_heavy_mkfun_named(js, fn, name, arity, data) ({                      \
+  static const ant_cfunc_meta_t _ant_cfunc_meta = { (fn), (name), (arity), 0 }; \
+  js_heavy_mkfun_meta((js), &_ant_cfunc_meta, (data));                          \
 })
 
 #define js_mkfun_flags(fn, flags) ({                                          \
@@ -175,14 +181,12 @@ void js_set_proto_wb(ant_t *, ant_value_t obj, ant_value_t proto);
 void js_set_proto_init(ant_value_t obj, ant_value_t proto);
 void *js_permanent_alloc(ant_t *, size_t size, size_t align);
 
+ant_value_t js_get_proto(ant_t *, ant_value_t obj);
+ant_value_t js_tostring_val(ant_t *js, ant_value_t value);
 ant_value_t js_prop_load(ant_prop_loc_t loc);
 ant_value_t js_setprop(ant_t *, ant_value_t obj, ant_value_t key, ant_value_t val);
 ant_value_t js_setprop_keyed(ant_t *, ant_value_t obj, ant_value_t key, ant_value_t val);
 ant_value_t js_setprop_nonconfigurable(ant_t *, ant_value_t obj, const char *key, size_t keylen, ant_value_t val);
-
-ant_value_t js_get_proto(ant_t *, ant_value_t obj);
-ant_value_t js_get_ctor_proto(ant_t *, const char *name, size_t len);
-ant_value_t js_tostring_val(ant_t *js, ant_value_t value);
 
 ant_object_t *js_obj_ptr(ant_value_t val);
 ant_value_t js_obj_from_ptr(ant_object_t *obj);

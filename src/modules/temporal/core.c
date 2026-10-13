@@ -1015,12 +1015,8 @@ ant_value_t temporal_require_new(ant_t *js, const char *name) {
   return js_mkerr_typed(js, JS_ERR_TYPE, "%s constructor requires 'new'", name);
 }
 
-void temporal_set_length(ant_t *js, ant_value_t fn, int length) {
-  ant_value_t obj = js_obj_from_ptr(js_obj_ptr(fn));
-  js_mkprop_fast(js, obj, "length", 6, js_mknum(length));
-  js_set_descriptor(js, obj, "length", 6, JS_DESC_C);
-  js_set_descriptor(js, obj, "name", 4, JS_DESC_C);
-  js_set_descriptor(js, obj, "prototype", 9, 0);
+void temporal_lock_prototype(ant_t *js, ant_value_t fn) {
+  js_set_descriptor(js, js_obj_from_ptr(js_obj_ptr(fn)), "prototype", 9, 0);
 }
 
 void temporal_set_namespace_property(

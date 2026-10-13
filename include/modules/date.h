@@ -3,12 +3,6 @@
 
 #include "types.h"
 
-#define DATE_METHOD_ENTRY(name_lit, fn_ptr) \
-  { name_lit, sizeof(name_lit) - 1, fn_ptr }
-  
-#define DATE_COUNT_OF(a) \
-  ((int)(sizeof(a) / sizeof((a)[0])))
-
 typedef struct {
   double year;
   double month;
@@ -62,12 +56,6 @@ typedef struct {
   date_field_index_t end_field_exclusive;
   bool local_time;
 } date_set_field_spec_t;
-
-typedef struct {
-  const char *name;
-  size_t len;
-  ant_cfunc_t fn;
-} date_method_entry_t;
 
 void init_date_module(ant_t *js);
 bool is_date_instance(ant_value_t value);

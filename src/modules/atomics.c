@@ -1030,20 +1030,20 @@ static ant_value_t js_atomics_pause(ant_params_t) {
 void init_atomics_module(ant_t *js) {
   ant_value_t atomics = js_mkobj(js);
   
-  js_set(js, atomics, "add", js_mkfun(js_atomics_add));
-  js_set(js, atomics, "and", js_mkfun(js_atomics_and));
-  js_set(js, atomics, "compareExchange", js_mkfun(js_atomics_compareExchange));
-  js_set(js, atomics, "exchange", js_mkfun(js_atomics_exchange));
-  js_set(js, atomics, "isLockFree", js_mkfun(js_atomics_isLockFree));
-  js_set(js, atomics, "load", js_mkfun(js_atomics_load));
-  js_set(js, atomics, "notify", js_mkfun(js_atomics_notify));
-  js_set(js, atomics, "or", js_mkfun(js_atomics_or));
+  js_set(js, atomics, "add", js_mkfun_arity(js_atomics_add, 3));
+  js_set(js, atomics, "and", js_mkfun_arity(js_atomics_and, 3));
+  js_set(js, atomics, "compareExchange", js_mkfun_arity(js_atomics_compareExchange, 4));
+  js_set(js, atomics, "exchange", js_mkfun_arity(js_atomics_exchange, 3));
+  js_set(js, atomics, "isLockFree", js_mkfun_arity(js_atomics_isLockFree, 1));
+  js_set(js, atomics, "load", js_mkfun_arity(js_atomics_load, 2));
+  js_set(js, atomics, "notify", js_mkfun_arity(js_atomics_notify, 3));
+  js_set(js, atomics, "or", js_mkfun_arity(js_atomics_or, 3));
   js_set(js, atomics, "pause", js_mkfun(js_atomics_pause));
-  js_set(js, atomics, "store", js_mkfun(js_atomics_store));
-  js_set(js, atomics, "sub", js_mkfun(js_atomics_sub));
-  js_set(js, atomics, "wait", js_mkfun(js_atomics_wait));
-  js_set(js, atomics, "waitAsync", js_mkfun(js_atomics_waitAsync));
-  js_set(js, atomics, "xor", js_mkfun(js_atomics_xor));
+  js_set(js, atomics, "store", js_mkfun_arity(js_atomics_store, 3));
+  js_set(js, atomics, "sub", js_mkfun_arity(js_atomics_sub, 3));
+  js_set(js, atomics, "wait", js_mkfun_arity(js_atomics_wait, 4));
+  js_set(js, atomics, "waitAsync", js_mkfun_arity(js_atomics_waitAsync, 4));
+  js_set(js, atomics, "xor", js_mkfun_arity(js_atomics_xor, 3));
   
   js_set_tostringtag(js, atomics, js_mkstr(js, "Atomics", 7));
   js_set_global_builtin(js, "Atomics", atomics);

@@ -612,11 +612,9 @@ static const tzabbr_t js_tzabbr[] = {
 };
 
 static bool string_get_tzabbr(const uint8_t *sp, int *pp, int *offset) {
-  for (int i = 0; i < DATE_COUNT_OF(js_tzabbr); i++) {
-    if (string_match(sp, pp, js_tzabbr[i].name)) {
-      *offset = js_tzabbr[i].offset;
-      return true;
-    }
+  for (size_t i = 0; i < sizeof(js_tzabbr) / sizeof(*js_tzabbr); i++) if (string_match(sp, pp, js_tzabbr[i].name)) {
+    *offset = js_tzabbr[i].offset;
+    return true;
   }
   return false;
 }
@@ -814,7 +812,7 @@ static ant_value_t builtin_Date(ant_params_t) {
     val = (double)date_now();
     
     ant_value_t tmp = js_mkobj(js);
-    ant_value_t date_proto = js_get_ctor_proto(js, "Date", 4);
+    ant_value_t date_proto = js->builtins.date_proto;
     if (is_object_type(date_proto)) js_set_proto_init(tmp, date_proto);
     
     js_set_slot(tmp, SLOT_DATA, tov(val));
@@ -1271,15 +1269,9 @@ static ant_value_t date_toPrimitive(ant_params_t) {
   return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert object to primitive value");
 }
 
-static void date_define_methods(
-  ant_t *js, ant_value_t target,
-  const date_method_entry_t *methods,
-  size_t count
-) {
-  for (size_t i = 0; i < count; i++) js_setprop(js,target,
-    js_mkstr(js, methods[i].name, methods[i].len),
-    js_mkfun_dyn(methods[i].fn)
-  );
+static void date_define_methods(ant_t *js, ant_value_t target, const ant_cfunc_meta_t *methods, size_t count) {
+  for (size_t i = 0; i < count; i++)
+    defmethod(js, target, methods[i].name, strlen(methods[i].name), js_mkfun_meta(&methods[i]));
 }
 
 void init_date_module(ant_t *js) {
@@ -1287,76 +1279,79 @@ void init_date_module(ant_t *js) {
   ant_value_t function_proto = js->sym.function_proto;
   ant_value_t date_proto = js_mkobj(js);
   
+  js->builtins.date_proto = date_proto;
   js_set_proto_init(date_proto, object_proto);
 
-  static const date_method_entry_t kDateProtoMethods[] = {
-    DATE_METHOD_ENTRY("valueOf", builtin_Date_valueOf),
-    DATE_METHOD_ENTRY("toString", builtin_Date_toString),
-    DATE_METHOD_ENTRY("toUTCString", builtin_Date_toUTCString),
-    DATE_METHOD_ENTRY("toGMTString", builtin_Date_toUTCString),
-    DATE_METHOD_ENTRY("toISOString", builtin_Date_toISOString),
-    DATE_METHOD_ENTRY("toDateString", builtin_Date_toDateString),
-    DATE_METHOD_ENTRY("toTimeString", builtin_Date_toTimeString),
-    DATE_METHOD_ENTRY("toLocaleString", builtin_Date_toLocaleString),
-    DATE_METHOD_ENTRY("toLocaleDateString", builtin_Date_toLocaleDateString),
-    DATE_METHOD_ENTRY("toLocaleTimeString", builtin_Date_toLocaleTimeString),
-    DATE_METHOD_ENTRY("getTimezoneOffset", builtin_Date_getTimezoneOffset),
-    DATE_METHOD_ENTRY("getTime", builtin_Date_getTime),
-    DATE_METHOD_ENTRY("getYear", builtin_Date_getYear),
-    DATE_METHOD_ENTRY("getFullYear", builtin_Date_getFullYear),
-    DATE_METHOD_ENTRY("getUTCFullYear", builtin_Date_getUTCFullYear),
-    DATE_METHOD_ENTRY("getMonth", builtin_Date_getMonth),
-    DATE_METHOD_ENTRY("getUTCMonth", builtin_Date_getUTCMonth),
-    DATE_METHOD_ENTRY("getDate", builtin_Date_getDate),
-    DATE_METHOD_ENTRY("getUTCDate", builtin_Date_getUTCDate),
-    DATE_METHOD_ENTRY("getHours", builtin_Date_getHours),
-    DATE_METHOD_ENTRY("getUTCHours", builtin_Date_getUTCHours),
-    DATE_METHOD_ENTRY("getMinutes", builtin_Date_getMinutes),
-    DATE_METHOD_ENTRY("getUTCMinutes", builtin_Date_getUTCMinutes),
-    DATE_METHOD_ENTRY("getSeconds", builtin_Date_getSeconds),
-    DATE_METHOD_ENTRY("getUTCSeconds", builtin_Date_getUTCSeconds),
-    DATE_METHOD_ENTRY("getMilliseconds", builtin_Date_getMilliseconds),
-    DATE_METHOD_ENTRY("getUTCMilliseconds", builtin_Date_getUTCMilliseconds),
-    DATE_METHOD_ENTRY("getDay", builtin_Date_getDay),
-    DATE_METHOD_ENTRY("getUTCDay", builtin_Date_getUTCDay),
-    DATE_METHOD_ENTRY("setTime", builtin_Date_setTime),
-    DATE_METHOD_ENTRY("setMilliseconds", builtin_Date_setMilliseconds),
-    DATE_METHOD_ENTRY("setUTCMilliseconds", builtin_Date_setUTCMilliseconds),
-    DATE_METHOD_ENTRY("setSeconds", builtin_Date_setSeconds),
-    DATE_METHOD_ENTRY("setUTCSeconds", builtin_Date_setUTCSeconds),
-    DATE_METHOD_ENTRY("setMinutes", builtin_Date_setMinutes),
-    DATE_METHOD_ENTRY("setUTCMinutes", builtin_Date_setUTCMinutes),
-    DATE_METHOD_ENTRY("setHours", builtin_Date_setHours),
-    DATE_METHOD_ENTRY("setUTCHours", builtin_Date_setUTCHours),
-    DATE_METHOD_ENTRY("setDate", builtin_Date_setDate),
-    DATE_METHOD_ENTRY("setUTCDate", builtin_Date_setUTCDate),
-    DATE_METHOD_ENTRY("setMonth", builtin_Date_setMonth),
-    DATE_METHOD_ENTRY("setUTCMonth", builtin_Date_setUTCMonth),
-    DATE_METHOD_ENTRY("setYear", builtin_Date_setYear),
-    DATE_METHOD_ENTRY("setFullYear", builtin_Date_setFullYear),
-    DATE_METHOD_ENTRY("setUTCFullYear", builtin_Date_setUTCFullYear),
-    DATE_METHOD_ENTRY("toJSON", builtin_Date_toJSON),
+  static const ant_cfunc_meta_t date_proto_methods[] = {
+    { builtin_Date_valueOf,            "valueOf",            0, 0 },
+    { builtin_Date_toString,           "toString",           0, 0 },
+    { builtin_Date_toUTCString,        "toUTCString",        0, 0 },
+    { builtin_Date_toUTCString,        "toGMTString",        0, 0 },
+    { builtin_Date_toISOString,        "toISOString",        0, 0 },
+    { builtin_Date_toDateString,       "toDateString",       0, 0 },
+    { builtin_Date_toTimeString,       "toTimeString",       0, 0 },
+    { builtin_Date_toLocaleString,     "toLocaleString",     0, 0 },
+    { builtin_Date_toLocaleDateString, "toLocaleDateString", 0, 0 },
+    { builtin_Date_toLocaleTimeString, "toLocaleTimeString", 0, 0 },
+    { builtin_Date_getTimezoneOffset,  "getTimezoneOffset",  0, 0 },
+    { builtin_Date_getTime,            "getTime",            0, 0 },
+    { builtin_Date_getYear,            "getYear",            0, 0 },
+    { builtin_Date_getFullYear,        "getFullYear",        0, 0 },
+    { builtin_Date_getUTCFullYear,     "getUTCFullYear",     0, 0 },
+    { builtin_Date_getMonth,           "getMonth",           0, 0 },
+    { builtin_Date_getUTCMonth,        "getUTCMonth",        0, 0 },
+    { builtin_Date_getDate,            "getDate",            0, 0 },
+    { builtin_Date_getUTCDate,         "getUTCDate",         0, 0 },
+    { builtin_Date_getHours,           "getHours",           0, 0 },
+    { builtin_Date_getUTCHours,        "getUTCHours",        0, 0 },
+    { builtin_Date_getMinutes,         "getMinutes",         0, 0 },
+    { builtin_Date_getUTCMinutes,      "getUTCMinutes",      0, 0 },
+    { builtin_Date_getSeconds,         "getSeconds",         0, 0 },
+    { builtin_Date_getUTCSeconds,      "getUTCSeconds",      0, 0 },
+    { builtin_Date_getMilliseconds,    "getMilliseconds",    0, 0 },
+    { builtin_Date_getUTCMilliseconds, "getUTCMilliseconds", 0, 0 },
+    { builtin_Date_getDay,             "getDay",             0, 0 },
+    { builtin_Date_getUTCDay,          "getUTCDay",          0, 0 },
+    { builtin_Date_setTime,            "setTime",            1, 0 },
+    { builtin_Date_setMilliseconds,    "setMilliseconds",    1, 0 },
+    { builtin_Date_setUTCMilliseconds, "setUTCMilliseconds", 1, 0 },
+    { builtin_Date_setSeconds,         "setSeconds",         2, 0 },
+    { builtin_Date_setUTCSeconds,      "setUTCSeconds",      2, 0 },
+    { builtin_Date_setMinutes,         "setMinutes",         3, 0 },
+    { builtin_Date_setUTCMinutes,      "setUTCMinutes",      3, 0 },
+    { builtin_Date_setHours,           "setHours",           4, 0 },
+    { builtin_Date_setUTCHours,        "setUTCHours",        4, 0 },
+    { builtin_Date_setDate,            "setDate",            1, 0 },
+    { builtin_Date_setUTCDate,         "setUTCDate",         1, 0 },
+    { builtin_Date_setMonth,           "setMonth",           2, 0 },
+    { builtin_Date_setUTCMonth,        "setUTCMonth",        2, 0 },
+    { builtin_Date_setYear,            "setYear",            1, 0 },
+    { builtin_Date_setFullYear,        "setFullYear",        3, 0 },
+    { builtin_Date_setUTCFullYear,     "setUTCFullYear",     3, 0 },
+    { builtin_Date_toJSON,             "toJSON",             1, 0 },
   };
-  date_define_methods(js, date_proto, kDateProtoMethods, DATE_COUNT_OF(kDateProtoMethods));
+  
+  date_define_methods(
+    js, date_proto, date_proto_methods, 
+    sizeof(date_proto_methods) / sizeof(*date_proto_methods)
+  );
 
   ant_value_t to_primitive_sym = js->sym.toPrimitive_sym;
-  if (vtype(to_primitive_sym) == kTypeSymbol) {
-    js_set_sym(js, date_proto, to_primitive_sym, js_mkfun(date_toPrimitive));
-  }
+  if (vtype(to_primitive_sym) == kTypeSymbol) js_set_sym(js, date_proto, to_primitive_sym, js_mkfun(date_toPrimitive));
 
   ant_value_t date_ctor_obj = js_mkobj(js);
   js_set_proto_init(date_ctor_obj, function_proto);
-  js_set_slot(date_ctor_obj, SLOT_CFUNC, js_mkfun(builtin_Date));
+  js_set_slot(date_ctor_obj, SLOT_CFUNC, js_mkfun_arity(builtin_Date, 7));
   
-  static const date_method_entry_t kDateCtorMethods[] = {
-    DATE_METHOD_ENTRY("now", builtin_Date_now),
-    DATE_METHOD_ENTRY("parse", builtin_Date_parse),
-    DATE_METHOD_ENTRY("UTC", builtin_Date_UTC),
+  static const ant_cfunc_meta_t date_ctor_methods[] = {
+    { builtin_Date_now,   "now",   0, 0 },
+    { builtin_Date_parse, "parse", 1, 0 },
+    { builtin_Date_UTC,   "UTC",   7, 0 },
   };
   
-  date_define_methods(js, date_ctor_obj, kDateCtorMethods, DATE_COUNT_OF(kDateCtorMethods));
+  date_define_methods(js, date_ctor_obj, date_ctor_methods, sizeof(date_ctor_methods) / sizeof(*date_ctor_methods));
   js_setprop_nonconfigurable(js, date_ctor_obj, "prototype", 9, date_proto);
-  js_setprop(js, date_ctor_obj, ANT_STRING("name"), ANT_STRING("Date"));
+  js_set_function_name(js, date_ctor_obj, "Date", sizeof("Date") - 1);
 
   ant_value_t date_ctor_func = js_obj_to_func(js, date_ctor_obj);
   js_set_global_builtin(js, "Date", date_ctor_func);

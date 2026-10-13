@@ -29,7 +29,7 @@ static ant_value_t http_writer_make_buffer_value(ant_t *js, ant_http1_buffer_t *
 
   if (len > 0 && data) memcpy(ab->data, data, len);
   free(data);
-  out = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, "Buffer");
+  out = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, js->builtins.buffer_proto);
   return out;
 }
 

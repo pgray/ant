@@ -264,8 +264,8 @@ void temporal_init_instant(ant_t *js, ant_value_t temporal) {
   TEMPORAL_METHOD(js, proto, "until", temporal_instant_until, 1);
   TEMPORAL_METHOD(js, proto, "valueOf", temporal_instant_value_of, 0);
   temporal_set_to_string_tag(js, proto, "Temporal.Instant");
-  ant_value_t ctor = js_make_ctor(js, temporal_instant_ctor, proto, "Instant", 7);
-  temporal_set_length(js, ctor, 1);
+  ant_value_t ctor = js_make_ctor(js, temporal_instant_ctor, proto, "Instant", 7, 1);
+  temporal_lock_prototype(js, ctor);
   TEMPORAL_METHOD(js, ctor, "compare", temporal_instant_compare, 2);
   TEMPORAL_METHOD(js, ctor, "from", temporal_instant_from, 1);
   TEMPORAL_METHOD(js, ctor, "fromEpochMilliseconds", temporal_instant_from_epoch_milliseconds, 1);

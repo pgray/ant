@@ -139,7 +139,7 @@ void init_domexception_module(ant_t *js) {
   js->builtins.domexception_proto = proto;
   g_initialized = true;
 
-  ant_value_t error_proto = js_get_ctor_proto(js, "Error", 5);
+  ant_value_t error_proto = js->builtins.error_protos[JS_ERR_GENERIC];
   if (vtype(error_proto) != kTypeUndefined) js_set_proto_init(proto, error_proto);
 
   js_set(js, proto, "name",    js_mkstr(js, "Error", 5));
@@ -154,8 +154,7 @@ void init_domexception_module(ant_t *js) {
   js_mkprop_fast(js, ctor, "prototype", 9, proto);
   js_set_descriptor(js, ctor, "prototype", 9, 0);
   
-  js_mkprop_fast(js, ctor, "name", 4, ANT_STRING("DOMException"));
-  js_set_descriptor(js, ctor, "name", 4, 0);
+  js_set_function_name(js, ctor, "DOMException", sizeof("DOMException") - 1);
   set_constants(js, ctor);
 
   ant_value_t fn = js_obj_to_func(js, ctor);

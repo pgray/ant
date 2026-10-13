@@ -296,19 +296,19 @@ static ant_value_t reflect_prevent_extensions(ant_params_t) {
 void init_reflect_module(ant_t *js) {
   ant_value_t reflect_obj = js_mkobj(js);
   
-  js_set(js, reflect_obj, "get", js_mkfun(reflect_get));
-  js_set(js, reflect_obj, "set", js_mkfun(reflect_set));
-  js_set(js, reflect_obj, "has", js_mkfun(reflect_has));
-  js_set(js, reflect_obj, "deleteProperty", js_mkfun(reflect_delete_property));
-  js_set(js, reflect_obj, "ownKeys", js_mkfun(reflect_own_keys));
-  js_set(js, reflect_obj, "construct", js_mkfun(reflect_construct));
-  js_set(js, reflect_obj, "apply", js_mkfun(reflect_apply));
-  js_set(js, reflect_obj, "getOwnPropertyDescriptor", js_mkfun(reflect_get_own_property_descriptor));
-  js_set(js, reflect_obj, "defineProperty", js_mkfun(reflect_define_property));
-  js_set(js, reflect_obj, "getPrototypeOf", js_mkfun(reflect_get_prototype_of));
-  js_set(js, reflect_obj, "setPrototypeOf", js_mkfun(reflect_set_prototype_of));
-  js_set(js, reflect_obj, "isExtensible", js_mkfun(reflect_is_extensible));
-  js_set(js, reflect_obj, "preventExtensions", js_mkfun(reflect_prevent_extensions));
+  js_set(js, reflect_obj, "get", js_mkfun_arity(reflect_get, 2));
+  js_set(js, reflect_obj, "set", js_mkfun_arity(reflect_set, 3));
+  js_set(js, reflect_obj, "has", js_mkfun_arity(reflect_has, 2));
+  js_set(js, reflect_obj, "deleteProperty", js_mkfun_arity(reflect_delete_property, 2));
+  js_set(js, reflect_obj, "ownKeys", js_mkfun_arity(reflect_own_keys, 1));
+  js_set(js, reflect_obj, "construct", js_mkfun_arity(reflect_construct, 2));
+  js_set(js, reflect_obj, "apply", js_mkfun_arity(reflect_apply, 3));
+  js_set(js, reflect_obj, "getOwnPropertyDescriptor", js_mkfun_arity(reflect_get_own_property_descriptor, 2));
+  js_set(js, reflect_obj, "defineProperty", js_mkfun_arity(reflect_define_property, 3));
+  js_set(js, reflect_obj, "getPrototypeOf", js_mkfun_arity(reflect_get_prototype_of, 1));
+  js_set(js, reflect_obj, "setPrototypeOf", js_mkfun_arity(reflect_set_prototype_of, 2));
+  js_set(js, reflect_obj, "isExtensible", js_mkfun_arity(reflect_is_extensible, 1));
+  js_set(js, reflect_obj, "preventExtensions", js_mkfun_arity(reflect_prevent_extensions, 1));
   
   js_set_tostringtag(js, reflect_obj, js_mkstr(js, "Reflect", 7));
   js_set_global_builtin(js, "Reflect", reflect_obj);

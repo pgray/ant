@@ -258,7 +258,7 @@ static ant_value_t zlib_make_buffer(ant_t *js, const uint8_t *data, size_t len) 
   ArrayBufferData *ab = create_array_buffer_data(js, len);
   if (!ab) return js_mkerr(js, "out of memory");
   if (data && len > 0) memcpy(ab->data, data, len);
-  return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, "Buffer");
+  return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, js->builtins.buffer_proto);
 }
 
 static ant_value_t zlib_emit_data(ant_t *js, ant_value_t obj, const uint8_t *data, size_t len) {
@@ -1115,7 +1115,7 @@ static ant_value_t zlib_mkctor(ant_t *js, zlib_kind_t kind, ant_cfunc_t fn, cons
   if (is_object_type(js->builtins.zlib_transform_proto)) js_set_proto_init(proto, js->builtins.zlib_transform_proto);
   js->builtins.zlib_protos[kind] = proto;
 
-  ant_value_t ctor = js_make_ctor(js, fn, proto, name, strlen(name));
+  ant_value_t ctor = js_make_ctor(js, fn, proto, name, strlen(name), 1);
   js_mark_constructor(ctor, true);
   return ctor;
 }
@@ -1127,56 +1127,56 @@ ant_value_t zlib_library(ant_t *js) {
   ant_value_t consts = make_constants(js);
   ant_value_t codes = make_codes(js);
 
-  js_set(js, lib, "gzip", js_mkfun(js_gzip));
-  js_set(js, lib, "gzipSync", js_mkfun(js_gzipSync));
+  js_set(js, lib, "gzip", js_mkfun_arity(js_gzip, 3));
+  js_set(js, lib, "gzipSync", js_mkfun_arity(js_gzipSync, 2));
   js_set(js, lib, "Gzip", zlib_mkctor(js, ZLIB_KIND_GZIP, js_create_gzip, "Gzip"));
-  js_set(js, lib, "createGzip", js_mkfun(js_create_gzip));
+  js_set(js, lib, "createGzip", js_mkfun_arity(js_create_gzip, 1));
 
-  js_set(js, lib, "gunzip", js_mkfun(js_gunzip));
-  js_set(js, lib, "gunzipSync", js_mkfun(js_gunzipSync));
+  js_set(js, lib, "gunzip", js_mkfun_arity(js_gunzip, 3));
+  js_set(js, lib, "gunzipSync", js_mkfun_arity(js_gunzipSync, 2));
   js_set(js, lib, "Gunzip", zlib_mkctor(js, ZLIB_KIND_GUNZIP, js_create_gunzip, "Gunzip"));
-  js_set(js, lib, "createGunzip", js_mkfun(js_create_gunzip));
+  js_set(js, lib, "createGunzip", js_mkfun_arity(js_create_gunzip, 1));
 
-  js_set(js, lib, "deflate", js_mkfun(js_deflate));
-  js_set(js, lib, "deflateSync", js_mkfun(js_deflateSync));
+  js_set(js, lib, "deflate", js_mkfun_arity(js_deflate, 3));
+  js_set(js, lib, "deflateSync", js_mkfun_arity(js_deflateSync, 2));
   js_set(js, lib, "Deflate", zlib_mkctor(js, ZLIB_KIND_DEFLATE, js_create_deflate, "Deflate"));
-  js_set(js, lib, "createDeflate", js_mkfun(js_create_deflate));
+  js_set(js, lib, "createDeflate", js_mkfun_arity(js_create_deflate, 1));
 
-  js_set(js, lib, "inflate", js_mkfun(js_inflate));
-  js_set(js, lib, "inflateSync", js_mkfun(js_inflateSync));
+  js_set(js, lib, "inflate", js_mkfun_arity(js_inflate, 3));
+  js_set(js, lib, "inflateSync", js_mkfun_arity(js_inflateSync, 2));
   js_set(js, lib, "Inflate", zlib_mkctor(js, ZLIB_KIND_INFLATE, js_create_inflate, "Inflate"));
-  js_set(js, lib, "createInflate", js_mkfun(js_create_inflate));
+  js_set(js, lib, "createInflate", js_mkfun_arity(js_create_inflate, 1));
 
-  js_set(js, lib, "deflateRaw", js_mkfun(js_deflateRaw));
-  js_set(js, lib, "deflateRawSync", js_mkfun(js_deflateRawSync));
+  js_set(js, lib, "deflateRaw", js_mkfun_arity(js_deflateRaw, 3));
+  js_set(js, lib, "deflateRawSync", js_mkfun_arity(js_deflateRawSync, 2));
   js_set(js, lib, "DeflateRaw", zlib_mkctor(js, ZLIB_KIND_DEFLATE_RAW, js_create_deflate_raw, "DeflateRaw"));
-  js_set(js, lib, "createDeflateRaw", js_mkfun(js_create_deflate_raw));
+  js_set(js, lib, "createDeflateRaw", js_mkfun_arity(js_create_deflate_raw, 1));
 
-  js_set(js, lib, "inflateRaw", js_mkfun(js_inflateRaw));
-  js_set(js, lib, "inflateRawSync", js_mkfun(js_inflateRawSync));
+  js_set(js, lib, "inflateRaw", js_mkfun_arity(js_inflateRaw, 3));
+  js_set(js, lib, "inflateRawSync", js_mkfun_arity(js_inflateRawSync, 2));
   js_set(js, lib, "InflateRaw", zlib_mkctor(js, ZLIB_KIND_INFLATE_RAW, js_create_inflate_raw, "InflateRaw"));
-  js_set(js, lib, "createInflateRaw", js_mkfun(js_create_inflate_raw));
+  js_set(js, lib, "createInflateRaw", js_mkfun_arity(js_create_inflate_raw, 1));
 
-  js_set(js, lib, "unzip", js_mkfun(js_unzip));
-  js_set(js, lib, "unzipSync", js_mkfun(js_unzipSync));
+  js_set(js, lib, "unzip", js_mkfun_arity(js_unzip, 3));
+  js_set(js, lib, "unzipSync", js_mkfun_arity(js_unzipSync, 2));
   js_set(js, lib, "Unzip", zlib_mkctor(js, ZLIB_KIND_UNZIP, js_create_unzip, "Unzip"));
-  js_set(js, lib, "createUnzip", js_mkfun(js_create_unzip));
+  js_set(js, lib, "createUnzip", js_mkfun_arity(js_create_unzip, 1));
 
-  js_set(js, lib, "brotliCompress", js_mkfun(js_brotliCompress));
-  js_set(js, lib, "brotliCompressSync", js_mkfun(js_brotliCompressSync));
+  js_set(js, lib, "brotliCompress", js_mkfun_arity(js_brotliCompress, 3));
+  js_set(js, lib, "brotliCompressSync", js_mkfun_arity(js_brotliCompressSync, 2));
   js_set(js, lib, "BrotliCompress", zlib_mkctor(js, ZLIB_KIND_BROTLI_COMPRESS, js_create_brotli_compress, "BrotliCompress"));
-  js_set(js, lib, "createBrotliCompress", js_mkfun(js_create_brotli_compress));
+  js_set(js, lib, "createBrotliCompress", js_mkfun_arity(js_create_brotli_compress, 1));
 
-  js_set(js, lib, "brotliDecompress", js_mkfun(js_brotliDecompress));
-  js_set(js, lib, "brotliDecompressSync", js_mkfun(js_brotliDecompressSync));
+  js_set(js, lib, "brotliDecompress", js_mkfun_arity(js_brotliDecompress, 3));
+  js_set(js, lib, "brotliDecompressSync", js_mkfun_arity(js_brotliDecompressSync, 2));
   js_set(js, lib, "BrotliDecompress", zlib_mkctor(js, ZLIB_KIND_BROTLI_DECOMPRESS, js_create_brotli_decompress, "BrotliDecompress"));
-  js_set(js, lib, "createBrotliDecompress", js_mkfun(js_create_brotli_decompress));
+  js_set(js, lib, "createBrotliDecompress", js_mkfun_arity(js_create_brotli_decompress, 1));
   
   js_set(js, lib, "default", lib);
   js_set(js, lib, "constants", consts);
   js_set(js, lib, "codes", codes);
   zlib_install_constants(js, lib);
-  js_set(js, lib, "crc32", js_mkfun(js_zlib_crc32));
+  js_set(js, lib, "crc32", js_mkfun_arity(js_zlib_crc32, 1));
   js_set_tostringtag(js, lib, js_mkstr(js, "zlib", 4));
   
   return lib;

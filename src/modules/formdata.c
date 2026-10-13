@@ -481,8 +481,7 @@ void init_formdata_module(ant_t *js) {
   ant_value_t ctor_obj = js_mkobj(js);
   js_set_slot(ctor_obj, SLOT_CFUNC, js_mkfun(js_formdata_ctor));
   js_mkprop_fast(js, ctor_obj, "prototype", 9, js->builtins.formdata_proto);
-  js_mkprop_fast(js, ctor_obj, "name", 4, js_mkstr(js, "FormData", 8));
-  js_set_descriptor(js, ctor_obj, "name", 4, 0);
+  js_set_function_name(js, ctor_obj, "FormData", sizeof("FormData") - 1);
 
   ant_value_t ctor = js_obj_to_func(js, ctor_obj);
   js_set(js, js->builtins.formdata_proto, "constructor", ctor);

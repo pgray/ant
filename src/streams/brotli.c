@@ -36,7 +36,7 @@ static ant_value_t brotli_enqueue_buffer(
   ArrayBufferData *ab = create_array_buffer_data(js, len);
   if (!ab) return js_mkerr(js, "out of memory");
   memcpy(ab->data, data, len);
-  ant_value_t arr = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, "Uint8Array");
+  ant_value_t arr = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, js->builtins.typedarray_protos[TYPED_ARRAY_UINT8]);
   if (!ts_is_controller(ctrl_obj))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid TransformStreamDefaultController");
   return ts_ctrl_enqueue(js, ctrl_obj, arr);

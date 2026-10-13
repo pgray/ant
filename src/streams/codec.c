@@ -129,7 +129,7 @@ static ant_value_t tes_transform(ant_params_t) {
   memcpy(ab->data, out, o);
   free(out);
 
-  ant_value_t result = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, o, "Uint8Array");
+  ant_value_t result = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, o, js->builtins.typedarray_protos[TYPED_ARRAY_UINT8]);
   return ts_is_controller(ctrl_obj)
     ? ts_ctrl_enqueue(js, ctrl_obj, result)
     : js_mkerr_typed(js, JS_ERR_TYPE, "Invalid TransformStreamDefaultController");
@@ -148,7 +148,7 @@ static ant_value_t tes_flush(ant_params_t) {
     memcpy(ab->data, fffd, 3);
     st->pending_len = 0;
     
-    ant_value_t result = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, 3, "Uint8Array");
+    ant_value_t result = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, 3, js->builtins.typedarray_protos[TYPED_ARRAY_UINT8]);
     if (!ts_is_controller(ctrl_obj))
       return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid TransformStreamDefaultController");
     return ts_ctrl_enqueue(js, ctrl_obj, result);
@@ -381,7 +381,7 @@ void init_codec_stream_module(ant_t *js) {
   js_set_getter_desc(js, js->builtins.tes_proto, "writable", 8, js_mkfun(js_tes_get_writable), JS_DESC_C);
   js_set_tostringtag(js, js->builtins.tes_proto, js_mkstr(js, "TextEncoderStream", 17));
 
-  ant_value_t tes_ctor = js_make_ctor(js, js_tes_ctor, js->builtins.tes_proto, "TextEncoderStream", 17);
+  ant_value_t tes_ctor = js_make_ctor(js, js_tes_ctor, js->builtins.tes_proto, "TextEncoderStream", 17, 0);
   js_set(js, g, "TextEncoderStream", tes_ctor);
   js_set_descriptor(js, g, "TextEncoderStream", 17, JS_DESC_W | JS_DESC_C);
 
@@ -393,7 +393,7 @@ void init_codec_stream_module(ant_t *js) {
   js_set_getter_desc(js, js->builtins.tds_proto, "writable",  8, js_mkfun(js_tds_get_writable),  JS_DESC_C);
   js_set_tostringtag(js, js->builtins.tds_proto, js_mkstr(js, "TextDecoderStream", 17));
 
-  ant_value_t tds_ctor = js_make_ctor(js, js_tds_ctor, js->builtins.tds_proto, "TextDecoderStream", 17);
+  ant_value_t tds_ctor = js_make_ctor(js, js_tds_ctor, js->builtins.tds_proto, "TextDecoderStream", 17, 0);
   js_set(js, g, "TextDecoderStream", tds_ctor);
   js_set_descriptor(js, g, "TextDecoderStream", 17, JS_DESC_W | JS_DESC_C);
 }

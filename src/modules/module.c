@@ -151,18 +151,18 @@ ant_value_t module_library(ant_t *js) {
   GC_ROOT_PIN(js, proto);
   
   js_set_proto_init(proto, js->sym.object_proto);
-  ant_value_t lib = js_make_ctor(js, builtin_module_constructor, proto, "Module", 6);
+  ant_value_t lib = js_make_ctor(js, builtin_module_constructor, proto, "Module", 6, 0);
   js->modules.cjs.constructor = lib;
   GC_ROOT_RESTORE(js, root_mark);
   
   js_set(js, lib, "_cache", cache);
   js->modules.cjs.cache = js_mkundef();
   js_set(js, lib, "Module", lib);
-  js_set(js, proto, "require", js_mkfun(esm_cjs_require_module));
+  js_set(js, proto, "require", js_mkfun_arity(esm_cjs_require_module, 1));
 
-  js_set(js, lib, "createRequire", js_mkfun(builtin_createRequire));
-  js_set(js, lib, "registerHooks", js_mkfun(builtin_module_registerHooks));
-  js_set(js, lib, "isBuiltin", js_mkfun(builtin_module_isBuiltin));
+  js_set(js, lib, "createRequire", js_mkfun_arity(builtin_createRequire, 1));
+  js_set(js, lib, "registerHooks", js_mkfun_arity(builtin_module_registerHooks, 1));
+  js_set(js, lib, "isBuiltin", js_mkfun_arity(builtin_module_isBuiltin, 1));
 
   ant_value_t modules_arr = js_mkarr(js);
   builtin_iter_ctx_t ctx = { js, modules_arr };
@@ -170,7 +170,7 @@ ant_value_t module_library(ant_t *js) {
   esm_builtin_bundle_foreach(push_builtin_name, &ctx);
   
   js_set(js, lib, "builtinModules", modules_arr);
-  js_set(js, lib, "_resolveFilename", js_mkfun(builtin_resolveFilename));
+  js_set(js, lib, "_resolveFilename", js_mkfun_arity(builtin_resolveFilename, 4));
   js_set_tostringtag(js, lib, js_mkstr(js, "Module", 6));
 
   return lib;

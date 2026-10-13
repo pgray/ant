@@ -680,7 +680,7 @@ static ant_value_t util_types_is_proxy(ant_params_t) {
 static ant_value_t util_types_is_regexp(ant_params_t) {
   ant_value_t regexp_proto;
   if (nargs < 1 || !is_object_type(args[0])) return js_false;
-  regexp_proto = js_get_ctor_proto(js, "RegExp", 6);
+  regexp_proto = js->builtins.regexp_proto;
   return js_bool(util_has_proto_in_chain(js, args[0], regexp_proto));
 }
 
@@ -1395,26 +1395,26 @@ ant_value_t util_library(ant_t *js) {
   ant_value_t lib = js_mkobj(js);
   ant_value_t types = util_get_types_object(js);
   
-  ant_value_t promisify = js_heavy_mkfun(js, util_promisify, js_mkundef());
+  ant_value_t promisify = js_heavy_mkfun_named(js, util_promisify, "promisify", 1, js_mkundef());
   js_set(js, promisify, "custom", js_mksym_for(js, "nodejs.util.promisify.custom"));
 
   js_set(js, lib, "types", types);
   js_set(js, lib, "promisify", promisify);
   
   js_set(js, lib, "format", js_mkfun(util_format));
-  js_set(js, lib, "inspect", js_mkfun(util_inspect));
+  js_set(js, lib, "inspect", js_mkfun_arity(util_inspect, 2));
   js_set(js, lib, "aborted", js_mkfun(util_aborted));
-  js_set(js, lib, "debuglog", js_mkfun(util_debuglog));
-  js_set(js, lib, "inherits", js_mkfun(util_inherits));
-  js_set(js, lib, "parseEnv", js_mkfun(util_parse_env));
-  js_set(js, lib, "deprecate", js_mkfun(util_deprecate));
+  js_set(js, lib, "debuglog", js_mkfun_arity(util_debuglog, 2));
+  js_set(js, lib, "inherits", js_mkfun_arity(util_inherits, 2));
+  js_set(js, lib, "parseEnv", js_mkfun_arity(util_parse_env, 1));
+  js_set(js, lib, "deprecate", js_mkfun_arity(util_deprecate, 3));
   js_set(js, lib, "parseArgs", js_mkfun(util_parse_args));
-  js_set(js, lib, "styleText", js_mkfun(util_style_text));
-  js_set(js, lib, "callbackify", js_mkfun(util_callbackify));
+  js_set(js, lib, "styleText", js_mkfun_arity(util_style_text, 3));
+  js_set(js, lib, "callbackify", js_mkfun_arity(util_callbackify, 1));
   
-  js_set(js, lib, "formatWithOptions", js_mkfun(util_format_with_options));
-  js_set(js, lib, "isDeepStrictEqual", js_mkfun(util_is_deep_strict_equal));
-  js_set(js, lib, "stripVTControlCharacters", js_mkfun(util_strip_vt_control_characters));
+  js_set(js, lib, "formatWithOptions", js_mkfun_arity(util_format_with_options, 1));
+  js_set(js, lib, "isDeepStrictEqual", js_mkfun_arity(util_is_deep_strict_equal, 3));
+  js_set(js, lib, "stripVTControlCharacters", js_mkfun_arity(util_strip_vt_control_characters, 1));
   
   js_set(js, lib, "TextDecoder", js_get(js, js->global, "TextDecoder"));
   js_set(js, lib, "TextEncoder", js_get(js, js->global, "TextEncoder"));

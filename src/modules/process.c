@@ -726,7 +726,7 @@ static inline ant_value_t make_stdin_data_value(ant_t *js, const uv_buf_t *buf, 
   if (ab) memcpy(ab->data, buf->base, (size_t)nread);
 
   ant_value_t raw_val = ab
-    ? create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, (size_t)nread, "Buffer")
+    ? create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, (size_t)nread, js->builtins.buffer_proto)
     : js_mkstr(js, buf->base, (size_t)nread);
 
   if (is_err(raw_val)) return raw_val;
@@ -1787,7 +1787,7 @@ static ant_value_t process_make_warning_object(
   const char *detail, ant_offset_t detail_len
 ) {
   ant_value_t warning_obj = js_mkobj(js);
-  js_set_proto_init(warning_obj, js_get_ctor_proto(js, "Error", 5));
+  js_set_proto_init(warning_obj, js->builtins.error_protos[JS_ERR_GENERIC]);
   js_set_slot(warning_obj, SLOT_ERROR_BRAND, js_true);
   js_set(js, warning_obj, "name", js_mkstr(js, type, strlen(type)));
   js_set(js, warning_obj, "message", js_mkstr(js, msg.ptr, msg.len));
@@ -1936,24 +1936,24 @@ static ant_value_t process_get_builtin_module(ant_params_t) {
 }
 
 static void process_set_methods(ant_t *js, ant_value_t obj, bool include_event_methods) {
-  js_set(js, obj, "exit", js_mkfun(process_exit));
+  js_set(js, obj, "exit", js_mkfun_arity(process_exit, 1));
   js_set(js, obj, "cwd", js_mkfun(process_cwd));
-  js_set(js, obj, "chdir", js_mkfun(process_chdir));
+  js_set(js, obj, "chdir", js_mkfun_arity(process_chdir, 1));
   js_set(js, obj, "uptime", js_mkfun(process_uptime));
-  js_set(js, obj, "cpuUsage", js_mkfun(process_cpu_usage));
-  js_set(js, obj, "kill", js_mkfun(process_kill));
+  js_set(js, obj, "cpuUsage", js_mkfun_arity(process_cpu_usage, 1));
+  js_set(js, obj, "kill", js_mkfun_arity(process_kill, 2));
   js_set(js, obj, "abort", js_mkfun(process_abort));
-  js_set(js, obj, "umask", js_mkfun(process_umask));
-  js_set(js, obj, "nextTick", js_mkfun(process_next_tick));
-  js_set(js, obj, "emitWarning", js_mkfun(process_emit_warning));
-  js_set(js, obj, "getBuiltinModule", js_mkfun(process_get_builtin_module));
+  js_set(js, obj, "umask", js_mkfun_arity(process_umask, 1));
+  js_set(js, obj, "nextTick", js_mkfun_arity(process_next_tick, 1));
+  js_set(js, obj, "emitWarning", js_mkfun_arity(process_emit_warning, 4));
+  js_set(js, obj, "getBuiltinModule", js_mkfun_arity(process_get_builtin_module, 1));
   js_set(js, obj, "dlopen", js_mkfun(napi_process_dlopen_js));
 
-  ant_value_t mem_usage_fn = js_heavy_mkfun(js, process_memory_usage, js_mkundef());
+  ant_value_t mem_usage_fn = js_heavy_mkfun_named(js, process_memory_usage, "memoryUsage", 0, js_mkundef());
   js_set(js, mem_usage_fn, "rss", js_mkfun(process_memory_usage_rss));
   js_set(js, obj, "memoryUsage", mem_usage_fn);
 
-  ant_value_t hrtime_fn = js_heavy_mkfun(js, process_hrtime, js_mkundef());
+  ant_value_t hrtime_fn = js_heavy_mkfun_named(js, process_hrtime, "hrtime", 1, js_mkundef());
   js_set(js, hrtime_fn, "bigint", js_mkfun(process_hrtime_bigint));
   js_set(js, obj, "hrtime", hrtime_fn);
 
@@ -1968,12 +1968,12 @@ static void process_set_methods(ant_t *js, ant_value_t obj, bool include_event_m
   js_set(js, obj, "getgid", js_mkfun(process_getgid));
   js_set(js, obj, "getegid", js_mkfun(process_getegid));
   js_set(js, obj, "getgroups", js_mkfun(process_getgroups));
-  js_set(js, obj, "setuid", js_mkfun(process_setuid));
-  js_set(js, obj, "setgid", js_mkfun(process_setgid));
-  js_set(js, obj, "seteuid", js_mkfun(process_seteuid));
-  js_set(js, obj, "setegid", js_mkfun(process_setegid));
-  js_set(js, obj, "setgroups", js_mkfun(process_setgroups));
-  js_set(js, obj, "initgroups", js_mkfun(process_initgroups));
+  js_set(js, obj, "setuid", js_mkfun_arity(process_setuid, 1));
+  js_set(js, obj, "setgid", js_mkfun_arity(process_setgid, 1));
+  js_set(js, obj, "seteuid", js_mkfun_arity(process_seteuid, 1));
+  js_set(js, obj, "setegid", js_mkfun_arity(process_setegid, 1));
+  js_set(js, obj, "setgroups", js_mkfun_arity(process_setgroups, 1));
+  js_set(js, obj, "initgroups", js_mkfun_arity(process_initgroups, 2));
 #endif
 }
 
@@ -2009,7 +2009,7 @@ void init_process_module(ant_t *js) {
   eventemitter_set_listener_change_hook(js, process_obj, process_listener_change, ps);
   
   process_set_methods(js, process_obj, false);
-  js_set(js, process_obj, "binding", js_mkfun(process_binding));
+  js_set(js, process_obj, "binding", js_mkfun_arity(process_binding, 1));
   js_set(js, process_obj, "_exiting", js_false);
   
   js_set_accessor_desc(

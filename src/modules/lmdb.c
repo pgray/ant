@@ -364,7 +364,7 @@ static ant_value_t mdb_val_to_js(ant_t *js, MDB_val *val, bool as_string) {
     memcpy(ab->data, val->mv_data, val->mv_size);
   }
 
-  ant_value_t out = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, ab->length, "Uint8Array");
+  ant_value_t out = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, ab->length, js->builtins.typedarray_protos[TYPED_ARRAY_UINT8]);
   if (vtype(out) == kTypeError) free_array_buffer_data(js, ab);
   return out;
 }
@@ -1017,8 +1017,7 @@ static void ensure_lmdb_prototypes(ant_t *js) {
   js_set_tostringtag(js, env_proto, js_mkstr(js, "LMDBEnv", 7));
   js_set_slot(env_ctor_obj, SLOT_CFUNC, js_mkfun(lmdb_env_constructor));
   js_mkprop_fast(js, env_ctor_obj, "prototype", 9, env_proto);
-  js_mkprop_fast(js, env_ctor_obj, "name", 4, ANT_STRING("LMDBEnv"));
-  js_set_descriptor(js, env_ctor_obj, "name", 4, 0);
+  js_set_function_name(js, env_ctor_obj, "LMDBEnv", sizeof("LMDBEnv") - 1);
 
   ant_value_t db_ctor_obj = js_mkobj(js);
   ant_value_t db_proto = js_mkobj(js);
@@ -1035,8 +1034,7 @@ static void ensure_lmdb_prototypes(ant_t *js) {
   js_set_tostringtag(js, db_proto, js_mkstr(js, "LMDBDatabase", 12));
   js_set_slot(db_ctor_obj, SLOT_CFUNC, js_mkfun(lmdb_db_constructor));
   js_mkprop_fast(js, db_ctor_obj, "prototype", 9, db_proto);
-  js_mkprop_fast(js, db_ctor_obj, "name", 4, ANT_STRING("LMDBDatabase"));
-  js_set_descriptor(js, db_ctor_obj, "name", 4, 0);
+  js_set_function_name(js, db_ctor_obj, "LMDBDatabase", sizeof("LMDBDatabase") - 1);
 
   ant_value_t txn_ctor_obj = js_mkobj(js);
   ant_value_t txn_proto = js_mkobj(js);
@@ -1052,8 +1050,7 @@ static void ensure_lmdb_prototypes(ant_t *js) {
   js_set_tostringtag(js, txn_proto, js_mkstr(js, "LMDBTxn", 7));
   js_set_slot(txn_ctor_obj, SLOT_CFUNC, js_mkfun(lmdb_txn_constructor));
   js_mkprop_fast(js, txn_ctor_obj, "prototype", 9, txn_proto);
-  js_mkprop_fast(js, txn_ctor_obj, "name", 4, ANT_STRING("LMDBTxn"));
-  js_set_descriptor(js, txn_ctor_obj, "name", 4, 0);
+  js_set_function_name(js, txn_ctor_obj, "LMDBTxn", sizeof("LMDBTxn") - 1);
 
   lmdb_types.env_ctor = js_obj_to_func(js, env_ctor_obj);
   lmdb_types.db_ctor = js_obj_to_func(js, db_ctor_obj);

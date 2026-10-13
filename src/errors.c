@@ -62,7 +62,12 @@ bool js_mark_errorlike_no_stack(ant_t *js, ant_value_t value) {
   return true;
 }
 
-static const char *get_error_type_name(js_err_type_t err_type) {
+static_assert(
+  JS_ERR_TYPE_COUNT == sizeof(((ant_t *)0)->builtins.error_protos) / sizeof(ant_value_t),
+  "resize error_protos in isolate_values.h"
+);
+
+const char *js_err_type_name(js_err_type_t err_type) {
   static const char *names[] = {
     [JS_ERR_GENERIC]   = "Error",
     [JS_ERR_TYPE]      = "TypeError",
@@ -199,7 +204,7 @@ static ant_value_t make_error_value(
   bool no_stack = (err_type & JS_ERR_NO_STACK) != 0;
   js_err_type_t base_type = (js_err_type_t)(err_type & ~JS_ERR_NO_STACK);
 
-  const char *err_name = get_error_type_name(base_type);
+  const char *err_name = js_err_type_name(base_type);
   size_t err_name_len = strlen(err_name);
   size_t msg_len = strlen(error_msg);
 
@@ -223,7 +228,7 @@ static ant_value_t make_error_value(
   if ((T_FLAG_FIND(props_type) & T_SPECIAL_OBJECT_MASK) != 0)
     js_merge_obj(js, err_obj, props);
 
-  ant_value_t proto = js_get_ctor_proto(js, err_name, err_name_len);
+  ant_value_t proto = js->builtins.error_protos[base_type];
   int proto_type = vtype(proto);
   if ((T_FLAG_FIND(proto_type) & T_SPECIAL_OBJECT_MASK) != 0)
     js_set_proto_init(err_obj, proto);

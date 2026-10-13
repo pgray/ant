@@ -781,7 +781,7 @@ static bool cron_relative_ms(
 
 static ant_value_t cron_make_date(ant_t *js, int64_t epoch_ms) {
   ant_value_t object = js_mkobj(js);
-  ant_value_t prototype = js_get_slot(js->builtins.cron_proto, SLOT_DATA);
+  ant_value_t prototype = js->builtins.date_proto;
   if (is_object_type(prototype)) js_set_proto_init(object, prototype);
   js_set_slot(object, SLOT_DATA, js_mknum((double)epoch_ms));
   js_set_slot(object, SLOT_BRAND, js_mknum(BRAND_DATE));
@@ -2507,7 +2507,6 @@ static ant_value_t cron_call(ant_params_t) {
 void init_cron_module(ant_t *js) {
   js->builtins.cron_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.cron_proto, js->sym.object_proto);
-  js_set_slot(js->builtins.cron_proto, SLOT_DATA, js_get_ctor_proto(js, "Date", 4));
   gc_register_root(&js->builtins.cron_proto);
 
   ant_value_t cron_getter = js_cfunc_promote(js, js_mkfun(cron_job_get_cron));

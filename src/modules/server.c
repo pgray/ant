@@ -551,7 +551,7 @@ static ant_value_t server_make_chunk(ant_t *js, const char *data, size_t len) {
   ArrayBufferData *ab = create_array_buffer_data(js, len);
   if (!ab) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
   if (len > 0 && data) memcpy(ab->data, data, len);
-  return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, "Uint8Array");
+  return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, js->builtins.typedarray_protos[TYPED_ARRAY_UINT8]);
 }
 
 static ant_value_t server_sse_enqueue(ant_t *js, server_sse_state_t *state, char *data, size_t len) {

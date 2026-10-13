@@ -59,4 +59,24 @@ for (let i = 0; i < 3000; i++) readV(inst);
 Object.defineProperty(proto, 'v', { get() { return 2; }, configurable: true });
 assert.strictEqual(readV(inst), 2, 'a replaced prototype getter is seen by a warm site');
 
+const setterOnly = { x: 1 };
+const readSetterOnly = target => target.x;
+for (let i = 0; i < 3000; i++) readSetterOnly(setterOnly);
+Object.defineProperty(setterOnly, 'x', { set(value) {} });
+assert.strictEqual(readSetterOnly(setterOnly), undefined);
+assert.strictEqual(setterOnly.x, undefined);
+
+const setterProto = { y: 1 };
+const setterChild = Object.create(setterProto);
+for (let i = 0; i < 3000; i++) setterChild.y;
+Object.defineProperty(setterProto, 'y', { set(value) {} });
+assert.strictEqual(setterChild.y, undefined);
+
+Function.prototype.__builtinAccessor = 0;
+const readBuiltin = fn => fn.__builtinAccessor;
+for (let i = 0; i < 3000; i++) { readBuiltin(Math.max); readBuiltin(parseInt); }
+Object.defineProperty(Function.prototype, '__builtinAccessor', { get() { return this === Math.max ? 'max' : 'other'; }, configurable: true });
+assert.deepStrictEqual([readBuiltin(Math.max), readBuiltin(parseInt), Math.min.__builtinAccessor], ['max', 'other', 'other']);
+delete Function.prototype.__builtinAccessor;
+
 console.log('accessor ic OK');

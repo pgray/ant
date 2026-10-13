@@ -359,12 +359,12 @@ static ant_value_t js_unescape(ant_params_t) {
 }
 
 void init_uri_module(ant_t *js) {
-  js_set_global_builtin(js, "encodeURI", js_mkfun(js_encodeURI));
-  js_set_global_builtin(js, "encodeURIComponent", js_mkfun(js_encodeURIComponent));
+  js_set_global_builtin(js, "encodeURI", js_mkfun_arity(js_encodeURI, 1));
+  js_set_global_builtin(js, "encodeURIComponent", js_mkfun_arity(js_encodeURIComponent, 1));
   
-  js_set_global_builtin(js, "decodeURI", js_mkfun(js_decodeURI));
-  js_set_global_builtin(js, "decodeURIComponent", js_mkfun(js_decodeURIComponent));
+  js_set_global_builtin(js, "decodeURI", js_mkfun_arity(js_decodeURI, 1));
+  js_set_global_builtin(js, "decodeURIComponent", js_mkfun_arity(js_decodeURIComponent, 1));
   
-  js_set_global_builtin(js, "escape", js_mkfun(js_escape));
-  js_set_global_builtin(js, "unescape", js_mkfun(js_unescape));
+  js_set_global_builtin(js, "escape", js_mkfun_arity(js_escape, 1));
+  js_set_global_builtin(js, "unescape", js_mkfun_arity(js_unescape, 1));
 }

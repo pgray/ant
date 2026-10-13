@@ -71,8 +71,7 @@ static ant_value_t make_size_fn(ant_t *js, ant_cfunc_t cfunc, int length) {
   ant_value_t obj = js_mkobj(js);
   
   js_set_slot(obj, SLOT_CFUNC, js_mkfun_dyn(cfunc));
-  js_mkprop_fast(js, obj, "name", 4, js_mkstr(js, "size", 4));
-  js_set_descriptor(js, obj, "name", 4, 0);
+  js_set_function_name(js, obj, "size", sizeof("size") - 1);
   js_mkprop_fast(js, obj, "length", 6, js_mknum(length));
   js_set_descriptor(js, obj, "length", 6, 0);
   
@@ -88,7 +87,7 @@ void init_queuing_strategies_module(ant_t *js) {
   js_set_getter_desc(js, js->builtins.count_qs_proto, "size", 4, js_mkfun(js_qs_get_size), JS_DESC_C);
   js_set_tostringtag(js, js->builtins.count_qs_proto, js_mkstr(js, "CountQueuingStrategy", 20));
 
-  ant_value_t cqs_ctor = js_make_ctor(js, js_count_qs_ctor, js->builtins.count_qs_proto, "CountQueuingStrategy", 20);
+  ant_value_t cqs_ctor = js_make_ctor(js, js_count_qs_ctor, js->builtins.count_qs_proto, "CountQueuingStrategy", 20, 1);
   js_set(js, g, "CountQueuingStrategy", cqs_ctor);
   js_set_descriptor(js, g, "CountQueuingStrategy", 20, JS_DESC_W | JS_DESC_C);
 
@@ -98,7 +97,7 @@ void init_queuing_strategies_module(ant_t *js) {
   js_set_getter_desc(js, js->builtins.bytelength_qs_proto, "size", 4, js_mkfun(js_qs_get_size), JS_DESC_C);
   js_set_tostringtag(js, js->builtins.bytelength_qs_proto, js_mkstr(js, "ByteLengthQueuingStrategy", 25));
 
-  ant_value_t blqs_ctor = js_make_ctor(js, js_bytelength_qs_ctor, js->builtins.bytelength_qs_proto, "ByteLengthQueuingStrategy", 25);
+  ant_value_t blqs_ctor = js_make_ctor(js, js_bytelength_qs_ctor, js->builtins.bytelength_qs_proto, "ByteLengthQueuingStrategy", 25, 1);
   js_set(js, g, "ByteLengthQueuingStrategy", blqs_ctor);
   js_set_descriptor(js, g, "ByteLengthQueuingStrategy", 25, JS_DESC_W | JS_DESC_C);
 }

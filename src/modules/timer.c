@@ -1055,13 +1055,13 @@ int has_pending_microtasks(ant_t *js) {
 }
 
 static void timers_define_common(ant_t *js, ant_value_t obj) {
-  js_set(js, obj, "setTimeout", js_mkfun_flags(js_set_timeout, CFUNC_HAS_PROTOTYPE));
-  js_set(js, obj, "clearTimeout", js_mkfun_flags(js_clear_timeout, CFUNC_HAS_PROTOTYPE));
-  js_set(js, obj, "setInterval", js_mkfun_flags(js_set_interval, CFUNC_HAS_PROTOTYPE));
-  js_set(js, obj, "clearInterval", js_mkfun_flags(js_clear_timeout, CFUNC_HAS_PROTOTYPE));
-  js_set(js, obj, "setImmediate", js_mkfun_flags(js_set_immediate, CFUNC_HAS_PROTOTYPE));
-  js_set(js, obj, "clearImmediate", js_mkfun_flags(js_clear_immediate, CFUNC_HAS_PROTOTYPE));
-  js_set(js, obj, "queueMicrotask", js_mkfun(js_queue_microtask));
+  js_set(js, obj, "setTimeout", js_mkfun_arity_flags(js_set_timeout, 2, CFUNC_HAS_PROTOTYPE));
+  js_set(js, obj, "clearTimeout", js_mkfun_arity_flags(js_clear_timeout, 1, CFUNC_HAS_PROTOTYPE));
+  js_set(js, obj, "setInterval", js_mkfun_arity_flags(js_set_interval, 2, CFUNC_HAS_PROTOTYPE));
+  js_set(js, obj, "clearInterval", js_mkfun_arity_flags(js_clear_timeout, 1, CFUNC_HAS_PROTOTYPE));
+  js_set(js, obj, "setImmediate", js_mkfun_arity_flags(js_set_immediate, 1, CFUNC_HAS_PROTOTYPE));
+  js_set(js, obj, "clearImmediate", js_mkfun_arity_flags(js_clear_immediate, 1, CFUNC_HAS_PROTOTYPE));
+  js_set(js, obj, "queueMicrotask", js_mkfun_arity(js_queue_microtask, 1));
 }
 
 static ant_value_t timer_make_template(ant_t *js, ant_value_t proto, ant_value_t repeat) {
@@ -1140,9 +1140,9 @@ ant_value_t timers_promises_library(ant_t *js) {
   ant_value_t scheduler = js_mkobj(js);
 
   js_set(js, lib, "scheduler", scheduler);
-  js_set(js, lib, "setTimeout", js_mkfun(js_timers_promises_setTimeout));
-  js_set(js, lib, "setImmediate", js_mkfun(js_timers_promises_setImmediate));
-  js_set(js, lib, "setInterval", js_mkfun(js_timers_promises_setInterval));
+  js_set(js, lib, "setTimeout", js_mkfun_arity(js_timers_promises_setTimeout, 2));
+  js_set(js, lib, "setImmediate", js_mkfun_arity(js_timers_promises_setImmediate, 1));
+  js_set(js, lib, "setInterval", js_mkfun_arity(js_timers_promises_setInterval, 2));
   js_set(js, scheduler, "wait", js_mkfun(js_timers_promises_scheduler_wait));
   js_set(js, scheduler, "yield", js_mkfun(js_timers_promises_scheduler_yield));
   js_set_tostringtag(js, lib, js_mkstr(js, "timers/promises", 16));

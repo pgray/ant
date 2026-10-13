@@ -1917,12 +1917,12 @@ ant_value_t events_library(ant_t *js) {
   
   eventemitter_prototype(js);
   js_set_module_default(js, lib, js->builtins.eventemitter_ctor, "EventEmitter");
-  js_set(js, lib, "once", js_mkfun(js_events_once));
-  js_set(js, lib, "on", js_mkfun(js_events_on));
-  js_set(js, lib, "addAbortListener", js_mkfun(js_events_add_abort_listener));
+  js_set(js, lib, "once", js_mkfun_arity(js_events_once, 2));
+  js_set(js, lib, "on", js_mkfun_arity(js_events_on, 2));
+  js_set(js, lib, "addAbortListener", js_mkfun_arity(js_events_add_abort_listener, 2));
   js_set(js, lib, "setMaxListeners", js_mkfun(js_events_set_max_listeners));
-  js_set(js, lib, "getMaxListeners", js_mkfun(js_events_get_max_listeners));
-  js_set(js, lib, "getEventListeners", js_mkfun(js_events_get_event_listeners));
+  js_set(js, lib, "getMaxListeners", js_mkfun_arity(js_events_get_max_listeners, 1));
+  js_set(js, lib, "getEventListeners", js_mkfun_arity(js_events_get_event_listeners, 2));
   js_set(js, js->builtins.eventemitter_ctor, "once", js_get(js, lib, "once"));
   js_set(js, js->builtins.eventemitter_ctor, "on", js_get(js, lib, "on"));
   js_set(js, js->builtins.eventemitter_ctor, "addAbortListener", js_get(js, lib, "addAbortListener"));
@@ -1946,27 +1946,26 @@ ant_value_t eventemitter_prototype(ant_t *js) {
   if (is_object_type(object_proto)) js_set_proto_init(eventemitter_proto, object_proto);
   if (is_object_type(function_proto)) js_set_proto_init(eventemitter_ctor, function_proto);
 
-  js_set(js, eventemitter_proto, "on",                 js_mkfun(js_eventemitter_on));
+  js_set(js, eventemitter_proto, "on",                 js_mkfun_arity(js_eventemitter_on, 2));
   js_set_exact(js, eventemitter_proto, "addListener",  js_get(js, eventemitter_proto, "on"));
-  js_set(js, eventemitter_proto, "once",               js_mkfun(js_eventemitter_once));
-  js_set(js, eventemitter_proto, "prependListener",    js_mkfun(js_eventemitter_prepend_listener));
-  js_set(js, eventemitter_proto, "prependOnceListener", js_mkfun(js_eventemitter_prepend_once_listener));
-  js_set(js, eventemitter_proto, "off",                js_mkfun(js_eventemitter_off));
+  js_set(js, eventemitter_proto, "once",               js_mkfun_arity(js_eventemitter_once, 2));
+  js_set(js, eventemitter_proto, "prependListener",    js_mkfun_arity(js_eventemitter_prepend_listener, 2));
+  js_set(js, eventemitter_proto, "prependOnceListener", js_mkfun_arity(js_eventemitter_prepend_once_listener, 2));
+  js_set(js, eventemitter_proto, "off",                js_mkfun_arity(js_eventemitter_off, 2));
   js_set_exact(js, eventemitter_proto, "removeListener", js_get(js, eventemitter_proto, "off"));
-  js_set(js, eventemitter_proto, "emit",               js_mkfun(js_eventemitter_emit));
-  js_set(js, eventemitter_proto, "removeAllListeners", js_mkfun(js_eventemitter_removeAllListeners));
-  js_set(js, eventemitter_proto, "listenerCount",      js_mkfun(js_eventemitter_listenerCount));
-  js_set(js, eventemitter_proto, "setMaxListeners",    js_mkfun(js_eventemitter_setMaxListeners));
+  js_set(js, eventemitter_proto, "emit",               js_mkfun_arity(js_eventemitter_emit, 1));
+  js_set(js, eventemitter_proto, "removeAllListeners", js_mkfun_arity(js_eventemitter_removeAllListeners, 1));
+  js_set(js, eventemitter_proto, "listenerCount",      js_mkfun_arity(js_eventemitter_listenerCount, 2));
+  js_set(js, eventemitter_proto, "setMaxListeners",    js_mkfun_arity(js_eventemitter_setMaxListeners, 1));
   js_set(js, eventemitter_proto, "getMaxListeners",    js_mkfun(js_eventemitter_getMaxListeners));
-  js_set(js, eventemitter_proto, "listeners",          js_mkfun(js_eventemitter_listeners));
-  js_set(js, eventemitter_proto, "rawListeners",       js_mkfun(js_eventemitter_rawListeners));
+  js_set(js, eventemitter_proto, "listeners",          js_mkfun_arity(js_eventemitter_listeners, 1));
+  js_set(js, eventemitter_proto, "rawListeners",       js_mkfun_arity(js_eventemitter_rawListeners, 1));
   js_set(js, eventemitter_proto, "eventNames",         js_mkfun(js_eventemitter_eventNames));
   js_set_tostringtag(js, eventemitter_proto, js_mkstr(js, "EventEmitter", 12));
 
-  js_set_slot(eventemitter_ctor, SLOT_CFUNC, js_mkfun(js_eventemitter_ctor));
+  js_set_slot(eventemitter_ctor, SLOT_CFUNC, js_mkfun_arity(js_eventemitter_ctor, 1));
   js_mkprop_fast(js, eventemitter_ctor, "prototype", 9, eventemitter_proto);
-  js_mkprop_fast(js, eventemitter_ctor, "name", 4, ANT_STRING("EventEmitter"));
-  js_set_descriptor(js, eventemitter_ctor, "name", 4, 0);
+  js_set_function_name(js, eventemitter_ctor, "EventEmitter", sizeof("EventEmitter") - 1);
 
   js->builtins.eventemitter_proto = eventemitter_proto;
   js->builtins.eventemitter_ctor = js_obj_to_func(js, eventemitter_ctor);
@@ -1987,13 +1986,13 @@ void init_events_module(ant_t *js) {
   js_set(js, js->builtins.event_proto, "stopPropagation",         js_mkfun(js_event_stopPropagation));
   js_set(js, js->builtins.event_proto, "stopImmediatePropagation", js_mkfun(js_event_stopImmediatePropagation));
   js_set(js, js->builtins.event_proto, "composedPath",            js_mkfun(js_event_composedPath));
-  js_set(js, js->builtins.event_proto, "initEvent",               js_mkfun(js_event_initEvent));
+  js_set(js, js->builtins.event_proto, "initEvent",               js_mkfun_arity(js_event_initEvent, 1));
   js_set(js, js->builtins.event_proto, "NONE",             js_mknum(0));
   js_set(js, js->builtins.event_proto, "CAPTURING_PHASE",  js_mknum(1));
   js_set(js, js->builtins.event_proto, "AT_TARGET",        js_mknum(2));
   js_set(js, js->builtins.event_proto, "BUBBLING_PHASE",   js_mknum(3));
 
-  ant_value_t event_fn = js_make_ctor(js, js_event_ctor, js->builtins.event_proto, "Event", 5);
+  ant_value_t event_fn = js_make_ctor(js, js_event_ctor, js->builtins.event_proto, "Event", 5, 1);
   js_set(js, event_fn, "NONE",            js_mknum(0));
   js_set(js, event_fn, "CAPTURING_PHASE", js_mknum(1));
   js_set(js, event_fn, "AT_TARGET",       js_mknum(2));
@@ -2004,21 +2003,21 @@ void init_events_module(ant_t *js) {
   js_set_proto_init(js->builtins.customevent_proto, js->builtins.event_proto);
   js_set_tostringtag(js, js->builtins.customevent_proto, js_mkstr(js, "CustomEvent", 11));
 
-  ant_value_t customevent_fn = js_make_ctor(js, js_customevent_ctor, js->builtins.customevent_proto, "CustomEvent", 11);
+  ant_value_t customevent_fn = js_make_ctor(js, js_customevent_ctor, js->builtins.customevent_proto, "CustomEvent", 11, 1);
   js_set_global_builtin(js, "CustomEvent", customevent_fn);
 
   js->builtins.errorevent_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.errorevent_proto, js->builtins.event_proto);
   js_set_tostringtag(js, js->builtins.errorevent_proto, js_mkstr(js, "ErrorEvent", 10));
 
-  ant_value_t errorevent_fn = js_make_ctor(js, js_errorevent_ctor, js->builtins.errorevent_proto, "ErrorEvent", 10);
+  ant_value_t errorevent_fn = js_make_ctor(js, js_errorevent_ctor, js->builtins.errorevent_proto, "ErrorEvent", 10, 2);
   js_set_global_builtin(js, "ErrorEvent", errorevent_fn);
 
   js->builtins.promiserejectionevent_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.promiserejectionevent_proto, js->builtins.event_proto);
   js_set_tostringtag(js, js->builtins.promiserejectionevent_proto, js_mkstr(js, "PromiseRejectionEvent", 21));
 
-  ant_value_t pre_fn = js_make_ctor(js, js_promiserejectionevent_ctor, js->builtins.promiserejectionevent_proto, "PromiseRejectionEvent", 21);
+  ant_value_t pre_fn = js_make_ctor(js, js_promiserejectionevent_ctor, js->builtins.promiserejectionevent_proto, "PromiseRejectionEvent", 21, 2);
   js_set_global_builtin(js, "PromiseRejectionEvent", pre_fn);
 
   ant_value_t object_proto = js->sym.object_proto;
@@ -2027,17 +2026,16 @@ void init_events_module(ant_t *js) {
   ant_value_t eventtarget_proto = js_mkobj(js);
   js->builtins.eventtarget_proto = eventtarget_proto;
   if (is_object_type(object_proto)) js_set_proto_init(eventtarget_proto, object_proto);
-  js_set(js, eventtarget_proto, "addEventListener",    js_mkfun(js_add_event_listener_method));
-  js_set(js, eventtarget_proto, "removeEventListener", js_mkfun(js_remove_event_listener_method));
-  js_set(js, eventtarget_proto, "dispatchEvent",       js_mkfun(js_dispatch_event_method));
+  js_set(js, eventtarget_proto, "addEventListener",    js_mkfun_arity(js_add_event_listener_method, 2));
+  js_set(js, eventtarget_proto, "removeEventListener", js_mkfun_arity(js_remove_event_listener_method, 2));
+  js_set(js, eventtarget_proto, "dispatchEvent",       js_mkfun_arity(js_dispatch_event_method, 1));
   js_set_tostringtag(js, eventtarget_proto, js_mkstr(js, "EventTarget", 11));
 
   ant_value_t eventtarget_ctor = js_mkobj(js);
   if (is_object_type(function_proto)) js_set_proto_init(eventtarget_ctor, function_proto);
   js_set_slot(eventtarget_ctor, SLOT_CFUNC, js_mkfun(js_eventtarget_ctor));
   js_mkprop_fast(js, eventtarget_ctor, "prototype", 9, eventtarget_proto);
-  js_mkprop_fast(js, eventtarget_ctor, "name", 4, ANT_STRING("EventTarget"));
-  js_set_descriptor(js, eventtarget_ctor, "name", 4, 0);
+  js_set_function_name(js, eventtarget_ctor, "EventTarget", sizeof("EventTarget") - 1);
   ant_value_t eventtarget_fn = js_obj_to_func(js, eventtarget_ctor);
   js_set(js, eventtarget_proto, "constructor", eventtarget_fn);
   js_set_descriptor(js, eventtarget_proto, "constructor", 11, JS_DESC_W | JS_DESC_C);

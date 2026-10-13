@@ -229,7 +229,7 @@ static ant_value_t js_blob_bytes(ant_params_t) {
   if (!abd) { js_reject_promise(js, promise, js_mkerr(js, "out of memory")); return promise; }
   if (sz > 0 && bd) memcpy(abd->data, bd->data, sz);
 
-  ant_value_t bytes = create_typed_array(js, TYPED_ARRAY_UINT8, abd, 0, sz, "Uint8Array");
+  ant_value_t bytes = create_typed_array(js, TYPED_ARRAY_UINT8, abd, 0, sz, js->builtins.typedarray_protos[TYPED_ARRAY_UINT8]);
 
   if (is_err(bytes)) js_reject_promise(js, promise, bytes);
   else js_resolve_promise(js, promise, bytes);
@@ -287,7 +287,7 @@ static ant_value_t blob_stream_pull(ant_params_t) {
   ArrayBufferData *ab = create_array_buffer_data(js, bd->size);
   if (ab) {
     memcpy(ab->data, bd->data, bd->size);
-    rs_controller_enqueue(js, ctrl, create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, bd->size, "Uint8Array"));
+    rs_controller_enqueue(js, ctrl, create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, bd->size, js->builtins.typedarray_protos[TYPED_ARRAY_UINT8]));
   }}
 
   rs_controller_close(js, ctrl);
@@ -437,7 +437,7 @@ void init_blob_module(ant_t *js) {
   js_set(js, js->builtins.blob_proto, "stream",      js_mkfun(js_blob_stream));
 
   js_set_tostringtag(js, js->builtins.blob_proto, js_mkstr(js, "Blob", 4));
-  ant_value_t blob_ctor = js_make_ctor(js, js_blob_ctor, js->builtins.blob_proto, "Blob", 4);
+  ant_value_t blob_ctor = js_make_ctor(js, js_blob_ctor, js->builtins.blob_proto, "Blob", 4, 0);
   
   js_set(js, g, "Blob", blob_ctor);
   js_set_descriptor(js, g, "Blob", 4, JS_DESC_W | JS_DESC_C);
@@ -449,7 +449,7 @@ void init_blob_module(ant_t *js) {
   js_set_getter_desc(js, js->builtins.file_proto, "lastModified", 12, js_mkfun(file_get_last_modified),  JS_DESC_C);
 
   js_set_tostringtag(js, js->builtins.file_proto, js_mkstr(js, "File", 4));
-  ant_value_t file_ctor = js_make_ctor(js, js_file_ctor, js->builtins.file_proto, "File", 4);
+  ant_value_t file_ctor = js_make_ctor(js, js_file_ctor, js->builtins.file_proto, "File", 4, 2);
   
   js_set(js, g, "File", file_ctor);
   js_set_descriptor(js, g, "File", 4, JS_DESC_W | JS_DESC_C);

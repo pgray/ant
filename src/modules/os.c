@@ -1103,9 +1103,9 @@ ant_value_t os_library(ant_t *js) {
   js_set(js, lib, "cpus", js_mkfun(os_cpus));
   js_set(js, lib, "loadavg", js_mkfun(os_loadavg));
   js_set(js, lib, "networkInterfaces", js_mkfun(os_networkInterfaces));
-  js_set(js, lib, "userInfo", js_mkfun(os_userInfo));
-  js_set(js, lib, "getPriority", js_mkfun(os_getPriority));
-  js_set(js, lib, "setPriority", js_mkfun(os_setPriority));
+  js_set(js, lib, "userInfo", js_mkfun_arity(os_userInfo, 1));
+  js_set(js, lib, "getPriority", js_mkfun_arity(os_getPriority, 1));
+  js_set(js, lib, "setPriority", js_mkfun_arity(os_setPriority, 2));
   
   ant_value_t constants = js_mkobj(js);
   ant_value_t signals = js_mkobj(js);

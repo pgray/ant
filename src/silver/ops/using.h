@@ -30,7 +30,7 @@ static inline ant_value_t sv_make_suppressed_error_value(
     return obj;
   }
 
-  ant_value_t proto = js_get_ctor_proto(js, "SuppressedError", 15);
+  ant_value_t proto = js->builtins.suppressed_error_proto;
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
 
   js_mkprop_fast(js, obj, "error", 5, error);

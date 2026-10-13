@@ -542,7 +542,7 @@ static void resolve_body_promise(
     ArrayBufferData *ab = create_array_buffer_data(js, size);
     if (!ab) { js_reject_promise(js, promise, js_mkerr(js, "out of memory")); break; }
     if (data && size > 0) memcpy(ab->data, data, size);
-    ant_value_t bytes = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, size, "Uint8Array");
+    ant_value_t bytes = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, size, js->builtins.typedarray_protos[TYPED_ARRAY_UINT8]);
     if (is_err(bytes)) js_reject_promise(js, promise, bytes);
     else js_resolve_promise(js, promise, bytes);
     break;
@@ -896,7 +896,7 @@ static ant_value_t req_body_pull(ant_params_t) {
     if (!ab) return js_mkerr(js, "out of memory");
     memcpy(ab->data, d->body_data, d->body_size);
 
-    ant_value_t chunk = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, d->body_size, "Uint8Array");
+    ant_value_t chunk = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, d->body_size, js->builtins.typedarray_protos[TYPED_ARRAY_UINT8]);
     if (is_err(chunk)) return chunk;
 
     ant_value_t enqueued = rs_controller_enqueue(js, ctrl, chunk);
@@ -1556,7 +1556,7 @@ void init_request_module(ant_t *js) {
 
   js_set_sym(js, js->builtins.request_proto, js->sym.inspect_sym, js_mkfun(request_inspect));
   js_set_tostringtag(js, js->builtins.request_proto, js_mkstr(js, "Request", 7));
-  ant_value_t ctor = js_make_ctor(js, js_request_ctor, js->builtins.request_proto, "Request", 7);
+  ant_value_t ctor = js_make_ctor(js, js_request_ctor, js->builtins.request_proto, "Request", 7, 1);
   
   js_set(js, g, "Request", ctor);
   js_set_descriptor(js, g, "Request", 7, JS_DESC_W | JS_DESC_C);

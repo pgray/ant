@@ -962,7 +962,7 @@ void init_readable_stream_module(ant_t *js) {
   js_set_descriptor(js, js->builtins.controller_proto, "error", 5, JS_DESC_W | JS_DESC_C);
   js_set_tostringtag(js, js->builtins.controller_proto, js_mkstr(js, "ReadableStreamDefaultController", 31));
 
-  ant_value_t ctrl_ctor = js_make_ctor(js, js_rs_controller_ctor, js->builtins.controller_proto, "ReadableStreamDefaultController", 31);
+  ant_value_t ctrl_ctor = js_make_ctor(js, js_rs_controller_ctor, js->builtins.controller_proto, "ReadableStreamDefaultController", 31, 0);
   js_set(js, g, "ReadableStreamDefaultController", ctrl_ctor);
   js_set_descriptor(js, g, "ReadableStreamDefaultController", 31, JS_DESC_W | JS_DESC_C);
 
@@ -976,7 +976,7 @@ void init_readable_stream_module(ant_t *js) {
   js_set_descriptor(js, js->builtins.reader_proto, "cancel", 6, JS_DESC_W | JS_DESC_C);
   js_set_tostringtag(js, js->builtins.reader_proto, js_mkstr(js, "ReadableStreamDefaultReader", 27));
 
-  ant_value_t reader_ctor = js_make_ctor(js, js_rs_reader_ctor, js->builtins.reader_proto, "ReadableStreamDefaultReader", 27);
+  ant_value_t reader_ctor = js_make_ctor(js, js_rs_reader_ctor, js->builtins.reader_proto, "ReadableStreamDefaultReader", 27, 1);
   js_set(js, g, "ReadableStreamDefaultReader", reader_ctor);
   js_set_descriptor(js, g, "ReadableStreamDefaultReader", 27, JS_DESC_W | JS_DESC_C);
 
@@ -1000,7 +1000,7 @@ void init_readable_stream_module(ant_t *js) {
   js_set_sym(js, js->builtins.rs_proto, js->sym.asyncIterator_sym, js_get(js, js->builtins.rs_proto, "values"));
   js_set_tostringtag(js, js->builtins.rs_proto, js_mkstr(js, "ReadableStream", 14));
 
-  ant_value_t rs_ctor = js_make_ctor(js, js_rs_ctor, js->builtins.rs_proto, "ReadableStream", 14);
+  ant_value_t rs_ctor = js_make_ctor(js, js_rs_ctor, js->builtins.rs_proto, "ReadableStream", 14, 0);
   js_set(js, g, "ReadableStream", rs_ctor);
   js_set_descriptor(js, g, "ReadableStream", 14, JS_DESC_W | JS_DESC_C);
 }

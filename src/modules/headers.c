@@ -1217,12 +1217,12 @@ void init_headers_module(ant_t *js) {
 
   js->builtins.headers_proto = js_mkobj(js);
 
-  js_set(js, js->builtins.headers_proto, "append",       js_mkfun(js_headers_append));
-  js_set(js, js->builtins.headers_proto, "set",          js_mkfun(js_headers_set));
-  js_set(js, js->builtins.headers_proto, "get",          js_mkfun(js_headers_get));
-  js_set(js, js->builtins.headers_proto, "has",          js_mkfun(js_headers_has));
-  js_set(js, js->builtins.headers_proto, "delete",       js_mkfun(js_headers_delete));
-  js_set(js, js->builtins.headers_proto, "forEach",      js_mkfun(js_headers_for_each));
+  js_set(js, js->builtins.headers_proto, "append",       js_mkfun_arity(js_headers_append, 2));
+  js_set(js, js->builtins.headers_proto, "set",          js_mkfun_arity(js_headers_set, 2));
+  js_set(js, js->builtins.headers_proto, "get",          js_mkfun_arity(js_headers_get, 1));
+  js_set(js, js->builtins.headers_proto, "has",          js_mkfun_arity(js_headers_has, 1));
+  js_set(js, js->builtins.headers_proto, "delete",       js_mkfun_arity(js_headers_delete, 1));
+  js_set(js, js->builtins.headers_proto, "forEach",      js_mkfun_arity(js_headers_for_each, 1));
   js_set(js, js->builtins.headers_proto, "keys",         js_mkfun(js_headers_keys));
   js_set(js, js->builtins.headers_proto, "values",       js_mkfun(js_headers_values));
   js_set(js, js->builtins.headers_proto, "entries",      js_mkfun(js_headers_entries));
@@ -1235,8 +1235,7 @@ void init_headers_module(ant_t *js) {
   ant_value_t ctor_obj = js_mkobj(js);
   js_set_slot(ctor_obj, SLOT_CFUNC, js_mkfun(js_headers_ctor));
   js_mkprop_fast(js, ctor_obj, "prototype", 9, js->builtins.headers_proto);
-  js_mkprop_fast(js, ctor_obj, "name", 4, js_mkstr(js, "Headers", 7));
-  js_set_descriptor(js, ctor_obj, "name", 4, 0);
+  js_set_function_name(js, ctor_obj, "Headers", sizeof("Headers") - 1);
   
   ant_value_t ctor = js_obj_to_func(js, ctor_obj);
   js_set(js, js->builtins.headers_proto, "constructor", ctor);

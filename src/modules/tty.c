@@ -121,7 +121,7 @@ static void tty_read_stream_push_chunk(tty_read_stream_state_t *state, const cha
   if (ab) memcpy(ab->data, data, len);
   
   chunk = ab
-    ? create_typed_array(state->js, TYPED_ARRAY_UINT8, ab, 0, len, "Buffer")
+    ? create_typed_array(state->js, TYPED_ARRAY_UINT8, ab, 0, len, state->js->builtins.buffer_proto)
     : js_mkstr(state->js, data, len);
   (void)stream_readable_push(state->js, state->stream_obj, chunk, js_mkundef());
 }
@@ -821,7 +821,7 @@ static ant_value_t tty_write_stream_constructor(ant_params_t) {
 
 static void setup_readstream_proto(ant_t *js, ant_value_t proto) {
   if (!is_special_object(proto)) return;
-  js_set(js, proto, "setRawMode", js_mkfun(tty_read_stream_set_raw_mode));
+  js_set(js, proto, "setRawMode", js_mkfun_arity(tty_read_stream_set_raw_mode, 1));
   js_set_tostringtag(js, proto, js_mkstr(js, "ReadStream", 10));
 }
 
@@ -829,13 +829,13 @@ static void setup_writestream_proto(ant_t *js, ant_value_t proto) {
   if (!is_special_object(proto)) return;
 
   js_set(js, proto, "write", js_mkfun(tty_stream_write));
-  js_set(js, proto, "clearLine", js_mkfun(tty_write_stream_clear_line));
-  js_set(js, proto, "clearScreenDown", js_mkfun(tty_write_stream_clear_screen_down));
-  js_set(js, proto, "cursorTo", js_mkfun(tty_write_stream_cursor_to));
-  js_set(js, proto, "moveCursor", js_mkfun(tty_write_stream_move_cursor));
+  js_set(js, proto, "clearLine", js_mkfun_arity(tty_write_stream_clear_line, 2));
+  js_set(js, proto, "clearScreenDown", js_mkfun_arity(tty_write_stream_clear_screen_down, 1));
+  js_set(js, proto, "cursorTo", js_mkfun_arity(tty_write_stream_cursor_to, 3));
+  js_set(js, proto, "moveCursor", js_mkfun_arity(tty_write_stream_move_cursor, 3));
   js_set(js, proto, "getWindowSize", js_mkfun(tty_write_stream_get_window_size));
   js_set(js, proto, "getColorDepth", js_mkfun(tty_write_stream_get_color_depth));
-  js_set(js, proto, "hasColors", js_mkfun(tty_write_stream_has_colors));
+  js_set(js, proto, "hasColors", js_mkfun_arity(tty_write_stream_has_colors, 2));
   js_set_getter_desc(js, proto, "rows", 4, js_mkfun(tty_write_stream_rows_getter), JS_DESC_E | JS_DESC_C);
   js_set_getter_desc(js, proto, "columns", 7, js_mkfun(tty_write_stream_columns_getter), JS_DESC_E | JS_DESC_C);
   js_set_tostringtag(js, proto, js_mkstr(js, "WriteStream", 11));
@@ -849,7 +849,7 @@ static void tty_init_stream_constructors(ant_t *js) {
   js_set_proto_init(js->builtins.tty_readstream_proto, stream_readable_prototype(js));
   setup_readstream_proto(js, js->builtins.tty_readstream_proto);
   
-  js->builtins.tty_readstream_ctor = js_make_ctor(js, tty_read_stream_constructor, js->builtins.tty_readstream_proto, "ReadStream", 10);
+  js->builtins.tty_readstream_ctor = js_make_ctor(js, tty_read_stream_constructor, js->builtins.tty_readstream_proto, "ReadStream", 10, 2);
   js_set_proto_init(js->builtins.tty_readstream_ctor, stream_readable_constructor(js));
   
   gc_register_root(&js->builtins.tty_readstream_proto);
@@ -859,7 +859,7 @@ static void tty_init_stream_constructors(ant_t *js) {
   js_set_proto_init(js->builtins.tty_writestream_proto, stream_writable_prototype(js));
   setup_writestream_proto(js, js->builtins.tty_writestream_proto);
   
-  js->builtins.tty_writestream_ctor = js_make_ctor(js, tty_write_stream_constructor, js->builtins.tty_writestream_proto, "WriteStream", 11);
+  js->builtins.tty_writestream_ctor = js_make_ctor(js, tty_write_stream_constructor, js->builtins.tty_writestream_proto, "WriteStream", 11, 1);
   js_set_proto_init(js->builtins.tty_writestream_ctor, stream_writable_constructor(js));
   
   gc_register_root(&js->builtins.tty_writestream_proto);
@@ -926,7 +926,7 @@ ant_value_t tty_library(ant_t *js) {
   ant_value_t lib = js_mkobj(js);
   tty_init_stream_constructors(js);
 
-  js_set(js, lib, "isatty", js_mkfun(tty_isatty));
+  js_set(js, lib, "isatty", js_mkfun_arity(tty_isatty, 1));
   js_set(js, lib, "ReadStream", js->builtins.tty_readstream_ctor);
   js_set(js, lib, "WriteStream", js->builtins.tty_writestream_ctor);
   js_set_tostringtag(js, lib, js_mkstr(js, "tty", 3));

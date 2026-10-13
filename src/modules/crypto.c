@@ -334,7 +334,7 @@ static ant_value_t crypto_make_buffer(ant_t *js, const uint8_t *data, size_t len
   ArrayBufferData *buffer = create_array_buffer_data(js, len);
   if (!buffer) return js_mkerr(js, "Failed to allocate Buffer");
   if (len > 0 && data) memcpy(buffer->data, data, len);
-  return create_typed_array(js, TYPED_ARRAY_UINT8, buffer, 0, len, "Buffer");
+  return create_typed_array(js, TYPED_ARRAY_UINT8, buffer, 0, len, js->builtins.buffer_proto);
 }
 
 static bool crypto_get_mutable_bytes(ant_value_t value, uint8_t **out, size_t *len) {
@@ -2236,9 +2236,9 @@ static ant_value_t create_crypto_obj(ant_t *js) {
   ant_value_t subtle_obj = js_mkobj(js);
   
   js_set(js, crypto_obj, "random", js_mkfun(js_crypto_random));
-  js_set(js, crypto_obj, "randomBytes", js_mkfun(js_crypto_random_bytes));
-  js_set(js, crypto_obj, "randomFillSync", js_mkfun(js_crypto_random_fill_sync));
-  js_set(js, crypto_obj, "randomUUID", js_mkfun(js_crypto_random_uuid));
+  js_set(js, crypto_obj, "randomBytes", js_mkfun_arity(js_crypto_random_bytes, 2));
+  js_set(js, crypto_obj, "randomFillSync", js_mkfun_arity(js_crypto_random_fill_sync, 1));
+  js_set(js, crypto_obj, "randomUUID", js_mkfun_arity(js_crypto_random_uuid, 1));
   js_set(js, crypto_obj, "randomUUIDv7", js_mkfun(js_crypto_random_uuidv7));
   js_set(js, crypto_obj, "getRandomValues", js_mkfun(js_crypto_get_random_values));
   // TODO: add remaining WebCrypto key formats, key derivation, wrapping, and asymmetric algorithms.
@@ -2273,18 +2273,18 @@ ant_value_t crypto_library(ant_t *js) {
   
   js_set(js, lib, "webcrypto", webcrypto);
   js_set(js, lib, "subtle", js_get(js, webcrypto, "subtle"));
-  js_set(js, lib, "hash", js_mkfun(js_crypto_hash));
-  js_set(js, lib, "createHash", js_mkfun(js_crypto_create_hash));
-  js_set(js, lib, "createHmac", js_mkfun(js_crypto_create_hmac));
-  js_set(js, lib, "createCipheriv", js_mkfun(js_crypto_create_cipheriv));
-  js_set(js, lib, "createDecipheriv", js_mkfun(js_crypto_create_decipheriv));
-  js_set(js, lib, "pbkdf2", js_mkfun(js_crypto_pbkdf2));
-  js_set(js, lib, "pbkdf2Sync", js_mkfun(js_crypto_pbkdf2_sync));
-  js_set(js, lib, "scrypt", js_mkfun(js_crypto_scrypt));
-  js_set(js, lib, "scryptSync", js_mkfun(js_crypto_scrypt_sync));
-  js_set(js, lib, "randomBytes", js_mkfun(js_crypto_random_bytes));
-  js_set(js, lib, "randomFillSync", js_mkfun(js_crypto_random_fill_sync));
-  js_set(js, lib, "randomUUID", js_mkfun(js_crypto_random_uuid));
+  js_set(js, lib, "hash", js_mkfun_arity(js_crypto_hash, 3));
+  js_set(js, lib, "createHash", js_mkfun_arity(js_crypto_create_hash, 2));
+  js_set(js, lib, "createHmac", js_mkfun_arity(js_crypto_create_hmac, 3));
+  js_set(js, lib, "createCipheriv", js_mkfun_arity(js_crypto_create_cipheriv, 4));
+  js_set(js, lib, "createDecipheriv", js_mkfun_arity(js_crypto_create_decipheriv, 4));
+  js_set(js, lib, "pbkdf2", js_mkfun_arity(js_crypto_pbkdf2, 6));
+  js_set(js, lib, "pbkdf2Sync", js_mkfun_arity(js_crypto_pbkdf2_sync, 5));
+  js_set(js, lib, "scrypt", js_mkfun_arity(js_crypto_scrypt, 4));
+  js_set(js, lib, "scryptSync", js_mkfun_arity(js_crypto_scrypt_sync, 3));
+  js_set(js, lib, "randomBytes", js_mkfun_arity(js_crypto_random_bytes, 2));
+  js_set(js, lib, "randomFillSync", js_mkfun_arity(js_crypto_random_fill_sync, 1));
+  js_set(js, lib, "randomUUID", js_mkfun_arity(js_crypto_random_uuid, 1));
   js_set(js, lib, "getRandomValues", js_mkfun(js_crypto_get_random_values));
   js_set(js, lib, "getCiphers", js_mkfun(js_crypto_get_ciphers));
   js_set(js, lib, "getCurves", js_mkfun(js_crypto_get_curves));

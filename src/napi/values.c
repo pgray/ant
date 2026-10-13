@@ -178,7 +178,7 @@ static napi_status napi_create_date_common(napi_env env, double time, napi_value
 
 static napi_status napi_make_error_object(
   napi_env env,
-  const char *name,
+  js_err_type_t err_type,
   napi_value msg,
   napi_value *result
 ) {
@@ -194,11 +194,12 @@ static napi_status napi_make_error_object(
     if (is_err(message)) return napi_check_pending_from_result(env, message);
   }
 
+  const char *name = js_err_type_name(err_type);
   ant_value_t err = js_mkobj(js);
   js_set(js, err, "name", js_mkstr(js, name, strlen(name)));
   js_set(js, err, "message", message);
 
-  ant_value_t proto = js_get_ctor_proto(js, name, strlen(name));
+  ant_value_t proto = js->builtins.error_protos[err_type];
   if (is_object_type(proto)) js_set_proto_init(err, proto);
 
   *result = NAPI_RETURN(nenv, err);
@@ -430,7 +431,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_create_error(
   napi_value msg,
   napi_value *result
 ) {
-  return napi_make_error_object(env, "Error", msg, result);
+  return napi_make_error_object(env, JS_ERR_GENERIC, msg, result);
 }
 
 NAPI_EXTERN napi_status NAPI_CDECL napi_create_type_error(
@@ -439,7 +440,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_create_type_error(
   napi_value msg,
   napi_value *result
 ) {
-  return napi_make_error_object(env, "TypeError", msg, result);
+  return napi_make_error_object(env, JS_ERR_TYPE, msg, result);
 }
 
 NAPI_EXTERN napi_status NAPI_CDECL napi_create_range_error(
@@ -448,7 +449,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_create_range_error(
   napi_value msg,
   napi_value *result
 ) {
-  return napi_make_error_object(env, "RangeError", msg, result);
+  return napi_make_error_object(env, JS_ERR_RANGE, msg, result);
 }
 
 NAPI_EXTERN napi_status NAPI_CDECL napi_create_promise(
@@ -537,7 +538,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_create_buffer(
   ArrayBufferData *buf = create_array_buffer_data(nenv->js, length);
   if (!buf) return napi_set_last(env, napi_generic_failure, "allocation failed");
 
-  ant_value_t value = create_typed_array(nenv->js, TYPED_ARRAY_UINT8, buf, 0, length, "Buffer");
+  ant_value_t value = create_typed_array(nenv->js, TYPED_ARRAY_UINT8, buf, 0, length, nenv->js->builtins.buffer_proto);
   if (is_err(value)) return napi_check_pending_from_result(env, value);
 
   if (data) *data = buf->data;
@@ -680,7 +681,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_create_typedarray(
     ab,
     byte_offset,
     length,
-    buffer_typedarray_type_name(ta_type),
+    nenv->js->builtins.typedarray_protos[ta_type],
     (ant_value_t)arraybuffer
   );
 
@@ -1085,7 +1086,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_is_buffer(
     return napi_set_last(env, napi_ok, NULL);
   }
 
-  ant_value_t buffer_proto = js_get_ctor_proto(nenv->js, "Buffer", 6);
+  ant_value_t buffer_proto = nenv->js->builtins.buffer_proto;
   *result = is_object_type(buffer_proto)
     && proto_chain_contains(nenv->js, (ant_value_t)value, buffer_proto);
   return napi_set_last(env, napi_ok, NULL);

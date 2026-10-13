@@ -18,7 +18,7 @@ static ant_value_t http_parser_make_buffer(ant_t *js, const uint8_t *data, size_
   ArrayBufferData *ab = create_array_buffer_data(js, len);
   if (!ab) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
   if (len > 0 && data) memcpy(ab->data, data, len);
-  return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, "Buffer");
+  return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, js->builtins.buffer_proto);
 }
 
 static ant_value_t http_parser_make_error(

@@ -378,7 +378,7 @@ static ant_value_t net_make_buffer_chunk(ant_t *js, const char *data, size_t len
   ArrayBufferData *ab = create_array_buffer_data(js, len);
   if (!ab) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
   if (len > 0 && data) memcpy(ab->data, data, len);
-  return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, "Buffer");
+  return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, js->builtins.buffer_proto);
 }
 
 static void net_socket_sync_state(net_socket_t *socket) {
@@ -1214,28 +1214,28 @@ static void net_init_constructors(ant_t *js) {
   js_set(js, js->builtins.net_socket_proto, "pause", js_mkfun(js_net_socket_pause));
   js_set(js, js->builtins.net_socket_proto, "resume", js_mkfun(js_net_socket_resume));
   js_set(js, js->builtins.net_socket_proto, "setEncoding", js_mkfun(js_net_socket_setEncoding));
-  js_set(js, js->builtins.net_socket_proto, "setTimeout", js_mkfun(js_net_socket_setTimeout));
-  js_set(js, js->builtins.net_socket_proto, "setNoDelay", js_mkfun(js_net_socket_setNoDelay));
-  js_set(js, js->builtins.net_socket_proto, "setKeepAlive", js_mkfun(js_net_socket_setKeepAlive));
+  js_set(js, js->builtins.net_socket_proto, "setTimeout", js_mkfun_arity(js_net_socket_setTimeout, 2));
+  js_set(js, js->builtins.net_socket_proto, "setNoDelay", js_mkfun_arity(js_net_socket_setNoDelay, 1));
+  js_set(js, js->builtins.net_socket_proto, "setKeepAlive", js_mkfun_arity(js_net_socket_setKeepAlive, 2));
   js_set(js, js->builtins.net_socket_proto, "write", js_mkfun(js_net_socket_write));
-  js_set(js, js->builtins.net_socket_proto, "end", js_mkfun(js_net_socket_end));
+  js_set(js, js->builtins.net_socket_proto, "end", js_mkfun_arity(js_net_socket_end, 3));
   js_set(js, js->builtins.net_socket_proto, "destroy", js_mkfun(js_net_socket_destroy));
   js_set(js, js->builtins.net_socket_proto, "connect", js_mkfun(js_net_socket_connect));
   js_set(js, js->builtins.net_socket_proto, "ref", js_mkfun(js_net_socket_ref));
   js_set(js, js->builtins.net_socket_proto, "unref", js_mkfun(js_net_socket_unref));
   js_set_tostringtag(js, js->builtins.net_socket_proto, js_mkstr(js, "Socket", 6));
-  js->builtins.net_socket_ctor = js_make_ctor(js, js_net_socket_ctor, js->builtins.net_socket_proto, "Socket", 6);
+  js->builtins.net_socket_ctor = js_make_ctor(js, js_net_socket_ctor, js->builtins.net_socket_proto, "Socket", 6, 1);
 
   js->builtins.net_server_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.net_server_proto, ee_proto);
   js_set(js, js->builtins.net_server_proto, "listen", js_mkfun(js_net_server_listen));
-  js_set(js, js->builtins.net_server_proto, "close", js_mkfun(js_net_server_close));
+  js_set(js, js->builtins.net_server_proto, "close", js_mkfun_arity(js_net_server_close, 1));
   js_set(js, js->builtins.net_server_proto, "address", js_mkfun(js_net_server_address));
-  js_set(js, js->builtins.net_server_proto, "getConnections", js_mkfun(js_net_server_getConnections));
+  js_set(js, js->builtins.net_server_proto, "getConnections", js_mkfun_arity(js_net_server_getConnections, 1));
   js_set(js, js->builtins.net_server_proto, "ref", js_mkfun(js_net_server_ref));
   js_set(js, js->builtins.net_server_proto, "unref", js_mkfun(js_net_server_unref));
   js_set_tostringtag(js, js->builtins.net_server_proto, js_mkstr(js, "Server", 6));
-  js->builtins.net_server_ctor = js_make_ctor(js, js_net_server_ctor, js->builtins.net_server_proto, "Server", 6);
+  js->builtins.net_server_ctor = js_make_ctor(js, js_net_server_ctor, js->builtins.net_server_proto, "Server", 6, 2);
 }
 
 ant_value_t net_library(ant_t *js) {
@@ -1244,16 +1244,16 @@ ant_value_t net_library(ant_t *js) {
   net_init_constructors(js);
   js_set(js, lib, "Server", js->builtins.net_server_ctor);
   js_set(js, lib, "Socket", js->builtins.net_socket_ctor);
-  js_set(js, lib, "createServer", js_mkfun(js_net_createServer));
+  js_set(js, lib, "createServer", js_mkfun_arity(js_net_createServer, 2));
   js_set(js, lib, "createConnection", js_mkfun(js_net_createConnection));
   js_set(js, lib, "connect", js_mkfun(js_net_connect));
-  js_set(js, lib, "isIP", js_mkfun(net_isIP));
-  js_set(js, lib, "isIPv4", js_mkfun(net_isIPv4));
-  js_set(js, lib, "isIPv6", js_mkfun(net_isIPv6));
+  js_set(js, lib, "isIP", js_mkfun_arity(net_isIP, 1));
+  js_set(js, lib, "isIPv4", js_mkfun_arity(net_isIPv4, 1));
+  js_set(js, lib, "isIPv6", js_mkfun_arity(net_isIPv6, 1));
   js_set(js, lib, "getDefaultAutoSelectFamily", js_mkfun(js_net_getDefaultAutoSelectFamily));
-  js_set(js, lib, "setDefaultAutoSelectFamily", js_mkfun(js_net_setDefaultAutoSelectFamily));
+  js_set(js, lib, "setDefaultAutoSelectFamily", js_mkfun_arity(js_net_setDefaultAutoSelectFamily, 1));
   js_set(js, lib, "getDefaultAutoSelectFamilyAttemptTimeout", js_mkfun(js_net_getDefaultAutoSelectFamilyAttemptTimeout));
-  js_set(js, lib, "setDefaultAutoSelectFamilyAttemptTimeout", js_mkfun(js_net_setDefaultAutoSelectFamilyAttemptTimeout));
+  js_set(js, lib, "setDefaultAutoSelectFamilyAttemptTimeout", js_mkfun_arity(js_net_setDefaultAutoSelectFamilyAttemptTimeout, 1));
   js_set(js, lib, "default", lib);
   js_set_tostringtag(js, lib, js_mkstr(js, "net", 3));
   

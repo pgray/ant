@@ -141,7 +141,7 @@ static ant_value_t v8_serialize(ant_params_t) {
   if (!ab) goto oom;
   memcpy(ab->data, e.data, e.len);
   free(e.data);
-  return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, e.len, "Buffer");
+  return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, e.len, js->builtins.buffer_proto);
 
 oom:
   free(e.data);
@@ -354,23 +354,23 @@ static ant_value_t v8_cached_data_version_tag(ant_params_t) {
 ant_value_t v8_library(ant_t *js) {
   ant_value_t lib = js_mkobj(js);
 
-  js_set(js, lib, "serialize",              js_mkfun(v8_serialize));
-  js_set(js, lib, "deserialize",            js_mkfun(v8_deserialize));
-  js_set(js, lib, "writeHeapSnapshot",      js_mkfun(v8_write_heap_snapshot));
-  js_set(js, lib, "getHeapSnapshot",        js_mkfun(v8_get_heap_snapshot));
+  js_set(js, lib, "serialize",              js_mkfun_arity(v8_serialize, 1));
+  js_set(js, lib, "deserialize",            js_mkfun_arity(v8_deserialize, 1));
+  js_set(js, lib, "writeHeapSnapshot",      js_mkfun_arity(v8_write_heap_snapshot, 2));
+  js_set(js, lib, "getHeapSnapshot",        js_mkfun_arity(v8_get_heap_snapshot, 1));
   js_set(js, lib, "getHeapStatistics",      js_mkfun(v8_get_heap_statistics));
   js_set(js, lib, "getHeapSpaceStatistics", js_mkfun(v8_get_heap_space_statistics));
   js_set(js, lib, "getHeapCodeStatistics",  js_mkfun(v8_get_heap_code_statistics));
   js_set(js, lib, "cachedDataVersionTag",   js_mkfun(v8_cached_data_version_tag));
-  js_set(js, lib, "setFlagsFromString",     js_mkfun(v8_noop));
-  js_set(js, lib, "stopCoverage",           js_mkfun(v8_noop));
-  js_set(js, lib, "takeCoverage",           js_mkfun(v8_noop));
-  js_set(js, lib, "promiseEvents",          js_mkfun(v8_noop));
+  js_set(js, lib, "setFlagsFromString",     js_mkfun_arity(v8_noop, 1));
+  js_set(js, lib, "stopCoverage",           js_mkfun_arity(v8_noop, 1));
+  js_set(js, lib, "takeCoverage",           js_mkfun_arity(v8_noop, 1));
+  js_set(js, lib, "promiseEvents",          js_mkfun_arity(v8_noop, 1));
 
   ant_value_t snapshot = js_mkobj(js);
   js_set(js, snapshot, "isBuildingSnapshot",      js_mkfun(v8_noop_false));
-  js_set(js, snapshot, "addSerializeCallback",    js_mkfun(v8_noop));
-  js_set(js, snapshot, "addDeserializeCallback",  js_mkfun(v8_noop));
+  js_set(js, snapshot, "addSerializeCallback",    js_mkfun_arity(v8_noop, 1));
+  js_set(js, snapshot, "addDeserializeCallback",  js_mkfun_arity(v8_noop, 1));
   
   js_set(js, lib, "startupSnapshot", snapshot);
   js_set(js, lib, "constants", js_mkobj(js));

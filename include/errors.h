@@ -21,6 +21,7 @@ typedef enum {
   JS_ERR_URI,
   JS_ERR_INTERNAL,
   JS_ERR_AGGREGATE,
+  JS_ERR_TYPE_COUNT
 } js_err_type_t;
 
 typedef struct {
@@ -36,6 +37,7 @@ typedef struct {
 } js_error_site_t;
 
 js_err_type_t get_error_type(ant_t *js);
+const char *js_err_type_name(js_err_type_t err_type);
 
 bool print_uncaught_throw(ant_t *js);
 bool print_unhandled_promise_rejection(ant_t *js, ant_value_t value);

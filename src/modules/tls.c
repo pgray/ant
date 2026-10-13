@@ -180,7 +180,7 @@ static ant_value_t tls_make_buffer_chunk(ant_t *js, const char *data, size_t len
   ArrayBufferData *ab = create_array_buffer_data(js, len);
   if (!ab) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
   if (len > 0 && data) memcpy(ab->data, data, len);
-  return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, "Buffer");
+  return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, js->builtins.buffer_proto);
 }
 
 static void tls_socket_sync_state(ant_tls_socket_t *socket) {
@@ -933,7 +933,7 @@ void tls_init_socket_proto(ant_t *js) {
   }
 
   if (!js->builtins.tls_socket_ctor)
-    js->builtins.tls_socket_ctor = js_make_ctor(js, js_tls_socket_ctor, js->builtins.tls_socket_proto, "TLSSocket", 9);
+    js->builtins.tls_socket_ctor = js_make_ctor(js, js_tls_socket_ctor, js->builtins.tls_socket_proto, "TLSSocket", 9, 2);
 }
 
 static ant_value_t js_tls_create_context(ant_params_t) {
@@ -1276,8 +1276,7 @@ static ant_value_t tls_build_library(ant_t *js) {
   
   if (!js->builtins.tls_context_ctor) js->builtins.tls_context_ctor = js_make_ctor(
     js, js_tls_secure_context_ctor,
-    js->builtins.tls_context_proto, "SecureContext", 13
-  );
+    js->builtins.tls_context_proto, "SecureContext", 13, 4);
   
   js_set(js, lib, "version", version);
   js_set(js, lib, "TLSSocket", js->builtins.tls_socket_ctor);

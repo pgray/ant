@@ -130,9 +130,10 @@ void init_symbol_module(ant_t *js) {
 
   ant_value_t ctor = js_mkobj(js);
   js_set_slot(ctor, SLOT_CFUNC, js_mkfun(builtin_Symbol));
+  js_set_function_name(js, ctor, "Symbol", 6);
   
-  defmethod(js, ctor, "for", 3, js_mkfun(builtin_Symbol_for));
-  defmethod(js, ctor, "keyFor", 6, js_mkfun(builtin_Symbol_keyFor));
+  defmethod(js, ctor, "for", 3, js_mkfun_arity(builtin_Symbol_for, 1));
+  defmethod(js, ctor, "keyFor", 6, js_mkfun_arity(builtin_Symbol_keyFor, 1));
   
   js_set(js, ctor, "prototype", proto);
   js_set_descriptor(js, ctor, "prototype", 9, 0);

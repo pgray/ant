@@ -123,7 +123,7 @@ static void eventsource_emit(eventsource_state_t *es, const char *type, ant_valu
   char handler_name[32];
 
   if (!is_callable(dispatch)) {
-    ant_value_t eventtarget_proto = js_get_ctor_proto(js, "EventTarget", 11);
+    ant_value_t eventtarget_proto = js->builtins.eventtarget_proto;
     if (is_object_type(eventtarget_proto)) dispatch = js_get(js, eventtarget_proto, "dispatchEvent");
   }
   eventsource_call(js, dispatch, es->obj, args, 1);
@@ -134,7 +134,7 @@ static void eventsource_emit(eventsource_state_t *es, const char *type, ant_valu
 }
 
 static void eventsource_emit_simple(eventsource_state_t *es, const char *type) {
-  ant_value_t proto = js_get_ctor_proto(es->js, "Event", 5);
+  ant_value_t proto = es->js->builtins.event_proto;
   eventsource_emit(es, type, eventsource_make_event(es->js, type, proto));
 }
 
@@ -213,7 +213,7 @@ static bool eventsource_on_message(const ant_sse_message_t *message, void *user_
   eventsource_state_t *es = (eventsource_state_t *)user_data;
   ant_t *js = es->js;
   const char *type = (message->event && message->event[0]) ? message->event : "message";
-  ant_value_t proto = js_get_ctor_proto(js, "MessageEvent", 12);
+  ant_value_t proto = js->builtins.message_event_proto;
   ant_value_t event = eventsource_make_event(js, type, proto);
 
   js_set(js, event, "data", js_mkstr(js, message->data ? message->data : "", message->data ? strlen(message->data) : 0));
@@ -446,7 +446,7 @@ static ant_value_t js_eventsource_close(ant_params_t) {
 }
 
 void init_eventsource_module(ant_t *js) {
-  ant_value_t eventtarget_proto = js_get_ctor_proto(js, "EventTarget", 11);
+  ant_value_t eventtarget_proto = js->builtins.eventtarget_proto;
   js->builtins.eventsource_proto = js_mkobj(js);
   
   if (is_object_type(eventtarget_proto)) js_set_proto_init(js->builtins.eventsource_proto, eventtarget_proto);
@@ -456,7 +456,7 @@ void init_eventsource_module(ant_t *js) {
   js_set(js, js->builtins.eventsource_proto, "CLOSED", js_mknum(ES_CLOSED));
   js_set_tostringtag(js, js->builtins.eventsource_proto, js_mkstr(js, "EventSource", 11));
 
-  js->builtins.eventsource_ctor = js_make_ctor(js, js_eventsource_ctor, js->builtins.eventsource_proto, "EventSource", 11);
+  js->builtins.eventsource_ctor = js_make_ctor(js, js_eventsource_ctor, js->builtins.eventsource_proto, "EventSource", 11, 1);
   js_set(js, js->builtins.eventsource_ctor, "CONNECTING", js_mknum(ES_CONNECTING));
   js_set(js, js->builtins.eventsource_ctor, "OPEN", js_mknum(ES_OPEN));
   js_set(js, js->builtins.eventsource_ctor, "CLOSED", js_mknum(ES_CLOSED));

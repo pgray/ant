@@ -502,17 +502,17 @@ void init_generator_module(ant_t *js) {
   ant_value_t proto = js->sym.generator_proto;
   js_set_proto_wb(js, proto, js->sym.iterator_proto);
   
-  defmethod(js, proto, "next", 4, js_mkfun(generator_next));
-  defmethod(js, proto, "return", 6, js_mkfun(generator_return));
-  defmethod(js, proto, "throw", 5, js_mkfun(generator_throw));
+  defmethod(js, proto, "next", 4, js_mkfun_arity(generator_next, 1));
+  defmethod(js, proto, "return", 6, js_mkfun_arity(generator_return, 1));
+  defmethod(js, proto, "throw", 5, js_mkfun_arity(generator_throw, 1));
   mkprop(js, proto, js->sym.toStringTag_sym, ANT_STRING("Generator"), ANT_PROP_ATTR_CONFIGURABLE);
 
   ant_value_t async_proto = js->sym.async_generator_proto;
   js_set_proto_wb(js, async_proto, js->sym.async_iterator_proto);
   
-  defmethod(js, async_proto, "next", 4, js_mkfun(generator_next));
-  defmethod(js, async_proto, "return", 6, js_mkfun(generator_return));
-  defmethod(js, async_proto, "throw", 5, js_mkfun(generator_throw));
+  defmethod(js, async_proto, "next", 4, js_mkfun_arity(generator_next, 1));
+  defmethod(js, async_proto, "return", 6, js_mkfun_arity(generator_return, 1));
+  defmethod(js, async_proto, "throw", 5, js_mkfun_arity(generator_throw, 1));
   
   mkprop(js, async_proto, js->sym.toStringTag_sym, ANT_STRING("AsyncGenerator"), ANT_PROP_ATTR_CONFIGURABLE);
 }
