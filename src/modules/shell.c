@@ -70,7 +70,7 @@ static bool sh_bytes_append(sh_bytes_t *bytes, const char *data, size_t len) {
 static ant_value_t sh_make_byte_array(
   ant_t *js, const char *data, size_t len
 ) {
-  ArrayBufferData *buffer = create_array_buffer_data(len);
+  ArrayBufferData *buffer = create_array_buffer_data(js, len);
   if (!buffer) return js_mkerr(js, "Out of memory");
   if (len) memcpy(buffer->data, data, len);
   return create_typed_array(js, TYPED_ARRAY_UINT8, buffer, 0, len, "Buffer");
@@ -777,7 +777,7 @@ ant_value_t shell_ops_library(ant_t *js) {
   js_set(js, lib, "finish", js_mkfun(sh_runtime_finish));
   js_set(js, lib, "context", js_mkfun(sh_runtime_context));
   js_set(js, lib, "debugEnabled", sv_dump_shell_unlikely ? js_true : js_false);
-  js_set_sym(js, lib, js->sym.toStringTag_sym, js_mkstr(js, "shell ops", 9));
+  js_set_tostringtag(js, lib, js_mkstr(js, "shell ops", 9));
 
   return lib;
 }

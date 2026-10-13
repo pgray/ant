@@ -1378,7 +1378,7 @@ void jit_emit_inline_body(
             MIR_label_t eq_done = MIR_new_label(ctx);
             mir_emit_strict_tagged_equality(
                 ctx, jit_func, rl, rr, rd, r_bool, op == OP_SNE,
-                eq_slow, eq_done);
+                (feedback & SV_TFB_STR) != 0, eq_slow, eq_done);
             MIR_append_insn(ctx, jit_func, eq_slow);
             mir_call_helper2(ctx, jit_func, rd,
                              helper2_proto, helper,
@@ -1534,14 +1534,13 @@ void jit_emit_inline_body(
           MIR_append_insn(ctx, jit_func, gf_slowl);
         }
         MIR_append_insn(ctx, jit_func,
-                        MIR_new_call_insn(ctx, 9,
+                        MIR_new_call_insn(ctx, 8,
                                           MIR_new_ref_op(ctx, gf_proto),
                                           MIR_new_ref_op(ctx, seen_effect ? ext->imp_get_field : imp_get_field_inline),
                                           MIR_new_reg_op(ctx, dst),
                                           MIR_new_reg_op(ctx, r_js),
                                           MIR_new_reg_op(ctx, obj),
-                                          MIR_new_uint_op(ctx, (uint64_t)(uintptr_t)atom->str),
-                                          MIR_new_uint_op(ctx, (uint64_t)atom->len),
+                                          MIR_new_uint_op(ctx, (uint64_t)(uintptr_t)atom),
                                           MIR_new_uint_op(ctx, (uint64_t)(uintptr_t)callee),
                                           MIR_new_int_op(ctx, (int64_t)inl_bc_off)));
         mir_emit_inline_read_guard(
@@ -1582,14 +1581,13 @@ void jit_emit_inline_body(
           MIR_append_insn(ctx, jit_func, gf_slow);
         }
         MIR_append_insn(ctx, jit_func,
-                        MIR_new_call_insn(ctx, 9,
+                        MIR_new_call_insn(ctx, 8,
                                           MIR_new_ref_op(ctx, gf_proto),
                                           MIR_new_ref_op(ctx, seen_effect ? ext->imp_get_field : imp_get_field_inline),
                                           MIR_new_reg_op(ctx, dst),
                                           MIR_new_reg_op(ctx, r_js),
                                           MIR_new_reg_op(ctx, obj),
-                                          MIR_new_uint_op(ctx, (uint64_t)(uintptr_t)atom->str),
-                                          MIR_new_uint_op(ctx, (uint64_t)atom->len),
+                                          MIR_new_uint_op(ctx, (uint64_t)(uintptr_t)atom),
                                           MIR_new_uint_op(ctx, (uint64_t)(uintptr_t)callee),
                                           MIR_new_int_op(ctx, (int64_t)inl_bc_off)));
         mir_emit_inline_read_guard(
@@ -1625,14 +1623,13 @@ void jit_emit_inline_body(
           MIR_append_insn(ctx, jit_func, gf_slow);
         }
         MIR_append_insn(ctx, jit_func,
-                        MIR_new_call_insn(ctx, 9,
+                        MIR_new_call_insn(ctx, 8,
                                           MIR_new_ref_op(ctx, gf_proto),
                                           MIR_new_ref_op(ctx, seen_effect ? ext->imp_get_field : imp_get_field_inline),
                                           MIR_new_reg_op(ctx, dst),
                                           MIR_new_reg_op(ctx, r_js),
                                           MIR_new_reg_op(ctx, obj),
-                                          MIR_new_uint_op(ctx, (uint64_t)(uintptr_t)atom->str),
-                                          MIR_new_uint_op(ctx, (uint64_t)atom->len),
+                                          MIR_new_uint_op(ctx, (uint64_t)(uintptr_t)atom),
                                           MIR_new_uint_op(ctx, (uint64_t)(uintptr_t)callee),
                                           MIR_new_int_op(ctx, (int64_t)inl_bc_off)));
         mir_emit_inline_read_guard(

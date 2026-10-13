@@ -211,11 +211,14 @@ static ant_value_t js_blob_array_buffer(ant_params_t) {
   ant_value_t promise = js_mkpromise(js);
 
   size_t sz = (bd && bd->data) ? bd->size : 0;
-  ArrayBufferData *abd = create_array_buffer_data(sz);
+  ArrayBufferData *abd = create_array_buffer_data(js, sz);
   if (!abd) { js_reject_promise(js, promise, js_mkerr(js, "out of memory")); return promise; }
   if (sz > 0 && bd) memcpy(abd->data, bd->data, sz);
 
-  js_resolve_promise(js, promise, create_arraybuffer_obj(js, abd));
+  ant_value_t ab_obj = create_arraybuffer_obj(js, abd);
+  free_array_buffer_data(js, abd);
+  js_resolve_promise(js, promise, ab_obj);
+
   return promise;
 }
 
@@ -224,7 +227,7 @@ static ant_value_t js_blob_bytes(ant_params_t) {
   ant_value_t promise = js_mkpromise(js);
 
   size_t sz = (bd && bd->data) ? bd->size : 0;
-  ArrayBufferData *abd = create_array_buffer_data(sz);
+  ArrayBufferData *abd = create_array_buffer_data(js, sz);
 
   if (!abd) { js_reject_promise(js, promise, js_mkerr(js, "out of memory")); return promise; }
   if (sz > 0 && bd) memcpy(abd->data, bd->data, sz);
@@ -284,7 +287,7 @@ static ant_value_t blob_stream_pull(ant_params_t) {
   ant_value_t ctrl = (nargs > 0) ? args[0] : js_mkundef();
 
   if (bd && bd->size > 0 && bd->data) {
-  ArrayBufferData *ab = create_array_buffer_data(bd->size);
+  ArrayBufferData *ab = create_array_buffer_data(js, bd->size);
   if (ab) {
     memcpy(ab->data, bd->data, bd->size);
     rs_controller_enqueue(js, ctrl, create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, bd->size, "Uint8Array"));
@@ -436,7 +439,7 @@ void init_blob_module(ant_t *js) {
   js_set(js, js->builtins.blob_proto, "slice",       js_mkfun(js_blob_slice));
   js_set(js, js->builtins.blob_proto, "stream",      js_mkfun(js_blob_stream));
 
-  js_set_sym(js, js->builtins.blob_proto, js->sym.toStringTag_sym, js_mkstr(js, "Blob", 4));
+  js_set_tostringtag(js, js->builtins.blob_proto, js_mkstr(js, "Blob", 4));
   ant_value_t blob_ctor = js_make_ctor(js, js_blob_ctor, js->builtins.blob_proto, "Blob", 4);
   
   js_set(js, g, "Blob", blob_ctor);
@@ -448,7 +451,7 @@ void init_blob_module(ant_t *js) {
   js_set_getter_desc(js, js->builtins.file_proto, "name",         4,  js_mkfun(file_get_name),          JS_DESC_C);
   js_set_getter_desc(js, js->builtins.file_proto, "lastModified", 12, js_mkfun(file_get_last_modified),  JS_DESC_C);
 
-  js_set_sym(js, js->builtins.file_proto, js->sym.toStringTag_sym, js_mkstr(js, "File", 4));
+  js_set_tostringtag(js, js->builtins.file_proto, js_mkstr(js, "File", 4));
   ant_value_t file_ctor = js_make_ctor(js, js_file_ctor, js->builtins.file_proto, "File", 4);
   
   js_set(js, g, "File", file_ctor);

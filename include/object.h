@@ -12,10 +12,18 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+typedef enum: uint8_t {
+  ANT_EXOTIC_KEYS_ANY,
+  ANT_EXOTIC_KEYS_NUMERIC,
+} ant_exotic_keys_t;
+
 typedef struct {
   ant_value_t (*getter)(ant_t *, ant_value_t, const char *, size_t);
   bool (*setter)(ant_t *, ant_value_t, const char *, size_t, ant_value_t);
   bool (*deleter)(ant_t *, ant_value_t, const char *, size_t);
+  ant_value_t (*definer)(ant_t *, ant_value_t, const char *, size_t, ant_value_t value, bool has_value, bool plain_data);
+  ant_exotic_keys_t keys;
+  bool heap;
 } ant_exotic_ops_t;
 
 typedef struct {
@@ -24,6 +32,7 @@ typedef struct {
   ant_value_t (*set)(ant_t *, ant_value_t target, const char *key, size_t key_len, ant_value_t value);
   ant_value_t (*del)(ant_t *, ant_value_t target, const char *key, size_t key_len);
   ant_value_t (*keys)(ant_t *, ant_value_t target);
+  ant_value_t (*flat_entries)(ant_t *, ant_value_t target);
 } ant_host_proxy_ops_t;
 
 typedef struct promise_handler {
@@ -63,6 +72,7 @@ typedef struct {
   ant_value_t handler;
   const ant_host_proxy_ops_t *host;
   bool revoked;
+  uint32_t plain_handler_epoch;
 } ant_proxy_state_t;
 
 typedef struct {
@@ -281,12 +291,6 @@ enum {
 
 static inline void ant_object_guard_absence(ant_object_t *obj) {
   if (obj) obj->flags.guards_absence = 1;
-}
-
-static inline void ant_object_invalidate_guarded_absence(ant_t *js, ant_object_t *obj) {
-  if (!obj || !obj->flags.guards_absence) return;
-  obj->flags.guards_absence = 0;
-  ant_ic_epoch_bump(js);
 }
 
 static inline bool ant_object_has_sidecar(const ant_object_t *obj) {

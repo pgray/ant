@@ -176,7 +176,7 @@ switch (kind) {
 }}
 
 static ant_value_t make_buffer_chunk(ant_t *js, const char *data, size_t len) {
-  ArrayBufferData *ab = create_array_buffer_data(len);
+  ArrayBufferData *ab = create_array_buffer_data(js, len);
   if (!ab) return js_mkerr(js, "Out of memory");
   if (len > 0 && data) memcpy(ab->data, data, len);
   return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, "Buffer");
@@ -973,7 +973,7 @@ static ant_value_t create_child_object(ant_t *js, child_process_t *cp) {
   js_set(js, obj, "write", js_mkfun(child_write));
   js_set(js, obj, "end", js_mkfun(child_end));
   
-  js_set_sym(js, obj, js->sym.toStringTag_sym, js_mkstr(js, "ChildProcess", 12));
+  js_set_tostringtag(js, obj, js_mkstr(js, "ChildProcess", 12));
   
   return obj;
 }
@@ -1759,7 +1759,7 @@ static bool sync_value_bytes(ant_t *js, ant_value_t value, const char **out, siz
 static ant_value_t sync_make_output(ant_t *js, const char *bytes, size_t len, bool as_string) {
   if (as_string) return js_mkstr(js, bytes ? bytes : "", len);
 
-  ArrayBufferData *buffer = create_array_buffer_data(len);
+  ArrayBufferData *buffer = create_array_buffer_data(js, len);
   if (!buffer) return js_mkerr(js, "Out of memory");
   if (bytes && len > 0) memcpy(buffer->data, bytes, len);
 
@@ -2679,7 +2679,7 @@ ant_value_t child_process_library(ant_t *js) {
   js_set(js, lib, "execFileSync", js_mkfun(builtin_execFileSync));
   js_set(js, lib, "spawnSync", js_mkfun(builtin_spawnSync));
   js_set(js, lib, "fork", js_mkfun(builtin_fork));
-  js_set_sym(js, lib, js->sym.toStringTag_sym, js_mkstr(js, "child_process", 13));
+  js_set_tostringtag(js, lib, js_mkstr(js, "child_process", 13));
   
   return lib;
 }

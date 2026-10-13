@@ -500,10 +500,11 @@ static void websocket_emit_message(websocket_state_t *ws, const uint8_t *data, s
   if (binary) {
     if (ws->binary_type_blob) data_val = blob_create(js, data, len, "");
     else {
-      ArrayBufferData *ab = create_array_buffer_data(len);
+      ArrayBufferData *ab = create_array_buffer_data(js, len);
       if (!ab) return;
       if (len > 0) memcpy(ab->data, data, len);
       data_val = create_arraybuffer_obj(js, ab);
+      free_array_buffer_data(js, ab);
     }
   } else data_val = js_mkstr(js, data, len);
 
@@ -1064,7 +1065,7 @@ void init_websocket_module(ant_t *js) {
   js_set(js, js->builtins.websocket_proto, "OPEN", js_mknum(WS_OPEN));
   js_set(js, js->builtins.websocket_proto, "CLOSING", js_mknum(WS_CLOSING));
   js_set(js, js->builtins.websocket_proto, "CLOSED", js_mknum(WS_CLOSED));
-  js_set_sym(js, js->builtins.websocket_proto, js->sym.toStringTag_sym, js_mkstr(js, "WebSocket", 9));
+  js_set_tostringtag(js, js->builtins.websocket_proto, js_mkstr(js, "WebSocket", 9));
   js->builtins.websocket_ctor = js_make_ctor(js, js_websocket_ctor, js->builtins.websocket_proto, "WebSocket", 9);
   js_set(js, js->builtins.websocket_ctor, "CONNECTING", js_mknum(WS_CONNECTING));
   js_set(js, js->builtins.websocket_ctor, "OPEN", js_mknum(WS_OPEN));
@@ -1074,13 +1075,13 @@ void init_websocket_module(ant_t *js) {
 
   js->builtins.message_event_proto = js_mkobj(js);
   if (is_object_type(event_proto)) js_set_proto_init(js->builtins.message_event_proto, event_proto);
-  js_set_sym(js, js->builtins.message_event_proto, js->sym.toStringTag_sym, js_mkstr(js, "MessageEvent", 12));
+  js_set_tostringtag(js, js->builtins.message_event_proto, js_mkstr(js, "MessageEvent", 12));
   ant_value_t message_ctor = js_make_ctor(js, js_message_event_ctor, js->builtins.message_event_proto, "MessageEvent", 12);
   js_set_global_builtin(js, "MessageEvent", message_ctor);
 
   js->builtins.close_event_proto = js_mkobj(js);
   if (is_object_type(event_proto)) js_set_proto_init(js->builtins.close_event_proto, event_proto);
-  js_set_sym(js, js->builtins.close_event_proto, js->sym.toStringTag_sym, js_mkstr(js, "CloseEvent", 10));
+  js_set_tostringtag(js, js->builtins.close_event_proto, js_mkstr(js, "CloseEvent", 10));
   ant_value_t close_ctor = js_make_ctor(js, js_close_event_ctor, js->builtins.close_event_proto, "CloseEvent", 10);
   js_set_global_builtin(js, "CloseEvent", close_ctor);
 }

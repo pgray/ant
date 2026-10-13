@@ -16,6 +16,7 @@
 
 static constexpr uint8_t CFUNC_HAS_PROTOTYPE  = 0x01u;
 static constexpr uint8_t CFUNC_IS_CONSTRUCTOR = 0x02u;
+static constexpr uint8_t CFUNC_NATIVE_GETTER  = 0x04u;
 
 #define ANT_ASSERT(cond, msg) ({                                            \
 if (!(cond)) {                                                              \
@@ -38,6 +39,7 @@ ant_t *ant_create();
 ant_value_t js_glob(ant_t *);
 
 void init_intrinsic_symbols(ant_t *js);
+void js_init_function_has_instance(ant_t *js);
 void js_mark_constructor(ant_value_t value, bool is_constructor);
 
 typedef enum: uint8_t {
@@ -162,6 +164,7 @@ ant_value_t js_mkprop_fast(ant_t *js, ant_value_t obj, const char *key, size_t l
 void js_set(ant_t *, ant_value_t, const char *, ant_value_t);
 void js_set_exact(ant_t *, ant_value_t, const char *, ant_value_t);
 void js_set_sym(ant_t *, ant_value_t obj, ant_value_t sym, ant_value_t val);
+void js_set_tostringtag(ant_t *, ant_value_t obj, ant_value_t tag);
 void js_set_symbol(ant_t *, ant_value_t obj, const char *key, ant_value_t val);
 bool js_prop_store(ant_t *js, ant_prop_loc_t loc, ant_value_t value);
 void js_merge_obj(ant_t *, ant_value_t dst, ant_value_t src);
@@ -231,14 +234,25 @@ void js_reject_promise(ant_t *js, ant_value_t promise, ant_value_t value);
 void js_resolve_promise(ant_t *js, ant_value_t promise, ant_value_t value);
 void js_process_promise_thenable_job(ant_t *js, ant_value_t promise, ant_value_t thenable, ant_value_t then_fn);
 
-typedef ant_value_t (*js_getter_fn)(ant_t *js, ant_value_t obj, const char *key, size_t key_len);
+typedef void (*js_finalizer_fn)(ant_t *js, ant_object_t *obj);
+
 typedef bool (*js_setter_fn)(ant_t *js, ant_value_t obj, const char *key, size_t key_len, ant_value_t value);
 typedef bool (*js_deleter_fn)(ant_t *js, ant_value_t obj, const char *key, size_t key_len);
-typedef void (*js_finalizer_fn)(ant_t *js, ant_object_t *obj);
+
+typedef ant_value_t (*js_definer_fn)(
+  ant_t *js, ant_value_t obj, const char *key, size_t key_len,
+  ant_value_t value, bool has_value, bool plain_data
+);
+
+typedef ant_value_t (*js_getter_fn)(
+  ant_t *js, ant_value_t obj, 
+  const char *key, size_t key_len
+);
 
 void js_set_getter(ant_value_t obj, js_getter_fn getter);
 void js_set_setter(ant_value_t obj, js_setter_fn setter);
 void js_set_deleter(ant_value_t obj, js_deleter_fn deleter);
+void js_set_definer(ant_value_t obj, js_definer_fn definer);
 void js_set_finalizer(ant_value_t obj, js_finalizer_fn fn);
 
 ant_value_t js_get_slot(ant_value_t obj, internal_slot_t slot);

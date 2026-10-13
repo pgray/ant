@@ -109,6 +109,7 @@ typedef struct {
   bool *has_const;
   uint8_t *known_bool;
   uint8_t *known_builtin;
+  const ant_flat_string_t **known_str;
   jit_integer_range_t *integer_range;
   int sp, max;
   bool overflow;
@@ -120,6 +121,7 @@ typedef struct {
   bool has_const;
   uint8_t known_bool;
   uint8_t known_builtin;
+  const ant_flat_string_t *known_str;
   jit_integer_range_t integer_range;
 } jit_value_info_t;
 
@@ -459,10 +461,17 @@ void mir_emit_numeric_equality(
     MIR_context_t ctx, MIR_item_t fn,
     MIR_reg_t left, MIR_reg_t right, MIR_reg_t result,
     MIR_reg_t scratch, bool invert);
+static constexpr ant_offset_t JIT_CONST_STR_EQ_MAX = 64;
+
+void mir_emit_const_string_equality(
+    MIR_context_t ctx, MIR_item_t fn,
+    MIR_reg_t value, MIR_reg_t literal, const ant_flat_string_t *lit,
+    MIR_reg_t result, MIR_reg_t scratch, bool invert,
+    MIR_label_t slow, MIR_label_t done);
 void mir_emit_strict_tagged_equality(
     MIR_context_t ctx, MIR_item_t fn,
     MIR_reg_t left, MIR_reg_t right, MIR_reg_t result,
-    MIR_reg_t scratch, bool invert,
+    MIR_reg_t scratch, bool invert, bool inline_long_strings,
     MIR_label_t slow, MIR_label_t done);
 void mir_emit_branch_if_string_builder(
     MIR_context_t ctx, MIR_item_t fn,
@@ -512,6 +521,10 @@ void mir_emit_value_to_objptr_or_jmp(
     MIR_context_t ctx, MIR_item_t fn,
     MIR_reg_t v, MIR_reg_t out_ptr,
     MIR_reg_t r_tag, MIR_label_t slow);
+void mir_emit_receiver_exotic_guard(MIR_context_t ctx, MIR_item_t fn, MIR_reg_t ptr, MIR_reg_t tmp, MIR_label_t slow);
+void mir_emit_receiver_numeric_atom_guard(
+    MIR_context_t ctx, MIR_item_t fn, const sv_atom_t *atom,
+    MIR_reg_t ptr, MIR_reg_t tmp, MIR_label_t slow);
 void mir_emit_ic_obj_epoch_guard(
     ant_t *js, MIR_context_t ctx, MIR_item_t fn,
     MIR_reg_t ic, MIR_label_t slow,

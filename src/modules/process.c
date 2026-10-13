@@ -722,7 +722,7 @@ static inline ant_value_t make_stdin_data_value(ant_t *js, const uv_buf_t *buf, 
   ant_process_state_t *ps = process_state(js);
   if (!ps) return js_mkundef();
   
-  ArrayBufferData *ab = create_array_buffer_data((size_t)nread);
+  ArrayBufferData *ab = create_array_buffer_data(js, (size_t)nread);
   if (ab) memcpy(ab->data, buf->base, (size_t)nread);
 
   ant_value_t raw_val = ab
@@ -1694,12 +1694,32 @@ static ant_value_t env_keys(ant_t *js, ant_value_t target) {
   return arr;
 }
 
+static void env_entries_cb(
+  ant_t *js, const char *key, size_t key_len, const char *value, size_t val_len, void *ctx
+) {
+  ant_value_t pairs = *(ant_value_t *)ctx;
+  js_arr_push(js, pairs, js_mkstr(js, key, key_len));
+  js_arr_push(js, pairs, js_mkstr(js, value, val_len));
+}
+
+static ant_value_t env_entries(ant_t *js, ant_value_t target) {
+  GC_ROOT_SAVE(root_mark, js);
+  ant_value_t pairs = js_mkarr(js);
+  GC_ROOT_PIN(js, pairs);
+  
+  env_foreach(js, env_entries_cb, &pairs);
+  GC_ROOT_RESTORE(js, root_mark);
+  
+  return pairs;
+}
+
 static const ant_host_proxy_ops_t env_host_ops = {
   .name = "process.env",
   .get = env_get,
   .set = env_set,
   .del = env_del,
   .keys = env_keys,
+  .flat_entries = env_entries,
 };
 
 static ant_value_t process_cwd(ant_params_t) {
@@ -1979,7 +1999,7 @@ void init_process_module(ant_t *js) {
   ant_value_t process_proto = js_newobj(js);
 
   process_set_methods(js, process_proto, true);
-  js_set_sym(js, process_proto, js->sym.toStringTag_sym, js_mkstr(js, "process", 7));
+  js_set_tostringtag(js, process_proto, js_mkstr(js, "process", 7));
 
   ant_value_t process_obj = js_mkobj(js);
   ant_value_t env_obj = js_newobj(js);
@@ -2096,7 +2116,7 @@ void init_process_module(ant_t *js) {
   js_set(js, stdin_proto, "pause", js_mkfun(js_stdin_pause));
   js_set(js, stdin_proto, "ref", js_mkfun(js_stdin_ref));
   js_set(js, stdin_proto, "unref", js_mkfun(js_stdin_unref));
-  js_set_sym(js, stdin_proto, js->sym.toStringTag_sym, js_mkstr(js, "ReadStream", 10));
+  js_set_tostringtag(js, stdin_proto, js_mkstr(js, "ReadStream", 10));
   
   ant_value_t stdin_obj = js_mkobj(js);
   js_set_proto_init(stdin_obj, stdin_proto);
@@ -2110,7 +2130,7 @@ void init_process_module(ant_t *js) {
   if (is_object_type(ee_proto)) js_set_proto_init(stdout_proto, ee_proto);
   js_set(js, stdout_proto, "write", js_mkfun(js_stdout_write));
   js_set(js, stdout_proto, "getWindowSize", js_mkfun(js_stdout_get_window_size));
-  js_set_sym(js, stdout_proto, js->sym.toStringTag_sym, js_mkstr(js, "WriteStream", 11));
+  js_set_tostringtag(js, stdout_proto, js_mkstr(js, "WriteStream", 11));
   
   ant_value_t stdout_obj = js_mkobj(js);
   js_set_proto_init(stdout_obj, stdout_proto);
@@ -2124,7 +2144,7 @@ void init_process_module(ant_t *js) {
   ant_value_t stderr_proto = js_mkobj(js);
   if (is_object_type(ee_proto)) js_set_proto_init(stderr_proto, ee_proto);
   js_set(js, stderr_proto, "write", js_mkfun(js_stderr_write));
-  js_set_sym(js, stderr_proto, js->sym.toStringTag_sym, js_mkstr(js, "WriteStream", 11));
+  js_set_tostringtag(js, stderr_proto, js_mkstr(js, "WriteStream", 11));
   
   ant_value_t stderr_obj = js_mkobj(js);
   js_set_proto_init(stderr_obj, stderr_proto);

@@ -400,13 +400,15 @@ static void resolve_body_promise(
     break;
   }
   case BODY_ARRAYBUFFER: {
-    ArrayBufferData *ab = create_array_buffer_data(size);
+    ArrayBufferData *ab = create_array_buffer_data(js, size);
     if (!ab) {
       js_reject_promise(js, promise, js_mkerr(js, "out of memory"));
       break;
     }
     if (data && size > 0) memcpy(ab->data, data, size);
-    js_resolve_promise(js, promise, create_arraybuffer_obj(js, ab));
+    ant_value_t ab_obj = create_arraybuffer_obj(js, ab);
+    free_array_buffer_data(js, ab);
+    js_resolve_promise(js, promise, ab_obj);
     break;
   }
   case BODY_BLOB: {
@@ -417,7 +419,7 @@ static void resolve_body_promise(
     break;
   }
   case BODY_BYTES: {
-    ArrayBufferData *ab = create_array_buffer_data(size);
+    ArrayBufferData *ab = create_array_buffer_data(js, size);
     if (!ab) {
       js_reject_promise(js, promise, js_mkerr(js, "out of memory"));
       break;
@@ -1031,7 +1033,7 @@ static ant_value_t res_body_pull(ant_params_t) {
   ant_value_t ctrl = (nargs > 0) ? args[0] : js_mkundef();
 
   if (d && d->body_data && d->body_size > 0) {
-    ArrayBufferData *ab = create_array_buffer_data(d->body_size);
+    ArrayBufferData *ab = create_array_buffer_data(js, d->body_size);
     if (!ab) return js_mkerr(js, "out of memory");
     memcpy(ab->data, d->body_data, d->body_size);
 
@@ -1320,7 +1322,7 @@ void init_response_module(ant_t *js) {
 #undef GETTER
 
   js_set_sym(js, js->builtins.response_proto, js->sym.inspect_sym, js_mkfun(response_inspect));
-  js_set_sym(js, js->builtins.response_proto, js->sym.toStringTag_sym, js_mkstr(js, "Response", 8));
+  js_set_tostringtag(js, js->builtins.response_proto, js_mkstr(js, "Response", 8));
   ctor = js_make_ctor(js, js_response_ctor, js->builtins.response_proto, "Response", 8);
   js_set(js, ctor, "error", js_mkfun(js_response_error));
   js_set(js, ctor, "redirect", js_mkfun(js_response_redirect));

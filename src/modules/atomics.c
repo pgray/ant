@@ -75,7 +75,7 @@ static void async_waiter_remove_locked(AsyncWaitEntry *entry) {
 
 static void async_waiter_release_buffer(AsyncWaitEntry *entry) {
   if (!entry || !entry->buffer) return;
-  free_array_buffer_data(entry->buffer);
+  free_array_buffer_data(entry->js, entry->buffer);
   entry->buffer = NULL;
 }
 
@@ -1045,7 +1045,7 @@ void init_atomics_module(ant_t *js) {
   js_set(js, atomics, "waitAsync", js_mkfun(js_atomics_waitAsync));
   js_set(js, atomics, "xor", js_mkfun(js_atomics_xor));
   
-  js_set_sym(js, atomics, js->sym.toStringTag_sym, js_mkstr(js, "Atomics", 7));
+  js_set_tostringtag(js, atomics, js_mkstr(js, "Atomics", 7));
   js_set_global_builtin(js, "Atomics", atomics);
 }
 

@@ -26,4 +26,111 @@ assert.deepStrictEqual(Object.keys(Empty), []);
 const prototype = Object.getOwnPropertyDescriptor(Empty, 'prototype');
 assert.deepStrictEqual([prototype.writable, prototype.enumerable, prototype.configurable], [false, false, false]);
 
+// every canonical numeric string belongs to the typed array, valid index or not; other strings are ordinary
+const keyed = new Uint8Array(2);
+for (const key of ['1.5', '-0', '5', 'NaN', 'Infinity', '-1']) {
+  keyed[key] = 3;
+  assert.strictEqual(keyed[key], undefined, `${key} is not stored`);
+  assert.throws(() => Object.defineProperty(keyed, key, { value: 1 }), TypeError, `defining ${key} throws`);
+  assert.strictEqual(Reflect.defineProperty(keyed, key, { value: 1 }), false, `Reflect.defineProperty refuses ${key}`);
+}
+assert.deepStrictEqual(Object.keys(keyed), ['0', '1']);
+keyed['01'] = 4;
+keyed['1e3'] = 5;
+assert.deepStrictEqual([keyed['01'], keyed['1e3'], keyed[1]], [4, 5, 0], 'non-canonical numeric strings are ordinary keys');
+
+const shadowed = Object.setPrototypeOf(new Uint8Array(2), { '1.5': 'proto', '01': 'proto' });
+assert.deepStrictEqual([shadowed['1.5'], shadowed['01']], [undefined, 'proto'], 'a numeric key stops at the typed array');
+assert.strictEqual(Reflect.defineProperty(new Uint8Array(2), '1', { value: 9, writable: true, enumerable: true, configurable: true }), true);
+assert.strictEqual(Reflect.defineProperty(new Uint8Array(2), '1', { value: 9, writable: false }), false, 'an element cannot become read-only');
+
+const lengthed = [1];
+assert.throws(() => Reflect.defineProperty(lengthed, 'length', { value: -1 }), RangeError, 'an invalid length throws even through Reflect');
+Object.defineProperty(lengthed, 'length', { value: '0' });
+assert.strictEqual(lengthed.length, 0, 'a string length converts');
+
+const bigs = new BigInt64Array(2);
+assert.throws(() => { bigs[5] = 1; }, TypeError, 'an out-of-range BigInt write still converts its value');
+assert.throws(() => { bigs['1.5'] = 1; }, TypeError, 'an invalid BigInt key still converts its value');
+assert.throws(() => { new Uint8Array(2)[5] = { valueOf() { throw new RangeError('v'); } }; }, RangeError);
+bigs[5] = 1n;
+assert.throws(() => Reflect.defineProperty(new BigInt64Array(2), '0', { value: 1 }), TypeError, 'a failed element conversion is not a refusal');
+assert.deepStrictEqual([Reflect.defineProperty(bigs, '0', { value: 3n }), bigs[0]], [true, 3n]);
+assert.throws(() => Reflect.defineProperty([], 'length', { value: { valueOf() { return null.x; } } }), TypeError, 'a throwing length conversion is abrupt');
+
+const viaProto = Object.create(Object.setPrototypeOf(new Uint8Array(2), { '1.5': 'p', '9': 'q', '01': 'r' }));
+assert.deepStrictEqual(['1.5' in viaProto, '9' in viaProto, '1' in viaProto, Reflect.has(viaProto, '1.5')], [false, false, true, false], 'numeric keys stop at an inherited typed array');
+assert.deepStrictEqual([viaProto['1.5'], viaProto['9'], viaProto['01'], viaProto[1]], [undefined, undefined, 'r', 0], 'inherited reads see the elements');
+const backingTa = new Uint8Array(2);
+const writer = Object.create(backingTa);
+writer['1.5'] = 3;
+writer[1] = 7;
+assert.deepStrictEqual([Object.keys(writer), backingTa[1], writer[1]], [['1'], 0, 7], 'an invalid key is dropped and a valid index lands on the receiver');
+
+function FromTyped() {}
+FromTyped.prototype = new Uint8Array(2);
+for (const inheritor of [new FromTyped(), Object.setPrototypeOf({}, new Uint8Array(2)), { __proto__: new Uint8Array(2) }, Object.create(new Uint8Array(2))]) {
+  inheritor['1.5'] = 9;
+  assert.deepStrictEqual([inheritor['1.5'], inheritor[1], '1.5' in inheritor, '1' in inheritor, Object.keys(inheritor)], [undefined, 0, false, true, []], 'every way of inheriting from a typed array gets its key rules');
+}
+
+const shadowedRead = Object.setPrototypeOf(new Uint8Array(2), { 5: 'proto', 1.5: 'frac' });
+assert.deepStrictEqual([Reflect.get(shadowedRead, '5', {}), Reflect.get(shadowedRead, '1.5', {}), Reflect.get(shadowedRead, '1', {})], [undefined, undefined, 0], 'a receiver read still stops at the typed array');
+
+const own = new Uint8Array([7, 8]);
+const ownDesc = Object.getOwnPropertyDescriptor(own, '0');
+assert.deepStrictEqual([ownDesc.value, ownDesc.writable, ownDesc.enumerable, ownDesc.configurable, Object.getOwnPropertyDescriptor(own, '5')], [7, true, true, true, undefined], 'an element reads as a data descriptor');
+assert.deepStrictEqual([delete own[0], delete own[5], delete own['1.5'], delete own.foo, own[0]], [false, true, true, true, 7], 'a valid index cannot be deleted');
+assert.throws(() => { 'use strict'; delete own[1]; }, TypeError, 'strict delete of an element throws');
+assert.deepStrictEqual((function (a) { return [delete arguments[0], arguments[0], delete arguments.foo]; })(1), [true, undefined, true]);
+
+own.extra = 1;
+const forInOwn = [];
+for (const k in own) forInOwn.push(k);
+assert.deepStrictEqual(forInOwn, ['0', '1', 'extra'], 'for-in lists elements first and skips prototype methods');
+const forInInherited = [];
+for (const k in Object.create(new Uint8Array(2))) forInInherited.push(k);
+assert.deepStrictEqual(forInInherited, ['0', '1'], 'for-in walks into a typed array prototype');
+const forInBuffers = [];
+for (const k in new DataView(new ArrayBuffer(2))) forInBuffers.push(k);
+for (const k in new ArrayBuffer(2)) forInBuffers.push(k);
+assert.deepStrictEqual(forInBuffers, [], 'buffer and view accessors are not enumerable');
+assert.deepStrictEqual([Object.keys({ ...own }), Object.keys(Object.assign({}, own))], [['0', '1', 'extra'], ['0', '1', 'extra']]);
+assert.deepStrictEqual([Object.values(own), Object.entries(own)], [[7, 8, 1], [['0', 7], ['1', 8], ['extra', 1]]], 'values and entries include elements');
+assert.deepStrictEqual([Object.values(new BigInt64Array([1n, -2n])), Object.entries(new Float64Array([0.5]))], [[1n, -2n], [['0', 0.5]]]);
+
+assert.deepStrictEqual([Object.values(own), Object.entries(own)], [[7, 8, 1], [['0', 7], ['1', 8], ['extra', 1]]], 'values and entries include elements');
+assert.deepStrictEqual([Object.values(new BigInt64Array([1n, -2n])), Object.entries(new Float64Array([0.5]))], [[1n, -2n], [['0', 0.5]]]);
+
+const ab = new ArrayBuffer(4);
+const int16View = new Int16Array(ab, 2);
+assert.deepStrictEqual([Object.getOwnPropertyNames(int16View), int16View.buffer === ab, int16View.BYTES_PER_ELEMENT], [['0'], true, 2], 'buffer and BYTES_PER_ELEMENT are inherited, not own');
+assert.deepStrictEqual([Object.getOwnPropertyNames(ab), Object.getOwnPropertyNames(new DataView(ab, 1)), new DataView(ab, 1).buffer === ab], [[], [], true]);
+const moved = ab.transfer(8);
+assert.deepStrictEqual([ab.byteLength, moved.byteLength, ab.detached], [0, 8, true], 'byteLength follows the buffer after a transfer');
+assert.throws(() => Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array).prototype, 'buffer').get.call({}), TypeError);
+
+const attrs = (o, k) => { const d = Object.getOwnPropertyDescriptor(o, k); return [d.writable, d.enumerable, d.configurable]; };
+for (const C of [Int16Array, Uint8Array, Float64Array]) {
+  assert.deepStrictEqual([attrs(C, 'BYTES_PER_ELEMENT'), attrs(C.prototype, 'BYTES_PER_ELEMENT'), attrs(C, 'prototype')], [[false, false, false], [false, false, false], [false, false, false]], C.name);
+  assert.deepStrictEqual(Object.keys(C), [], 'typed array constructor statics are not enumerable');
+}
+for (const C of [ArrayBuffer, SharedArrayBuffer, DataView, Object.getPrototypeOf(Uint8Array)]) assert.deepStrictEqual(attrs(C, 'prototype'), [false, false, false], C.name);
+assert.deepStrictEqual(attrs(Buffer, 'prototype'), [true, false, false]);
+for (const C of [Int8Array, Float16Array, BigUint64Array]) {
+  assert.deepStrictEqual([C.length, attrs(C, 'name'), attrs(C, 'length'), Reflect.ownKeys(C).slice(0, 4), Reflect.ownKeys(C.prototype), attrs(C.prototype, 'constructor')],
+    [3, [false, false, true], [false, false, true], ['length', 'name', 'prototype', 'BYTES_PER_ELEMENT'], ['constructor', 'BYTES_PER_ELEMENT'], [true, false, true]], C.name);
+}
+const TypedArray = Object.getPrototypeOf(Int8Array);
+assert.deepStrictEqual([TypedArray.length, attrs(TypedArray, 'name'), Reflect.ownKeys(TypedArray).slice(0, 3)], [0, [false, false, true], ['length', 'name', 'prototype']]);
+assert.throws(() => Uint8Array(2), TypeError);
+assert.strictEqual(new (class extends Uint16Array {})(2).length, 2);
+assert.deepStrictEqual([Int8Array.from, Int8Array.of, Object.hasOwn(Int8Array, 'from'), Object.hasOwn(Int8Array, Symbol.species)], [TypedArray.from, TypedArray.of, false, false], 'from, of and species are inherited from %TypedArray%');
+class Sub16 extends Uint16Array {}
+assert.deepStrictEqual([Sub16.from([1, 70000]).constructor, [...Sub16.from([1, 70000])], Sub16.of(3).constructor, Float32Array.of(1.5)[0], BigInt64Array.from([1n])[0]], [Sub16, [1, 4464], Sub16, 1.5, 1n], 'from and of build instances of this');
+for (const bad of [TypedArray, {}, function () {}, Promise.resolve]) {
+  assert.throws(() => TypedArray.from.call(bad, [1]), TypeError);
+  assert.throws(() => TypedArray.of.call(bad, 1), TypeError);
+}
+
 console.log('typed array in OK');

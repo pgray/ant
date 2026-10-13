@@ -234,7 +234,7 @@ static ant_value_t js_stats_fn(ant_params_t) {
       if (ant_object_promise_state(obj)) promise_bytes += sizeof(ant_promise_state_t);
       if (ant_object_proxy_state(obj)) proxy_bytes += sizeof(ant_proxy_state_t);
       if (ant_object_has_sidecar(obj)) extra_bytes += sizeof(ant_object_sidecar_t);
-      if (obj->exotic_ops) exotic_bytes += sizeof(ant_exotic_ops_t);
+      if (obj->exotic_ops && obj->exotic_ops->heap) exotic_bytes += sizeof(ant_exotic_ops_t);
     }
   }
 
@@ -260,7 +260,7 @@ static ant_value_t js_stats_fn(ant_params_t) {
   js_set(js, alloc, "total", js_mknum((double)alloc_total));
   js_set(js, result, "alloc", alloc);
 
-  size_t buffer_mem = buffer_get_external_memory();
+  size_t buffer_mem = buffer_get_external_memory(js);
   size_t code_mem = code_arena_get_memory(js);
   size_t parse_mem = parse_arena_get_memory(js);
   size_t external_total = buffer_mem + code_mem + parse_mem;
