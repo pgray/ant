@@ -59,4 +59,21 @@ assert.strictEqual(big.readBigUInt64BE(8), 2n ** 63n);
 assert.throws(() => big.readBigInt64LE(10), RangeError);
 assert.throws(() => big.writeBigInt64LE(1, 0), TypeError);
 
+const errorOf = fn => { try { fn(); } catch (e) { return [e.name, e.code, e.message]; } return null; };
+const eight = Buffer.alloc(8);
+const two = Buffer.alloc(2);
+assert.deepStrictEqual(errorOf(() => eight.writeBigInt64LE(5, 9)), ['RangeError', 'ERR_OUT_OF_RANGE', 'The value of "offset" is out of range. It must be >= 0 and <= 0. Received 9']);
+assert.deepStrictEqual(errorOf(() => eight.writeBigInt64LE(5, 0))[0], 'TypeError');
+assert.deepStrictEqual(errorOf(() => eight.writeBigInt64LE(2n ** 63n, 0)), ['RangeError', 'ERR_OUT_OF_RANGE', 'The value of "value" is out of range. It must be >= -(2n ** 63n) and < 2n ** 63n. Received 9_223_372_036_854_775_808n']);
+assert.deepStrictEqual(errorOf(() => two.readUInt8(5)), ['RangeError', 'ERR_OUT_OF_RANGE', 'The value of "offset" is out of range. It must be >= 0 and <= 1. Received 5']);
+assert.deepStrictEqual(errorOf(() => two.readUInt8(1.5)), ['RangeError', 'ERR_OUT_OF_RANGE', 'The value of "offset" is out of range. It must be an integer. Received 1.5']);
+assert.deepStrictEqual(errorOf(() => two.readUInt8('1')), ['TypeError', 'ERR_INVALID_ARG_TYPE', 'The "offset" argument must be of type number. Received type string (\'1\')']);
+assert.deepStrictEqual(errorOf(() => two.readFloatLE(0)), ['RangeError', 'ERR_BUFFER_OUT_OF_BOUNDS', 'Attempt to access memory outside buffer bounds']);
+assert.deepStrictEqual(errorOf(() => eight.writeUInt32LE(-1, 0)), ['RangeError', 'ERR_OUT_OF_RANGE', 'The value of "value" is out of range. It must be >= 0 and <= 4294967295. Received -1']);
+assert.deepStrictEqual(errorOf(() => eight.writeUIntLE(2 ** 48, 0, 6)), ['RangeError', 'ERR_OUT_OF_RANGE', 'The value of "value" is out of range. It must be >= 0 and < 2 ** 48. Received 281_474_976_710_656']);
+assert.deepStrictEqual(errorOf(() => eight.readUIntLE(0, 7)), ['RangeError', 'ERR_OUT_OF_RANGE', 'The value of "byteLength" is out of range. It must be >= 1 and <= 6. Received 7']);
+
+const methodLengths = { slice: 2, toString: 3, utf8Slice: 2, indexOf: 4, lastIndexOf: 4, includes: 4, compare: 5, equals: 1, write: 4, fill: 4, copy: 4 };
+for (const [name, length] of Object.entries(methodLengths)) assert.strictEqual(P[name].length, length, name);
+
 console.log('buffer numeric read/write OK');

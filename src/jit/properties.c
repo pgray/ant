@@ -915,13 +915,7 @@ static bool mir_emit_get_field_native_getter(
 #define MEM(t, off, base) MIR_new_mem_op(ctx, t, (MIR_disp_t)(off), base, 0, 1)
 #define LBL(l) MIR_new_label_op(ctx, l)
   
-  mir_load_imm(ctx, fn, r_ic, (uint64_t)(uintptr_t)ic);
-  INSN(MIR_MOV, REG(tmp), MEM(MIR_T_U32, offsetof(sv_ic_entry_t, epoch), r_ic));
-  INSN(MIR_MOV, REG(tmp2), MEM(MIR_T_U32, 0, r_global_epoch));
-  INSN(MIR_BNE, LBL(slow), REG(tmp), REG(tmp2));
-  INSN(MIR_MOV, REG(tmp), MEM(MIR_T_U8, offsetof(sv_ic_entry_t, get_kind), r_ic));
-  INSN(MIR_BNE, LBL(slow), REG(tmp), MIR_new_int_op(ctx, SV_GF_IC_PROTO_GETTER));
-  
+  mir_emit_get_field_kind_epoch_guard(ctx, fn, ic, SV_GF_IC_PROTO_GETTER, r_ic, ptr, tmp, tmp2, r_global_epoch, slow);
   mir_emit_value_to_objptr_or_jmp(ctx, fn, obj, ptr, tmp, slow);
   INSN(MIR_MOV, REG(tmp), MEM(MIR_T_P, offsetof(ant_object_t, shape), ptr));
   INSN(MIR_MOV, REG(tmp2), MEM(MIR_T_P, offsetof(sv_ic_entry_t, cached_shape), r_ic));
@@ -955,11 +949,12 @@ static bool mir_emit_get_field_native_getter(
   MIR_label_t done = MIR_new_label(ctx), zero = MIR_new_label(ctx);
   INSN(MIR_MOV, REG(ptr), MEM(MIR_T_P, offsetof(ant_object_t, native) + offsetof(ant_native_entry_t, ptr), ptr));
   
-  if (g->detach == ANT_NATIVE_DETACH_REF) {
+  if (g->detach == ANT_NATIVE_DETACH_REF || g->detach == ANT_NATIVE_DETACH_REF_SLOW) {
+    MIR_label_t detached = g->detach == ANT_NATIVE_DETACH_REF_SLOW ? slow : zero;
     INSN(MIR_MOV, REG(tmp), MEM(MIR_T_P, g->ref_offset, ptr));
-    INSN(MIR_BEQ, LBL(zero), REG(tmp), MIR_new_int_op(ctx, 0));
+    INSN(MIR_BEQ, LBL(detached), REG(tmp), MIR_new_int_op(ctx, 0));
     INSN(MIR_MOV, REG(tmp), MEM(MIR_T_U8, g->flag_offset, tmp));
-    INSN(MIR_BNE, LBL(zero), REG(tmp), MIR_new_int_op(ctx, 0));
+    INSN(MIR_BNE, LBL(detached), REG(tmp), MIR_new_int_op(ctx, 0));
   } else if (g->detach == ANT_NATIVE_DETACH_SELF) {
     INSN(MIR_MOV, REG(tmp), MEM(MIR_T_U8, g->flag_offset, ptr));
     INSN(MIR_BNE, LBL(zero), REG(tmp), MIR_new_int_op(ctx, 0));

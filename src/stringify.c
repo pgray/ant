@@ -1,8 +1,6 @@
-#include "stringify.h"
-
 #include "ant.h"
-#include "utils.h"
 #include "internal.h"
+#include "stringify.h"
 
 #include <inttypes.h>
 #include <math.h>
@@ -54,7 +52,7 @@ size_t stringify_typedarray(ant_t *js, ant_value_t obj, const TypedArrayData *ta
   
   if (stringify_is_buffer(js, obj)) return stringify_node_buffer(data, detached ? 0 : ta->byte_length, buf, len);
   
-  const char *name = ta->type <= TYPED_ARRAY_BIGUINT64 ? buffer_typedarray_type_name(ta->type) : "TypedArray";
+  const char *name = ta->type < TYPED_ARRAY_COUNT ? buffer_typedarray_type_name(ta->type) : "TypedArray";
   size_t n = cpy(buf, len, name, strlen(name));
   n += (size_t)snprintf(buf + n, REMAIN(n, len), "(%zu) [", length);
   if (length == 0) return n + cpy(buf + n, REMAIN(n, len), "]", 1);

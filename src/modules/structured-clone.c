@@ -53,8 +53,20 @@ static ant_value_t sc_detached_error(ant_t *js) {
   return js_throw(js, make_dom_exception(js, "An ArrayBuffer is detached and could not be cloned.", "DataCloneError"));
 }
 
+static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, sc_entry_t **transfer);
+
+static ant_value_t sc_clone_view_buffer(ant_t *js, ant_value_t view, sc_entry_t **seen, sc_entry_t **transfer, ArrayBufferData **out) {
+  ant_value_t clone = sc_clone_rec(js, js_get_slot(view, SLOT_DATA), seen, transfer);
+  if (is_err(clone)) return clone;
+  
+  *out = buffer_get_arraybuffer_data(clone);
+  if (!*out) return js_throw(js, make_dom_exception(js, "View buffer could not be cloned", "DataCloneError"));
+  
+  return clone;
+}
+
 static ant_value_t sc_clone_typed_array(
-  ant_t *js, ant_value_t key, TypedArrayData *ta_data, sc_entry_t **seen
+  ant_t *js, ant_value_t key, TypedArrayData *ta_data, sc_entry_t **seen, sc_entry_t **transfer
 ) {
   ant_value_t existing = sc_lookup(seen, key);
   if (vtype(existing) != kTypeUndefined) return existing;
@@ -64,19 +76,17 @@ static ant_value_t sc_clone_typed_array(
   );
   
   if (ta_data->buffer->is_detached) return sc_detached_error(js);
-
-  ArrayBufferData *new_buf = create_array_buffer_data(js, ta_data->byte_length);
-  if (!new_buf) return js_mkerr(js, "out of memory");
-  if (ta_data->byte_length > 0) {
-    memcpy(new_buf->data, ta_data->buffer->data + ta_data->byte_offset, ta_data->byte_length);
-  }
-
-  ant_value_t clone = create_typed_array(
-    js, ta_data->type, new_buf, 0, 
-    ta_data->length, buffer_typedarray_type_name(ta_data->type)
+  
+  ArrayBufferData *buffer = NULL;
+  ant_value_t ab_obj = sc_clone_view_buffer(js, key, seen, transfer, &buffer);
+  if (is_err(ab_obj)) return ab_obj;
+  
+  ant_value_t clone = create_typed_array_with_buffer(
+    js, ta_data->type, buffer, ta_data->byte_offset, ta_data->length,
+    buffer_typedarray_type_name(ta_data->type), ab_obj
   );
   
-  sc_add(seen, key, clone);
+  if (!is_err(clone)) sc_add(seen, key, clone);
   return clone;
 }
 
@@ -91,13 +101,8 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
     ta_data = buffer_get_typedarray_data(val);
   }
 
-  if (ta_data) {
-    return sc_clone_typed_array(js, val, ta_data, seen);
-  }
-
-  if (t == kTypeTypedArray) {
-    return sc_clone_typed_array(js, val, (TypedArrayData *)js_gettypedarray(val), seen);
-  }
+  if (ta_data) return sc_clone_typed_array(js, val, ta_data, seen, transfer);
+  if (t == kTypeTypedArray) return sc_clone_typed_array(js, val, (TypedArrayData *)js_gettypedarray(val), seen, transfer);
 
   if (t == kTypeFunction || t == kTypeBuiltin)
     return js_throw(js, make_dom_exception(js, "() => {} could not be cloned", "DataCloneError"));
@@ -116,11 +121,6 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
     ant_value_t clone = create_arraybuffer_copy(js, abd->data, abd->length);
     if (is_err(clone)) return clone;
     
-    if (transfer && sc_has(transfer, val)) {
-      abd->length = 0;
-      abd->is_detached = 1;
-    }
-    
     sc_add(seen, val, clone);
     return clone;
   }
@@ -131,10 +131,10 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
       return js_throw(js, make_dom_exception(js, "DataView could not be cloned", "DataCloneError"));
     if (dv->buffer->is_detached) return sc_detached_error(js);
     
-    ant_value_t ab_obj = create_arraybuffer_copy(js, dv->buffer->data, dv->buffer->length);
+    ArrayBufferData *new_buf = NULL;
+    ant_value_t ab_obj = sc_clone_view_buffer(js, val, seen, transfer, &new_buf);
     if (is_err(ab_obj)) return ab_obj;
     
-    ArrayBufferData *new_buf = buffer_get_arraybuffer_data(ab_obj);
     ant_value_t clone = create_dataview_with_buffer(js, new_buf, dv->byte_offset, dv->byte_length, ab_obj);
     if (is_err(clone)) return clone;
     
@@ -306,27 +306,53 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
   return clone;
 }
 
+static ant_value_t sc_clone_error(ant_t *js, const char *message) {
+  return js_throw(js, make_dom_exception(js, message, "DataCloneError"));
+}
+
+static ant_value_t sc_collect_transfer(ant_t *js, ant_value_t options, sc_entry_t **transfer) {
+  if (!is_object_type(options)) return js_mkundef();
+  ant_value_t list = js_get(js, options, "transfer");
+  if (vtype(list) != kTypeArray) return js_mkundef();
+  
+  ant_offset_t len = js_arr_len(js, list);
+  for (ant_offset_t i = 0; i < len; i++) {
+    ant_value_t item = js_arr_get(js, list, i);
+    ArrayBufferData *data = is_object_type(item) ? buffer_get_arraybuffer_data(item) : NULL;
+    
+    if (!data || data->is_shared) return sc_clone_error(js, "Found invalid value in transferList.");
+    if (sc_has(transfer, item)) return sc_clone_error(js, "Transfer list contains duplicate ArrayBuffer");
+    if (data->is_detached) return sc_clone_error(js, "Cannot transfer object of unsupported type.");
+    
+    sc_add(transfer, item, js_true);
+  }
+  
+  return js_mkundef();
+}
+
+static void sc_detach_transferred(sc_entry_t **transfer) {
+  sc_entry_t *e, *tmp;
+  HASH_ITER(hh, *transfer, e, tmp) {
+    ArrayBufferData *data = buffer_get_arraybuffer_data(e->key);
+    if (!data) continue;
+    data->length = 0;
+    data->is_detached = 1;
+  }
+}
+
 ant_value_t js_structured_clone(ant_params_t) {
   if (nargs < 1) return js_mkundef();
 
   sc_entry_t *transfer = NULL;
-
-  if (nargs < 2 || !is_object_type(args[1])) goto clone;
-  ant_value_t xfer_arr = js_get(js, args[1], "transfer");
-  if (vtype(xfer_arr) != kTypeArray) goto clone;
-
-  ant_offset_t xfer_len = js_arr_len(js, xfer_arr);
-  for (ant_offset_t i = 0; i < xfer_len; i++) {
-    ant_value_t item = js_arr_get(js, xfer_arr, i);
-    if (is_object_type(item)) sc_add(&transfer, item, js_true);
-  }
-
-clone:;
-
   sc_entry_t *seen = NULL;
-  ant_value_t result = sc_clone_rec(js, args[0], &seen, &transfer);
+  
+  ant_value_t result = sc_collect_transfer(js, nargs > 1 ? args[1] : js_mkundef(), &transfer);
+  if (!is_err(result)) result = sc_clone_rec(js, args[0], &seen, &transfer);
+  if (!is_err(result)) sc_detach_transferred(&transfer);
+  
   sc_free(&seen);
   sc_free(&transfer);
+  
   return result;
 }
 

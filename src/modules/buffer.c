@@ -321,7 +321,7 @@ static size_t get_element_size(TypedArrayType type) {
     &&L_4, &&L_4, &&L_2, &&L_4, &&L_8, &&L_8, &&L_8
   };
   
-  if (type > TYPED_ARRAY_BIGUINT64) goto L_1;
+  if (type >= TYPED_ARRAY_COUNT) goto L_1;
   goto *dispatch[type];
   
   L_1: return 1;
@@ -351,6 +351,11 @@ const char *buffer_typedarray_type_name(TypedArrayType type) {
   return names[i];
 }
 
+static_assert(
+  TYPED_ARRAY_COUNT == sizeof(((ant_t *)0)->mutable_roots.typedarray_names) / sizeof(ant_value_t),
+  "resize typedarray_names in isolate_values.h"
+);
+
 static ant_value_t js_typedarray_toStringTag_getter(ant_params_t) {
   ant_value_t this_val = js_getthis(js);
   TypedArrayData *ta = buffer_get_typedarray_data(this_val);
@@ -374,7 +379,10 @@ static ant_value_t create_typed_array_like(
   size_t byte_offset,
   size_t length
 ) {
-  ant_value_t ab_obj = create_arraybuffer_obj(js, buffer);
+  TypedArrayData *source = buffer_get_typedarray_data(this_val);
+  ant_value_t shared = source && source->buffer == buffer ? js_get_slot(this_val, SLOT_DATA) : js_mkundef();
+  
+  ant_value_t ab_obj = is_object_type(shared) ? shared : create_arraybuffer_obj(js, buffer);
   ant_value_t out = create_typed_array_with_buffer(
     js,type, buffer, byte_offset,
     length, buffer_typedarray_type_name(type), ab_obj
@@ -539,18 +547,23 @@ static ant_value_t js_typedarray_buffer_getter(ant_params_t) {
   return js_get_slot(this_val, SLOT_DATA);
 }
 
+static ant_value_t dataview_live_view(ant_t *js, const char *getter, DataViewData **out) {
+  *out = buffer_get_dataview_data(js_getthis(js));
+  if (!*out) return js_mkerr_typed(js, JS_ERR_TYPE, "Not a DataView");
+  if ((*out)->buffer && !(*out)->buffer->is_detached) return js_mkundef();
+  return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot perform get DataView.prototype.%s on a detached or out-of-bounds ArrayBuffer", getter);
+}
+
 static ant_value_t js_dataview_byteLength_getter(ant_params_t) {
-  ant_value_t this_val = js_getthis(js);
-  DataViewData *dv = buffer_get_dataview_data(this_val);
-  if (!dv) return js_mkerr_typed(js, JS_ERR_TYPE, "Not a DataView");
-  return js_mknum((double)dv->byte_length);
+  DataViewData *dv;
+  ant_value_t error = dataview_live_view(js, "byteLength", &dv);
+  return is_err(error) ? error : js_mknum((double)dv->byte_length);
 }
 
 static ant_value_t js_dataview_byteOffset_getter(ant_params_t) {
-  ant_value_t this_val = js_getthis(js);
-  DataViewData *dv = buffer_get_dataview_data(this_val);
-  if (!dv) return js_mkerr_typed(js, JS_ERR_TYPE, "Not a DataView");
-  return js_mknum((double)dv->byte_offset);
+  DataViewData *dv;
+  ant_value_t error = dataview_live_view(js, "byteOffset", &dv);
+  return is_err(error) ? error : js_mknum((double)dv->byte_offset);
 }
 
 #define BUFFER_SIZE_GETTER(name, fn, tag, detach_mode, ref, flag, field) \
@@ -569,9 +582,9 @@ BUFFER_SIZE_GETTER(typedarray_byte_length_getter, js_typedarray_byteLength_gette
 BUFFER_SIZE_GETTER(typedarray_byte_offset_getter, js_typedarray_byteOffset_getter, BUFFER_TYPEDARRAY_NATIVE_TAG,
   ANT_NATIVE_DETACH_REF, offsetof(TypedArrayData, buffer), offsetof(ArrayBufferData, is_detached), offsetof(TypedArrayData, byte_offset));
 BUFFER_SIZE_GETTER(dataview_byte_length_getter, js_dataview_byteLength_getter, BUFFER_DATAVIEW_NATIVE_TAG,
-  ANT_NATIVE_DETACH_NONE, 0, 0, offsetof(DataViewData, byte_length));
+  ANT_NATIVE_DETACH_REF_SLOW, offsetof(DataViewData, buffer), offsetof(ArrayBufferData, is_detached), offsetof(DataViewData, byte_length));
 BUFFER_SIZE_GETTER(dataview_byte_offset_getter, js_dataview_byteOffset_getter, BUFFER_DATAVIEW_NATIVE_TAG,
-  ANT_NATIVE_DETACH_NONE, 0, 0, offsetof(DataViewData, byte_offset));
+  ANT_NATIVE_DETACH_REF_SLOW, offsetof(DataViewData, buffer), offsetof(ArrayBufferData, is_detached), offsetof(DataViewData, byte_offset));
 BUFFER_SIZE_GETTER(arraybuffer_byte_length_getter, js_arraybuffer_byteLength_getter, BUFFER_ARRAYBUFFER_NATIVE_TAG,
   ANT_NATIVE_DETACH_SELF, 0, offsetof(ArrayBufferData, is_detached), offsetof(ArrayBufferData, length));
 BUFFER_SIZE_GETTER(sharedarraybuffer_byte_length_getter, js_arraybuffer_byteLength_getter, BUFFER_ARRAYBUFFER_NATIVE_TAG,
@@ -585,13 +598,15 @@ static ant_value_t js_arraybuffer_isView(ant_params_t) {
   return js_bool(buffer_is_dataview(args[0]) || buffer_get_typedarray_data(args[0]) != NULL);
 }
 
+static ant_value_t buffer_unwrap_bigint(ant_value_t value) {
+  if (!is_object_type(value)) return value;
+  ant_value_t primitive = js_get_slot(value, SLOT_PRIMITIVE);
+  return vtype(primitive) == kTypeBigInt ? primitive : value;
+}
+
 static ant_value_t buffer_require_bigint_value(ant_t *js, ant_value_t value) {
-  if (vtype(value) == kTypeBigInt) return value;
-  if (is_object_type(value)) {
-    ant_value_t primitive = js_get_slot(value, SLOT_PRIMITIVE);
-    if (vtype(primitive) == kTypeBigInt) return primitive;
-  }
-  return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert to BigInt");
+  value = buffer_unwrap_bigint(value);
+  return vtype(value) == kTypeBigInt ? value : js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert to BigInt");
 }
 
 static uint8_t typedarray_to_uint8_clamped(double value) {
@@ -647,6 +662,8 @@ static ant_value_t typedarray_write_value(ant_t *js, TypedArrayData *ta_data, si
   }
 }
 
+static constexpr size_t TYPEDARRAY_EXACT_DIGITS_MAX = 15;
+
 typedef enum {
   TYPEDARRAY_KEY_ORDINARY,
   TYPEDARRAY_KEY_INDEX,
@@ -655,7 +672,7 @@ typedef enum {
 
 static typedarray_key_kind_t typedarray_key_kind(const TypedArrayData *ta, const char *key, size_t len, size_t *index) {
   bool live = ta->buffer && !ta->buffer->is_detached;
-  bool digits = len <= 15 && (key[0] != '0' || len == 1);
+  bool digits = len <= TYPEDARRAY_EXACT_DIGITS_MAX && (key[0] != '0' || len == 1);
   uint64_t whole = 0;
   
   for (size_t i = 0; i < len && digits; i++) {
@@ -745,7 +762,7 @@ static bool typedarray_read_number(const TypedArrayData *ta_data, size_t index, 
     &&R_INT32, &&R_UINT32, &&R_FLOAT16, &&R_FLOAT32, &&R_FLOAT64, &&R_FAIL, &&R_FAIL
   };
 
-  if (ta_data->type > TYPED_ARRAY_BIGUINT64) goto R_FAIL;
+  if (ta_data->type >= TYPED_ARRAY_COUNT) goto R_FAIL;
   goto *dispatch[ta_data->type];
 
   R_INT8:    *out = (double)((int8_t *)data)[index];   return true;
@@ -1431,7 +1448,7 @@ static ant_value_t js_typedarray_fill(ant_params_t) {
     &&L_INT32, &&L_UINT32, &&L_FLOAT16, &&L_FLOAT32, &&L_FLOAT64, &&L_DONE, &&L_DONE
   };
   
-  if (ta_data->type > TYPED_ARRAY_BIGUINT64) goto L_DONE;
+  if (ta_data->type >= TYPED_ARRAY_COUNT) goto L_DONE;
   goto *dispatch[ta_data->type];
   
   L_INT8:
@@ -1636,7 +1653,7 @@ static ant_value_t js_typedarray_toSorted(ant_params_t) {
         &&R_INT32, &&R_UINT32, &&R_FLOAT16, &&R_FLOAT32, &&R_FLOAT64, &&R_DONE, &&R_DONE
       };
       
-      if (ta_data->type > TYPED_ARRAY_BIGUINT64) goto R_DONE;
+      if (ta_data->type >= TYPED_ARRAY_COUNT) goto R_DONE;
       goto *read_dispatch[ta_data->type];
       
       R_INT8:    a_val = (double)((int8_t*)data)[j-1]; b_val = (double)((int8_t*)data)[j]; goto R_COMPARE;
@@ -1666,7 +1683,7 @@ static ant_value_t js_typedarray_toSorted(ant_params_t) {
         &&S_INT32, &&S_UINT32, &&S_FLOAT16, &&S_FLOAT32, &&S_FLOAT64, &&S_DONE, &&S_DONE
       };
       
-      if (ta_data->type > TYPED_ARRAY_BIGUINT64) goto S_DONE;
+      if (ta_data->type >= TYPED_ARRAY_COUNT) goto S_DONE;
       goto *swap_dispatch[ta_data->type];
       
       S_INT8:    { int8_t tmp = ((int8_t*)data)[j-1]; ((int8_t*)data)[j-1] = ((int8_t*)data)[j]; ((int8_t*)data)[j] = tmp; goto S_DONE; }
@@ -1988,556 +2005,6 @@ static ant_value_t js_dataview_constructor(ant_params_t) {
   return obj;
 }
 
-// DataView.prototype.getUint8(byteOffset)
-static ant_value_t js_dataview_getInt8(ant_params_t) {
-  if (nargs < 1) return js_mkerr(js, "getInt8 requires byteOffset");
-  
-  ant_value_t this_val = js_getthis(js);
-  DataViewData *dv = buffer_get_dataview_data(this_val);
-  if (!dv) return js_mkerr(js, "Not a DataView");
-  size_t offset = (size_t)js_getnum(args[0]);
-  
-  if (offset >= dv->byte_length) {
-    return js_mkerr(js, "Offset out of bounds");
-  }
-  
-  int8_t value = (int8_t)dv->buffer->data[dv->byte_offset + offset];
-  return js_mknum((double)value);
-}
-
-// DataView.prototype.setInt8(byteOffset, value)
-static ant_value_t js_dataview_setInt8(ant_params_t) {
-  if (nargs < 2) return js_mkerr(js, "setInt8 requires byteOffset and value");
-  
-  ant_value_t this_val = js_getthis(js);
-  DataViewData *dv = buffer_get_dataview_data(this_val);
-  if (!dv) return js_mkerr(js, "Not a DataView");
-  size_t offset = (size_t)js_getnum(args[0]);
-  int8_t value = (int8_t)js_to_int32(js_getnum(args[1]));
-  
-  if (offset >= dv->byte_length) {
-    return js_mkerr(js, "Offset out of bounds");
-  }
-  
-  dv->buffer->data[dv->byte_offset + offset] = (uint8_t)value;
-  return js_mkundef();
-}
-
-// DataView.prototype.getUint8(byteOffset)
-static ant_value_t js_dataview_getUint8(ant_params_t) {
-  if (nargs < 1) return js_mkerr(js, "getUint8 requires byteOffset");
-  
-  ant_value_t this_val = js_getthis(js);
-  DataViewData *dv = buffer_get_dataview_data(this_val);
-  if (!dv) return js_mkerr(js, "Not a DataView");
-  size_t offset = (size_t)js_getnum(args[0]);
-  
-  if (offset >= dv->byte_length) {
-    return js_mkerr(js, "Offset out of bounds");
-  }
-  
-  uint8_t value = dv->buffer->data[dv->byte_offset + offset];
-  return js_mknum((double)value);
-}
-
-// DataView.prototype.setUint8(byteOffset, value)
-static ant_value_t js_dataview_setUint8(ant_params_t) {
-  if (nargs < 2) return js_mkerr(js, "setUint8 requires byteOffset and value");
-  
-  ant_value_t this_val = js_getthis(js);
-  DataViewData *dv = buffer_get_dataview_data(this_val);
-  if (!dv) return js_mkerr(js, "Not a DataView");
-  size_t offset = (size_t)js_getnum(args[0]);
-  uint8_t value = (uint8_t)js_to_uint32(js_getnum(args[1]));
-  
-  if (offset >= dv->byte_length) {
-    return js_mkerr(js, "Offset out of bounds");
-  }
-  
-  dv->buffer->data[dv->byte_offset + offset] = value;
-  return js_mkundef();
-}
-
-// DataView.prototype.getInt16(byteOffset, littleEndian)
-static ant_value_t js_dataview_getInt16(ant_params_t) {
-  if (nargs < 1) return js_mkerr(js, "getInt16 requires byteOffset");
-  
-  ant_value_t this_val = js_getthis(js);
-  DataViewData *dv = buffer_get_dataview_data(this_val);
-  if (!dv) return js_mkerr(js, "Not a DataView");
-  size_t offset = (size_t)js_getnum(args[0]);
-  bool little_endian = (nargs > 1 && js_truthy(js, args[1]));
-  
-  if (offset + 2 > dv->byte_length) {
-    return js_mkerr(js, "Offset out of bounds");
-  }
-  
-  uint8_t *ptr = dv->buffer->data + dv->byte_offset + offset;
-  int16_t value;
-  
-  if (little_endian) {
-    value = (int16_t)(ptr[0] | (ptr[1] << 8));
-  } else {
-    value = (int16_t)((ptr[0] << 8) | ptr[1]);
-  }
-  
-  return js_mknum((double)value);
-}
-
-// DataView.prototype.getUint16(byteOffset, littleEndian)
-static ant_value_t js_dataview_getUint16(ant_params_t) {
-  if (nargs < 1) return js_mkerr(js, "getUint16 requires byteOffset");
-  
-  ant_value_t this_val = js_getthis(js);
-  DataViewData *dv = buffer_get_dataview_data(this_val);
-  if (!dv) return js_mkerr(js, "Not a DataView");
-  size_t offset = (size_t)js_getnum(args[0]);
-  bool little_endian = (nargs > 1 && js_truthy(js, args[1]));
-  
-  if (offset + 2 > dv->byte_length) {
-    return js_mkerr(js, "Offset out of bounds");
-  }
-  
-  uint8_t *ptr = dv->buffer->data + dv->byte_offset + offset;
-  uint16_t value;
-  
-  if (little_endian) value = (uint16_t)(ptr[0] | (ptr[1] << 8));
-  else value = (uint16_t)((ptr[0] << 8) | ptr[1]);
-  
-  return js_mknum((double)value);
-}
-
-// DataView.prototype.setUint16(byteOffset, value, littleEndian)
-static ant_value_t js_dataview_setUint16(ant_params_t) {
-  if (nargs < 2) return js_mkerr(js, "setUint16 requires byteOffset and value");
-  
-  ant_value_t this_val = js_getthis(js);
-  DataViewData *dv = buffer_get_dataview_data(this_val);
-  if (!dv) return js_mkerr(js, "Not a DataView");
-  size_t offset = (size_t)js_getnum(args[0]);
-  uint16_t value = (uint16_t)js_to_uint32(js_getnum(args[1]));
-  bool little_endian = (nargs > 2 && js_truthy(js, args[2]));
-  
-  if (offset + 2 > dv->byte_length) {
-    return js_mkerr(js, "Offset out of bounds");
-  }
-  
-  uint8_t *ptr = dv->buffer->data + dv->byte_offset + offset;
-  
-  if (little_endian) {
-    ptr[0] = (uint8_t)(value & 0xFF);
-    ptr[1] = (uint8_t)((value >> 8) & 0xFF);
-  } else {
-    ptr[0] = (uint8_t)((value >> 8) & 0xFF);
-    ptr[1] = (uint8_t)(value & 0xFF);
-  }
-  
-  return js_mkundef();
-}
-
-// DataView.prototype.getInt32(byteOffset, littleEndian)
-static ant_value_t js_dataview_getInt32(ant_params_t) {
-  if (nargs < 1) return js_mkerr(js, "getInt32 requires byteOffset");
-  
-  ant_value_t this_val = js_getthis(js);
-  DataViewData *dv = buffer_get_dataview_data(this_val);
-  if (!dv) return js_mkerr(js, "Not a DataView");
-  size_t offset = (size_t)js_getnum(args[0]);
-  bool little_endian = (nargs > 1 && js_truthy(js, args[1]));
-  
-  if (offset + 4 > dv->byte_length) {
-    return js_mkerr(js, "Offset out of bounds");
-  }
-  
-  uint8_t *ptr = dv->buffer->data + dv->byte_offset + offset;
-  int32_t value;
-  
-  if (little_endian) {
-    value = (int32_t)(ptr[0] | (ptr[1] << 8) | (ptr[2] << 16) | (ptr[3] << 24));
-  } else {
-    value = (int32_t)((ptr[0] << 24) | (ptr[1] << 16) | (ptr[2] << 8) | ptr[3]);
-  }
-  
-  return js_mknum((double)value);
-}
-
-// DataView.prototype.getFloat32(byteOffset, littleEndian)
-static ant_value_t js_dataview_getFloat32(ant_params_t) {
-  if (nargs < 1) return js_mkerr(js, "getFloat32 requires byteOffset");
-  
-  ant_value_t this_val = js_getthis(js);
-  DataViewData *dv = buffer_get_dataview_data(this_val);
-  if (!dv) return js_mkerr(js, "Not a DataView");
-  size_t offset = (size_t)js_getnum(args[0]);
-  bool little_endian = (nargs > 1 && js_truthy(js, args[1]));
-  
-  if (offset + 4 > dv->byte_length) {
-    return js_mkerr(js, "Offset out of bounds");
-  }
-  
-  uint8_t *ptr = dv->buffer->data + dv->byte_offset + offset;
-  uint32_t bits;
-  
-  if (little_endian) {
-    bits = ptr[0] | (ptr[1] << 8) | (ptr[2] << 16) | (ptr[3] << 24);
-  } else {
-    bits = (ptr[0] << 24) | (ptr[1] << 16) | (ptr[2] << 8) | ptr[3];
-  }
-  
-  float value;
-  memcpy(&value, &bits, 4);
-  return js_mknum((double)value);
-}
-
-// DataView.prototype.setInt16(byteOffset, value, littleEndian)
-static ant_value_t js_dataview_setInt16(ant_params_t) {
-  if (nargs < 2) return js_mkerr(js, "setInt16 requires byteOffset and value");
-  
-  ant_value_t this_val = js_getthis(js);
-  DataViewData *dv = buffer_get_dataview_data(this_val);
-  if (!dv) return js_mkerr(js, "Not a DataView");
-  size_t offset = (size_t)js_getnum(args[0]);
-  int16_t value = (int16_t)js_to_int32(js_getnum(args[1]));
-  bool little_endian = (nargs > 2 && js_truthy(js, args[2]));
-  
-  if (offset + 2 > dv->byte_length) {
-    return js_mkerr(js, "Offset out of bounds");
-  }
-  
-  uint8_t *ptr = dv->buffer->data + dv->byte_offset + offset;
-  
-  if (little_endian) {
-    ptr[0] = (uint8_t)(value & 0xFF);
-    ptr[1] = (uint8_t)((value >> 8) & 0xFF);
-  } else {
-    ptr[0] = (uint8_t)((value >> 8) & 0xFF);
-    ptr[1] = (uint8_t)(value & 0xFF);
-  }
-  
-  return js_mkundef();
-}
-
-// DataView.prototype.setInt32(byteOffset, value, littleEndian)
-static ant_value_t js_dataview_setInt32(ant_params_t) {
-  if (nargs < 2) return js_mkerr(js, "setInt32 requires byteOffset and value");
-  
-  ant_value_t this_val = js_getthis(js);
-  DataViewData *dv = buffer_get_dataview_data(this_val);
-  if (!dv) return js_mkerr(js, "Not a DataView");
-  size_t offset = (size_t)js_getnum(args[0]);
-  int32_t value = js_to_int32(js_getnum(args[1]));
-  bool little_endian = (nargs > 2 && js_truthy(js, args[2]));
-  
-  if (offset + 4 > dv->byte_length) {
-    return js_mkerr(js, "Offset out of bounds");
-  }
-  
-  uint8_t *ptr = dv->buffer->data + dv->byte_offset + offset;
-  
-  if (little_endian) {
-    ptr[0] = (uint8_t)(value & 0xFF);
-    ptr[1] = (uint8_t)((value >> 8) & 0xFF);
-    ptr[2] = (uint8_t)((value >> 16) & 0xFF);
-    ptr[3] = (uint8_t)((value >> 24) & 0xFF);
-  } else {
-    ptr[0] = (uint8_t)((value >> 24) & 0xFF);
-    ptr[1] = (uint8_t)((value >> 16) & 0xFF);
-    ptr[2] = (uint8_t)((value >> 8) & 0xFF);
-    ptr[3] = (uint8_t)(value & 0xFF);
-  }
-  
-  return js_mkundef();
-}
-
-// DataView.prototype.getUint32(byteOffset, littleEndian)
-static ant_value_t js_dataview_getUint32(ant_params_t) {
-  if (nargs < 1) return js_mkerr(js, "getUint32 requires byteOffset");
-  
-  ant_value_t this_val = js_getthis(js);
-  DataViewData *dv = buffer_get_dataview_data(this_val);
-  if (!dv) return js_mkerr(js, "Not a DataView");
-  size_t offset = (size_t)js_getnum(args[0]);
-  bool little_endian = (nargs > 1 && js_truthy(js, args[1]));
-  
-  if (offset + 4 > dv->byte_length) {
-    return js_mkerr(js, "Offset out of bounds");
-  }
-  
-  uint8_t *ptr = dv->buffer->data + dv->byte_offset + offset;
-  uint32_t value;
-  
-  if (little_endian) value = (uint32_t)(ptr[0] | (ptr[1] << 8) | (ptr[2] << 16) | (ptr[3] << 24));
-  else value = (uint32_t)((ptr[0] << 24) | (ptr[1] << 16) | (ptr[2] << 8) | ptr[3]);
-  
-  return js_mknum((double)value);
-}
-
-// DataView.prototype.setUint32(byteOffset, value, littleEndian)
-static ant_value_t js_dataview_setUint32(ant_params_t) {
-  if (nargs < 2) return js_mkerr(js, "setUint32 requires byteOffset and value");
-  
-  ant_value_t this_val = js_getthis(js);
-  DataViewData *dv = buffer_get_dataview_data(this_val);
-  if (!dv) return js_mkerr(js, "Not a DataView");
-  size_t offset = (size_t)js_getnum(args[0]);
-  
-  uint32_t value = js_to_uint32(js_getnum(args[1]));
-  bool little_endian = (nargs > 2 && js_truthy(js, args[2]));
-  
-  if (offset + 4 > dv->byte_length) return js_mkerr(js, "Offset out of bounds");  
-  uint8_t *ptr = dv->buffer->data + dv->byte_offset + offset;
-  
-  if (little_endian) {
-    ptr[0] = (uint8_t)(value & 0xFF);
-    ptr[1] = (uint8_t)((value >> 8) & 0xFF);
-    ptr[2] = (uint8_t)((value >> 16) & 0xFF);
-    ptr[3] = (uint8_t)((value >> 24) & 0xFF);
-  } else {
-    ptr[0] = (uint8_t)((value >> 24) & 0xFF);
-    ptr[1] = (uint8_t)((value >> 16) & 0xFF);
-    ptr[2] = (uint8_t)((value >> 8) & 0xFF);
-    ptr[3] = (uint8_t)(value & 0xFF);
-  }
-  
-  return js_mkundef();
-}
-
-// DataView.prototype.setFloat32(byteOffset, value, littleEndian)
-static ant_value_t js_dataview_setFloat32(ant_params_t) {
-  if (nargs < 2) return js_mkerr(js, "setFloat32 requires byteOffset and value");
-  
-  ant_value_t this_val = js_getthis(js);
-  DataViewData *dv = buffer_get_dataview_data(this_val);
-  if (!dv) return js_mkerr(js, "Not a DataView");
-  size_t offset = (size_t)js_getnum(args[0]);
-  float value = (float)js_getnum(args[1]);
-  bool little_endian = (nargs > 2 && js_truthy(js, args[2]));
-  
-  if (offset + 4 > dv->byte_length) {
-    return js_mkerr(js, "Offset out of bounds");
-  }
-  
-  uint8_t *ptr = dv->buffer->data + dv->byte_offset + offset;
-  uint32_t bits;
-  memcpy(&bits, &value, 4);
-  
-  if (little_endian) {
-    ptr[0] = (uint8_t)(bits & 0xFF);
-    ptr[1] = (uint8_t)((bits >> 8) & 0xFF);
-    ptr[2] = (uint8_t)((bits >> 16) & 0xFF);
-    ptr[3] = (uint8_t)((bits >> 24) & 0xFF);
-  } else {
-    ptr[0] = (uint8_t)((bits >> 24) & 0xFF);
-    ptr[1] = (uint8_t)((bits >> 16) & 0xFF);
-    ptr[2] = (uint8_t)((bits >> 8) & 0xFF);
-    ptr[3] = (uint8_t)(bits & 0xFF);
-  }
-  
-  return js_mkundef();
-}
-
-// DataView.prototype.getFloat64(byteOffset, littleEndian)
-static ant_value_t js_dataview_getFloat64(ant_params_t) {
-  if (nargs < 1) return js_mkerr(js, "getFloat64 requires byteOffset");
-  
-  ant_value_t this_val = js_getthis(js);
-  DataViewData *dv = buffer_get_dataview_data(this_val);
-  if (!dv) return js_mkerr(js, "Not a DataView");
-  size_t offset = (size_t)js_getnum(args[0]);
-  bool little_endian = (nargs > 1 && js_truthy(js, args[1]));
-  
-  if (offset + 8 > dv->byte_length) {
-    return js_mkerr(js, "Offset out of bounds");
-  }
-  
-  uint8_t *ptr = dv->buffer->data + dv->byte_offset + offset;
-  uint64_t bits;
-  
-  if (little_endian) {
-    bits = (uint64_t)ptr[0] | ((uint64_t)ptr[1] << 8) | ((uint64_t)ptr[2] << 16) | ((uint64_t)ptr[3] << 24) |
-           ((uint64_t)ptr[4] << 32) | ((uint64_t)ptr[5] << 40) | ((uint64_t)ptr[6] << 48) | ((uint64_t)ptr[7] << 56);
-  } else {
-    bits = ((uint64_t)ptr[0] << 56) | ((uint64_t)ptr[1] << 48) | ((uint64_t)ptr[2] << 40) | ((uint64_t)ptr[3] << 32) |
-           ((uint64_t)ptr[4] << 24) | ((uint64_t)ptr[5] << 16) | ((uint64_t)ptr[6] << 8) | (uint64_t)ptr[7];
-  }
-  
-  double value;
-  memcpy(&value, &bits, 8);
-  return js_mknum(value);
-}
-
-// DataView.prototype.setFloat64(byteOffset, value, littleEndian)
-static ant_value_t js_dataview_setFloat64(ant_params_t) {
-  if (nargs < 2) return js_mkerr(js, "setFloat64 requires byteOffset and value");
-  
-  ant_value_t this_val = js_getthis(js);
-  DataViewData *dv = buffer_get_dataview_data(this_val);
-  if (!dv) return js_mkerr(js, "Not a DataView");
-  size_t offset = (size_t)js_getnum(args[0]);
-  double value = js_getnum(args[1]);
-  bool little_endian = (nargs > 2 && js_truthy(js, args[2]));
-  
-  if (offset + 8 > dv->byte_length) {
-    return js_mkerr(js, "Offset out of bounds");
-  }
-  
-  uint8_t *ptr = dv->buffer->data + dv->byte_offset + offset;
-  uint64_t bits;
-  memcpy(&bits, &value, 8);
-  
-  if (little_endian) {
-    ptr[0] = (uint8_t)(bits & 0xFF);
-    ptr[1] = (uint8_t)((bits >> 8) & 0xFF);
-    ptr[2] = (uint8_t)((bits >> 16) & 0xFF);
-    ptr[3] = (uint8_t)((bits >> 24) & 0xFF);
-    ptr[4] = (uint8_t)((bits >> 32) & 0xFF);
-    ptr[5] = (uint8_t)((bits >> 40) & 0xFF);
-    ptr[6] = (uint8_t)((bits >> 48) & 0xFF);
-    ptr[7] = (uint8_t)((bits >> 56) & 0xFF);
-  } else {
-    ptr[0] = (uint8_t)((bits >> 56) & 0xFF);
-    ptr[1] = (uint8_t)((bits >> 48) & 0xFF);
-    ptr[2] = (uint8_t)((bits >> 40) & 0xFF);
-    ptr[3] = (uint8_t)((bits >> 32) & 0xFF);
-    ptr[4] = (uint8_t)((bits >> 24) & 0xFF);
-    ptr[5] = (uint8_t)((bits >> 16) & 0xFF);
-    ptr[6] = (uint8_t)((bits >> 8) & 0xFF);
-    ptr[7] = (uint8_t)(bits & 0xFF);
-  }
-  
-  return js_mkundef();
-}
-
-static ant_value_t js_dataview_getBigInt64(ant_params_t) {
-  if (nargs < 1) return js_mkerr(js, "getBigInt64 requires byteOffset");
-
-  ant_value_t this_val = js_getthis(js);
-  DataViewData *dv = buffer_get_dataview_data(this_val);
-  if (!dv) return js_mkerr(js, "Not a DataView");
-  size_t offset = (size_t)js_getnum(args[0]);
-  bool little_endian = (nargs > 1 && js_truthy(js, args[1]));
-
-  if (offset + 8 > dv->byte_length) return js_mkerr(js, "Offset out of bounds");
-
-  uint8_t *ptr = dv->buffer->data + dv->byte_offset + offset;
-  uint64_t bits;
-  if (little_endian) {
-    bits = (uint64_t)ptr[0] | ((uint64_t)ptr[1] << 8) | ((uint64_t)ptr[2] << 16) | ((uint64_t)ptr[3] << 24) |
-           ((uint64_t)ptr[4] << 32) | ((uint64_t)ptr[5] << 40) | ((uint64_t)ptr[6] << 48) | ((uint64_t)ptr[7] << 56);
-  } else {
-    bits = ((uint64_t)ptr[0] << 56) | ((uint64_t)ptr[1] << 48) | ((uint64_t)ptr[2] << 40) | ((uint64_t)ptr[3] << 32) |
-           ((uint64_t)ptr[4] << 24) | ((uint64_t)ptr[5] << 16) | ((uint64_t)ptr[6] << 8) | (uint64_t)ptr[7];
-  }
-
-  return bigint_from_int64(js, (int64_t)bits);
-}
-
-static ant_value_t js_dataview_setBigInt64(ant_params_t) {
-  if (nargs < 2) return js_mkerr(js, "setBigInt64 requires byteOffset and value");
-
-  ant_value_t this_val = js_getthis(js);
-  DataViewData *dv = buffer_get_dataview_data(this_val);
-  if (!dv) return js_mkerr(js, "Not a DataView");
-  size_t offset = (size_t)js_getnum(args[0]);
-  ant_value_t bigint = buffer_require_bigint_value(js, args[1]);
-  bool little_endian = (nargs > 2 && js_truthy(js, args[2]));
-  int64_t wrapped = 0;
-
-  if (is_err(bigint)) return bigint;
-  if (offset + 8 > dv->byte_length) return js_mkerr(js, "Offset out of bounds");
-  if (!bigint_to_int64_wrapping(js, bigint, &wrapped)) {
-    return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert to BigInt");
-  }
-
-  uint8_t *ptr = dv->buffer->data + dv->byte_offset + offset;
-  uint64_t bits = (uint64_t)wrapped;
-  if (little_endian) {
-    ptr[0] = (uint8_t)(bits & 0xFF);
-    ptr[1] = (uint8_t)((bits >> 8) & 0xFF);
-    ptr[2] = (uint8_t)((bits >> 16) & 0xFF);
-    ptr[3] = (uint8_t)((bits >> 24) & 0xFF);
-    ptr[4] = (uint8_t)((bits >> 32) & 0xFF);
-    ptr[5] = (uint8_t)((bits >> 40) & 0xFF);
-    ptr[6] = (uint8_t)((bits >> 48) & 0xFF);
-    ptr[7] = (uint8_t)((bits >> 56) & 0xFF);
-  } else {
-    ptr[0] = (uint8_t)((bits >> 56) & 0xFF);
-    ptr[1] = (uint8_t)((bits >> 48) & 0xFF);
-    ptr[2] = (uint8_t)((bits >> 40) & 0xFF);
-    ptr[3] = (uint8_t)((bits >> 32) & 0xFF);
-    ptr[4] = (uint8_t)((bits >> 24) & 0xFF);
-    ptr[5] = (uint8_t)((bits >> 16) & 0xFF);
-    ptr[6] = (uint8_t)((bits >> 8) & 0xFF);
-    ptr[7] = (uint8_t)(bits & 0xFF);
-  }
-
-  return js_mkundef();
-}
-
-static ant_value_t js_dataview_getBigUint64(ant_params_t) {
-  if (nargs < 1) return js_mkerr(js, "getBigUint64 requires byteOffset");
-
-  ant_value_t this_val = js_getthis(js);
-  DataViewData *dv = buffer_get_dataview_data(this_val);
-  if (!dv) return js_mkerr(js, "Not a DataView");
-  size_t offset = (size_t)js_getnum(args[0]);
-  bool little_endian = (nargs > 1 && js_truthy(js, args[1]));
-
-  if (offset + 8 > dv->byte_length) return js_mkerr(js, "Offset out of bounds");
-
-  uint8_t *ptr = dv->buffer->data + dv->byte_offset + offset;
-  uint64_t bits;
-  if (little_endian) {
-    bits = (uint64_t)ptr[0] | ((uint64_t)ptr[1] << 8) | ((uint64_t)ptr[2] << 16) | ((uint64_t)ptr[3] << 24) |
-           ((uint64_t)ptr[4] << 32) | ((uint64_t)ptr[5] << 40) | ((uint64_t)ptr[6] << 48) | ((uint64_t)ptr[7] << 56);
-  } else {
-    bits = ((uint64_t)ptr[0] << 56) | ((uint64_t)ptr[1] << 48) | ((uint64_t)ptr[2] << 40) | ((uint64_t)ptr[3] << 32) |
-           ((uint64_t)ptr[4] << 24) | ((uint64_t)ptr[5] << 16) | ((uint64_t)ptr[6] << 8) | (uint64_t)ptr[7];
-  }
-
-  return bigint_from_uint64(js, bits);
-}
-
-static ant_value_t js_dataview_setBigUint64(ant_params_t) {
-  if (nargs < 2) return js_mkerr(js, "setBigUint64 requires byteOffset and value");
-
-  ant_value_t this_val = js_getthis(js);
-  DataViewData *dv = buffer_get_dataview_data(this_val);
-  if (!dv) return js_mkerr(js, "Not a DataView");
-  size_t offset = (size_t)js_getnum(args[0]);
-  ant_value_t bigint = buffer_require_bigint_value(js, args[1]);
-  bool little_endian = (nargs > 2 && js_truthy(js, args[2]));
-  uint64_t wrapped = 0;
-
-  if (is_err(bigint)) return bigint;
-  if (offset + 8 > dv->byte_length) return js_mkerr(js, "Offset out of bounds");
-  if (!bigint_to_uint64_wrapping(js, bigint, &wrapped)) {
-    return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert to BigInt");
-  }
-
-  uint8_t *ptr = dv->buffer->data + dv->byte_offset + offset;
-  if (little_endian) {
-    ptr[0] = (uint8_t)(wrapped & 0xFF);
-    ptr[1] = (uint8_t)((wrapped >> 8) & 0xFF);
-    ptr[2] = (uint8_t)((wrapped >> 16) & 0xFF);
-    ptr[3] = (uint8_t)((wrapped >> 24) & 0xFF);
-    ptr[4] = (uint8_t)((wrapped >> 32) & 0xFF);
-    ptr[5] = (uint8_t)((wrapped >> 40) & 0xFF);
-    ptr[6] = (uint8_t)((wrapped >> 48) & 0xFF);
-    ptr[7] = (uint8_t)((wrapped >> 56) & 0xFF);
-  } else {
-    ptr[0] = (uint8_t)((wrapped >> 56) & 0xFF);
-    ptr[1] = (uint8_t)((wrapped >> 48) & 0xFF);
-    ptr[2] = (uint8_t)((wrapped >> 40) & 0xFF);
-    ptr[3] = (uint8_t)((wrapped >> 32) & 0xFF);
-    ptr[4] = (uint8_t)((wrapped >> 24) & 0xFF);
-    ptr[5] = (uint8_t)((wrapped >> 16) & 0xFF);
-    ptr[6] = (uint8_t)((wrapped >> 8) & 0xFF);
-    ptr[7] = (uint8_t)(wrapped & 0xFF);
-  }
-
-  return js_mkundef();
-}
 
 static uint8_t *hex_decode(const char *data, size_t len, size_t *out_len) {
   if (len % 2 != 0) return NULL;
@@ -3928,23 +3395,104 @@ static ant_value_t js_buffer_copy(ant_params_t) {
   return js_mknum((double)copy_len);
 }
 
-static bool buffer_checked_byte_offset(
-  ant_value_t value,
-  size_t byte_length,
-  size_t width,
-  size_t *out
-) {
-  double offset_num = vtype(value) == kTypeNumber ? js_getnum(value) : 0.0;
-  if (!isfinite(offset_num) || offset_num < 0) return false;
+static inline uint64_t buffer_load_bytes(const uint8_t *ptr, size_t width, bool little_endian) {
+  uint64_t bits = 0;
+  memcpy(&bits, ptr, width);
+  return little_endian ? bits : __builtin_bswap64(bits) >> (64 - 8 * width);
+}
 
-  offset_num = floor(offset_num);
-  if (offset_num > (double)byte_length) return false;
+static inline void buffer_store_bytes(uint8_t *ptr, size_t width, bool little_endian, uint64_t bits) {
+  if (!little_endian) bits = __builtin_bswap64(bits << (64 - 8 * width));
+  memcpy(ptr, &bits, width);
+}
 
-  size_t offset = (size_t)offset_num;
-  if (width > byte_length || offset > byte_length - width) return false;
+static ant_value_t buffer_code_error(ant_t *js, js_err_type_t type, const char *code, const char *message) {
+  ant_value_t props = js_mkobj(js);
+  js_set(js, props, "code", js_mkstr(js, code, strlen(code)));
+  return js_mkerr_props(js, type, props, "%s", message);
+}
 
-  *out = offset;
-  return true;
+static void buffer_group_digits(const char *digits, char *out, size_t len) {
+  size_t n = strlen(digits), start = digits[0] == '-' ? 1 : 0, head = n;
+  while (head >= start + 4) head -= 3;
+  
+  size_t w = 0;
+  for (size_t i = 0; i < n && w + 1 < len; i++) {
+    if (i >= head && i > start && (i - head) % 3 == 0) out[w++] = '_';
+    if (w + 1 < len) out[w++] = digits[i];
+  }
+  out[w] = '\0';
+}
+
+static void buffer_describe_value(ant_t *js, ant_value_t value, char *out, size_t len) {
+  char raw[96];
+  
+  if (vtype(value) == kTypeBigInt) {
+    size_t n = strbigint(js, value, raw, sizeof(raw) - 1);
+    raw[n < sizeof(raw) - 1 ? n : sizeof(raw) - 2] = '\0';
+    const char *digits = raw[0] == '-' ? raw + 1 : raw;
+    bool large = strlen(digits) > 10 || (strlen(digits) == 10 && strcmp(digits, "4294967296") > 0);
+    if (large) buffer_group_digits(raw, out, len - 1);
+    else snprintf(out, len - 1, "%s", raw);
+    strncat(out, "n", len - strlen(out) - 1);
+    return;
+  }
+  
+  double d = js_getnum(value);
+  if (d == 0 && signbit(d)) { snprintf(out, len, "-0"); return; }
+  
+  size_t n = js_number_to_chars(value, raw, sizeof(raw) - 1);
+  raw[n < sizeof(raw) - 1 ? n : sizeof(raw) - 2] = '\0';
+  if (isfinite(d) && d == trunc(d) && fabs(d) > 4294967296.0) buffer_group_digits(raw, out, len);
+  else snprintf(out, len, "%s", raw);
+}
+
+static void buffer_describe_type(ant_t *js, ant_value_t value, char *out, size_t len) {
+  uint8_t t = vtype(value);
+  if (t == kTypeUndefined || t == kTypeNull) { snprintf(out, len, "%s", t == kTypeNull ? "null" : "undefined"); return; }
+  if (t == kTypeFunction || t == kTypeBuiltin) { snprintf(out, len, "function"); return; }
+  if (t == kTypeArray) { snprintf(out, len, "an instance of Array"); return; }
+  if (is_object_type(value)) { snprintf(out, len, "an instance of Object"); return; }
+  
+  if (t == kTypeString) {
+    ant_offset_t slen = 0;
+    const char *str = (const char *)(uintptr_t)vstr(js, value, &slen);
+    bool cut = slen > 25;
+    snprintf(out, len, "type string ('%.*s%s')", (int)(cut ? 25 : slen), str, cut ? "..." : "");
+    return;
+  }
+  
+  char shown[96];
+  if (t == kTypeBool) snprintf(shown, sizeof(shown), "%s", js_truthy(js, value) ? "true" : "false");
+  else if (t == kTypeSymbol) snprintf(shown, sizeof(shown), "Symbol()");
+  else buffer_describe_value(js, value, shown, sizeof(shown));
+  
+  const char *type = t == kTypeBool ? "boolean" : t == kTypeSymbol ? "symbol" : t == kTypeBigInt ? "bigint" : "number";
+  snprintf(out, len, "type %s (%s)", type, shown);
+}
+
+static ant_value_t buffer_out_of_range(ant_t *js, const char *name, const char *range, ant_value_t received) {
+  char got[128], message[384];
+  buffer_describe_value(js, received, got, sizeof(got));
+  snprintf(message, sizeof(message), "The value of \"%s\" is out of range. It must be %s. Received %s", name, range, got);
+  return buffer_code_error(js, JS_ERR_RANGE, "ERR_OUT_OF_RANGE", message);
+}
+
+static ant_value_t buffer_arg_type_error(ant_t *js, const char *name, ant_value_t received) {
+  char got[128], message[256];
+  buffer_describe_type(js, received, got, sizeof(got));
+  snprintf(message, sizeof(message), "The \"%s\" argument must be of type number. Received %s", name, got);
+  return buffer_code_error(js, JS_ERR_TYPE, "ERR_INVALID_ARG_TYPE", message);
+}
+
+static ant_value_t buffer_bounds_error(ant_t *js, ant_value_t offset, double max) {
+  double n = js_getnum(offset);
+  if (floor(n) != n) return buffer_out_of_range(js, "offset", "an integer", offset);
+  if (max < 0) return buffer_code_error(js, JS_ERR_RANGE, "ERR_BUFFER_OUT_OF_BOUNDS", "Attempt to access memory outside buffer bounds");
+  
+  char range[64];
+  snprintf(range, sizeof(range), ">= 0 and <= %.0f", max);
+  return buffer_out_of_range(js, "offset", range, offset);
 }
 
 static ant_value_t buffer_access_ptr(ant_t *js, ant_value_t offset_value, size_t width, uint8_t **ptr, size_t *offset) {
@@ -3954,36 +3502,48 @@ static ant_value_t buffer_access_ptr(ant_t *js, ant_value_t offset_value, size_t
   if (!ta->buffer || ta->buffer->is_detached)
     return js_mkerr(js, "Cannot operate on a detached TypedArray");
 
-  if (vtype(offset_value) != kTypeUndefined && vtype(offset_value) != kTypeNumber)
-    return js_mkerr_typed(js, JS_ERR_TYPE, "offset must be a number");
+  if (vtype(offset_value) == kTypeUndefined) offset_value = js_mknum(0);
+  if (vtype(offset_value) != kTypeNumber) return buffer_arg_type_error(js, "offset", offset_value);
 
-  double n = vtype(offset_value) == kTypeNumber ? js_getnum(offset_value) : 0.0;
-  if (floor(n) != n || !buffer_checked_byte_offset(offset_value, ta->byte_length, width, offset))
-    return js_mkerr_typed(js, JS_ERR_RANGE, "Offset out of bounds");
+  double n = js_getnum(offset_value);
+  double max = (double)ta->byte_length - (double)width;
+  if (floor(n) != n || n < 0 || n > max) return buffer_bounds_error(js, offset_value, max);
 
+  *offset = (size_t)n;
   *ptr = ta->buffer->data + ta->byte_offset + *offset;
   return js_mkundef();
 }
 
-static ant_value_t buffer_write_bigint64(ant_native_params_t, bool little_endian, bool is_signed) {
-  ant_value_t value = buffer_require_bigint_value(js, nargs > 0 ? args[0] : js_mkundef());
-  if (is_err(value)) return value;
-
-  uint64_t bits;
-  if (is_signed) {
-    int64_t signed_value;
-    if (!bigint_to_int64_checked(js, value, &signed_value))
-      return js_mkerr_typed(js, JS_ERR_RANGE, "value out of range for signed 64-bit integer");
-    bits = (uint64_t)signed_value;
+static bool buffer_bigint64_in_range(ant_t *js, ant_value_t value, bool is_signed, uint64_t *bits) {
+  if (vtype(value) == kTypeBigInt && !is_signed) return bigint_to_uint64_checked(js, value, bits);
+  
+  if (vtype(value) == kTypeBigInt) {
+    int64_t signed_bits;
+    if (!bigint_to_int64_checked(js, value, &signed_bits)) return false;
+    *bits = (uint64_t)signed_bits;
+    return true;
   }
-  else if (!bigint_to_uint64_checked(js, value, &bits))
-    return js_mkerr_typed(js, JS_ERR_RANGE, "value out of range for unsigned 64-bit integer");
+  
+  if (vtype(value) != kTypeNumber) return true;
+  double n = js_getnum(value);
+  
+  if (isnan(n)) return true;
+  return is_signed ? n >= -0x1p63 && n < 0x1p63 : n >= 0 && n < 0x1p64;
+}
+
+static ant_value_t buffer_write_bigint64(ant_native_params_t, bool little_endian, bool is_signed) {
+  ant_value_t value = buffer_unwrap_bigint(nargs > 0 ? args[0] : js_mkundef());
+  const char *range = is_signed ? ">= -(2n ** 63n) and < 2n ** 63n" : ">= 0n and < 2n ** 64n";
+  
+  uint64_t bits = 0;
+  if (!buffer_bigint64_in_range(js, value, is_signed, &bits)) return buffer_out_of_range(js, "value", range, value);
   
   size_t offset; uint8_t *ptr;
   ant_value_t error = buffer_access_ptr(js, nargs > 1 ? args[1] : js_mkundef(), 8, &ptr, &offset);
-  
   if (is_err(error)) return error;
-  for (size_t i = 0; i < 8; i++, bits >>= 8) ptr[little_endian ? i : 7 - i] = (uint8_t)bits;
+  
+  if (vtype(value) != kTypeBigInt) return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot mix BigInt and other types, use explicit conversions");
+  buffer_store_bytes(ptr, 8, little_endian, bits);
   
   return js_mknum((double)(offset + 8));
 }
@@ -3993,9 +3553,7 @@ static ant_value_t buffer_read_bigint64(ant_native_params_t, bool little_endian,
   ant_value_t error = buffer_access_ptr(js, nargs > 0 ? args[0] : js_mkundef(), 8, &ptr, &offset);
   
   if (is_err(error)) return error;
-  uint64_t bits = 0;
-  
-  for (size_t i = 0; i < 8; i++) bits = (bits << 8) | ptr[little_endian ? 7 - i : i];
+  uint64_t bits = buffer_load_bytes(ptr, 8, little_endian);
   return is_signed ? bigint_from_int64(js, (int64_t)bits) : bigint_from_uint64(js, bits);
 }
 
@@ -4013,9 +3571,10 @@ typedef enum {
 } buffer_num_endian_t;
 
 static ant_value_t buffer_num_width(ant_t *js, ant_value_t value, size_t *width) {
-  if (vtype(value) != kTypeNumber) return js_mkerr_typed(js, JS_ERR_TYPE, "byteLength must be a number");
+  if (vtype(value) != kTypeNumber) return buffer_arg_type_error(js, "byteLength", value);
   double n = js_getnum(value);
-  if (floor(n) != n || n < 1 || n > 6) return js_mkerr_typed(js, JS_ERR_RANGE, "byteLength out of range");
+  if (floor(n) != n) return buffer_out_of_range(js, "byteLength", "an integer", value);
+  if (n < 1 || n > 6) return buffer_out_of_range(js, "byteLength", ">= 1 and <= 6", value);
   *width = (size_t)n;
   return js_mkundef();
 }
@@ -4035,8 +3594,7 @@ static inline __attribute__((always_inline)) ant_value_t buffer_read_num(
   ant_value_t error = buffer_access_ptr(js, nargs > 0 ? args[0] : js_mkundef(), width, &ptr, &offset);
   if (is_err(error)) return error;
   
-  uint64_t bits = 0;
-  for (size_t i = 0; i < width; i++) bits = (bits << 8) | ptr[endian == BUFFER_NUM_LE ? width - 1 - i : i];
+  uint64_t bits = buffer_load_bytes(ptr, width, endian == BUFFER_NUM_LE);
   
   if (kind == BUFFER_NUM_UINT) return js_mknum((double)bits);
   
@@ -4078,7 +3636,14 @@ static inline __attribute__((always_inline)) ant_value_t buffer_write_num(ant_na
   else {
     double span = (double)(1ULL << (8 * width - (kind == BUFFER_NUM_INT)));
     double lo = kind == BUFFER_NUM_INT ? -span : 0;
-    if (value < lo || value > span - 1) return js_mkerr_typed(js, JS_ERR_RANGE, "The value of \"value\" is out of range");
+    if (value < lo || value > span - 1) {
+      char range[96];
+      unsigned bits_width = 8 * (unsigned)width;
+      if (width <= 4) snprintf(range, sizeof(range), ">= %.0f and <= %.0f", lo, span - 1);
+      else if (kind == BUFFER_NUM_UINT) snprintf(range, sizeof(range), ">= 0 and < 2 ** %u", bits_width);
+      else snprintf(range, sizeof(range), ">= -(2 ** %u) and < 2 ** %u", bits_width - 1, bits_width - 1);
+      return buffer_out_of_range(js, "value", range, js_mknum(value));
+    }
     bits = isnan(value) ? 0 : (uint64_t)(int64_t)trunc(value);
   }
   
@@ -4086,7 +3651,7 @@ static inline __attribute__((always_inline)) ant_value_t buffer_write_num(ant_na
   ant_value_t error = buffer_access_ptr(js, nargs > 1 ? args[1] : js_mkundef(), width, &ptr, &offset);
   if (is_err(error)) return error;
   
-  for (size_t i = 0; i < width; i++, bits >>= 8) ptr[endian == BUFFER_NUM_LE ? i : width - 1 - i] = (uint8_t)bits;
+  buffer_store_bytes(ptr, width, endian == BUFFER_NUM_LE, bits);
   return js_mknum((double)(offset + width));
 }
 
@@ -4122,6 +3687,114 @@ static const buffer_num_method_t buffer_num_methods[] = {
   #include "buffer/num_methods.h"
   #define BUFFER_NUM_METHOD(type, suffix, kind, width, endian) BUFFER_NUM_ENTRY(write, type, suffix, kind, width)
   #include "buffer/num_methods.h"
+};
+
+static __attribute__((noinline)) ant_value_t dataview_receiver_error(ant_t *js, const char *method) {
+  return js_mkerr_typed(js, JS_ERR_TYPE, "Method DataView.prototype.%s called on incompatible receiver", method);
+}
+
+static __attribute__((noinline)) ant_value_t dataview_range_error(ant_t *js) {
+  return js_mkerr_typed(js, JS_ERR_RANGE, "Offset is outside the bounds of the DataView");
+}
+
+static __attribute__((noinline)) ant_value_t dataview_access_error(ant_t *js, DataViewData *dv, const char *method) {
+  if (!dv->buffer || dv->buffer->is_detached) return js_mkerr_typed(
+    js, JS_ERR_TYPE, "Cannot perform DataView.prototype.%s on a detached or out-of-bounds ArrayBuffer", method
+  );
+  return dataview_range_error(js);
+}
+
+static inline __attribute__((always_inline)) uint8_t *dataview_access(DataViewData *dv, size_t index, size_t width) {
+  if (!dv->buffer || dv->buffer->is_detached) return NULL;
+  if (index > dv->byte_length || width > dv->byte_length - index) return NULL;
+  return dv->buffer->data + dv->byte_offset + index;
+}
+
+static inline __attribute__((always_inline)) ant_value_t dataview_get(
+  ant_native_params_t, const char *method, buffer_num_kind_t kind, size_t width
+) {
+  DataViewData *dv = buffer_get_dataview_data(js_getthis(js));
+  if (!dv) return dataview_receiver_error(js, method);
+  
+  size_t index;
+  if (is_err(js_to_index_fast(js, nargs > 0 ? args[0] : js_mkundef(), &index))) return dataview_range_error(js);
+  bool little_endian = nargs > 1 && js_truthy(js, args[1]);
+  
+  uint8_t *ptr = dataview_access(dv, index, width);
+  if (!ptr) return dataview_access_error(js, dv, method);
+  
+  uint64_t bits = buffer_load_bytes(ptr, width, little_endian);
+  
+  unsigned shift = 64 - 8 * (unsigned)width;
+  switch (kind) {
+    case BUFFER_NUM_UINT:    return js_mknum((double)bits);
+    case BUFFER_NUM_INT:     return js_mknum((double)((int64_t)(bits << shift) >> shift));
+    case BUFFER_NUM_BIGINT:  return bigint_from_int64(js, (int64_t)bits);
+    case BUFFER_NUM_BIGUINT: return bigint_from_uint64(js, bits);
+    case BUFFER_NUM_FLOAT: break;
+  }
+  
+  if (width == 2) return js_mknum(half_to_double((uint16_t)bits));
+  if (width == 4) {
+    float f; uint32_t narrow = (uint32_t)bits;
+    memcpy(&f, &narrow, sizeof(f));
+    return js_mknum((double)f);
+  }
+  
+  double d;
+  memcpy(&d, &bits, sizeof(d));
+  return js_mknum(d);
+}
+
+static inline __attribute__((always_inline)) ant_value_t dataview_set(
+  ant_native_params_t, const char *method, buffer_num_kind_t kind, size_t width
+) {
+  DataViewData *dv = buffer_get_dataview_data(js_getthis(js));
+  if (!dv) return dataview_receiver_error(js, method);
+  
+  size_t index;
+  if (is_err(js_to_index_fast(js, nargs > 0 ? args[0] : js_mkundef(), &index))) return dataview_range_error(js);
+  
+  ant_value_t value = nargs > 1 ? args[1] : js_mkundef();
+  uint64_t bits = 0;
+  
+  if (kind == BUFFER_NUM_BIGINT || kind == BUFFER_NUM_BIGUINT) {
+    ant_value_t bigint = buffer_require_bigint_value(js, value);
+    if (is_err(bigint)) return bigint;
+    bool ok = kind == BUFFER_NUM_BIGINT
+      ? bigint_to_int64_wrapping(js, bigint, (int64_t *)&bits)
+      : bigint_to_uint64_wrapping(js, bigint, &bits);
+    if (!ok) return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert to BigInt");
+  } else {
+    double num = vtype(value) == kTypeNumber ? js_getnum(value) : js_to_number(js, value);
+    if (kind != BUFFER_NUM_FLOAT) bits = (uint64_t)js_to_uint32(num);
+    else if (width == 2) bits = double_to_half(num);
+    else if (width == 4) { float f = (float)num; uint32_t narrow; memcpy(&narrow, &f, sizeof(narrow)); bits = narrow; }
+    else memcpy(&bits, &num, sizeof(bits));
+  }
+  
+  bool little_endian = nargs > 2 && js_truthy(js, args[2]);
+  uint8_t *ptr = dataview_access(dv, index, width);
+  if (!ptr) return dataview_access_error(js, dv, method);
+  
+  buffer_store_bytes(ptr, width, little_endian, bits);
+  return js_mkundef();
+}
+
+#define DATAVIEW_METHOD(type, kind, width) \
+  static ant_value_t js_dataview_get##type(ant_params_t) { \
+    return dataview_get(js, args, nargs, "get" #type, BUFFER_NUM_##kind, width); \
+  } \
+  static ant_value_t js_dataview_set##type(ant_params_t) { \
+    return dataview_set(js, args, nargs, "set" #type, BUFFER_NUM_##kind, width); \
+  }
+#include "buffer/dataview_methods.h"
+
+static const ant_cfunc_meta_t dataview_methods[] = {
+  #define DATAVIEW_METHOD(type, kind, width) \
+    { js_dataview_get##type, "get" #type, 1, 0 }, \
+    { js_dataview_set##type, "set" #type, 2, 0 },
+  #include "buffer/dataview_methods.h"
 };
 
 // Buffer.isBuffer(obj)
@@ -4453,26 +4126,10 @@ void init_buffer_module(ant_t *js) {
   ant_value_t dataview_proto = js_mkobj(js);
   js_set_proto_init(dataview_proto, object_proto);
   
-  defmethod(js, dataview_proto, "getInt8", 7, js_mkfun(js_dataview_getInt8));
-  defmethod(js, dataview_proto, "setInt8", 7, js_mkfun(js_dataview_setInt8));
-  defmethod(js, dataview_proto, "getUint8", 8, js_mkfun(js_dataview_getUint8));
-  defmethod(js, dataview_proto, "setUint8", 8, js_mkfun(js_dataview_setUint8));
-  defmethod(js, dataview_proto, "getInt16", 8, js_mkfun(js_dataview_getInt16));
-  defmethod(js, dataview_proto, "setInt16", 8, js_mkfun(js_dataview_setInt16));
-  defmethod(js, dataview_proto, "getUint16", 9, js_mkfun(js_dataview_getUint16));
-  defmethod(js, dataview_proto, "setUint16", 9, js_mkfun(js_dataview_setUint16));
-  defmethod(js, dataview_proto, "getInt32", 8, js_mkfun(js_dataview_getInt32));
-  defmethod(js, dataview_proto, "setInt32", 8, js_mkfun(js_dataview_setInt32));
-  defmethod(js, dataview_proto, "getUint32", 9, js_mkfun(js_dataview_getUint32));
-  defmethod(js, dataview_proto, "setUint32", 9, js_mkfun(js_dataview_setUint32));
-  defmethod(js, dataview_proto, "getFloat32", 10, js_mkfun(js_dataview_getFloat32));
-  defmethod(js, dataview_proto, "setFloat32", 10, js_mkfun(js_dataview_setFloat32));
-  defmethod(js, dataview_proto, "getFloat64", 10, js_mkfun(js_dataview_getFloat64));
-  defmethod(js, dataview_proto, "setFloat64", 10, js_mkfun(js_dataview_setFloat64));
-  defmethod(js, dataview_proto, "getBigInt64", 11, js_mkfun(js_dataview_getBigInt64));
-  defmethod(js, dataview_proto, "setBigInt64", 11, js_mkfun(js_dataview_setBigInt64));
-  defmethod(js, dataview_proto, "getBigUint64", 12, js_mkfun(js_dataview_getBigUint64));
-  defmethod(js, dataview_proto, "setBigUint64", 12, js_mkfun(js_dataview_setBigUint64));
+  for (size_t i = 0; i < sizeof(dataview_methods) / sizeof(dataview_methods[0]); i++) {
+    const ant_cfunc_meta_t *m = &dataview_methods[i];
+    defmethod(js, dataview_proto, m->name, strlen(m->name), js_mkfun_meta(m));
+  }
   
   js_set_getter_desc(js, dataview_proto, "buffer", 6, js_mkfun_meta(&dataview_buffer_getter.meta), JS_DESC_C);
   js_set_getter_desc(js, dataview_proto, "byteLength", 10, js_mkfun_meta(&dataview_byte_length_getter.meta), JS_DESC_C);
@@ -4513,18 +4170,24 @@ void init_buffer_module(ant_t *js) {
   if (is_special_object(uint8array_proto)) js_set_proto_init(buffer_proto, uint8array_proto);
   else js_set_proto_init(buffer_proto, typedarray_proto);
   
-  js_set(js, buffer_proto, "slice", js_mkfun(js_buffer_slice));
-  js_set(js, buffer_proto, "toString", js_mkfun(js_buffer_toString));
-  js_set(js, buffer_proto, "utf8Slice", js_mkfun(js_buffer_utf8Slice));
-  js_set(js, buffer_proto, "toBase64", js_mkfun(js_buffer_toBase64));
-  js_set(js, buffer_proto, "indexOf", js_mkfun(js_buffer_indexOf));
-  js_set(js, buffer_proto, "lastIndexOf", js_mkfun(js_buffer_lastIndexOf));
-  js_set(js, buffer_proto, "includes", js_mkfun(js_buffer_includes));
-  js_set(js, buffer_proto, "compare", js_mkfun(js_buffer_proto_compare));
-  js_set(js, buffer_proto, "equals", js_mkfun(js_buffer_proto_equals));
-  js_set(js, buffer_proto, "write", js_mkfun(js_buffer_write));
-  js_set(js, buffer_proto, "fill", js_mkfun(js_buffer_fill));
-  js_set(js, buffer_proto, "copy", js_mkfun(js_buffer_copy));
+  static const ant_cfunc_meta_t buffer_proto_methods[] = {
+    { js_buffer_slice,         "slice",       2, 0 },
+    { js_buffer_toString,      "toString",    3, 0 },
+    { js_buffer_utf8Slice,     "utf8Slice",   2, 0 },
+    { js_buffer_toBase64,      "toBase64",    0, 0 },
+    { js_buffer_indexOf,       "indexOf",     4, 0 },
+    { js_buffer_lastIndexOf,   "lastIndexOf", 4, 0 },
+    { js_buffer_includes,      "includes",    4, 0 },
+    { js_buffer_proto_compare, "compare",     5, 0 },
+    { js_buffer_proto_equals,  "equals",      1, 0 },
+    { js_buffer_write,         "write",       4, 0 },
+    { js_buffer_fill,          "fill",        4, 0 },
+    { js_buffer_copy,          "copy",        4, 0 },
+  };
+  
+  for (size_t i = 0; i < sizeof(buffer_proto_methods) / sizeof(buffer_proto_methods[0]); i++)
+    js_set(js, buffer_proto, buffer_proto_methods[i].name, js_mkfun_meta(&buffer_proto_methods[i]));
+  
   for (size_t i = 0; i < sizeof(buffer_num_methods) / sizeof(buffer_num_methods[0]); i++) {
     const buffer_num_method_t *m = &buffer_num_methods[i];
     ant_value_t fn = js_mkfun_meta(&m->meta);

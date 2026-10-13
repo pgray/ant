@@ -15,6 +15,7 @@ typedef enum : uint8_t {
   ANT_NATIVE_DETACH_NONE,
   ANT_NATIVE_DETACH_SELF,
   ANT_NATIVE_DETACH_REF,
+  ANT_NATIVE_DETACH_REF_SLOW,
 } ant_native_detach_t;
 
 typedef struct {

@@ -64,6 +64,7 @@ export function targets() {
     'test_cron_continuation_error.cjs',
     'test_crypto_digest_string_encodings.cjs',
     'test_curried_call_fusion.cjs',
+    'test_dataview_accessors.cjs',
     'test_define_property_descriptor_reads.cjs',
     'test_direct_eval_environment.cjs',
     'test_disposal_error_values.cjs',

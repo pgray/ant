@@ -78,5 +78,8 @@ assert.deepStrictEqual([typeof asyncDispose, asyncDispose.name, asyncDispose.len
   assert.deepStrictEqual([await asyncDispose.call({}), await asyncDispose.call({ return: () => Promise.resolve(5) })], [undefined, undefined], 'any object works and the result is dropped');
   await assert.rejects(asyncDispose.call({ return: 1 }), TypeError);
   await assert.rejects(asyncDispose.call({ return() { throw new RangeError('x'); } }), RangeError);
+  const matchAllIterator = 'a1'.matchAll(/\d/g);
+  assert.strictEqual(Object.prototype.toString.call(matchAllIterator), '[object RegExp String Iterator]');
+  assert.deepStrictEqual(Object.getOwnPropertyNames(Object.getPrototypeOf(matchAllIterator)), ['next']);
   console.log('intrinsic toStringTag OK');
 })();
