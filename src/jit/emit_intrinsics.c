@@ -45,12 +45,18 @@ void jit_emit_intrinsics(jit_compile_t *c) {
       MIR_reg_t r_call_res = vstack_push(&c->vs);
 
       MIR_label_t char_done = NULL;
-      if (c->op == OP_CALL_CHAR_CODE_AT && call_argc >= 2) {
-        MIR_label_t char_slow = MIR_new_label(c->ctx);
+      if (c->op == OP_CALL_CHAR_CODE_AT && call_argc >= 1) {
         char_done = MIR_new_label(c->ctx);
-        mir_emit_uncurried_char_code_at(c->ctx, c->jit_func, r_call_func, r_arg_arr,
-                                        r_call_res, c->r_js, c->r_d_slot, char_slow, char_done, mir_next_reg_site(&c->reg_site_n));
-        MIR_append_insn(c->ctx, c->jit_func, char_slow);
+        MIR_label_t direct_slow = MIR_new_label(c->ctx);
+        mir_emit_char_code_at(c->ctx, c->jit_func, r_call_func, r_call_this, r_arg_arr,
+                              r_call_res, c->r_js, c->r_d_slot, direct_slow, char_done, mir_next_reg_site(&c->reg_site_n));
+        MIR_append_insn(c->ctx, c->jit_func, direct_slow);
+        if (call_argc >= 2) {
+          MIR_label_t uncurried_slow = MIR_new_label(c->ctx);
+          mir_emit_uncurried_char_code_at(c->ctx, c->jit_func, r_call_func, r_arg_arr,
+                                          r_call_res, c->r_js, c->r_d_slot, uncurried_slow, char_done, mir_next_reg_site(&c->reg_site_n));
+          MIR_append_insn(c->ctx, c->jit_func, uncurried_slow);
+        }
       }
 
       MIR_append_insn(c->ctx, c->jit_func,

@@ -405,6 +405,10 @@ MIR_reg_t mir_emit_exact_integer_guard(
     MIR_label_t slow, int site);
 void mir_emit_primitive_type_test(
     MIR_context_t ctx, MIR_item_t fn, MIR_reg_t value, MIR_reg_t scratch, uint8_t type);
+void mir_emit_char_code_at(
+    MIR_context_t ctx, MIR_item_t fn, MIR_reg_t target, MIR_reg_t receiver, MIR_reg_t args,
+    MIR_reg_t result, MIR_reg_t js, MIR_reg_t d_slot,
+    MIR_label_t slow, MIR_label_t done, int site);
 void mir_emit_uncurried_char_code_at(
     MIR_context_t ctx, MIR_item_t fn, MIR_reg_t target, MIR_reg_t args,
     MIR_reg_t result, MIR_reg_t js, MIR_reg_t d_slot,

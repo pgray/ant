@@ -599,7 +599,8 @@ static inline bool is_unboxed_obj(ant_t *js, ant_value_t val, ant_value_t expect
 }
 
 uint32_t js_to_uint32(double d) {
-  if (!isfinite(d) || d == 0) return 0;
+  if (d >= 0.0 && d < 4294967296.0) return (uint32_t)d;
+  if (!isfinite(d)) return 0;
   double sign = (d < 0) ? -1.0 : 1.0;
   double posInt = sign * floor(fabs(d));
   double val = fmod(posInt, 4294967296.0);

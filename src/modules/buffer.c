@@ -3715,19 +3715,16 @@ static inline __attribute__((always_inline)) uint8_t *dataview_access(DataViewDa
   return dv->buffer->data + dv->byte_offset + index;
 }
 
-static inline __attribute__((always_inline)) ant_value_t dataview_get(
-  ant_native_params_t, const char *method, buffer_num_kind_t kind, size_t width
+static inline __attribute__((always_inline)) bool dataview_fast_ptr(DataViewData *dv, ant_value_t offset, size_t width, uint8_t **out) {
+  double index = tod(offset);
+  if (dv->buffer->is_detached || !(index >= 0.0 && index <= (double)dv->byte_length - (double)width)) return false;
+  *out = dv->buffer->data + dv->byte_offset + (size_t)index;
+  return true;
+}
+
+static inline __attribute__((always_inline)) ant_value_t dataview_read_value(
+  ant_t *js, const uint8_t *ptr, buffer_num_kind_t kind, size_t width, bool little_endian
 ) {
-  DataViewData *dv = buffer_get_dataview_data(js_getthis(js));
-  if (!dv) return dataview_receiver_error(js, method);
-  
-  size_t index;
-  if (is_err(js_to_index_fast(js, nargs > 0 ? args[0] : js_mkundef(), &index))) return dataview_range_error(js);
-  bool little_endian = nargs > 1 && js_truthy(js, args[1]);
-  
-  uint8_t *ptr = dataview_access(dv, index, width);
-  if (!ptr) return dataview_access_error(js, dv, method);
-  
   uint64_t bits = buffer_load_bytes(ptr, width, little_endian);
   
   unsigned shift = 64 - 8 * (unsigned)width;
@@ -3751,14 +3748,46 @@ static inline __attribute__((always_inline)) ant_value_t dataview_get(
   return js_mknum(d);
 }
 
-static inline __attribute__((always_inline)) ant_value_t dataview_set(
+static __attribute__((noinline)) ant_value_t dataview_get_slow(
+  ant_native_params_t, DataViewData *dv, const char *method, buffer_num_kind_t kind, size_t width
+) {
+  size_t index;
+  ant_value_t index_result = js_to_index_fast(js, nargs > 0 ? args[0] : js_mkundef(), &index);
+  if (is_err(index_result)) return index_result;
+  bool little_endian = nargs > 1 && js_truthy(js, args[1]);
+  
+  uint8_t *ptr = dataview_access(dv, index, width);
+  if (!ptr) return dataview_access_error(js, dv, method);
+  return dataview_read_value(js, ptr, kind, width, little_endian);
+}
+
+static inline __attribute__((always_inline)) ant_value_t dataview_get(
   ant_native_params_t, const char *method, buffer_num_kind_t kind, size_t width
 ) {
   DataViewData *dv = buffer_get_dataview_data(js_getthis(js));
   if (!dv) return dataview_receiver_error(js, method);
   
+  uint8_t *ptr;
+  if (__builtin_expect(!dataview_fast_ptr(dv, nargs > 0 ? args[0] : js_mkundef(), width, &ptr), 0))
+    return dataview_get_slow(js, args, nargs, dv, method, kind, width);
+  return dataview_read_value(js, ptr, kind, width, nargs > 1 && js_truthy(js, args[1]));
+}
+
+static inline __attribute__((always_inline)) uint64_t dataview_number_bits(double num, buffer_num_kind_t kind, size_t width) {
+  uint64_t bits = 0;
+  if (kind != BUFFER_NUM_FLOAT) bits = (uint64_t)js_to_uint32(num);
+  else if (width == 2) bits = double_to_half(num);
+  else if (width == 4) { float f = (float)num; uint32_t narrow; memcpy(&narrow, &f, sizeof(narrow)); bits = narrow; }
+  else memcpy(&bits, &num, sizeof(bits));
+  return bits;
+}
+
+static __attribute__((noinline)) ant_value_t dataview_set_slow(
+  ant_native_params_t, DataViewData *dv, const char *method, buffer_num_kind_t kind, size_t width
+) {
   size_t index;
-  if (is_err(js_to_index_fast(js, nargs > 0 ? args[0] : js_mkundef(), &index))) return dataview_range_error(js);
+  ant_value_t index_result = js_to_index_fast(js, nargs > 0 ? args[0] : js_mkundef(), &index);
+  if (is_err(index_result)) return index_result;
   
   ant_value_t value = nargs > 1 ? args[1] : js_mkundef();
   uint64_t bits = 0;
@@ -3770,19 +3799,30 @@ static inline __attribute__((always_inline)) ant_value_t dataview_set(
       ? bigint_to_int64_wrapping(js, bigint, (int64_t *)&bits)
       : bigint_to_uint64_wrapping(js, bigint, &bits);
     if (!ok) return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert to BigInt");
-  } else {
-    double num = vtype(value) == kTypeNumber ? js_getnum(value) : js_to_number(js, value);
-    if (kind != BUFFER_NUM_FLOAT) bits = (uint64_t)js_to_uint32(num);
-    else if (width == 2) bits = double_to_half(num);
-    else if (width == 4) { float f = (float)num; uint32_t narrow; memcpy(&narrow, &f, sizeof(narrow)); bits = narrow; }
-    else memcpy(&bits, &num, sizeof(bits));
-  }
+  } else bits = dataview_number_bits(vtype(value) == kTypeNumber ? js_getnum(value) : js_to_number(js, value), kind, width);
   
   bool little_endian = nargs > 2 && js_truthy(js, args[2]);
   uint8_t *ptr = dataview_access(dv, index, width);
   if (!ptr) return dataview_access_error(js, dv, method);
   
   buffer_store_bytes(ptr, width, little_endian, bits);
+  return js_mkundef();
+}
+
+static inline __attribute__((always_inline)) ant_value_t dataview_set(
+  ant_native_params_t, const char *method, buffer_num_kind_t kind, size_t width
+) {
+  DataViewData *dv = buffer_get_dataview_data(js_getthis(js));
+  if (!dv) return dataview_receiver_error(js, method);
+  
+  bool numeric = kind != BUFFER_NUM_BIGINT && kind != BUFFER_NUM_BIGUINT;
+  ant_value_t value = nargs > 1 ? args[1] : js_mkundef();
+  
+  uint8_t *ptr;
+  if (__builtin_expect(!numeric || vtype(value) != kTypeNumber || !dataview_fast_ptr(dv, nargs > 0 ? args[0] : js_mkundef(), width, &ptr), 0))
+    return dataview_set_slow(js, args, nargs, dv, method, kind, width);
+  
+  buffer_store_bytes(ptr, width, nargs > 2 && js_truthy(js, args[2]), dataview_number_bits(js_getnum(value), kind, width));
   return js_mkundef();
 }
 
