@@ -44,6 +44,7 @@
 #include "silver/ops/eval_env.h"
 #include "modules/regex.h"
 #include "modules/json.h"
+#include "modules/collections.h"
 #include "modules/process.h"
 
 #ifndef ANT_WASM_EMBED
@@ -1318,6 +1319,20 @@ static size_t strobj_error(ant_t *js, ant_value_t obj, char *buf, size_t len, si
   return builder.n;
 }
 
+static size_t strobj_map(ant_t *js, ant_value_t obj, map_entry_t *head, char *buf, size_t len, size_t n) {
+  js_inspect_builder_t builder;
+  js_inspect_builder_init_fixed(&builder, js, buf, len, n);
+  js_inspect_map(&builder, obj, head);
+  return builder.n;
+}
+
+static size_t strobj_set(ant_t *js, ant_value_t obj, set_entry_t *head, char *buf, size_t len, size_t n) {
+  js_inspect_builder_t builder;
+  js_inspect_builder_init_fixed(&builder, js, buf, len, n);
+  js_inspect_set(&builder, obj, head);
+  return builder.n;
+}
+
 static size_t strobj_inspect(ant_t *js, ant_value_t obj, char *buf, size_t len, size_t n) {
   ant_value_t tag = lkp_sym_proto_val(js, obj, (ant_offset_t)vdata(js->sym.toStringTag_sym));
   js_inspect_builder_t builder;
@@ -1351,6 +1366,12 @@ static size_t strobj_body(ant_t *js, ant_value_t obj, char *buf, size_t len, siz
   
   blob_data_t *bd = blob_get_data(obj);
   if (bd) return n + stringify_blob(bd, js_brand_id(obj) == BRAND_FILE, buf + n, REMAIN(n, len));
+  
+  map_entry_t **map = get_map_from_obj(obj);
+  if (map) return strobj_map(js, obj, *map, buf, len, n);
+  
+  set_entry_t **set = get_set_from_obj(obj);
+  if (set) return strobj_set(js, obj, *set, buf, len, n);
   
   return strobj_inspect(js, obj, buf, len, n);
 }
@@ -1940,10 +1961,14 @@ size_t tostr(ant_t *js, ant_value_t value, char *buf, size_t len) {
     case kTypeObject:   return strobj(js, value, buf, len);
     case kTypeString:   return strstring(js, value, buf, len);
     case kTypeNumber:   return js_number_to_chars(value, buf, len);
-    case kTypeBigInt:   return strbigint(js, value, buf, len);
     case kTypePromise:  return strpromise(js, value, buf, len);
     case kTypeFunction: return strfunc(js, value, buf, len);
     case kTypeBuiltin:  return strcfunc(js, value, buf, len);
+    
+    case kTypeBigInt: {
+      size_t n = strbigint(js, value, buf, len);
+      return n + cpy(buf + n, REMAIN(n, len), "n", 1);
+    }
     
     case kTypeError: {
       if (is_err(value)) {

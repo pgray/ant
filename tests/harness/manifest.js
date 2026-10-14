@@ -57,6 +57,7 @@ export function targets() {
     'test_reflect_builtin_targets.cjs',
     'test_receiver_edges.cjs',
     'test_detached_views.cjs',
+    'test_inspect_collections.cjs',
     'test_builtin_receiver_ic.cjs',
     'test_caught_exception_stack.cjs',
     'test_child_process_exec_sync_options.cjs',

@@ -22,9 +22,7 @@ static size_t stringify_typed_element(ant_t *js, const TypedArrayData *ta, size_
   ant_value_t value;
   if (!buffer_typedarray_data_read_index(js, ta, i, &value)) return 0;
   if (vtype(value) == kTypeNumber && tod(value) == 0 && signbit(tod(value))) return cpy(buf, len, "-0", 2);
-  
-  size_t n = tostr(js, value, buf, len);
-  return vtype(value) == kTypeBigInt ? n + cpy(buf + n, REMAIN(n, len), "n", 1) : n;
+  return tostr(js, value, buf, len);
 }
 
 static bool stringify_is_buffer(ant_t *js, ant_value_t obj) {

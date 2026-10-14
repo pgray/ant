@@ -4,6 +4,7 @@
 #include "silver/engine.h"
 #include "errors.h"
 #include "gc/roots.h"
+#include "modules/collections.h"
 
 #include <math.h>
 #include <stdarg.h>
@@ -181,6 +182,14 @@ js_inspect_vappendf(js_inspect_builder_t *builder, const char *fmt, va_list args
   builder->n += (size_t)needed;
   
   return true;
+}
+
+static bool __attribute__((format(printf, 2, 3)))
+js_inspect_appendf(js_inspect_builder_t *builder, const char *fmt, ...) {
+  va_list args; va_start(args, fmt);
+  bool ok = js_inspect_vappendf(builder, fmt, args);
+  va_end(args);
+  return ok;
 }
 
 static bool js_inspect_append_indent(js_inspect_builder_t *builder, int indent) {
@@ -534,6 +543,77 @@ bool js_inspect_close(js_inspect_builder_t *builder) {
 
   builder->closed = true;
   return true;
+}
+
+static inline bool js_inspect_is_nested(ant_value_t value) {
+  uint8_t t = vtype(value);
+  return t == kTypeObject || t == kTypeArray || t == kTypeFunction;
+}
+
+static bool js_inspect_collection_header(
+  js_inspect_builder_t *builder, ant_value_t obj,
+  const char *kind, size_t count, bool nested
+) {
+  ant_offset_t class_len = 0;
+  const char *class_name = get_class_name(builder->js, obj, &class_len, kind);
+  
+  bool ok = class_name
+    ? js_inspect_appendf(builder, "%.*s(%zu) [%s]", (int)class_len, class_name, count, kind)
+    : js_inspect_appendf(builder, "%s(%zu)", kind, count);
+  if (!ok) return false;
+  
+  int prop_count = 0;
+  bool small = is_small_object(builder->js, obj, &prop_count);
+  builder->first = true;
+  builder->did_indent = false;
+  
+  if (count == 0 && prop_count == 0) {
+    builder->inline_mode = false;
+    builder->closed = true;
+    return js_inspect_append(builder, " {}", 3);
+  }
+  
+  builder->inline_mode = small && !nested && count + (size_t)prop_count <= 4;
+  builder->closed = false;
+  return js_inspect_append(builder, builder->inline_mode ? " { " : " {\n", 3);
+}
+
+bool js_inspect_map(js_inspect_builder_t *builder, ant_value_t obj, map_entry_t *head) {
+  bool nested = false;
+  map_entry_t *entry, *tmp;
+  HASH_ITER(hh, head, entry, tmp)
+    if (js_inspect_is_nested(entry->key_val) || js_inspect_is_nested(entry->value)) { nested = true; break; }
+  
+  if (!js_inspect_collection_header(builder, obj, "Map", HASH_COUNT(head), nested)) return false;
+  if (builder->closed) return true;
+  js_inspect_begin_body(builder);
+  
+  HASH_ITER(hh, head, entry, tmp) {
+    if (!js_inspect_property_prefix(builder)) return false;
+    if (!js_inspect_append_tostr(builder, entry->key_val)) return false;
+    if (!js_inspect_append(builder, " => ", 4)) return false;
+    if (!js_inspect_append_tostr(builder, entry->value)) return false;
+  }
+  
+  return js_inspect_object_body(builder, obj) && js_inspect_close(builder);
+}
+
+bool js_inspect_set(js_inspect_builder_t *builder, ant_value_t obj, set_entry_t *head) {
+  bool nested = false;
+  set_entry_t *entry, *tmp;
+  HASH_ITER(hh, head, entry, tmp)
+    if (js_inspect_is_nested(entry->value)) { nested = true; break; }
+  
+  if (!js_inspect_collection_header(builder, obj, "Set", HASH_COUNT(head), nested)) return false;
+  if (builder->closed) return true;
+  js_inspect_begin_body(builder);
+  
+  HASH_ITER(hh, head, entry, tmp) {
+    if (!js_inspect_property_prefix(builder)) return false;
+    if (!js_inspect_append_tostr(builder, entry->value)) return false;
+  }
+  
+  return js_inspect_object_body(builder, obj) && js_inspect_close(builder);
 }
 
 static ant_value_t js_inspect_error_to_string(ant_t *js, ant_value_t obj) {
