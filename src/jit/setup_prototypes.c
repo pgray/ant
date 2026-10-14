@@ -259,6 +259,7 @@ void jit_setup_prototypes(jit_compile_t *c, MIR_type_t ret_type) {
 
   MIR_type_t math_ret = MIR_T_D;
   c->math1_proto = MIR_new_proto(c->ctx, "math1_proto", 1, &math_ret, 1, MIR_T_D, "x");
+  c->fmod_proto = MIR_new_proto(c->ctx, "fmod_proto", 1, &math_ret, 2, MIR_T_D, "x", MIR_T_D, "y");
 
   MIR_type_t h1_ret = MIR_JSVAL;
   c->helper1_proto = MIR_new_proto(c->ctx, "helper1_proto",
@@ -644,6 +645,7 @@ void jit_setup_prototypes(jit_compile_t *c, MIR_type_t ret_type) {
   c->imp_mul = MIR_new_import(c->ctx, "jit_helper_mul");
   c->imp_div = MIR_new_import(c->ctx, "jit_helper_div");
   c->imp_mod = MIR_new_import(c->ctx, "jit_helper_mod");
+  c->imp_fmod = MIR_new_import(c->ctx, "fmod");
   c->imp_str_read_value =
       MIR_new_import(c->ctx, "jit_helper_str_read_value");
   c->imp_str_append_local =

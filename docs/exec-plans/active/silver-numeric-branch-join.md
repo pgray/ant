@@ -38,5 +38,5 @@ for constants, integer arithmetic, a live numeric operand, and short circuits.
 - The focused branch test fails before the fix at call 101:
   `integer expression join at call 101: 0.5 != 104.5`. Node passes.
 - Build, focused tests, JIT harness, spec suite, and final preflight pending.
-- The configured tree needs `nix develop -c meson compile -C build` for its
+- The configured tree needs `direnv exec . meson compile -C build` for its
   pinned compiler, linker, and macOS SDK environment.

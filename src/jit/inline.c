@@ -1109,63 +1109,17 @@ void jit_emit_inline_body(
       }
 
       case OP_MOD: {
-        INL_FLUSH_SLOT(isp - 1);
-        INL_FLUSH_SLOT(isp - 2);
-        mir_emit_is_num_guard(ctx, jit_func, r_bool, inl_vs[isp - 1], slow);
-        mir_emit_is_num_guard(ctx, jit_func, r_bool, inl_vs[isp - 2], slow);
-
-        if (!*p_d_slot) {
-          *p_d_slot = MIR_new_func_reg(ctx, jit_func->u.func,
-                                       MIR_T_I64, "d_slot_inl");
-          MIR_append_insn(ctx, jit_func,
-                          MIR_new_insn(ctx, MIR_ALLOCA,
-                                       MIR_new_reg_op(ctx, *p_d_slot),
-                                       MIR_new_uint_op(ctx, 8)));
+        for (int k = isp - 2; k < isp; k++) {
+          if (inl_num[k]) continue;
+          INL_ENSURE_D_SLOT();
+          mir_emit_is_num_guard(ctx, jit_func, r_bool, inl_vs[k], slow);
+          mir_i64_to_d(ctx, jit_func, inl_d[k], inl_vs[k], *p_d_slot);
+          inl_num[k] = 1;
         }
-
-        MIR_reg_t rr = inl_vs[--isp];
-        MIR_reg_t rl = inl_vs[--isp];
-        MIR_reg_t rd = inl_vs[isp++];
-
-        int mn = inl_arith++;
-        char md1[32], md2[32], md3[32], md4[32], md5[32];
-        snprintf(md1, sizeof(md1), "inl%d_mod1_%d", id, mn);
-        snprintf(md2, sizeof(md2), "inl%d_mod2_%d", id, mn);
-        snprintf(md3, sizeof(md3), "inl%d_mod3_%d", id, mn);
-        snprintf(md4, sizeof(md4), "inl%d_mod4_%d", id, mn);
-        snprintf(md5, sizeof(md5), "inl%d_mod5_%d", id, mn);
-        MIR_reg_t fd1 = MIR_new_func_reg(ctx, jit_func->u.func, MIR_T_D, md1);
-        MIR_reg_t fd2 = MIR_new_func_reg(ctx, jit_func->u.func, MIR_T_D, md2);
-        MIR_reg_t fd3 = MIR_new_func_reg(ctx, jit_func->u.func, MIR_T_D, md3);
-        MIR_reg_t fd4 = MIR_new_func_reg(ctx, jit_func->u.func, MIR_T_D, md4);
-        MIR_reg_t fd5 = MIR_new_func_reg(ctx, jit_func->u.func, MIR_T_D, md5);
-
-        mir_i64_to_d(ctx, jit_func, fd1, rl, *p_d_slot);
-        mir_i64_to_d(ctx, jit_func, fd2, rr, *p_d_slot);
-        MIR_append_insn(ctx, jit_func,
-                        MIR_new_insn(ctx, MIR_DDIV,
-                                     MIR_new_reg_op(ctx, fd3),
-                                     MIR_new_reg_op(ctx, fd1),
-                                     MIR_new_reg_op(ctx, fd2)));
-        MIR_append_insn(ctx, jit_func,
-                        MIR_new_insn(ctx, MIR_D2I,
-                                     MIR_new_reg_op(ctx, rd),
-                                     MIR_new_reg_op(ctx, fd3)));
-        MIR_append_insn(ctx, jit_func,
-                        MIR_new_insn(ctx, MIR_I2D,
-                                     MIR_new_reg_op(ctx, fd4),
-                                     MIR_new_reg_op(ctx, rd)));
-        MIR_append_insn(ctx, jit_func,
-                        MIR_new_insn(ctx, MIR_DMUL,
-                                     MIR_new_reg_op(ctx, fd4),
-                                     MIR_new_reg_op(ctx, fd4),
-                                     MIR_new_reg_op(ctx, fd2)));
-        MIR_append_insn(ctx, jit_func,
-                        MIR_new_insn(ctx, MIR_DSUB,
-                                     MIR_new_reg_op(ctx, fd5),
-                                     MIR_new_reg_op(ctx, fd1),
-                                     MIR_new_reg_op(ctx, fd4)));
-        mir_d_to_i64(ctx, jit_func, rd, fd5, *p_d_slot);
+        isp--;
+        mir_emit_mod_numbers(ctx, jit_func, p_reg_site, ext->fmod_proto, ext->imp_fmod,
+                             inl_d[isp - 1], inl_d[isp], inl_d[isp - 1]);
+        inl_num[isp] = 0;
         break;
       }
 

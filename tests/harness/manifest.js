@@ -55,6 +55,7 @@ export function targets() {
     'test_builtin_lengths.cjs',
     'test_intrinsic_protos.cjs',
     'test_dataview_fast_path.cjs',
+    'test_jit_inline_mod.cjs',
     'test_jit_primitive_field_ic.cjs',
     'test_reflect_builtin_targets.cjs',
     'test_receiver_edges.cjs',

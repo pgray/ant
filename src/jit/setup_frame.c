@@ -478,6 +478,8 @@ bool jit_setup_frame(jit_compile_t *c) {
       .imp_bxor = c->imp_bxor,
       .imp_shl = c->imp_shl,
       .imp_shr = c->imp_shr,
+      .fmod_proto = c->fmod_proto,
+      .imp_fmod = c->imp_fmod,
       .imp_ushr = c->imp_ushr,
       .self_proto = c->self_proto,
       .math1_proto = c->math1_proto,

@@ -56,6 +56,17 @@ static void jit_derive_induction_shadow(jit_compile_t *c, int idx) {
       .max = JIT_COUNTER_MAX, .known = true};
 }
 
+static bool jit_local_integer_read(jit_compile_t *c, int idx) {
+  if (!c->integer_locals || !c->integer_locals[idx]) return false;
+  if (!c->dnum_locals || !c->dnum_locals[idx] ||
+      !c->known_type_locals || c->known_type_locals[idx] != SV_TI_NUM) return true;
+  uint8_t *ip = c->ip + c->sz;
+  if (ip >= c->end || (*ip != OP_PUT_LOCAL && *ip != OP_PUT_LOCAL8)) return true;
+  int target = *ip == OP_PUT_LOCAL8 ? sv_get_u8(ip + 1) : sv_get_u16(ip + 1);
+  return target >= c->n_locals || !c->dnum_locals[target] ||
+         (c->entry_integer_regs && c->entry_integer_regs[target]);
+}
+
 static bool jit_param_counter_use(jit_compile_t *c, uint16_t idx) {
   uint8_t *ip = c->ip + c->sz;
   if (ip < c->end && (*ip == OP_POST_INC || *ip == OP_POST_DEC)) {
@@ -424,7 +435,7 @@ void jit_emit_locals(jit_compile_t *c) {
         break;
       }
       jit_derive_induction_shadow(c, idx);
-      if (c->integer_locals && c->integer_locals[idx]) {
+      if (jit_local_integer_read(c, idx)) {
         MIR_reg_t dst = vstack_push(&c->vs);
         MIR_append_insn(c->ctx, c->jit_func, MIR_new_insn(c->ctx, MIR_MOV, MIR_new_reg_op(c->ctx, dst), MIR_new_reg_op(c->ctx, c->integer_locals[idx])));
         c->vs.slot_type[c->vs.sp - 1] = SLOT_I32;
@@ -468,7 +479,7 @@ void jit_emit_locals(jit_compile_t *c) {
         break;
       }
       jit_derive_induction_shadow(c, idx);
-      if (c->integer_locals && c->integer_locals[idx]) {
+      if (jit_local_integer_read(c, idx)) {
         MIR_reg_t dst = vstack_push(&c->vs);
         MIR_append_insn(c->ctx, c->jit_func, MIR_new_insn(c->ctx, MIR_MOV, MIR_new_reg_op(c->ctx, dst), MIR_new_reg_op(c->ctx, c->integer_locals[idx])));
         c->vs.slot_type[c->vs.sp - 1] = SLOT_I32;

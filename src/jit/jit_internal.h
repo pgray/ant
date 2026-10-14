@@ -202,6 +202,7 @@ typedef struct {
   MIR_item_t stable_load_proto, imp_load_stable_builtin;
   MIR_item_t stable_call_proto, imp_call_stable_builtin;
   MIR_item_t imp_band, imp_bor, imp_bxor, imp_shl, imp_shr, imp_ushr;
+  MIR_item_t fmod_proto, imp_fmod;
   MIR_item_t self_proto;
   MIR_item_t math1_proto;
   MIR_item_t const *imp_math;
@@ -209,6 +210,11 @@ typedef struct {
   int *next_inline_id;
   bool reader_only;
 } jit_inline_ext_t;
+
+void mir_emit_mod_numbers(
+    MIR_context_t ctx, MIR_item_t fn, int *reg_site,
+    MIR_item_t fmod_proto, MIR_item_t imp_fmod,
+    MIR_reg_t l, MIR_reg_t r, MIR_reg_t dst);
 
 void mir_emit_drop_owner_code_once(
   MIR_context_t ctx, MIR_item_t fn, ant_t *js, const char *prefix, int site,

@@ -103,6 +103,7 @@ typedef struct jit_compile {
   MIR_item_t imp_mul;
   MIR_item_t imp_div;
   MIR_item_t imp_mod;
+  MIR_item_t fmod_proto, imp_fmod;
   MIR_item_t imp_str_read_value;
   MIR_item_t imp_str_append_local;
   MIR_item_t imp_str_append_local_snapshot;

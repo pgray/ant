@@ -1,3 +1,4 @@
+#include <math.h>
 #include <time.h>
 
 #include "gc/roots.h"
@@ -44,6 +45,7 @@ void jit_load_externals_once(sv_jit_ctx_t *jc) {
   LOAD_EXT(jit_helper_mul);
   LOAD_EXT(jit_helper_div);
   LOAD_EXT(jit_helper_mod);
+  LOAD_EXT(fmod);
   LOAD_EXT(jit_helper_str_read_value);
   LOAD_EXT(jit_helper_str_append_local);
   LOAD_EXT(jit_helper_str_append_local_snapshot);
