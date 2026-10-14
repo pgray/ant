@@ -427,17 +427,17 @@ void init_blob_module(ant_t *js) {
   ant_value_t g = js_glob(js);
   js->builtins.blob_proto  = js_mkobj(js);
 
-  js_set_getter_desc(js, js->builtins.blob_proto, "size", 4, js_mkfun(blob_get_size), JS_DESC_C);
-  js_set_getter_desc(js, js->builtins.blob_proto, "type", 4, js_mkfun(blob_get_type), JS_DESC_C);
+  js_set_getter_desc(js, js->builtins.blob_proto, "size", 4, Ant_Function_Create(blob_get_size), JS_DESC_C);
+  js_set_getter_desc(js, js->builtins.blob_proto, "type", 4, Ant_Function_Create(blob_get_type), JS_DESC_C);
 
-  js_set(js, js->builtins.blob_proto, "text",        js_mkfun(js_blob_text));
-  js_set(js, js->builtins.blob_proto, "arrayBuffer", js_mkfun(js_blob_array_buffer));
-  js_set(js, js->builtins.blob_proto, "bytes",       js_mkfun(js_blob_bytes));
-  js_set(js, js->builtins.blob_proto, "slice",       js_mkfun(js_blob_slice));
-  js_set(js, js->builtins.blob_proto, "stream",      js_mkfun(js_blob_stream));
+  js_set(js, js->builtins.blob_proto, "text",        Ant_Function_Create(js_blob_text));
+  js_set(js, js->builtins.blob_proto, "arrayBuffer", Ant_Function_Create(js_blob_array_buffer));
+  js_set(js, js->builtins.blob_proto, "bytes",       Ant_Function_Create(js_blob_bytes));
+  js_set(js, js->builtins.blob_proto, "slice",       Ant_Function_Create(js_blob_slice));
+  js_set(js, js->builtins.blob_proto, "stream",      Ant_Function_Create(js_blob_stream));
 
   js_set_tostringtag(js, js->builtins.blob_proto, js_mkstr(js, "Blob", 4));
-  ant_value_t blob_ctor = js_make_intrinsic_ctor(js, js_blob_ctor, js->builtins.blob_proto, "Blob", 0);
+  ant_value_t blob_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_blob_ctor, js->builtins.blob_proto, "Blob", 0);
   
   js_set(js, g, "Blob", blob_ctor);
   js_set_descriptor(js, g, "Blob", 4, JS_DESC_W | JS_DESC_C);
@@ -445,11 +445,11 @@ void init_blob_module(ant_t *js) {
   js->builtins.file_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.file_proto, js->builtins.blob_proto);
 
-  js_set_getter_desc(js, js->builtins.file_proto, "name",         4,  js_mkfun(file_get_name),          JS_DESC_C);
-  js_set_getter_desc(js, js->builtins.file_proto, "lastModified", 12, js_mkfun(file_get_last_modified),  JS_DESC_C);
+  js_set_getter_desc(js, js->builtins.file_proto, "name",         4,  Ant_Function_Create(file_get_name),          JS_DESC_C);
+  js_set_getter_desc(js, js->builtins.file_proto, "lastModified", 12, Ant_Function_Create(file_get_last_modified),  JS_DESC_C);
 
   js_set_tostringtag(js, js->builtins.file_proto, js_mkstr(js, "File", 4));
-  ant_value_t file_ctor = js_make_intrinsic_ctor(js, js_file_ctor, js->builtins.file_proto, "File", 2);
+  ant_value_t file_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_file_ctor, js->builtins.file_proto, "File", 2);
   
   js_set(js, g, "File", file_ctor);
   js_set_descriptor(js, g, "File", 4, JS_DESC_W | JS_DESC_C);

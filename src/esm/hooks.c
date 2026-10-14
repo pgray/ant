@@ -206,7 +206,7 @@ static ant_value_t esm_run_resolve_chain(ant_t *js, const esm_chain_t *chain, in
     if (is_err(fn)) return fn;
     if (vtype(fn) != kTypeFunction && vtype(fn) != kTypeBuiltin) continue;
 
-    ant_value_t next = esm_hook_make_next(js, js_mkfun(builtin_esm_next_resolve), chain, level - 1);
+    ant_value_t next = esm_hook_make_next(js, Ant_Function_Create(builtin_esm_next_resolve), chain, level - 1);
     return esm_run_hook_level(js, fn, next, spec, chain->ctx, "resolve");
   }
 
@@ -307,7 +307,7 @@ static ant_value_t esm_run_load_chain(ant_t *js, const esm_chain_t *chain, int l
     if (is_err(fn)) return fn;
     if (vtype(fn) != kTypeFunction && vtype(fn) != kTypeBuiltin) continue;
 
-    ant_value_t next = esm_hook_make_next(js, js_mkfun(builtin_esm_next_load), chain, level - 1);
+    ant_value_t next = esm_hook_make_next(js, Ant_Function_Create(builtin_esm_next_load), chain, level - 1);
     return esm_run_hook_level(js, fn, next, url, chain->ctx, "load");
   }
 

@@ -110,7 +110,7 @@ ant_value_t maybe_call_symbol_method(
 void js_define_species_getter(ant_t *js, ant_value_t ctor) {
   if (!is_object_type(ctor) || vtype(js->sym.species_sym) != kTypeSymbol) return;
   ctor = js_as_obj(ctor);
-  js_set_sym_getter_desc(js, ctor, js->sym.species_sym, js_mkfun(sym_this_cb), JS_DESC_C);
+  js_set_sym_getter_desc(js, ctor, js->sym.species_sym, Ant_Function_Create(sym_this_cb), JS_DESC_C);
 }
 
 void init_symbol_module(ant_t *js) {
@@ -121,19 +121,19 @@ void init_symbol_module(ant_t *js) {
   js->sym.symbol_proto = proto;
   js_set_proto_init(proto, js->sym.object_proto);
   
-  defmethod(js, proto, "toString", 8, js_mkfun(builtin_Symbol_toString));
-  defmethod(js, proto, "valueOf", 7, js_mkfun(builtin_Symbol_valueOf));
+  defmethod(js, proto, "toString", 8, Ant_Function_Create(builtin_Symbol_toString));
+  defmethod(js, proto, "valueOf", 7, Ant_Function_Create(builtin_Symbol_valueOf));
   
-  mkprop(js, proto, js->sym.toPrimitive_sym, js_mkfun(builtin_Symbol_valueOf), ANT_PROP_ATTR_CONFIGURABLE);
+  mkprop(js, proto, js->sym.toPrimitive_sym, Ant_Function_CreateWithMeta(builtin_Symbol_valueOf, "[Symbol.toPrimitive]", 1, 0), ANT_PROP_ATTR_CONFIGURABLE);
   mkprop(js, proto, js->sym.toStringTag_sym, ANT_STRING("Symbol"), ANT_PROP_ATTR_CONFIGURABLE);
-  js_set_getter_desc(js, proto, "description", 11, js_mkfun(builtin_Symbol_description), JS_DESC_C);
+  js_set_getter_desc(js, proto, "description", 11, Ant_Function_Create(builtin_Symbol_description), JS_DESC_C);
 
   ant_value_t ctor = js_mkobj(js);
-  js_set_slot(ctor, SLOT_CFUNC, js_mkfun(builtin_Symbol));
+  js_set_slot(ctor, SLOT_CFUNC, Ant_Function_Create(builtin_Symbol));
   js_set_function_name(js, ctor, "Symbol", 6);
   
-  defmethod(js, ctor, "for", 3, js_mkfun_arity(builtin_Symbol_for, 1));
-  defmethod(js, ctor, "keyFor", 6, js_mkfun_arity(builtin_Symbol_keyFor, 1));
+  defmethod(js, ctor, "for", 3, Ant_Function_CreateWithArity(builtin_Symbol_for, 1));
+  defmethod(js, ctor, "keyFor", 6, Ant_Function_CreateWithArity(builtin_Symbol_keyFor, 1));
   
   js_set(js, ctor, "prototype", proto);
   js_set_descriptor(js, ctor, "prototype", 9, 0);

@@ -595,8 +595,8 @@ static ant_value_t fs_create_readstream_impl(ant_t *js, ant_value_t path_arg, an
   stream_obj = stream_construct_readable(js, proto, stream_options, new_target);
   if (is_err(stream_obj)) return stream_obj;
 
-  js_set(js, stream_obj, "_read", js_mkfun(fs_readstream__read));
-  js_set(js, stream_obj, "_destroy", js_mkfun(fs_stream_destroy));
+  js_set(js, stream_obj, "_read", Ant_Function_Create(fs_readstream__read));
+  js_set(js, stream_obj, "_destroy", Ant_Function_Create(fs_stream_destroy));
   js_set(js, stream_obj, "path", path_val);
   js_set(js, stream_obj, "flags", is_undefined(flags_raw) ? js_mkstr(js, "r", 1) : flags_raw);
   js_set(js, stream_obj, "mode", vtype(mode_val) == kTypeNumber ? mode_val : js_mknum(0666));
@@ -638,9 +638,9 @@ static ant_value_t fs_create_writestream_impl(ant_t *js, ant_value_t path_arg, a
   stream_obj = stream_construct_writable(js, proto, stream_options, new_target);
   if (is_err(stream_obj)) return stream_obj;
 
-  js_set(js, stream_obj, "_write", js_mkfun(fs_writestream__write));
-  js_set(js, stream_obj, "_final", js_mkfun(fs_writestream__final));
-  js_set(js, stream_obj, "_destroy", js_mkfun(fs_stream_destroy));
+  js_set(js, stream_obj, "_write", Ant_Function_Create(fs_writestream__write));
+  js_set(js, stream_obj, "_final", Ant_Function_Create(fs_writestream__final));
+  js_set(js, stream_obj, "_destroy", Ant_Function_Create(fs_stream_destroy));
   js_set(js, stream_obj, "path", path_val);
   js_set(js, stream_obj, "flags", is_undefined(flags_raw) ? js_mkstr(js, "w", 1) : flags_raw);
   js_set(js, stream_obj, "mode", vtype(mode_val) == kTypeNumber ? mode_val : js_mknum(0666));
@@ -692,16 +692,16 @@ static void fs_init_stream_constructors(ant_t *js) {
 
   js->builtins.readstream_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.readstream_proto, stream_readable_prototype(js));
-  js_set(js, js->builtins.readstream_proto, "close", js_mkfun(fs_stream_close));
+  js_set(js, js->builtins.readstream_proto, "close", Ant_Function_Create(fs_stream_close));
   js_set_tostringtag(js, js->builtins.readstream_proto, js_mkstr(js, "ReadStream", 10));
-  js->builtins.readstream_ctor = js_make_ctor(js, js_readstream_ctor, js->builtins.readstream_proto, "ReadStream", 2);
+  js->builtins.readstream_ctor = Ant_Function_CreateConstructor(js, js_readstream_ctor, js->builtins.readstream_proto, "ReadStream", 2);
   js_set_proto_init(js->builtins.readstream_ctor, stream_readable_constructor(js));
 
   js->builtins.writestream_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.writestream_proto, stream_writable_prototype(js));
-  js_set(js, js->builtins.writestream_proto, "close", js_mkfun(fs_stream_close));
+  js_set(js, js->builtins.writestream_proto, "close", Ant_Function_Create(fs_stream_close));
   js_set_tostringtag(js, js->builtins.writestream_proto, js_mkstr(js, "WriteStream", 11));
-  js->builtins.writestream_ctor = js_make_ctor(js, js_writestream_ctor, js->builtins.writestream_proto, "WriteStream", 2);
+  js->builtins.writestream_ctor = Ant_Function_CreateConstructor(js, js_writestream_ctor, js->builtins.writestream_proto, "WriteStream", 2);
   js_set_proto_init(js->builtins.writestream_ctor, stream_writable_constructor(js));
 }
 
@@ -1177,12 +1177,12 @@ static void fs_init_watch_constructors(ant_t *js) {
   js->builtins.fswatcher_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.fswatcher_proto, ee_proto);
   
-  js_set(js, js->builtins.fswatcher_proto, "close", js_mkfun(js_fswatcher_close));
-  js_set(js, js->builtins.fswatcher_proto, "ref", js_mkfun(js_fswatcher_ref));
-  js_set(js, js->builtins.fswatcher_proto, "unref", js_mkfun(js_fswatcher_unref));
+  js_set(js, js->builtins.fswatcher_proto, "close", Ant_Function_Create(js_fswatcher_close));
+  js_set(js, js->builtins.fswatcher_proto, "ref", Ant_Function_Create(js_fswatcher_ref));
+  js_set(js, js->builtins.fswatcher_proto, "unref", Ant_Function_Create(js_fswatcher_unref));
   
   js_set_tostringtag(js, js->builtins.fswatcher_proto, js_mkstr(js, "FSWatcher", 9));
-  js->builtins.fswatcher_ctor = js_make_ctor(js, js_fswatcher_ctor, js->builtins.fswatcher_proto, "FSWatcher", 0);
+  js->builtins.fswatcher_ctor = Ant_Function_CreateConstructor(js, js_fswatcher_ctor, js->builtins.fswatcher_proto, "FSWatcher", 0);
 }
 
 static bool fs_parse_watch_options(ant_native_params_t, fs_watch_options_t *out) {
@@ -1878,12 +1878,12 @@ static void fs_init_filehandle_proto(ant_t *js) {
   if (is_object_type(js->builtins.filehandle_proto)) return;
   js->builtins.filehandle_proto = js_mkobj(js);
   js_set_native(js->builtins.filehandle_proto, NULL, FS_FILEHANDLE_NATIVE_TAG);
-  js_set(js, js->builtins.filehandle_proto, "close", js_mkfun(builtin_fs_filehandle_close));
-  js_set(js, js->builtins.filehandle_proto, "stat", js_mkfun(builtin_fs_filehandle_stat));
-  js_set(js, js->builtins.filehandle_proto, "sync", js_mkfun(builtin_fs_filehandle_sync));
-  js_set(js, js->builtins.filehandle_proto, "read", js_mkfun(builtin_fs_filehandle_read));
-  js_set(js, js->builtins.filehandle_proto, "write", js_mkfun(builtin_fs_filehandle_write));
-  js_set(js, js->builtins.filehandle_proto, "writeFile", js_mkfun(builtin_fs_filehandle_writeFile));
+  js_set(js, js->builtins.filehandle_proto, "close", Ant_Function_Create(builtin_fs_filehandle_close));
+  js_set(js, js->builtins.filehandle_proto, "stat", Ant_Function_Create(builtin_fs_filehandle_stat));
+  js_set(js, js->builtins.filehandle_proto, "sync", Ant_Function_Create(builtin_fs_filehandle_sync));
+  js_set(js, js->builtins.filehandle_proto, "read", Ant_Function_Create(builtin_fs_filehandle_read));
+  js_set(js, js->builtins.filehandle_proto, "write", Ant_Function_Create(builtin_fs_filehandle_write));
+  js_set(js, js->builtins.filehandle_proto, "writeFile", Ant_Function_Create(builtin_fs_filehandle_writeFile));
   js_set_tostringtag(js, js->builtins.filehandle_proto, js_mkstr(js, "FileHandle", 10));
 }
 
@@ -5761,9 +5761,9 @@ void init_fs_module(ant_t *js) {
   ant_value_t stats_ctor = js_mkobj(js);
   js->builtins.stats_proto = js_mkobj(js);
   
-  js_set(js, js->builtins.stats_proto, "isFile", js_mkfun(stat_isFile));
-  js_set(js, js->builtins.stats_proto, "isDirectory", js_mkfun(stat_isDirectory));
-  js_set(js, js->builtins.stats_proto, "isSymbolicLink", js_mkfun(stat_isSymbolicLink));
+  js_set(js, js->builtins.stats_proto, "isFile", Ant_Function_Create(stat_isFile));
+  js_set(js, js->builtins.stats_proto, "isDirectory", Ant_Function_Create(stat_isDirectory));
+  js_set(js, js->builtins.stats_proto, "isSymbolicLink", Ant_Function_Create(stat_isSymbolicLink));
   js_set_tostringtag(js, js->builtins.stats_proto, js_mkstr(js, "Stats", 5));
   
   js_mkprop_fast(js, stats_ctor, "prototype", 9, js->builtins.stats_proto);
@@ -5772,13 +5772,13 @@ void init_fs_module(ant_t *js) {
   js->builtins.stats_ctor = js_obj_to_func(js, stats_ctor);
 
   js->builtins.dirent_proto = js_mkobj(js);
-  js_set(js, js->builtins.dirent_proto, "isFile", js_mkfun(dirent_isFile));
-  js_set(js, js->builtins.dirent_proto, "isDirectory", js_mkfun(dirent_isDirectory));
-  js_set(js, js->builtins.dirent_proto, "isSymbolicLink", js_mkfun(dirent_isSymbolicLink));
-  js_set(js, js->builtins.dirent_proto, "isBlockDevice", js_mkfun(dirent_isBlockDevice));
-  js_set(js, js->builtins.dirent_proto, "isCharacterDevice", js_mkfun(dirent_isCharacterDevice));
-  js_set(js, js->builtins.dirent_proto, "isFIFO", js_mkfun(dirent_isFIFO));
-  js_set(js, js->builtins.dirent_proto, "isSocket", js_mkfun(dirent_isSocket));
+  js_set(js, js->builtins.dirent_proto, "isFile", Ant_Function_Create(dirent_isFile));
+  js_set(js, js->builtins.dirent_proto, "isDirectory", Ant_Function_Create(dirent_isDirectory));
+  js_set(js, js->builtins.dirent_proto, "isSymbolicLink", Ant_Function_Create(dirent_isSymbolicLink));
+  js_set(js, js->builtins.dirent_proto, "isBlockDevice", Ant_Function_Create(dirent_isBlockDevice));
+  js_set(js, js->builtins.dirent_proto, "isCharacterDevice", Ant_Function_Create(dirent_isCharacterDevice));
+  js_set(js, js->builtins.dirent_proto, "isFIFO", Ant_Function_Create(dirent_isFIFO));
+  js_set(js, js->builtins.dirent_proto, "isSocket", Ant_Function_Create(dirent_isSocket));
   js_set_tostringtag(js, js->builtins.dirent_proto, js_mkstr(js, "Dirent", 6));
 }
 
@@ -6490,14 +6490,14 @@ static void fs_init_dir_proto(ant_t *js) {
   if (is_object_type(js->builtins.dir_proto)) return;
   ant_value_t proto = js->builtins.dir_proto = js_mkobj(js);
 
-  js_set(js, proto, "read", fs_make_callback_wrapper(js, js_mkfun(builtin_fs_dir_read), false, "read", 1));
-  js_set(js, proto, "readSync", js_mkfun(builtin_fs_dir_readSync));
-  js_set(js, proto, "close", fs_make_callback_wrapper(js, js_mkfun(builtin_fs_dir_close), false, "close", 1));
-  js_set(js, proto, "closeSync", js_mkfun(builtin_fs_dir_closeSync));
+  js_set(js, proto, "read", fs_make_callback_wrapper(js, Ant_Function_Create(builtin_fs_dir_read), false, "read", 1));
+  js_set(js, proto, "readSync", Ant_Function_Create(builtin_fs_dir_readSync));
+  js_set(js, proto, "close", fs_make_callback_wrapper(js, Ant_Function_Create(builtin_fs_dir_close), false, "close", 1));
+  js_set(js, proto, "closeSync", Ant_Function_Create(builtin_fs_dir_closeSync));
 
-  js_set_sym(js, proto, js->sym.asyncIterator_sym, js_mkfun(builtin_fs_dir_asyncIterator));
-  js_set_sym(js, proto, js->sym.dispose_sym, js_mkfun(builtin_fs_dir_dispose));
-  js_set_sym(js, proto, js->sym.asyncDispose_sym, js_mkfun(builtin_fs_dir_asyncDispose));
+  js_set_sym(js, proto, js->sym.asyncIterator_sym, Ant_Function_Create(builtin_fs_dir_asyncIterator));
+  js_set_sym(js, proto, js->sym.dispose_sym, Ant_Function_Create(builtin_fs_dir_dispose));
+  js_set_sym(js, proto, js->sym.asyncDispose_sym, Ant_Function_Create(builtin_fs_dir_asyncDispose));
   js_set_tostringtag(js, proto, js_mkstr(js, "Dir", 3));
 }
 
@@ -6815,53 +6815,53 @@ static ant_value_t builtin_fs_promises_getter(ant_params_t) {
 
 ant_value_t fs_library(ant_t *js) {
   ant_value_t lib = js_mkobj(js);
-  ant_value_t realpath_sync = js_heavy_mkfun_named(js, builtin_fs_realpathSync, "realpathSync", 2, js_mkundef());
+  ant_value_t realpath_sync = Ant_Function_CreateWithData(js, builtin_fs_realpathSync, "realpathSync", 2, js_mkundef());
   
   fs_set_callback_compatible_methods(js, lib);
   fs_init_watch_constructors(js);
   fs_init_stream_constructors(js);
 
-  js_set(js, lib, "read", js_mkfun_arity(builtin_fs_read_fd, 6));
-  js_set(js, lib, "readFileSync", js_mkfun_arity(builtin_fs_readFileSync, 2));
-  js_set(js, lib, "readSync", js_mkfun_arity(builtin_fs_readSync, 5));
-  js_set(js, lib, "fsync", js_mkfun_arity(builtin_fs_fsync, 2));
-  js_set(js, lib, "stream", js_mkfun(builtin_fs_stream));
-  js_set(js, lib, "createReadStream", js_mkfun_arity(builtin_fs_createReadStream, 2));
-  js_set(js, lib, "createWriteStream", js_mkfun_arity(builtin_fs_createWriteStream, 2));
-  js_set(js, lib, "openSync", js_mkfun_arity(builtin_fs_openSync, 3));
-  js_set(js, lib, "closeSync", js_mkfun_arity(builtin_fs_closeSync, 1));
-  js_set(js, lib, "writeFileSync", js_mkfun_arity(builtin_fs_writeFileSync, 3));
-  js_set(js, lib, "writeSync", js_mkfun_arity(builtin_fs_writeSync, 5));
-  js_set(js, lib, "writevSync", js_mkfun_arity(builtin_fs_writevSync, 3));
-  js_set(js, lib, "appendFileSync", js_mkfun_arity(builtin_fs_appendFileSync, 3));
-  js_set(js, lib, "cpSync", js_mkfun_arity(builtin_fs_cpSync, 3));
-  js_set(js, lib, "copyFileSync", js_mkfun_arity(builtin_fs_copyFileSync, 3));
-  js_set(js, lib, "renameSync", js_mkfun_arity(builtin_fs_renameSync, 2));
-  js_set(js, lib, "rmSync", js_mkfun_arity(builtin_fs_rmSync, 2));
-  js_set(js, lib, "unlinkSync", js_mkfun_arity(builtin_fs_unlinkSync, 1));
-  js_set(js, lib, "mkdirSync", js_mkfun_arity(builtin_fs_mkdirSync, 2));
-  js_set(js, lib, "mkdtempSync", js_mkfun_arity(builtin_fs_mkdtempSync, 2));
-  js_set(js, lib, "rmdirSync", js_mkfun_arity(builtin_fs_rmdirSync, 2));
-  js_set(js, lib, "statSync", js_mkfun_arity(builtin_fs_statSync, 1));
-  js_set(js, lib, "lstatSync", js_mkfun_arity(builtin_fs_lstatSync, 1));
-  js_set(js, lib, "fstatSync", js_mkfun_arity(builtin_fs_fstatSync, 1));
-  js_set(js, lib, "fsyncSync", js_mkfun_arity(builtin_fs_fsyncSync, 1));
-  js_set(js, lib, "utimesSync", js_mkfun_arity(builtin_fs_utimesSync, 3));
-  js_set(js, lib, "futimesSync", js_mkfun_arity(builtin_fs_futimesSync, 3));
-  js_set(js, lib, "truncateSync", js_mkfun_arity(builtin_fs_truncateSync, 2));
-  js_set(js, lib, "ftruncateSync", js_mkfun_arity(builtin_fs_ftruncateSync, 1));
-  js_set(js, lib, "existsSync", js_mkfun_arity(builtin_fs_existsSync, 1));
-  js_set(js, lib, "accessSync", js_mkfun_arity(builtin_fs_accessSync, 2));
-  js_set(js, lib, "chmodSync", js_mkfun_arity(builtin_fs_chmodSync, 2));
-  js_set(js, lib, "readdirSync", js_mkfun_arity(builtin_fs_readdirSync, 2));
+  js_set(js, lib, "read", Ant_Function_CreateWithArity(builtin_fs_read_fd, 6));
+  js_set(js, lib, "readFileSync", Ant_Function_CreateWithArity(builtin_fs_readFileSync, 2));
+  js_set(js, lib, "readSync", Ant_Function_CreateWithArity(builtin_fs_readSync, 5));
+  js_set(js, lib, "fsync", Ant_Function_CreateWithArity(builtin_fs_fsync, 2));
+  js_set(js, lib, "stream", Ant_Function_Create(builtin_fs_stream));
+  js_set(js, lib, "createReadStream", Ant_Function_CreateWithArity(builtin_fs_createReadStream, 2));
+  js_set(js, lib, "createWriteStream", Ant_Function_CreateWithArity(builtin_fs_createWriteStream, 2));
+  js_set(js, lib, "openSync", Ant_Function_CreateWithArity(builtin_fs_openSync, 3));
+  js_set(js, lib, "closeSync", Ant_Function_CreateWithArity(builtin_fs_closeSync, 1));
+  js_set(js, lib, "writeFileSync", Ant_Function_CreateWithArity(builtin_fs_writeFileSync, 3));
+  js_set(js, lib, "writeSync", Ant_Function_CreateWithArity(builtin_fs_writeSync, 5));
+  js_set(js, lib, "writevSync", Ant_Function_CreateWithArity(builtin_fs_writevSync, 3));
+  js_set(js, lib, "appendFileSync", Ant_Function_CreateWithArity(builtin_fs_appendFileSync, 3));
+  js_set(js, lib, "cpSync", Ant_Function_CreateWithArity(builtin_fs_cpSync, 3));
+  js_set(js, lib, "copyFileSync", Ant_Function_CreateWithArity(builtin_fs_copyFileSync, 3));
+  js_set(js, lib, "renameSync", Ant_Function_CreateWithArity(builtin_fs_renameSync, 2));
+  js_set(js, lib, "rmSync", Ant_Function_CreateWithArity(builtin_fs_rmSync, 2));
+  js_set(js, lib, "unlinkSync", Ant_Function_CreateWithArity(builtin_fs_unlinkSync, 1));
+  js_set(js, lib, "mkdirSync", Ant_Function_CreateWithArity(builtin_fs_mkdirSync, 2));
+  js_set(js, lib, "mkdtempSync", Ant_Function_CreateWithArity(builtin_fs_mkdtempSync, 2));
+  js_set(js, lib, "rmdirSync", Ant_Function_CreateWithArity(builtin_fs_rmdirSync, 2));
+  js_set(js, lib, "statSync", Ant_Function_CreateWithArity(builtin_fs_statSync, 1));
+  js_set(js, lib, "lstatSync", Ant_Function_CreateWithArity(builtin_fs_lstatSync, 1));
+  js_set(js, lib, "fstatSync", Ant_Function_CreateWithArity(builtin_fs_fstatSync, 1));
+  js_set(js, lib, "fsyncSync", Ant_Function_CreateWithArity(builtin_fs_fsyncSync, 1));
+  js_set(js, lib, "utimesSync", Ant_Function_CreateWithArity(builtin_fs_utimesSync, 3));
+  js_set(js, lib, "futimesSync", Ant_Function_CreateWithArity(builtin_fs_futimesSync, 3));
+  js_set(js, lib, "truncateSync", Ant_Function_CreateWithArity(builtin_fs_truncateSync, 2));
+  js_set(js, lib, "ftruncateSync", Ant_Function_CreateWithArity(builtin_fs_ftruncateSync, 1));
+  js_set(js, lib, "existsSync", Ant_Function_CreateWithArity(builtin_fs_existsSync, 1));
+  js_set(js, lib, "accessSync", Ant_Function_CreateWithArity(builtin_fs_accessSync, 2));
+  js_set(js, lib, "chmodSync", Ant_Function_CreateWithArity(builtin_fs_chmodSync, 2));
+  js_set(js, lib, "readdirSync", Ant_Function_CreateWithArity(builtin_fs_readdirSync, 2));
   js_set(js, lib, "realpathSync", realpath_sync);
-  js_set(js, lib, "readlinkSync", js_mkfun_arity(builtin_fs_readlinkSync, 2));
-  js_set(js, lib, "symlinkSync", js_mkfun_arity(builtin_fs_symlinkSync, 3));
-  js_set(js, lib, "linkSync", js_mkfun_arity(builtin_fs_linkSync, 2));
-  js_set(js, lib, "opendirSync", js_mkfun_arity(builtin_fs_opendirSync, 2));
-  js_set(js, lib, "watch", js_mkfun_arity(builtin_fs_watch, 3));
-  js_set(js, lib, "watchFile", js_mkfun_arity(builtin_fs_watchFile, 3));
-  js_set(js, lib, "unwatchFile", js_mkfun_arity(builtin_fs_unwatchFile, 2));
+  js_set(js, lib, "readlinkSync", Ant_Function_CreateWithArity(builtin_fs_readlinkSync, 2));
+  js_set(js, lib, "symlinkSync", Ant_Function_CreateWithArity(builtin_fs_symlinkSync, 3));
+  js_set(js, lib, "linkSync", Ant_Function_CreateWithArity(builtin_fs_linkSync, 2));
+  js_set(js, lib, "opendirSync", Ant_Function_CreateWithArity(builtin_fs_opendirSync, 2));
+  js_set(js, lib, "watch", Ant_Function_CreateWithArity(builtin_fs_watch, 3));
+  js_set(js, lib, "watchFile", Ant_Function_CreateWithArity(builtin_fs_watchFile, 3));
+  js_set(js, lib, "unwatchFile", Ant_Function_CreateWithArity(builtin_fs_unwatchFile, 2));
   js_set(js, lib, "FSWatcher", js->builtins.fswatcher_ctor);
   js_set(js, lib, "ReadStream", js->builtins.readstream_ctor);
   js_set(js, lib, "WriteStream", js->builtins.writestream_ctor);

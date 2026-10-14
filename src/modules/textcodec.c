@@ -423,23 +423,23 @@ void init_textcodec_module(ant_t *js) {
   ant_value_t g = js_glob(js);
 
   js->builtins.textencoder_proto = js_mkobj(js);
-  js_set_getter_desc(js, js->builtins.textencoder_proto, "encoding", 8, js_mkfun(js_textencoder_get_encoding), JS_DESC_C);
-  js_set(js, js->builtins.textencoder_proto, "encode",     js_mkfun(js_textencoder_encode));
-  js_set(js, js->builtins.textencoder_proto, "encodeInto", js_mkfun_arity(js_textencoder_encode_into, 2));
+  js_set_getter_desc(js, js->builtins.textencoder_proto, "encoding", 8, Ant_Function_Create(js_textencoder_get_encoding), JS_DESC_C);
+  js_set(js, js->builtins.textencoder_proto, "encode",     Ant_Function_Create(js_textencoder_encode));
+  js_set(js, js->builtins.textencoder_proto, "encodeInto", Ant_Function_CreateWithArity(js_textencoder_encode_into, 2));
   js_set_tostringtag(js, js->builtins.textencoder_proto, js_mkstr(js, "TextEncoder", 11));
   
-  ant_value_t te_ctor = js_make_intrinsic_ctor(js, js_textencoder_ctor, js->builtins.textencoder_proto, "TextEncoder", 0);
+  ant_value_t te_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_textencoder_ctor, js->builtins.textencoder_proto, "TextEncoder", 0);
   js_set(js, g, "TextEncoder", te_ctor);
   js_set_descriptor(js, g, "TextEncoder", 11, JS_DESC_W | JS_DESC_C);
 
   js->builtins.textdecoder_proto = js_mkobj(js);
-  js_set_getter_desc(js, js->builtins.textdecoder_proto, "encoding",  8, js_mkfun(js_textdecoder_get_encoding),  JS_DESC_C);
-  js_set_getter_desc(js, js->builtins.textdecoder_proto, "fatal",     5, js_mkfun(js_textdecoder_get_fatal),     JS_DESC_C);
-  js_set_getter_desc(js, js->builtins.textdecoder_proto, "ignoreBOM", 9, js_mkfun(js_textdecoder_get_ignore_bom), JS_DESC_C);
-  js_set(js, js->builtins.textdecoder_proto, "decode", js_mkfun(js_textdecoder_decode));
+  js_set_getter_desc(js, js->builtins.textdecoder_proto, "encoding",  8, Ant_Function_Create(js_textdecoder_get_encoding),  JS_DESC_C);
+  js_set_getter_desc(js, js->builtins.textdecoder_proto, "fatal",     5, Ant_Function_Create(js_textdecoder_get_fatal),     JS_DESC_C);
+  js_set_getter_desc(js, js->builtins.textdecoder_proto, "ignoreBOM", 9, Ant_Function_Create(js_textdecoder_get_ignore_bom), JS_DESC_C);
+  js_set(js, js->builtins.textdecoder_proto, "decode", Ant_Function_Create(js_textdecoder_decode));
   js_set_tostringtag(js, js->builtins.textdecoder_proto, js_mkstr(js, "TextDecoder", 11));
   
-  ant_value_t td_ctor = js_make_intrinsic_ctor(js, js_textdecoder_ctor, js->builtins.textdecoder_proto, "TextDecoder", 0);
+  ant_value_t td_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_textdecoder_ctor, js->builtins.textdecoder_proto, "TextDecoder", 0);
   js_set(js, g, "TextDecoder", td_ctor);
   js_set_descriptor(js, g, "TextDecoder", 11, JS_DESC_W | JS_DESC_C);
 }

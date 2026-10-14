@@ -787,10 +787,10 @@ ant_value_t readable_stream_tee(ant_t *js, ant_value_t source) {
 }
 
 void init_pipes_proto(ant_t *js, ant_value_t rs_proto) {
-  js_set(js, rs_proto, "pipeTo", js_mkfun(js_rs_pipe_to));
+  js_set(js, rs_proto, "pipeTo", Ant_Function_Create(js_rs_pipe_to));
   js_set_descriptor(js, rs_proto, "pipeTo", 6, JS_DESC_W | JS_DESC_C);
-  js_set(js, rs_proto, "pipeThrough", js_mkfun(js_rs_pipe_through));
+  js_set(js, rs_proto, "pipeThrough", Ant_Function_Create(js_rs_pipe_through));
   js_set_descriptor(js, rs_proto, "pipeThrough", 11, JS_DESC_W | JS_DESC_C);
-  js_set(js, rs_proto, "tee", js_mkfun(js_rs_tee));
+  js_set(js, rs_proto, "tee", Ant_Function_Create(js_rs_tee));
   js_set_descriptor(js, rs_proto, "tee", 3, JS_DESC_W | JS_DESC_C);
 }

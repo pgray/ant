@@ -1031,22 +1031,22 @@ void init_websocket_module(ant_t *js) {
 
   js->builtins.websocket_proto = js_mkobj(js);
   if (is_object_type(eventtarget_proto)) js_set_proto_init(js->builtins.websocket_proto, eventtarget_proto);
-  js_set(js, js->builtins.websocket_proto, "send", js_mkfun(js_websocket_send));
-  js_set(js, js->builtins.websocket_proto, "close", js_mkfun(js_websocket_close));
-  js_set(js, js->builtins.websocket_proto, "on", js_mkfun(js_websocket_on));
-  js_set(js, js->builtins.websocket_proto, "once", js_mkfun(js_websocket_once));
-  js_set(js, js->builtins.websocket_proto, "off", js_mkfun(js_websocket_off));
+  js_set(js, js->builtins.websocket_proto, "send", Ant_Function_Create(js_websocket_send));
+  js_set(js, js->builtins.websocket_proto, "close", Ant_Function_Create(js_websocket_close));
+  js_set(js, js->builtins.websocket_proto, "on", Ant_Function_Create(js_websocket_on));
+  js_set(js, js->builtins.websocket_proto, "once", Ant_Function_Create(js_websocket_once));
+  js_set(js, js->builtins.websocket_proto, "off", Ant_Function_Create(js_websocket_off));
   
   js_set_accessor_desc(
     js, js->builtins.websocket_proto, "binaryType", 10,
-    js_mkfun(js_websocket_get_binary_type), js_mkfun(js_websocket_set_binary_type),
+    Ant_Function_Create(js_websocket_get_binary_type), Ant_Function_Create(js_websocket_set_binary_type),
     JS_DESC_E | JS_DESC_C
   );
 
 #define WS_DEFINE_HANDLER(name, len) \
   js_set_accessor_desc( \
     js, js->builtins.websocket_proto, #name, len, \
-    js_mkfun(js_websocket_get_##name), js_mkfun(js_websocket_set_##name), \
+    Ant_Function_Create(js_websocket_get_##name), Ant_Function_Create(js_websocket_set_##name), \
     JS_DESC_E | JS_DESC_C \
   )
   WS_DEFINE_HANDLER(onopen, 6);
@@ -1060,7 +1060,7 @@ void init_websocket_module(ant_t *js) {
   js_set(js, js->builtins.websocket_proto, "CLOSING", js_mknum(WS_CLOSING));
   js_set(js, js->builtins.websocket_proto, "CLOSED", js_mknum(WS_CLOSED));
   js_set_tostringtag(js, js->builtins.websocket_proto, js_mkstr(js, "WebSocket", 9));
-  js->builtins.websocket_ctor = js_make_intrinsic_ctor(js, js_websocket_ctor, js->builtins.websocket_proto, "WebSocket", 1);
+  js->builtins.websocket_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_websocket_ctor, js->builtins.websocket_proto, "WebSocket", 1);
   js_set(js, js->builtins.websocket_ctor, "CONNECTING", js_mknum(WS_CONNECTING));
   js_set(js, js->builtins.websocket_ctor, "OPEN", js_mknum(WS_OPEN));
   js_set(js, js->builtins.websocket_ctor, "CLOSING", js_mknum(WS_CLOSING));
@@ -1070,13 +1070,13 @@ void init_websocket_module(ant_t *js) {
   js->builtins.message_event_proto = js_mkobj(js);
   if (is_object_type(event_proto)) js_set_proto_init(js->builtins.message_event_proto, event_proto);
   js_set_tostringtag(js, js->builtins.message_event_proto, js_mkstr(js, "MessageEvent", 12));
-  ant_value_t message_ctor = js_make_intrinsic_ctor(js, js_message_event_ctor, js->builtins.message_event_proto, "MessageEvent", 1);
+  ant_value_t message_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_message_event_ctor, js->builtins.message_event_proto, "MessageEvent", 1);
   js_set_global_builtin(js, "MessageEvent", message_ctor);
 
   js->builtins.close_event_proto = js_mkobj(js);
   if (is_object_type(event_proto)) js_set_proto_init(js->builtins.close_event_proto, event_proto);
   js_set_tostringtag(js, js->builtins.close_event_proto, js_mkstr(js, "CloseEvent", 10));
-  ant_value_t close_ctor = js_make_intrinsic_ctor(js, js_close_event_ctor, js->builtins.close_event_proto, "CloseEvent", 1);
+  ant_value_t close_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_close_event_ctor, js->builtins.close_event_proto, "CloseEvent", 1);
   js_set_global_builtin(js, "CloseEvent", close_ctor);
 }
 

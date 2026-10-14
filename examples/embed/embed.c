@@ -107,9 +107,9 @@ static void example_c_functions(void) {
 
 
   ant_value_t global = js_glob(js);
-  js_set(js, global, "add", js_mkfun(my_add));
-  js_set(js, global, "greet", js_mkfun(my_greet));
-  js_set(js, global, "createPoint", js_mkfun(my_create_point));
+  js_set(js, global, "add", Ant_Function_Create(my_add));
+  js_set(js, global, "greet", Ant_Function_Create(my_greet));
+  js_set(js, global, "createPoint", Ant_Function_Create(my_create_point));
 
   const char *code1 = "add(10, 32)";
   ant_value_t r1 = js_eval_bytecode_eval(js, code1, strlen(code1));
@@ -183,7 +183,7 @@ static void example_error_handling(void) {
   }
 
   ant_value_t global = js_glob(js);
-  js_set(js, global, "add", js_mkfun(my_add));
+  js_set(js, global, "add", Ant_Function_Create(my_add));
 
   const char *type_err = "add('not', 'numbers')";
   ant_value_t r3 = js_eval_bytecode_eval(js, type_err, strlen(type_err));
@@ -294,7 +294,7 @@ static void example_this_context(void) {
   ant_value_t person = js_mkobj(js);
   js_set(js, person, "firstName", js_mkstr(js, "Jane", 4));
   js_set(js, person, "lastName", js_mkstr(js, "Smith", 5));
-  js_set(js, person, "getFullName", js_mkfun(method_get_full_name));
+  js_set(js, person, "getFullName", Ant_Function_Create(method_get_full_name));
 
   js_set(js, js_glob(js), "person", person);
 

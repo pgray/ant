@@ -58,16 +58,16 @@ static void CheckCleanup(ant_t *js, int failure, int close_kind) {
   fail_next = failure == NEXT;
   fail_close = close_kind != 0;
   if (close_kind == 2) {
-    js_set_getter_desc(js, iterator, "return", 6, js_mkfun(IteratorReturn), JS_DESC_C);
+    js_set_getter_desc(js, iterator, "return", 6, Ant_Function_Create(IteratorReturn), JS_DESC_C);
   } else {
     js_delete_prop(js, iterator, "return", 6);
-    js_set(js, iterator, "return", js_mkfun(IteratorReturn));
+    js_set(js, iterator, "return", Ant_Function_Create(IteratorReturn));
   }
 
   fail_realloc = failure == GROW;
   fail_root_at = failure == INITIAL_ROOT ? 1 : failure == ITEM_ROOT ? 4 : failure == RESULT_ROOT ? 6 : 0;
   gc_temp_root_scope_t *previous_roots = js->temp_roots;
-  ant_value_t args[] = { iterator, js_mkfun(ThrowingMapper) };
+  ant_value_t args[] = { iterator, Ant_Function_Create(ThrowingMapper) };
   ant_value_t result = js_typedarray_from(js, args, failure == MAPPER ? 2 : 1, TYPED_ARRAY_UINT8, "Uint8Array");
   assert(js->temp_roots == previous_roots);
   assert(close_calls == (failure == INITIAL_ROOT ? 0 : 1));
@@ -105,8 +105,8 @@ int main(void) {
   original_reason = js_mkobj(js);
   GC_ROOT_PIN(js, original_reason);
   close_reason = js_mknull();
-  js_set_sym(js, iterator, js->sym.iterator_sym, js_mkfun(IteratorSelf));
-  js_set(js, iterator, "next", js_mkfun(IteratorNext));
+  js_set_sym(js, iterator, js->sym.iterator_sym, Ant_Function_Create(IteratorSelf));
+  js_set(js, iterator, "next", Ant_Function_Create(IteratorNext));
   js_setstackbase(js, NULL);
 
   for (int close_kind = 0; close_kind < 3; close_kind++) {

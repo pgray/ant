@@ -346,7 +346,7 @@ void temporal_init_plain_yearmonth(ant_t *js, ant_value_t temporal) {
   TEMPORAL_METHOD(js, proto, "valueOf", temporal_plain_yearmonth_value_of, 0);
   TEMPORAL_METHOD(js, proto, "with", temporal_plain_yearmonth_with, 1);
   temporal_set_to_string_tag(js, proto, "Temporal.PlainYearMonth");
-  ant_value_t ctor = js_make_intrinsic_ctor(js, temporal_plain_yearmonth_ctor, proto, "PlainYearMonth", 2);
+  ant_value_t ctor = Ant_Function_CreateIntrinsicConstructor(js, temporal_plain_yearmonth_ctor, proto, "PlainYearMonth", 2);
   TEMPORAL_METHOD(js, ctor, "compare", temporal_plain_yearmonth_compare, 2);
   TEMPORAL_METHOD(js, ctor, "from", temporal_plain_yearmonth_from, 1);
   temporal_set_namespace_property(js, temporal, "PlainYearMonth", ctor);

@@ -1485,26 +1485,26 @@ static ant_value_t js_console_table(ant_params_t) {
 }
 
 static void console_apply_methods(ant_t *js, ant_value_t console_obj) {
-  js_set(js, console_obj, "log", js_mkfun(js_console_log));
-  js_set(js, console_obj, "error", js_mkfun(js_console_error));
-  js_set(js, console_obj, "warn", js_mkfun(js_console_warn));
-  js_set(js, console_obj, "info", js_mkfun(js_console_info));
-  js_set(js, console_obj, "debug", js_mkfun(js_console_debug));
-  js_set(js, console_obj, "assert", js_mkfun_arity(js_console_assert, 1));
-  js_set(js, console_obj, "dir", js_mkfun_arity(js_console_dir, 2));
-  js_set(js, console_obj, "dirxml", js_mkfun(js_console_dirxml));
-  js_set(js, console_obj, "table", js_mkfun_arity(js_console_table, 2));
-  js_set(js, console_obj, "trace", js_mkfun(js_console_trace));
-  js_set(js, console_obj, "count", js_mkfun(js_console_count));
-  js_set(js, console_obj, "countReset", js_mkfun(js_console_countReset));
-  js_set(js, console_obj, "time", js_mkfun(js_console_time));
-  js_set(js, console_obj, "timeLog", js_mkfun(js_console_timeLog));
-  js_set(js, console_obj, "timeEnd", js_mkfun(js_console_timeEnd));
-  js_set(js, console_obj, "group", js_mkfun(js_console_group));
-  js_set(js, console_obj, "groupCollapsed", js_mkfun(js_console_group_collapsed));
-  js_set(js, console_obj, "groupEnd", js_mkfun(js_console_group_end));
-  js_set(js, console_obj, "clear", js_mkfun(js_console_clear));
-  js_set(js, console_obj, "inspect", js_mkfun(js_console_inspect));
+  js_set(js, console_obj, "log", Ant_Function_Create(js_console_log));
+  js_set(js, console_obj, "error", Ant_Function_Create(js_console_error));
+  js_set(js, console_obj, "warn", Ant_Function_Create(js_console_warn));
+  js_set(js, console_obj, "info", Ant_Function_Create(js_console_info));
+  js_set(js, console_obj, "debug", Ant_Function_Create(js_console_debug));
+  js_set(js, console_obj, "assert", Ant_Function_CreateWithArity(js_console_assert, 1));
+  js_set(js, console_obj, "dir", Ant_Function_CreateWithArity(js_console_dir, 2));
+  js_set(js, console_obj, "dirxml", Ant_Function_Create(js_console_dirxml));
+  js_set(js, console_obj, "table", Ant_Function_CreateWithArity(js_console_table, 2));
+  js_set(js, console_obj, "trace", Ant_Function_Create(js_console_trace));
+  js_set(js, console_obj, "count", Ant_Function_Create(js_console_count));
+  js_set(js, console_obj, "countReset", Ant_Function_Create(js_console_countReset));
+  js_set(js, console_obj, "time", Ant_Function_Create(js_console_time));
+  js_set(js, console_obj, "timeLog", Ant_Function_Create(js_console_timeLog));
+  js_set(js, console_obj, "timeEnd", Ant_Function_Create(js_console_timeEnd));
+  js_set(js, console_obj, "group", Ant_Function_Create(js_console_group));
+  js_set(js, console_obj, "groupCollapsed", Ant_Function_Create(js_console_group_collapsed));
+  js_set(js, console_obj, "groupEnd", Ant_Function_Create(js_console_group_end));
+  js_set(js, console_obj, "clear", Ant_Function_Create(js_console_clear));
+  js_set(js, console_obj, "inspect", Ant_Function_Create(js_console_inspect));
 }
 
 static ant_value_t js_console_constructor(ant_params_t) {
@@ -1546,7 +1546,7 @@ static void console_ensure_constructor(ant_t *js) {
   console_apply_methods(js, js->builtins.console_proto);
   
   js_set_tostringtag(js, js->builtins.console_proto, js_mkstr(js, "console", 7));
-  js->builtins.console_ctor = js_make_ctor(js, js_console_constructor, js->builtins.console_proto, "Console", 1);
+  js->builtins.console_ctor = Ant_Function_CreateConstructor(js, js_console_constructor, js->builtins.console_proto, "Console", 1);
 }
 
 static ant_value_t console_create_default(ant_t *js) {

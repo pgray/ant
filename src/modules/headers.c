@@ -1210,30 +1210,30 @@ void init_headers_module(ant_t *js) {
 
   js->builtins.headers_iter_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.headers_iter_proto, js->sym.iterator_proto);
-  js_set(js, js->builtins.headers_iter_proto, "next", js_mkfun(headers_iter_next));
+  js_set(js, js->builtins.headers_iter_proto, "next", Ant_Function_Create(headers_iter_next));
   js_set_descriptor(js, js->builtins.headers_iter_proto, "next", 4, JS_DESC_W | JS_DESC_E | JS_DESC_C);
-  js_set_sym(js, js->builtins.headers_iter_proto, js->sym.iterator_sym, js_mkfun(sym_this_cb));
+  js_set_sym(js, js->builtins.headers_iter_proto, js->sym.iterator_sym, Ant_Function_Create(sym_this_cb));
   js_iter_register_advance(js, js->builtins.headers_iter_proto, advance_headers);
 
   js->builtins.headers_proto = js_mkobj(js);
 
-  js_set(js, js->builtins.headers_proto, "append",       js_mkfun_arity(js_headers_append, 2));
-  js_set(js, js->builtins.headers_proto, "set",          js_mkfun_arity(js_headers_set, 2));
-  js_set(js, js->builtins.headers_proto, "get",          js_mkfun_arity(js_headers_get, 1));
-  js_set(js, js->builtins.headers_proto, "has",          js_mkfun_arity(js_headers_has, 1));
-  js_set(js, js->builtins.headers_proto, "delete",       js_mkfun_arity(js_headers_delete, 1));
-  js_set(js, js->builtins.headers_proto, "forEach",      js_mkfun_arity(js_headers_for_each, 1));
-  js_set(js, js->builtins.headers_proto, "keys",         js_mkfun(js_headers_keys));
-  js_set(js, js->builtins.headers_proto, "values",       js_mkfun(js_headers_values));
-  js_set(js, js->builtins.headers_proto, "entries",      js_mkfun(js_headers_entries));
-  js_set(js, js->builtins.headers_proto, "getSetCookie", js_mkfun(js_headers_get_set_cookie));
+  js_set(js, js->builtins.headers_proto, "append",       Ant_Function_CreateWithArity(js_headers_append, 2));
+  js_set(js, js->builtins.headers_proto, "set",          Ant_Function_CreateWithArity(js_headers_set, 2));
+  js_set(js, js->builtins.headers_proto, "get",          Ant_Function_CreateWithArity(js_headers_get, 1));
+  js_set(js, js->builtins.headers_proto, "has",          Ant_Function_CreateWithArity(js_headers_has, 1));
+  js_set(js, js->builtins.headers_proto, "delete",       Ant_Function_CreateWithArity(js_headers_delete, 1));
+  js_set(js, js->builtins.headers_proto, "forEach",      Ant_Function_CreateWithArity(js_headers_for_each, 1));
+  js_set(js, js->builtins.headers_proto, "keys",         Ant_Function_Create(js_headers_keys));
+  js_set(js, js->builtins.headers_proto, "values",       Ant_Function_Create(js_headers_values));
+  js_set(js, js->builtins.headers_proto, "entries",      Ant_Function_Create(js_headers_entries));
+  js_set(js, js->builtins.headers_proto, "getSetCookie", Ant_Function_Create(js_headers_get_set_cookie));
   
   js_set_sym(js, js->builtins.headers_proto, js->sym.iterator_sym,    js_get(js, js->builtins.headers_proto, "entries"));
-  js_set_sym(js, js->builtins.headers_proto, js->sym.inspect_sym,     js_mkfun(headers_inspect));
+  js_set_sym(js, js->builtins.headers_proto, js->sym.inspect_sym,     Ant_Function_Create(headers_inspect));
   js_set_tostringtag(js, js->builtins.headers_proto, js_mkstr(js, "Headers", 7));
 
   ant_value_t ctor_obj = js_mkobj(js);
-  js_set_slot(ctor_obj, SLOT_CFUNC, js_mkfun(js_headers_ctor));
+  js_set_slot(ctor_obj, SLOT_CFUNC, Ant_Function_Create(js_headers_ctor));
   js_mkprop_fast(js, ctor_obj, "prototype", 9, js->builtins.headers_proto);
   js_set_function_name(js, ctor_obj, "Headers", sizeof("Headers") - 1);
   

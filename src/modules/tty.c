@@ -785,8 +785,8 @@ static ant_value_t tty_read_stream_constructor(ant_params_t) {
   stream_set_attached_state(obj, state, tty_read_stream_finalize);
   
   js_set(js, obj, "isRaw", js_false);
-  js_set(js, obj, "_read", js_mkfun(tty_readstream__read));
-  js_set(js, obj, "_destroy", js_mkfun(tty_readstream__destroy));
+  js_set(js, obj, "_read", Ant_Function_Create(tty_readstream__read));
+  js_set(js, obj, "_destroy", Ant_Function_Create(tty_readstream__destroy));
   
   return obj;
 }
@@ -814,30 +814,30 @@ static ant_value_t tty_write_stream_constructor(ant_params_t) {
   if (is_err(obj)) return obj;
 
   ensure_stream_common_props(js, obj, fd);
-  js_set(js, obj, "_write", js_mkfun(tty_stream_write));
+  js_set(js, obj, "_write", Ant_Function_Create(tty_stream_write));
 
   return obj;
 }
 
 static void setup_readstream_proto(ant_t *js, ant_value_t proto) {
   if (!is_special_object(proto)) return;
-  js_set(js, proto, "setRawMode", js_mkfun_arity(tty_read_stream_set_raw_mode, 1));
+  js_set(js, proto, "setRawMode", Ant_Function_CreateWithArity(tty_read_stream_set_raw_mode, 1));
   js_set_tostringtag(js, proto, js_mkstr(js, "ReadStream", 10));
 }
 
 static void setup_writestream_proto(ant_t *js, ant_value_t proto) {
   if (!is_special_object(proto)) return;
 
-  js_set(js, proto, "write", js_mkfun(tty_stream_write));
-  js_set(js, proto, "clearLine", js_mkfun_arity(tty_write_stream_clear_line, 2));
-  js_set(js, proto, "clearScreenDown", js_mkfun_arity(tty_write_stream_clear_screen_down, 1));
-  js_set(js, proto, "cursorTo", js_mkfun_arity(tty_write_stream_cursor_to, 3));
-  js_set(js, proto, "moveCursor", js_mkfun_arity(tty_write_stream_move_cursor, 3));
-  js_set(js, proto, "getWindowSize", js_mkfun(tty_write_stream_get_window_size));
-  js_set(js, proto, "getColorDepth", js_mkfun(tty_write_stream_get_color_depth));
-  js_set(js, proto, "hasColors", js_mkfun_arity(tty_write_stream_has_colors, 2));
-  js_set_getter_desc(js, proto, "rows", 4, js_mkfun(tty_write_stream_rows_getter), JS_DESC_E | JS_DESC_C);
-  js_set_getter_desc(js, proto, "columns", 7, js_mkfun(tty_write_stream_columns_getter), JS_DESC_E | JS_DESC_C);
+  js_set(js, proto, "write", Ant_Function_Create(tty_stream_write));
+  js_set(js, proto, "clearLine", Ant_Function_CreateWithArity(tty_write_stream_clear_line, 2));
+  js_set(js, proto, "clearScreenDown", Ant_Function_CreateWithArity(tty_write_stream_clear_screen_down, 1));
+  js_set(js, proto, "cursorTo", Ant_Function_CreateWithArity(tty_write_stream_cursor_to, 3));
+  js_set(js, proto, "moveCursor", Ant_Function_CreateWithArity(tty_write_stream_move_cursor, 3));
+  js_set(js, proto, "getWindowSize", Ant_Function_Create(tty_write_stream_get_window_size));
+  js_set(js, proto, "getColorDepth", Ant_Function_Create(tty_write_stream_get_color_depth));
+  js_set(js, proto, "hasColors", Ant_Function_CreateWithArity(tty_write_stream_has_colors, 2));
+  js_set_getter_desc(js, proto, "rows", 4, Ant_Function_Create(tty_write_stream_rows_getter), JS_DESC_E | JS_DESC_C);
+  js_set_getter_desc(js, proto, "columns", 7, Ant_Function_Create(tty_write_stream_columns_getter), JS_DESC_E | JS_DESC_C);
   js_set_tostringtag(js, proto, js_mkstr(js, "WriteStream", 11));
 }
 
@@ -849,7 +849,7 @@ static void tty_init_stream_constructors(ant_t *js) {
   js_set_proto_init(js->builtins.tty_readstream_proto, stream_readable_prototype(js));
   setup_readstream_proto(js, js->builtins.tty_readstream_proto);
   
-  js->builtins.tty_readstream_ctor = js_make_ctor(js, tty_read_stream_constructor, js->builtins.tty_readstream_proto, "ReadStream", 2);
+  js->builtins.tty_readstream_ctor = Ant_Function_CreateConstructor(js, tty_read_stream_constructor, js->builtins.tty_readstream_proto, "ReadStream", 2);
   js_set_proto_init(js->builtins.tty_readstream_ctor, stream_readable_constructor(js));
   
   gc_register_root(&js->builtins.tty_readstream_proto);
@@ -859,7 +859,7 @@ static void tty_init_stream_constructors(ant_t *js) {
   js_set_proto_init(js->builtins.tty_writestream_proto, stream_writable_prototype(js));
   setup_writestream_proto(js, js->builtins.tty_writestream_proto);
   
-  js->builtins.tty_writestream_ctor = js_make_ctor(js, tty_write_stream_constructor, js->builtins.tty_writestream_proto, "WriteStream", 1);
+  js->builtins.tty_writestream_ctor = Ant_Function_CreateConstructor(js, tty_write_stream_constructor, js->builtins.tty_writestream_proto, "WriteStream", 1);
   js_set_proto_init(js->builtins.tty_writestream_ctor, stream_writable_constructor(js));
   
   gc_register_root(&js->builtins.tty_writestream_proto);
@@ -889,28 +889,28 @@ void init_tty_module(ant_t *js) {
   ant_value_t stdout_obj = js_get(js, process_obj, "stdout");
   if (is_special_object(stdout_obj)) {
     ensure_stream_common_props(js, stdout_obj, ANT_STDOUT_FD);
-    js_set_getter_desc(js, stdout_obj, "rows", 4, js_mkfun(tty_write_stream_rows_getter), JS_DESC_E | JS_DESC_C);
-    js_set_getter_desc(js, stdout_obj, "columns", 7, js_mkfun(tty_write_stream_columns_getter), JS_DESC_E | JS_DESC_C);
+    js_set_getter_desc(js, stdout_obj, "rows", 4, Ant_Function_Create(tty_write_stream_rows_getter), JS_DESC_E | JS_DESC_C);
+    js_set_getter_desc(js, stdout_obj, "columns", 7, Ant_Function_Create(tty_write_stream_columns_getter), JS_DESC_E | JS_DESC_C);
 
     ant_value_t stdout_proto = js_get_proto(js, stdout_obj);
     if (is_special_object(stdout_proto)) js_set_proto_init(stdout_proto, stream_duplex_prototype(js));
     setup_writestream_proto(js, stdout_proto);
     stream_init_duplex_object(js, stdout_obj, js_mkundef());
-    js_set(js, stdout_obj, "_write", js_mkfun(tty_stream_write));
+    js_set(js, stdout_obj, "_write", Ant_Function_Create(tty_stream_write));
     js_set(js, stdout_obj, "readable", js_false);
   }
 
   ant_value_t stderr_obj = js_get(js, process_obj, "stderr");
   if (is_special_object(stderr_obj)) {
     ensure_stream_common_props(js, stderr_obj, ANT_STDERR_FD);
-    js_set_getter_desc(js, stderr_obj, "rows", 4, js_mkfun(tty_write_stream_rows_getter), JS_DESC_E | JS_DESC_C);
-    js_set_getter_desc(js, stderr_obj, "columns", 7, js_mkfun(tty_write_stream_columns_getter), JS_DESC_E | JS_DESC_C);
+    js_set_getter_desc(js, stderr_obj, "rows", 4, Ant_Function_Create(tty_write_stream_rows_getter), JS_DESC_E | JS_DESC_C);
+    js_set_getter_desc(js, stderr_obj, "columns", 7, Ant_Function_Create(tty_write_stream_columns_getter), JS_DESC_E | JS_DESC_C);
     
     ant_value_t stderr_proto = js_get_proto(js, stderr_obj);
     if (is_special_object(stderr_proto)) js_set_proto_init(stderr_proto, stream_duplex_prototype(js));
     setup_writestream_proto(js, stderr_proto);
     stream_init_duplex_object(js, stderr_obj, js_mkundef());
-    js_set(js, stderr_obj, "_write", js_mkfun(tty_stream_write));
+    js_set(js, stderr_obj, "_write", Ant_Function_Create(tty_stream_write));
     js_set(js, stderr_obj, "readable", js_false);
   }
 }
@@ -926,7 +926,7 @@ ant_value_t tty_library(ant_t *js) {
   ant_value_t lib = js_mkobj(js);
   tty_init_stream_constructors(js);
 
-  js_set(js, lib, "isatty", js_mkfun_arity(tty_isatty, 1));
+  js_set(js, lib, "isatty", Ant_Function_CreateWithArity(tty_isatty, 1));
   js_set(js, lib, "ReadStream", js->builtins.tty_readstream_ctor);
   js_set(js, lib, "WriteStream", js->builtins.tty_writestream_ctor);
   js_set_tostringtag(js, lib, js_mkstr(js, "tty", 3));

@@ -364,6 +364,7 @@ void js_set_sym_descriptor(ant_t *js, ant_value_t obj, ant_value_t sym, int flag
 }
 
 void js_set_getter_desc(ant_t *js, ant_value_t obj, const char *key, size_t klen, ant_value_t getter, int flags) {
+  getter = js_cfunc_expose_property(js, getter, JS_CFUNC_GETTER, key, klen, false);
   assert(is_canonical_desc_obj(obj) && "js_set_getter_desc expects js_as_obj(...)");
 
   if (!is_canonical_desc_obj(obj)) return;
@@ -400,6 +401,7 @@ void js_set_getter_desc(ant_t *js, ant_value_t obj, const char *key, size_t klen
 }
 
 void js_set_setter_desc(ant_t *js, ant_value_t obj, const char *key, size_t klen, ant_value_t setter, int flags) {
+  setter = js_cfunc_expose_property(js, setter, JS_CFUNC_SETTER, key, klen, false);
   assert(is_canonical_desc_obj(obj) && "js_set_setter_desc expects js_as_obj(...)");
   if (!is_canonical_desc_obj(obj)) return;
   
@@ -437,6 +439,8 @@ void js_set_setter_desc(ant_t *js, ant_value_t obj, const char *key, size_t klen
 }
 
 void js_define_accessor_desc(ant_t *js, ant_value_t obj, const char *key, size_t klen, ant_value_t getter, ant_value_t setter, int flags) {
+  getter = js_cfunc_expose_property(js, getter, JS_CFUNC_GETTER, key, klen, false);
+  setter = js_cfunc_expose_property(js, setter, JS_CFUNC_SETTER, key, klen, false);
   ant_object_t *ptr = js_obj_ptr(obj);
   const char *interned = ptr && ptr->shape && !ptr->flags.is_exotic ? intern_string(key, klen) : NULL;
   
@@ -459,6 +463,8 @@ void js_define_accessor_desc(ant_t *js, ant_value_t obj, const char *key, size_t
 }
 
 void js_set_accessor_desc(ant_t *js, ant_value_t obj, const char *key, size_t klen, ant_value_t getter, ant_value_t setter, int flags) {
+  getter = js_cfunc_expose_property(js, getter, JS_CFUNC_GETTER, key, klen, false);
+  setter = js_cfunc_expose_property(js, setter, JS_CFUNC_SETTER, key, klen, false);
   assert(is_canonical_desc_obj(obj) && "js_set_accessor_desc expects js_as_obj(...)");
 
   if (!is_canonical_desc_obj(obj)) return;
@@ -496,6 +502,8 @@ void js_set_accessor_desc(ant_t *js, ant_value_t obj, const char *key, size_t kl
 }
 
 void js_set_sym_getter_desc(ant_t *js, ant_value_t obj, ant_value_t sym, ant_value_t getter, int flags) {
+  const char *desc = vtype(sym) == kTypeSymbol ? js_sym_desc(sym) : NULL;
+  getter = js_cfunc_expose_property(js, getter, JS_CFUNC_GETTER, desc, desc ? strlen(desc) : 0, true);
   assert(is_canonical_desc_obj(obj) && "js_set_sym_getter_desc expects js_as_obj(...)");
 
   if (!is_canonical_desc_obj(obj)) return;
@@ -531,6 +539,8 @@ void js_set_sym_getter_desc(ant_t *js, ant_value_t obj, ant_value_t sym, ant_val
 }
 
 void js_set_sym_setter_desc(ant_t *js, ant_value_t obj, ant_value_t sym, ant_value_t setter, int flags) {
+  const char *desc = vtype(sym) == kTypeSymbol ? js_sym_desc(sym) : NULL;
+  setter = js_cfunc_expose_property(js, setter, JS_CFUNC_SETTER, desc, desc ? strlen(desc) : 0, true);
   assert(is_canonical_desc_obj(obj) && "js_set_sym_setter_desc expects js_as_obj(...)");
 
   if (!is_canonical_desc_obj(obj)) return;

@@ -1148,44 +1148,44 @@ void init_writable_stream_module(ant_t *js) {
   js->builtins.close_sentinel = js_mkobj(js);
   js->builtins.ws_controller_proto = js_mkobj(js);
   
-  js_set_getter_desc(js, js->builtins.ws_controller_proto, "signal", 6, js_mkfun(js_ws_controller_get_signal), JS_DESC_C);
-  js_set(js, js->builtins.ws_controller_proto, "error", js_mkfun(js_ws_controller_error));
+  js_set_getter_desc(js, js->builtins.ws_controller_proto, "signal", 6, Ant_Function_Create(js_ws_controller_get_signal), JS_DESC_C);
+  js_set(js, js->builtins.ws_controller_proto, "error", Ant_Function_Create(js_ws_controller_error));
   js_set_descriptor(js, js->builtins.ws_controller_proto, "error", 5, JS_DESC_W | JS_DESC_C);
   js_set_tostringtag(js, js->builtins.ws_controller_proto, js_mkstr(js, "WritableStreamDefaultController", 31));
 
-  ant_value_t ctrl_ctor = js_make_intrinsic_ctor(js, js_ws_controller_ctor, js->builtins.ws_controller_proto, "WritableStreamDefaultController", 0);
+  ant_value_t ctrl_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_ws_controller_ctor, js->builtins.ws_controller_proto, "WritableStreamDefaultController", 0);
   js_set(js, g, "WritableStreamDefaultController", ctrl_ctor);
   js_set_descriptor(js, g, "WritableStreamDefaultController", 31, JS_DESC_W | JS_DESC_C);
 
   js->builtins.ws_writer_proto = js_mkobj(js);
-  js_set_getter_desc(js, js->builtins.ws_writer_proto, "closed", 6, js_mkfun(js_ws_writer_get_closed), JS_DESC_C);
-  js_set_getter_desc(js, js->builtins.ws_writer_proto, "desiredSize", 11, js_mkfun(js_ws_writer_get_desired_size), JS_DESC_C);
-  js_set_getter_desc(js, js->builtins.ws_writer_proto, "ready", 5, js_mkfun(js_ws_writer_get_ready), JS_DESC_C);
-  js_set(js, js->builtins.ws_writer_proto, "abort", js_mkfun(js_ws_writer_abort));
+  js_set_getter_desc(js, js->builtins.ws_writer_proto, "closed", 6, Ant_Function_Create(js_ws_writer_get_closed), JS_DESC_C);
+  js_set_getter_desc(js, js->builtins.ws_writer_proto, "desiredSize", 11, Ant_Function_Create(js_ws_writer_get_desired_size), JS_DESC_C);
+  js_set_getter_desc(js, js->builtins.ws_writer_proto, "ready", 5, Ant_Function_Create(js_ws_writer_get_ready), JS_DESC_C);
+  js_set(js, js->builtins.ws_writer_proto, "abort", Ant_Function_Create(js_ws_writer_abort));
   js_set_descriptor(js, js->builtins.ws_writer_proto, "abort", 5, JS_DESC_W | JS_DESC_C);
-  js_set(js, js->builtins.ws_writer_proto, "close", js_mkfun(js_ws_writer_close));
+  js_set(js, js->builtins.ws_writer_proto, "close", Ant_Function_Create(js_ws_writer_close));
   js_set_descriptor(js, js->builtins.ws_writer_proto, "close", 5, JS_DESC_W | JS_DESC_C);
-  js_set(js, js->builtins.ws_writer_proto, "releaseLock", js_mkfun(js_ws_writer_release_lock));
+  js_set(js, js->builtins.ws_writer_proto, "releaseLock", Ant_Function_Create(js_ws_writer_release_lock));
   js_set_descriptor(js, js->builtins.ws_writer_proto, "releaseLock", 11, JS_DESC_W | JS_DESC_C);
-  js_set(js, js->builtins.ws_writer_proto, "write", js_mkfun(js_ws_writer_write));
+  js_set(js, js->builtins.ws_writer_proto, "write", Ant_Function_Create(js_ws_writer_write));
   js_set_descriptor(js, js->builtins.ws_writer_proto, "write", 5, JS_DESC_W | JS_DESC_C);
   js_set_tostringtag(js, js->builtins.ws_writer_proto, js_mkstr(js, "WritableStreamDefaultWriter", 27));
 
-  ant_value_t writer_ctor = js_make_intrinsic_ctor(js, js_ws_writer_ctor, js->builtins.ws_writer_proto, "WritableStreamDefaultWriter", 1);
+  ant_value_t writer_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_ws_writer_ctor, js->builtins.ws_writer_proto, "WritableStreamDefaultWriter", 1);
   js_set(js, g, "WritableStreamDefaultWriter", writer_ctor);
   js_set_descriptor(js, g, "WritableStreamDefaultWriter", 27, JS_DESC_W | JS_DESC_C);
 
   js->builtins.ws_proto = js_mkobj(js);
-  js_set_getter_desc(js, js->builtins.ws_proto, "locked", 6, js_mkfun(js_ws_get_locked), JS_DESC_C);
-  js_set(js, js->builtins.ws_proto, "abort", js_mkfun(js_ws_abort));
+  js_set_getter_desc(js, js->builtins.ws_proto, "locked", 6, Ant_Function_Create(js_ws_get_locked), JS_DESC_C);
+  js_set(js, js->builtins.ws_proto, "abort", Ant_Function_Create(js_ws_abort));
   js_set_descriptor(js, js->builtins.ws_proto, "abort", 5, JS_DESC_W | JS_DESC_C);
-  js_set(js, js->builtins.ws_proto, "close", js_mkfun(js_ws_close));
+  js_set(js, js->builtins.ws_proto, "close", Ant_Function_Create(js_ws_close));
   js_set_descriptor(js, js->builtins.ws_proto, "close", 5, JS_DESC_W | JS_DESC_C);
-  js_set(js, js->builtins.ws_proto, "getWriter", js_mkfun(js_ws_get_writer));
+  js_set(js, js->builtins.ws_proto, "getWriter", Ant_Function_Create(js_ws_get_writer));
   js_set_descriptor(js, js->builtins.ws_proto, "getWriter", 9, JS_DESC_W | JS_DESC_C);
   js_set_tostringtag(js, js->builtins.ws_proto, js_mkstr(js, "WritableStream", 14));
 
-  ant_value_t ws_ctor = js_make_intrinsic_ctor(js, js_ws_ctor, js->builtins.ws_proto, "WritableStream", 0);
+  ant_value_t ws_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_ws_ctor, js->builtins.ws_proto, "WritableStream", 0);
   js_set(js, g, "WritableStream", ws_ctor);
   js_set_descriptor(js, g, "WritableStream", 14, JS_DESC_W | JS_DESC_C);
 }

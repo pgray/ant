@@ -1798,15 +1798,15 @@ void init_bigint_module(ant_t *js) {
   js->sym.bigint_proto = bigint_proto;
   js_set_proto_init(bigint_proto, object_proto);
   
-  defmethod(js, bigint_proto, "toString", 8, js_mkfun(builtin_bigint_toString));
-  defmethod(js, bigint_proto, "valueOf", 7, js_mkfun(builtin_bigint_valueOf));
+  defmethod(js, bigint_proto, "toString", 8, Ant_Function_Create(builtin_bigint_toString));
+  defmethod(js, bigint_proto, "valueOf", 7, Ant_Function_Create(builtin_bigint_valueOf));
   js_set_tostringtag(js, bigint_proto, ANT_STRING("BigInt"));
 
   ant_value_t bigint_ctor_obj = mkobj(js, 0);
   js_set_proto_init(bigint_ctor_obj, function_proto);
-  js_set_slot(bigint_ctor_obj, SLOT_CFUNC, js_mkfun_arity(builtin_BigInt, 1));
-  defmethod(js, bigint_ctor_obj, "asIntN", 6, js_mkfun_arity(builtin_BigInt_asIntN, 2));
-  defmethod(js, bigint_ctor_obj, "asUintN", 7, js_mkfun_arity(builtin_BigInt_asUintN, 2));
+  js_set_slot(bigint_ctor_obj, SLOT_CFUNC, Ant_Function_CreateWithArity(builtin_BigInt, 1));
+  defmethod(js, bigint_ctor_obj, "asIntN", 6, Ant_Function_CreateWithArity(builtin_BigInt_asIntN, 2));
+  defmethod(js, bigint_ctor_obj, "asUintN", 7, Ant_Function_CreateWithArity(builtin_BigInt_asUintN, 2));
   js_setprop_nonconfigurable(js, bigint_ctor_obj, "prototype", 9, bigint_proto);
   js_set_function_name(js, bigint_ctor_obj, "BigInt", sizeof("BigInt") - 1);
   js_set_global_builtin(js, "BigInt", js_obj_to_func(js, bigint_ctor_obj));

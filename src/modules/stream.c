@@ -454,12 +454,12 @@ static ant_value_t js_writable_hwm_getter(ant_params_t) {
 }
 
 static void stream_define_writable_accessors(ant_t *js, ant_value_t proto) {
-  js_set_getter_desc(js, proto, "writable", 8, js_mkfun(js_writable_writable_getter), JS_DESC_C);
-  js_set_getter_desc(js, proto, "writableEnded", 13, js_mkfun(js_writable_ended_getter), JS_DESC_C);
-  js_set_getter_desc(js, proto, "writableFinished", 16, js_mkfun(js_writable_finished_getter), JS_DESC_C);
-  js_set_getter_desc(js, proto, "writableHighWaterMark", 21, js_mkfun(js_writable_hwm_getter), JS_DESC_C);
-  js_set_getter_desc(js, proto, "writableLength", 14, js_mkfun(js_writable_length_getter), JS_DESC_C);
-  js_set_getter_desc(js, proto, "writableNeedDrain", 17, js_mkfun(js_writable_need_drain_getter), JS_DESC_C);
+  js_set_getter_desc(js, proto, "writable", 8, Ant_Function_Create(js_writable_writable_getter), JS_DESC_C);
+  js_set_getter_desc(js, proto, "writableEnded", 13, Ant_Function_Create(js_writable_ended_getter), JS_DESC_C);
+  js_set_getter_desc(js, proto, "writableFinished", 16, Ant_Function_Create(js_writable_finished_getter), JS_DESC_C);
+  js_set_getter_desc(js, proto, "writableHighWaterMark", 21, Ant_Function_Create(js_writable_hwm_getter), JS_DESC_C);
+  js_set_getter_desc(js, proto, "writableLength", 14, Ant_Function_Create(js_writable_length_getter), JS_DESC_C);
+  js_set_getter_desc(js, proto, "writableNeedDrain", 17, Ant_Function_Create(js_writable_need_drain_getter), JS_DESC_C);
 }
 
 static void stream_init_writable(ant_t *js, ant_value_t obj, ant_value_t raw_options) {
@@ -1758,7 +1758,7 @@ static ant_value_t stream_finished_register(ant_t *js, ant_value_t stream_obj, a
   ant_value_t on_finish = 0;
   ant_value_t on_error = 0;
 
-  if (!is_callable(callback)) callback = js_mkfun(stream_noop);
+  if (!is_callable(callback)) callback = Ant_Function_Create(stream_noop);
 
   js_set(js, state_obj, "stream", stream_obj);
   js_set(js, state_obj, "callback", callback);
@@ -1828,7 +1828,7 @@ static ant_value_t js_stream_pipeline(ant_params_t) {
     stream_count--;
   }
   
-  if (!is_callable(callback)) callback = js_mkfun(stream_noop);
+  if (!is_callable(callback)) callback = Ant_Function_Create(stream_noop);
   if (stream_count <= 0) return js_mkundef();
 
   done_state = js_mkobj(js);
@@ -2281,69 +2281,69 @@ void stream_init_constructors(ant_t *js) {
 
   js->builtins.stream_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.stream_proto, ee_proto);
-  js_set(js, js->builtins.stream_proto, "pipe", js_mkfun_arity(js_stream_pipe, 2));
-  js_set(js, js->builtins.stream_proto, "unpipe", js_mkfun(js_stream_unpipe));
-  js_set(js, js->builtins.stream_proto, "pause", js_mkfun(js_stream_pause));
-  js_set(js, js->builtins.stream_proto, "resume", js_mkfun(js_stream_resume));
-  js_set(js, js->builtins.stream_proto, "isPaused", js_mkfun(js_stream_is_paused));
-  js_set(js, js->builtins.stream_proto, "destroy", js_mkfun(js_stream_destroy));
+  js_set(js, js->builtins.stream_proto, "pipe", Ant_Function_CreateWithArity(js_stream_pipe, 2));
+  js_set(js, js->builtins.stream_proto, "unpipe", Ant_Function_Create(js_stream_unpipe));
+  js_set(js, js->builtins.stream_proto, "pause", Ant_Function_Create(js_stream_pause));
+  js_set(js, js->builtins.stream_proto, "resume", Ant_Function_Create(js_stream_resume));
+  js_set(js, js->builtins.stream_proto, "isPaused", Ant_Function_Create(js_stream_is_paused));
+  js_set(js, js->builtins.stream_proto, "destroy", Ant_Function_Create(js_stream_destroy));
   js_set_tostringtag(js, js->builtins.stream_proto, js_mkstr(js, "Stream", 6));
-  js->builtins.stream_ctor = js_make_ctor(js, js_stream_ctor, js->builtins.stream_proto, "Stream", 1);
+  js->builtins.stream_ctor = Ant_Function_CreateConstructor(js, js_stream_ctor, js->builtins.stream_proto, "Stream", 1);
 
   js->builtins.readable_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.readable_proto, js->builtins.stream_proto);
-  js_set(js, js->builtins.readable_proto, "_read", js_mkfun_arity(js_readable__read, 1));
-  js_set(js, js->builtins.readable_proto, "push", js_mkfun_arity(js_readable_push, 2));
-  js_set(js, js->builtins.readable_proto, "read", js_mkfun_arity(js_readable_read, 1));
-  js_set(js, js->builtins.readable_proto, "setEncoding", js_mkfun_arity(js_readable_set_encoding, 1));
-  js_set(js, js->builtins.readable_proto, "on", js_mkfun_arity(js_readable_on, 2));
+  js_set(js, js->builtins.readable_proto, "_read", Ant_Function_CreateWithArity(js_readable__read, 1));
+  js_set(js, js->builtins.readable_proto, "push", Ant_Function_CreateWithArity(js_readable_push, 2));
+  js_set(js, js->builtins.readable_proto, "read", Ant_Function_CreateWithArity(js_readable_read, 1));
+  js_set(js, js->builtins.readable_proto, "setEncoding", Ant_Function_CreateWithArity(js_readable_set_encoding, 1));
+  js_set(js, js->builtins.readable_proto, "on", Ant_Function_CreateWithArity(js_readable_on, 2));
   js_set_exact(js, js->builtins.readable_proto, "addListener", js_get(js, js->builtins.readable_proto, "on"));
-  js_set(js, js->builtins.readable_proto, "once", js_mkfun(js_readable_once));
-  js_set(js, js->builtins.readable_proto, "resume", js_mkfun(js_readable_resume));
-  js_set(js, js->builtins.readable_proto, "pause", js_mkfun(js_readable_pause));
+  js_set(js, js->builtins.readable_proto, "once", Ant_Function_Create(js_readable_once));
+  js_set(js, js->builtins.readable_proto, "resume", Ant_Function_Create(js_readable_resume));
+  js_set(js, js->builtins.readable_proto, "pause", Ant_Function_Create(js_readable_pause));
   js_set_tostringtag(js, js->builtins.readable_proto, js_mkstr(js, "Readable", 8));
-  js->builtins.readable_ctor = js_make_ctor(js, js_readable_ctor, js->builtins.readable_proto, "Readable", 1);
-  js_set(js, js->builtins.readable_ctor, "from", js_mkfun(js_readable_from));
-  js_set(js, js->builtins.readable_ctor, "fromWeb", js_mkfun(js_readable_from_web));
-  js_set(js, js->builtins.readable_ctor, "toWeb", js_mkfun(js_readable_to_web));
+  js->builtins.readable_ctor = Ant_Function_CreateConstructor(js, js_readable_ctor, js->builtins.readable_proto, "Readable", 1);
+  js_set(js, js->builtins.readable_ctor, "from", Ant_Function_Create(js_readable_from));
+  js_set(js, js->builtins.readable_ctor, "fromWeb", Ant_Function_Create(js_readable_from_web));
+  js_set(js, js->builtins.readable_ctor, "toWeb", Ant_Function_Create(js_readable_to_web));
 
   js->builtins.writable_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.writable_proto, js->builtins.stream_proto);
-  js_set(js, js->builtins.writable_proto, "_write", js_mkfun_arity(js_writable__write, 3));
-  js_set(js, js->builtins.writable_proto, "_final", js_mkfun(js_writable__final));
-  js_set(js, js->builtins.writable_proto, "write", js_mkfun_arity(js_writable_write, 3));
+  js_set(js, js->builtins.writable_proto, "_write", Ant_Function_CreateWithArity(js_writable__write, 3));
+  js_set(js, js->builtins.writable_proto, "_final", Ant_Function_Create(js_writable__final));
+  js_set(js, js->builtins.writable_proto, "write", Ant_Function_CreateWithArity(js_writable_write, 3));
   stream_define_writable_accessors(js, js->builtins.writable_proto);
-  js_set(js, js->builtins.writable_proto, "end", js_mkfun_arity(js_writable_end, 3));
-  js_set(js, js->builtins.writable_proto, "cork", js_mkfun(stream_noop));
-  js_set(js, js->builtins.writable_proto, "uncork", js_mkfun(stream_noop));
+  js_set(js, js->builtins.writable_proto, "end", Ant_Function_CreateWithArity(js_writable_end, 3));
+  js_set(js, js->builtins.writable_proto, "cork", Ant_Function_Create(stream_noop));
+  js_set(js, js->builtins.writable_proto, "uncork", Ant_Function_Create(stream_noop));
   js_set_tostringtag(js, js->builtins.writable_proto, js_mkstr(js, "Writable", 8));
-  js->builtins.writable_ctor = js_make_ctor(js, js_writable_ctor, js->builtins.writable_proto, "Writable", 1);
+  js->builtins.writable_ctor = Ant_Function_CreateConstructor(js, js_writable_ctor, js->builtins.writable_proto, "Writable", 1);
 
   js->builtins.duplex_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.duplex_proto, js->builtins.readable_proto);
-  js_set(js, js->builtins.duplex_proto, "_write", js_mkfun_arity(js_writable__write, 3));
-  js_set(js, js->builtins.duplex_proto, "_final", js_mkfun(js_writable__final));
-  js_set(js, js->builtins.duplex_proto, "write", js_mkfun_arity(js_writable_write, 3));
+  js_set(js, js->builtins.duplex_proto, "_write", Ant_Function_CreateWithArity(js_writable__write, 3));
+  js_set(js, js->builtins.duplex_proto, "_final", Ant_Function_Create(js_writable__final));
+  js_set(js, js->builtins.duplex_proto, "write", Ant_Function_CreateWithArity(js_writable_write, 3));
   stream_define_writable_accessors(js, js->builtins.duplex_proto);
-  js_set(js, js->builtins.duplex_proto, "end", js_mkfun_arity(js_writable_end, 3));
-  js_set(js, js->builtins.duplex_proto, "cork", js_mkfun(stream_noop));
-  js_set(js, js->builtins.duplex_proto, "uncork", js_mkfun(stream_noop));
+  js_set(js, js->builtins.duplex_proto, "end", Ant_Function_CreateWithArity(js_writable_end, 3));
+  js_set(js, js->builtins.duplex_proto, "cork", Ant_Function_Create(stream_noop));
+  js_set(js, js->builtins.duplex_proto, "uncork", Ant_Function_Create(stream_noop));
   js_set_tostringtag(js, js->builtins.duplex_proto, js_mkstr(js, "Duplex", 6));
-  js->builtins.duplex_ctor = js_make_ctor(js, js_duplex_ctor, js->builtins.duplex_proto, "Duplex", 1);
+  js->builtins.duplex_ctor = Ant_Function_CreateConstructor(js, js_duplex_ctor, js->builtins.duplex_proto, "Duplex", 1);
 
   js->builtins.stream_transform_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.stream_transform_proto, js->builtins.duplex_proto);
-  js_set(js, js->builtins.stream_transform_proto, "_transform", js_mkfun_arity(js_transform__transform, 3));
-  js_set(js, js->builtins.stream_transform_proto, "_write", js_mkfun_arity(js_transform__write, 3));
-  js_set(js, js->builtins.stream_transform_proto, "_final", js_mkfun_arity(js_transform__final, 1));
+  js_set(js, js->builtins.stream_transform_proto, "_transform", Ant_Function_CreateWithArity(js_transform__transform, 3));
+  js_set(js, js->builtins.stream_transform_proto, "_write", Ant_Function_CreateWithArity(js_transform__write, 3));
+  js_set(js, js->builtins.stream_transform_proto, "_final", Ant_Function_CreateWithArity(js_transform__final, 1));
   js_set_tostringtag(js, js->builtins.stream_transform_proto, js_mkstr(js, "Transform", 9));
-  js->builtins.stream_transform_ctor = js_make_ctor(js, js_transform_ctor, js->builtins.stream_transform_proto, "Transform", 1);
+  js->builtins.stream_transform_ctor = Ant_Function_CreateConstructor(js, js_transform_ctor, js->builtins.stream_transform_proto, "Transform", 1);
 
   js->builtins.passthrough_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.passthrough_proto, js->builtins.stream_transform_proto);
-  js_set(js, js->builtins.passthrough_proto, "_transform", js_mkfun_arity(js_passthrough__transform, 3));
+  js_set(js, js->builtins.passthrough_proto, "_transform", Ant_Function_CreateWithArity(js_passthrough__transform, 3));
   js_set_tostringtag(js, js->builtins.passthrough_proto, js_mkstr(js, "PassThrough", 11));
-  js->builtins.passthrough_ctor = js_make_ctor(js, js_passthrough_ctor, js->builtins.passthrough_proto, "PassThrough", 1);
+  js->builtins.passthrough_ctor = Ant_Function_CreateConstructor(js, js_passthrough_ctor, js->builtins.passthrough_proto, "PassThrough", 1);
 
   js->builtins.stream_utf8 = js_mkstr(js, "utf8", 4);
   gc_register_root(&js->builtins.stream_utf8);
@@ -2517,8 +2517,8 @@ ant_value_t stream_library(ant_t *js) {
   ant_value_t promises = js_mkobj(js);
   stream_init_constructors(js);
 
-  js_set(js, promises, "pipeline", js_mkfun(js_stream_promises_pipeline));
-  js_set(js, promises, "finished", js_mkfun(js_stream_promises_finished));
+  js_set(js, promises, "pipeline", Ant_Function_Create(js_stream_promises_pipeline));
+  js_set(js, promises, "finished", Ant_Function_Create(js_stream_promises_finished));
 
   js_set_module_default(js, lib, js->builtins.stream_ctor, "Stream");
   js_set(js, lib, "Readable", js->builtins.readable_ctor);
@@ -2526,14 +2526,14 @@ ant_value_t stream_library(ant_t *js) {
   js_set(js, lib, "Duplex", js->builtins.duplex_ctor);
   js_set(js, lib, "Transform", js->builtins.stream_transform_ctor);
   js_set(js, lib, "PassThrough", js->builtins.passthrough_ctor);
-  js_set(js, lib, "pipeline", js_mkfun(js_stream_pipeline));
-  js_set(js, lib, "finished", js_mkfun_arity(js_stream_finished, 3));
-  js_set(js, lib, "getDefaultHighWaterMark", js_mkfun_arity(js_stream_get_default_high_water_mark, 1));
-  js_set(js, lib, "setDefaultHighWaterMark", js_mkfun_arity(js_stream_set_default_high_water_mark, 2));
-  js_set(js, lib, "isDestroyed", js_mkfun_arity(js_stream_is_destroyed, 1));
-  js_set(js, lib, "isDisturbed", js_mkfun_arity(js_stream_is_disturbed, 1));
-  js_set(js, lib, "isErrored", js_mkfun_arity(js_stream_is_errored, 1));
-  js_set(js, lib, "isReadable", js_mkfun_arity(js_stream_is_readable, 1));
+  js_set(js, lib, "pipeline", Ant_Function_Create(js_stream_pipeline));
+  js_set(js, lib, "finished", Ant_Function_CreateWithArity(js_stream_finished, 3));
+  js_set(js, lib, "getDefaultHighWaterMark", Ant_Function_CreateWithArity(js_stream_get_default_high_water_mark, 1));
+  js_set(js, lib, "setDefaultHighWaterMark", Ant_Function_CreateWithArity(js_stream_set_default_high_water_mark, 2));
+  js_set(js, lib, "isDestroyed", Ant_Function_CreateWithArity(js_stream_is_destroyed, 1));
+  js_set(js, lib, "isDisturbed", Ant_Function_CreateWithArity(js_stream_is_disturbed, 1));
+  js_set(js, lib, "isErrored", Ant_Function_CreateWithArity(js_stream_is_errored, 1));
+  js_set(js, lib, "isReadable", Ant_Function_CreateWithArity(js_stream_is_readable, 1));
   js_set(js, lib, "promises", promises);
 
   js_set(js, js->builtins.stream_ctor, "Readable", js->builtins.readable_ctor);

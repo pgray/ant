@@ -43,7 +43,7 @@ void init_performance_module(ant_t *js) {
   ant_value_t perf_obj = js_mkobj(js);
 
   js->perf_time_origin_ms = get_current_time_ms();
-  js_set(js, perf_obj, "now", js_mkfun(js_performance_now));
+  js_set(js, perf_obj, "now", Ant_Function_Create(js_performance_now));
   js_set(js, perf_obj, "timeOrigin", js_mknum(js->perf_time_origin_ms));
   
   js_set_tostringtag(js, perf_obj, ANT_STRING("Performance"));

@@ -238,7 +238,7 @@ static ant_value_t js_syntax_parse_javascript(ant_params_t) {
 
 ant_value_t syntax_library(ant_t *js) {
   ant_value_t lib = js_mkobj(js);
-  js_set(js, lib, "stripTypes", js_mkfun_arity(js_syntax_strip_types, 1));
-  js_set(js, lib, "parseJavaScript", js_mkfun_arity(js_syntax_parse_javascript, 1));
+  js_set(js, lib, "stripTypes", Ant_Function_CreateWithArity(js_syntax_strip_types, 1));
+  js_set(js, lib, "parseJavaScript", Ant_Function_CreateWithArity(js_syntax_parse_javascript, 1));
   return lib;
 }

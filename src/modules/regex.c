@@ -1840,7 +1840,7 @@ static ant_value_t regexp_attach_exec_result(ant_t *js,const regexp_exec_result_
     js_set_slot(ctx->array, SLOT_REGEXP_GROUPS_CACHE, js_mkundef());
     js_set_getter_desc(
       js, js_as_obj(ctx->array), "groups", 6,
-      js_mkfun(builtin_regexp_groups_getter), JS_DESC_E | JS_DESC_C
+      Ant_Function_Create(builtin_regexp_groups_getter), JS_DESC_E | JS_DESC_C
     );
   }
   else if (is_err(setprop_cstr(js, ctx->array, "groups", 6, js_mkundef()))) 
@@ -4416,9 +4416,9 @@ void init_regex_module(ant_t *js) {
   js_set_proto_init(regexp_proto, object_proto);
   js->builtins.regexp_proto = regexp_proto;
   
-  defmethod(js, regexp_proto, "test", 4, js_mkfun_arity(builtin_regexp_test, 1));
-  defmethod(js, regexp_proto, "exec", 4, js_mkfun_arity(builtin_regexp_exec, 1));
-  defmethod(js, regexp_proto, "toString", 8, js_mkfun(builtin_regexp_toString));
+  defmethod(js, regexp_proto, "test", 4, Ant_Function_CreateWithArity(builtin_regexp_test, 1));
+  defmethod(js, regexp_proto, "exec", 4, Ant_Function_CreateWithArity(builtin_regexp_exec, 1));
+  defmethod(js, regexp_proto, "toString", 8, Ant_Function_Create(builtin_regexp_toString));
 
   js_mkprop_fast(js, regexp_proto, "global", 6, js_false);
   js_mkprop_fast(js, regexp_proto, "ignoreCase", 10, js_false);
@@ -4429,23 +4429,23 @@ void init_regex_module(ant_t *js) {
   js_mkprop_fast(js, regexp_proto, "hasIndices", 10, js_false);
   js_mkprop_fast(js, regexp_proto, "unicodeSets", 11, js_false);
 
-  js_set_sym(js, regexp_proto, js->sym.split_sym, js_mkfun(builtin_regexp_symbol_split));
-  js_set_sym(js, regexp_proto, js->sym.match_sym, js_mkfun(builtin_regexp_symbol_match));
-  js_set_sym(js, regexp_proto, js->sym.matchAll_sym, js_mkfun(builtin_regexp_symbol_matchAll));
+  js_set_sym(js, regexp_proto, js->sym.split_sym, Ant_Function_CreateWithArity(builtin_regexp_symbol_split, 2));
+  js_set_sym(js, regexp_proto, js->sym.match_sym, Ant_Function_CreateWithArity(builtin_regexp_symbol_match, 1));
+  js_set_sym(js, regexp_proto, js->sym.matchAll_sym, Ant_Function_CreateWithArity(builtin_regexp_symbol_matchAll, 1));
 
   js->builtins.regexp_matchall_iter_proto_val = js_mkobj(js);
   js_set_proto_init(js->builtins.regexp_matchall_iter_proto_val, js->sym.iterator_proto);
-  defmethod(js, js->builtins.regexp_matchall_iter_proto_val, "next", 4, js_mkfun(regexp_matchall_next));
+  defmethod(js, js->builtins.regexp_matchall_iter_proto_val, "next", 4, Ant_Function_Create(regexp_matchall_next));
   mkprop(js, js->builtins.regexp_matchall_iter_proto_val, js->sym.toStringTag_sym, ANT_STRING("RegExp String Iterator"), ANT_PROP_ATTR_CONFIGURABLE);
   
-  js_set_sym(js, regexp_proto, js->sym.replace_sym, js_mkfun(builtin_regexp_symbol_replace));
-  js_set_sym(js, regexp_proto, js->sym.search_sym, js_mkfun(builtin_regexp_symbol_search));
+  js_set_sym(js, regexp_proto, js->sym.replace_sym, Ant_Function_CreateWithArity(builtin_regexp_symbol_replace, 2));
+  js_set_sym(js, regexp_proto, js->sym.search_sym, Ant_Function_CreateWithArity(builtin_regexp_symbol_search, 1));
   js_set_tostringtag(js, regexp_proto, js_mkstr(js, "RegExp", 6));
-  js_set_getter_desc(js, regexp_proto, "flags", 5, js_mkfun(builtin_regexp_flags_getter), JS_DESC_C);
-  defmethod(js, regexp_proto, "compile", 7, js_mkfun_arity(builtin_regexp_compile, 2));
+  js_set_getter_desc(js, regexp_proto, "flags", 5, Ant_Function_Create(builtin_regexp_flags_getter), JS_DESC_C);
+  defmethod(js, regexp_proto, "compile", 7, Ant_Function_CreateWithArity(builtin_regexp_compile, 2));
 
   ant_value_t regexp_ctor = js_mkobj(js);
-  js_set_slot(regexp_ctor, SLOT_CFUNC, js_mkfun_arity(builtin_RegExp, 2));
+  js_set_slot(regexp_ctor, SLOT_CFUNC, Ant_Function_CreateWithArity(builtin_RegExp, 2));
   js_mkprop_fast(js, regexp_ctor, "prototype", 9, regexp_proto);
   js_set_function_name(js, regexp_ctor, "RegExp", sizeof("RegExp") - 1);
   js_define_species_getter(js, regexp_ctor);
@@ -4455,7 +4455,7 @@ void init_regex_module(ant_t *js) {
   js_setprop(js, regexp_proto, js_mkstr(js, "constructor", 11), regexp_func);
   js_set_descriptor(js, regexp_proto, "constructor", 11, JS_DESC_W | JS_DESC_C);
 
-  js_set(js, regexp_ctor, "escape", js_mkfun_arity(builtin_regexp_escape, 1));
+  js_set(js, regexp_ctor, "escape", Ant_Function_CreateWithArity(builtin_regexp_escape, 1));
 
   ant_value_t empty = js_mkstr_permanent(js, "", 0);
   js->builtins.regexp_empty_string = empty;
@@ -4516,11 +4516,11 @@ void init_regex_module(ant_t *js) {
   ant_value_t string_ctor = js_get(js, glob, "String");
   ant_value_t string_proto = js_get(js, string_ctor, "prototype");
   
-  defmethod(js, string_proto, "search", 6, js_mkfun_arity(builtin_string_search, 1));
-  defmethod(js, string_proto, "match", 5, js_mkfun_arity(builtin_string_match, 1));
-  defmethod(js, string_proto, "matchAll", 8, js_mkfun_arity(builtin_string_matchAll, 1));
-  defmethod(js, string_proto, "replace", 7, js_mkfun_arity(builtin_string_replace, 2));
-  defmethod(js, string_proto, "replaceAll", 10, js_mkfun_arity(builtin_string_replaceAll, 2));
+  defmethod(js, string_proto, "search", 6, Ant_Function_CreateWithArity(builtin_string_search, 1));
+  defmethod(js, string_proto, "match", 5, Ant_Function_CreateWithArity(builtin_string_match, 1));
+  defmethod(js, string_proto, "matchAll", 8, Ant_Function_CreateWithArity(builtin_string_matchAll, 1));
+  defmethod(js, string_proto, "replace", 7, Ant_Function_CreateWithArity(builtin_string_replace, 2));
+  defmethod(js, string_proto, "replaceAll", 10, Ant_Function_CreateWithArity(builtin_string_replaceAll, 2));
   
   if (state) {
     state->exec_property_written = false;

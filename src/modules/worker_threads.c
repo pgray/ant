@@ -990,16 +990,16 @@ ant_value_t worker_threads_library(ant_t *js) {
 
   ant_value_t message_port_ctor_obj = js_mkobj(js);
   ant_value_t message_port_proto = js_mkobj(js);
-  js_set(js, message_port_proto, "postMessage", js_mkfun(worker_threads_message_port_post_message));
-  js_set(js, message_port_proto, "on", js_mkfun(worker_threads_message_port_on));
-  js_set(js, message_port_proto, "once", js_mkfun(worker_threads_message_port_once));
-  js_set(js, message_port_proto, "start", js_mkfun(worker_threads_message_port_start));
-  js_set(js, message_port_proto, "close", js_mkfun(worker_threads_message_port_close));
-  js_set(js, message_port_proto, "ref", js_mkfun(worker_threads_message_port_ref));
-  js_set(js, message_port_proto, "unref", js_mkfun(worker_threads_message_port_unref));
+  js_set(js, message_port_proto, "postMessage", Ant_Function_Create(worker_threads_message_port_post_message));
+  js_set(js, message_port_proto, "on", Ant_Function_Create(worker_threads_message_port_on));
+  js_set(js, message_port_proto, "once", Ant_Function_Create(worker_threads_message_port_once));
+  js_set(js, message_port_proto, "start", Ant_Function_Create(worker_threads_message_port_start));
+  js_set(js, message_port_proto, "close", Ant_Function_Create(worker_threads_message_port_close));
+  js_set(js, message_port_proto, "ref", Ant_Function_Create(worker_threads_message_port_ref));
+  js_set(js, message_port_proto, "unref", Ant_Function_Create(worker_threads_message_port_unref));
   js_set_tostringtag(js, message_port_proto, js_mkstr(js, "MessagePort", 11));
 
-  js_set_slot(message_port_ctor_obj, SLOT_CFUNC, js_mkfun(worker_threads_message_port_ctor));
+  js_set_slot(message_port_ctor_obj, SLOT_CFUNC, Ant_Function_Create(worker_threads_message_port_ctor));
   js_mkprop_fast(js, message_port_ctor_obj, "prototype", 9, message_port_proto);
   js_set_function_name(js, message_port_ctor_obj, "MessagePort", sizeof("MessagePort") - 1);
   js_set(js, lib, "MessagePort", js_obj_to_func(js, message_port_ctor_obj));
@@ -1008,16 +1008,16 @@ ant_value_t worker_threads_library(ant_t *js) {
   ant_value_t message_channel_ctor_obj = js_mkobj(js);
   ant_value_t message_channel_proto = js_mkobj(js);
   js_set_tostringtag(js, message_channel_proto, js_mkstr(js, "MessageChannel", 14));
-  js_set_slot(message_channel_ctor_obj, SLOT_CFUNC, js_mkfun(worker_threads_message_channel_ctor));
+  js_set_slot(message_channel_ctor_obj, SLOT_CFUNC, Ant_Function_Create(worker_threads_message_channel_ctor));
   js_mkprop_fast(js, message_channel_ctor_obj, "prototype", 9, message_channel_proto);
   js_set_function_name(js, message_channel_ctor_obj, "MessageChannel", sizeof("MessageChannel") - 1);
   js_set(js, lib, "MessageChannel", js_obj_to_func(js, message_channel_ctor_obj));
 
   if (is_worker) {
     ant_value_t parent_port = js_mkobj(js);
-    js_set(js, parent_port, "postMessage", js_mkfun(worker_threads_parent_post_message));
-    js_set(js, parent_port, "unref", js_mkfun(worker_threads_parent_unref));
-    js_set(js, parent_port, "ref", js_mkfun(worker_threads_parent_unref));
+    js_set(js, parent_port, "postMessage", Ant_Function_Create(worker_threads_parent_post_message));
+    js_set(js, parent_port, "unref", Ant_Function_Create(worker_threads_parent_unref));
+    js_set(js, parent_port, "ref", Ant_Function_Create(worker_threads_parent_unref));
     js_set(js, lib, "parentPort", parent_port);
 
     const char *worker_data_json = getenv(WT_ENV_DATA_JSON);
@@ -1038,24 +1038,24 @@ ant_value_t worker_threads_library(ant_t *js) {
   ant_value_t worker_ctor_obj = js_mkobj(js);
   ant_value_t worker_proto = js_mkobj(js);
 
-  js_set(js, worker_proto, "on", js_mkfun(worker_threads_worker_on));
-  js_set(js, worker_proto, "once", js_mkfun(worker_threads_worker_once));
-  js_set(js, worker_proto, "terminate", js_mkfun(worker_threads_worker_terminate));
-  js_set(js, worker_proto, "unref", js_mkfun(worker_threads_worker_unref));
-  js_set(js, worker_proto, "ref", js_mkfun(worker_threads_worker_ref));
-  js_set(js, worker_proto, "postMessage", js_mkfun(worker_threads_worker_post_message));
+  js_set(js, worker_proto, "on", Ant_Function_Create(worker_threads_worker_on));
+  js_set(js, worker_proto, "once", Ant_Function_Create(worker_threads_worker_once));
+  js_set(js, worker_proto, "terminate", Ant_Function_Create(worker_threads_worker_terminate));
+  js_set(js, worker_proto, "unref", Ant_Function_Create(worker_threads_worker_unref));
+  js_set(js, worker_proto, "ref", Ant_Function_Create(worker_threads_worker_ref));
+  js_set(js, worker_proto, "postMessage", Ant_Function_Create(worker_threads_worker_post_message));
   js_set_tostringtag(js, worker_proto, js_mkstr(js, "Worker", 6));
 
-  js_set_slot(worker_ctor_obj, SLOT_CFUNC, js_mkfun_arity(worker_threads_worker_ctor, 1));
+  js_set_slot(worker_ctor_obj, SLOT_CFUNC, Ant_Function_CreateWithArity(worker_threads_worker_ctor, 1));
   js_mkprop_fast(js, worker_ctor_obj, "prototype", 9, worker_proto);
   js_set_function_name(js, worker_ctor_obj, "Worker", sizeof("Worker") - 1);
   js_set(js, lib, "Worker", js_obj_to_func(js, worker_ctor_obj));
 
-  js_set(js, lib, "markAsUntransferable", js_mkfun_arity(worker_threads_mark_as_untransferable, 1));
-  js_set(js, lib, "receiveMessageOnPort", js_mkfun_arity(worker_threads_receive_message_on_port, 1));
-  js_set(js, lib, "setEnvironmentData", js_mkfun_arity(worker_threads_set_environment_data, 2));
-  js_set(js, lib, "getEnvironmentData", js_mkfun_arity(worker_threads_get_environment_data, 1));
-  js_set(js, lib, "moveMessagePortToContext", js_mkfun(worker_threads_move_message_port_to_context));
+  js_set(js, lib, "markAsUntransferable", Ant_Function_CreateWithArity(worker_threads_mark_as_untransferable, 1));
+  js_set(js, lib, "receiveMessageOnPort", Ant_Function_CreateWithArity(worker_threads_receive_message_on_port, 1));
+  js_set(js, lib, "setEnvironmentData", Ant_Function_CreateWithArity(worker_threads_set_environment_data, 2));
+  js_set(js, lib, "getEnvironmentData", Ant_Function_CreateWithArity(worker_threads_get_environment_data, 1));
+  js_set(js, lib, "moveMessagePortToContext", Ant_Function_Create(worker_threads_move_message_port_to_context));
 
   js_set_tostringtag(js, lib, js_mkstr(js, "worker_threads", 14));
   return lib;

@@ -2509,31 +2509,31 @@ void init_cron_module(ant_t *js) {
   js_set_proto_init(js->builtins.cron_proto, js->sym.object_proto);
   gc_register_root(&js->builtins.cron_proto);
 
-  ant_value_t cron_getter = js_cfunc_promote(js, js_mkfun(cron_job_get_cron));
+  ant_value_t cron_getter = js_cfunc_promote(js, Ant_Function_Create(cron_job_get_cron));
   js_set_function_name(js, cron_getter, "get cron", 8);
   js_set_getter_desc(
     js, js_as_obj(js->builtins.cron_proto), "cron", 4,
     cron_getter, JS_DESC_E
   );
-  js_set(js, js->builtins.cron_proto, "ref", js_mkfun(cron_job_ref));
-  js_set(js, js->builtins.cron_proto, "stop", js_mkfun(cron_job_stop));
-  js_set(js, js->builtins.cron_proto, "unref", js_mkfun(cron_job_unref));
+  js_set(js, js->builtins.cron_proto, "ref", Ant_Function_Create(cron_job_ref));
+  js_set(js, js->builtins.cron_proto, "stop", Ant_Function_Create(cron_job_stop));
+  js_set(js, js->builtins.cron_proto, "unref", Ant_Function_Create(cron_job_unref));
   js_set_descriptor(js, js->builtins.cron_proto, "ref", 3, JS_DESC_W | JS_DESC_E);
   js_set_descriptor(js, js->builtins.cron_proto, "stop", 4, JS_DESC_W | JS_DESC_E);
   js_set_descriptor(js, js->builtins.cron_proto, "unref", 5, JS_DESC_W | JS_DESC_E);
   ant_value_t dispose_symbol = js->sym.dispose_sym;
-  ant_value_t dispose = js_cfunc_promote(js, js_mkfun_arity(cron_job_dispose, 1));
+  ant_value_t dispose = js_cfunc_promote(js, Ant_Function_CreateWithArity(cron_job_dispose, 1));
   js_set_function_name(js, dispose, "dispose", 7);
   js_set_sym(js, js->builtins.cron_proto, dispose_symbol, dispose);
   js_set_sym_descriptor(js, js->builtins.cron_proto, dispose_symbol, JS_DESC_C);
   js_set_tostringtag(js, js->builtins.cron_proto, js_mkstr(js, "CronJob", 7));
 
-  js_set(js, js->Ant, "cron", js_mkfun_arity(cron_call, 3));
+  js_set(js, js->Ant, "cron", Ant_Function_CreateWithArity(cron_call, 3));
   ant_value_t function = js_cfunc_promote(js, js_get(js, js->Ant, "cron"));
   js_set(js, js->Ant, "cron", function);
   js_set_descriptor(js, js_as_obj(js->Ant), "cron", 4, JS_DESC_W | JS_DESC_E);
-  js_set(js, function, "parse", js_mkfun_arity(cron_parse, 1));
-  js_set(js, function, "remove", js_mkfun_arity(cron_remove_os, 1));
+  js_set(js, function, "parse", Ant_Function_CreateWithArity(cron_parse, 1));
+  js_set(js, function, "remove", Ant_Function_CreateWithArity(cron_remove_os, 1));
 }
 
 void gc_mark_cron(ant_t *js, gc_mark_fn mark) {

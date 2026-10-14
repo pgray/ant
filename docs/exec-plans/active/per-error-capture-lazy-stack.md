@@ -39,7 +39,7 @@ longer go stale or be clobbered by a nested call.
   needs alive without pins.
 - Sites that have no code unit (lexer and `node:syntax` errors) render their
   context prefix eagerly into the record. Those errors are rare.
-- `stack` is an own accessor (Node 26 does the same), shared via `js_mkfun`.
+- `stack` is an own accessor (Node 26 does the same), shared via `Ant_Function_Create`.
   The first read builds `Name: message\n    at fn (file:line:col)` from the
   current `name` and `message` and caches it in `SLOT_ERROR_STACK_TEXT`.
   Assignment stores the value there and drops the record. The getter walks

@@ -653,8 +653,8 @@ static ant_value_t crash_report_response_text(ant_params_t) {
 
   ant_value_t print_promise = js_promise_then(
     js, text_promise,
-    js_mkfun(crash_report_print_url),
-    js_mkfun(crash_report_noop)
+    Ant_Function_Create(crash_report_print_url),
+    Ant_Function_Create(crash_report_noop)
   );
   
   if (is_err(print_promise)) return print_promise;
@@ -924,8 +924,8 @@ int ant_crash_run_internal_report(ant_t *js) {
 
   ant_value_t report_promise = js_promise_then(
     js, fetch_promise,
-    js_mkfun(crash_report_response_text),
-    js_mkfun(crash_report_noop)
+    Ant_Function_Create(crash_report_response_text),
+    Ant_Function_Create(crash_report_noop)
   );
 
   promise_mark_handled(fetch_promise);

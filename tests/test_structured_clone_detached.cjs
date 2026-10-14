@@ -75,6 +75,18 @@ const longer = shorter.transfer(32);
 assert.deepStrictEqual([original.detached, sameLength.detached, shorter.detached], [true, true, true]);
 assert.deepStrictEqual([longer.byteLength, new Uint8Array(longer)[3], new Uint8Array(longer)[20]], [32, 5, 0]);
 
+assert.throws(() => structuredClone(1, { transfer: 5 }), TypeError);
+assert.throws(() => structuredClone(1, { transfer: 'ab' }), TypeError);
+assert.throws(() => structuredClone(1, 5), TypeError);
+assert.throws(() => structuredClone(1, { get transfer() { throw new RangeError('boom'); } }), RangeError);
+assert.strictEqual(structuredClone(1, null), 1);
+const viaSet = new ArrayBuffer(4);
+structuredClone(viaSet, { transfer: new Set([viaSet]) });
+assert.strictEqual(viaSet.detached, true);
+const viaGenerator = new ArrayBuffer(4);
+structuredClone(viaGenerator, { transfer: (function* () { yield viaGenerator; })() });
+assert.strictEqual(viaGenerator.detached, true);
+
 const memory = new WebAssembly.Memory({ initial: 1 });
 assert.throws(() => structuredClone(memory.buffer, { transfer: [memory.buffer] }), isDataCloneError);
 assert.strictEqual(memory.buffer.byteLength, 65536);

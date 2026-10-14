@@ -480,7 +480,7 @@ static void tls_init_context_proto(ant_t *js) {
 
   if (!js->builtins.tls_context_proto) {
     js->builtins.tls_context_proto = js_mkobj(js);
-    js_set(js, js->builtins.tls_context_proto, "close", js_mkfun(js_tls_context_close));
+    js_set(js, js->builtins.tls_context_proto, "close", Ant_Function_Create(js_tls_context_close));
     js_set_tostringtag(js, js->builtins.tls_context_proto, js_mkstr(js, "SecureContext", 13));
   }
 }
@@ -908,32 +908,32 @@ void tls_init_socket_proto(ant_t *js) {
 
     js->builtins.tls_socket_proto = js_mkobj(js);
     if (is_object_type(net_socket_proto)) js_set_proto_init(js->builtins.tls_socket_proto, net_socket_proto);
-    js_set(js, js->builtins.tls_socket_proto, "read", js_mkfun(js_tls_socket_read));
-    js_set(js, js->builtins.tls_socket_proto, "unshift", js_mkfun(js_tls_socket_unshift));
-    js_set(js, js->builtins.tls_socket_proto, "write", js_mkfun(js_tls_socket_write));
-    js_set(js, js->builtins.tls_socket_proto, "end", js_mkfun(js_tls_socket_end));
-    js_set(js, js->builtins.tls_socket_proto, "destroy", js_mkfun(js_tls_socket_destroy));
-    js_set(js, js->builtins.tls_socket_proto, "pause", js_mkfun(js_tls_socket_pause));
-    js_set(js, js->builtins.tls_socket_proto, "resume", js_mkfun(js_tls_socket_resume));
-    js_set(js, js->builtins.tls_socket_proto, "setEncoding", js_mkfun(js_tls_socket_setEncoding));
-    js_set(js, js->builtins.tls_socket_proto, "setNoDelay", js_mkfun(js_tls_socket_setNoDelay));
-    js_set(js, js->builtins.tls_socket_proto, "setKeepAlive", js_mkfun(js_tls_socket_setKeepAlive));
-    js_set(js, js->builtins.tls_socket_proto, "setTimeout", js_mkfun(js_tls_socket_setTimeout));
-    js_set(js, js->builtins.tls_socket_proto, "address", js_mkfun(js_tls_socket_address));
-    js_set(js, js->builtins.tls_socket_proto, "ref", js_mkfun(js_tls_socket_ref));
-    js_set(js, js->builtins.tls_socket_proto, "unref", js_mkfun(js_tls_socket_unref));
-    js_set(js, js->builtins.tls_socket_proto, "cork", js_mkfun(js_tls_socket_cork));
-    js_set(js, js->builtins.tls_socket_proto, "uncork", js_mkfun(js_tls_socket_uncork));
-    js_set(js, js->builtins.tls_socket_proto, "getProtocol", js_mkfun(js_tls_socket_getProtocol));
-    js_set(js, js->builtins.tls_socket_proto, "getCipher", js_mkfun(js_tls_socket_getCipher));
-    js_set(js, js->builtins.tls_socket_proto, "getSession", js_mkfun(js_tls_socket_getSession));
-    js_set(js, js->builtins.tls_socket_proto, "getPeerCertificate", js_mkfun(js_tls_socket_getPeerCertificate));
-    js_set(js, js->builtins.tls_socket_proto, "renegotiate", js_mkfun(js_tls_socket_renegotiate));
+    js_set(js, js->builtins.tls_socket_proto, "read", Ant_Function_Create(js_tls_socket_read));
+    js_set(js, js->builtins.tls_socket_proto, "unshift", Ant_Function_Create(js_tls_socket_unshift));
+    js_set(js, js->builtins.tls_socket_proto, "write", Ant_Function_Create(js_tls_socket_write));
+    js_set(js, js->builtins.tls_socket_proto, "end", Ant_Function_Create(js_tls_socket_end));
+    js_set(js, js->builtins.tls_socket_proto, "destroy", Ant_Function_Create(js_tls_socket_destroy));
+    js_set(js, js->builtins.tls_socket_proto, "pause", Ant_Function_Create(js_tls_socket_pause));
+    js_set(js, js->builtins.tls_socket_proto, "resume", Ant_Function_Create(js_tls_socket_resume));
+    js_set(js, js->builtins.tls_socket_proto, "setEncoding", Ant_Function_Create(js_tls_socket_setEncoding));
+    js_set(js, js->builtins.tls_socket_proto, "setNoDelay", Ant_Function_Create(js_tls_socket_setNoDelay));
+    js_set(js, js->builtins.tls_socket_proto, "setKeepAlive", Ant_Function_Create(js_tls_socket_setKeepAlive));
+    js_set(js, js->builtins.tls_socket_proto, "setTimeout", Ant_Function_Create(js_tls_socket_setTimeout));
+    js_set(js, js->builtins.tls_socket_proto, "address", Ant_Function_Create(js_tls_socket_address));
+    js_set(js, js->builtins.tls_socket_proto, "ref", Ant_Function_Create(js_tls_socket_ref));
+    js_set(js, js->builtins.tls_socket_proto, "unref", Ant_Function_Create(js_tls_socket_unref));
+    js_set(js, js->builtins.tls_socket_proto, "cork", Ant_Function_Create(js_tls_socket_cork));
+    js_set(js, js->builtins.tls_socket_proto, "uncork", Ant_Function_Create(js_tls_socket_uncork));
+    js_set(js, js->builtins.tls_socket_proto, "getProtocol", Ant_Function_Create(js_tls_socket_getProtocol));
+    js_set(js, js->builtins.tls_socket_proto, "getCipher", Ant_Function_Create(js_tls_socket_getCipher));
+    js_set(js, js->builtins.tls_socket_proto, "getSession", Ant_Function_Create(js_tls_socket_getSession));
+    js_set(js, js->builtins.tls_socket_proto, "getPeerCertificate", Ant_Function_Create(js_tls_socket_getPeerCertificate));
+    js_set(js, js->builtins.tls_socket_proto, "renegotiate", Ant_Function_Create(js_tls_socket_renegotiate));
     js_set_tostringtag(js, js->builtins.tls_socket_proto, js_mkstr(js, "TLSSocket", 9));
   }
 
   if (!js->builtins.tls_socket_ctor)
-    js->builtins.tls_socket_ctor = js_make_ctor(js, js_tls_socket_ctor, js->builtins.tls_socket_proto, "TLSSocket", 2);
+    js->builtins.tls_socket_ctor = Ant_Function_CreateConstructor(js, js_tls_socket_ctor, js->builtins.tls_socket_proto, "TLSSocket", 2);
 }
 
 static ant_value_t js_tls_create_context(ant_params_t) {
@@ -1258,8 +1258,8 @@ static ant_value_t js_tls_get_ciphers(ant_params_t) {
 static ant_value_t tls_build_library(ant_t *js) {
   ant_value_t lib = js_mkobj(js);
   ant_value_t version = js_mkstr(js, "unknown", 7);
-  ant_value_t connect = js_mkfun(js_tls_connect);
-  ant_value_t create_secure_context = js_mkfun(js_tls_create_context);
+  ant_value_t connect = Ant_Function_Create(js_tls_connect);
+  ant_value_t create_secure_context = Ant_Function_Create(js_tls_create_context);
   ant_value_t root_certificates = js_mkarr(js);
   
   tls_context *ctx = default_tls_context(NULL, 0);
@@ -1274,7 +1274,7 @@ static ant_value_t tls_build_library(ant_t *js) {
   tls_init_context_proto(js);
   tls_init_socket_proto(js);
   
-  if (!js->builtins.tls_context_ctor) js->builtins.tls_context_ctor = js_make_ctor(js, js_tls_secure_context_ctor, js->builtins.tls_context_proto, "SecureContext", 4);
+  if (!js->builtins.tls_context_ctor) js->builtins.tls_context_ctor = Ant_Function_CreateConstructor(js, js_tls_secure_context_ctor, js->builtins.tls_context_proto, "SecureContext", 4);
   
   js_set(js, lib, "version", version);
   js_set(js, lib, "TLSSocket", js->builtins.tls_socket_ctor);
@@ -1282,10 +1282,10 @@ static ant_value_t tls_build_library(ant_t *js) {
   js_set(js, lib, "createSecureContext", create_secure_context);
   js_set(js, lib, "connect", connect);
   js_set(js, lib, "createConnection", connect);
-  js_set(js, lib, "isSecureContext", js_mkfun(js_tls_is_context));
-  js_set(js, lib, "setConfigPath", js_mkfun(js_tls_set_config_path));
-  js_set(js, lib, "checkServerIdentity", js_mkfun(js_tls_check_server_identity));
-  js_set(js, lib, "getCiphers", js_mkfun(js_tls_get_ciphers));
+  js_set(js, lib, "isSecureContext", Ant_Function_Create(js_tls_is_context));
+  js_set(js, lib, "setConfigPath", Ant_Function_Create(js_tls_set_config_path));
+  js_set(js, lib, "checkServerIdentity", Ant_Function_Create(js_tls_check_server_identity));
+  js_set(js, lib, "getCiphers", Ant_Function_Create(js_tls_get_ciphers));
   
   builtin_object_freeze(js, &root_certificates, 1, js_mkundef());
   js_set(js, lib, "rootCertificates", root_certificates);

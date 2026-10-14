@@ -928,7 +928,7 @@ void jit_emit_compare(jit_compile_t *c) {
         MIR_append_insn(c->ctx, c->jit_func,
                         MIR_new_insn(c->ctx, MIR_MOV,
                                      MIR_new_reg_op(c->ctx, r_builtin),
-                                     MIR_new_uint_op(c->ctx, (uint64_t)js_mkfun(builtin_object_isPrototypeOf))));
+                                     MIR_new_uint_op(c->ctx, (uint64_t)Ant_Function_Create(builtin_object_isPrototypeOf))));
         MIR_append_insn(c->ctx, c->jit_func,
                         MIR_new_insn(c->ctx, MIR_BNE,
                                      MIR_new_label_op(c->ctx, slow),

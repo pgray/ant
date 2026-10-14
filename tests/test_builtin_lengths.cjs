@@ -170,4 +170,21 @@ try {
   Object.defineProperty(globalThis, 'RegExp', { configurable: true, writable: true, value: RealRegExp });
 }
 
+const accessor = (obj, key, kind) => Object.getOwnPropertyDescriptor(obj, key)[kind];
+const nameLength = fn => [fn.name, fn.length];
+assert.deepStrictEqual(nameLength(accessor(Map.prototype, 'size', 'get')), ['get size', 0]);
+assert.deepStrictEqual(nameLength(accessor(Object.prototype, '__proto__', 'set')), ['set __proto__', 1]);
+assert.deepStrictEqual(nameLength(accessor(Array, Symbol.species, 'get')), ['get [Symbol.species]', 0]);
+assert.deepStrictEqual(nameLength(RegExp.prototype[Symbol.split]), ['[Symbol.split]', 2]);
+assert.deepStrictEqual(nameLength(RegExp.prototype[Symbol.replace]), ['[Symbol.replace]', 2]);
+assert.deepStrictEqual(nameLength(Symbol.prototype[Symbol.toPrimitive]), ['[Symbol.toPrimitive]', 1]);
+assert.deepStrictEqual(nameLength(String.prototype[Symbol.iterator]), ['[Symbol.iterator]', 0]);
+
+assert.strictEqual(String.prototype.trimLeft, String.prototype.trimStart);
+assert.strictEqual(String.prototype.trimRight, String.prototype.trimEnd);
+assert.strictEqual(Date.prototype.toGMTString, Date.prototype.toUTCString);
+assert.strictEqual(DisposableStack.prototype[Symbol.dispose], DisposableStack.prototype.dispose);
+assert.strictEqual(AsyncDisposableStack.prototype[Symbol.asyncDispose], AsyncDisposableStack.prototype.disposeAsync);
+assert.strictEqual(Buffer.prototype.toLocaleString, Buffer.prototype.toString);
+
 console.log('builtin lengths OK');

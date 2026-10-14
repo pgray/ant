@@ -2043,7 +2043,7 @@ ant_value_t server_start_from_export(ant_t *js, ant_value_t default_export) {
   js_set(js, server->server_ctx, "stop", server_mkruntimefun(js, server_stop, server));
   js_set(js, server->server_ctx, "reload", server_mkruntimefun(js, server_reload, server));
   js_set(js, server->server_ctx, "upgradeWebSocket", server_mkruntimefun(js, server_upgrade_websocket, server));
-  js_set(js, server->server_ctx, "eventSource", js_mkfun(server_event_source));
+  js_set(js, server->server_ctx, "eventSource", Ant_Function_Create(server_event_source));
 
   return server->server_ctx;
 }

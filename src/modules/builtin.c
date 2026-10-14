@@ -437,18 +437,18 @@ void init_builtin_module(ant_t *js) {
   js_set_exact(js, ant_obj, "version", ANT_STRING(ANT_VERSION));
   js_set_exact(js, ant_obj, "channel", ANT_CANARY ? ANT_STRING("canary") : ANT_STRING("stable"));
 
-  js_set(js, ant_obj, "match", js_mkfun(js_match));
-  js_set(js, ant_obj, "serve", js_mkfun_arity(js_serve, 1));
-  js_set(js, ant_obj, "stats", js_mkfun(js_stats_fn));
-  js_set(js, ant_obj, "signal", js_mkfun(js_signal));
-  js_set(js, ant_obj, "sleep", js_mkfun(js_sleep));
-  js_set(js, ant_obj, "msleep", js_mkfun(js_msleep));
-  js_set(js, ant_obj, "usleep", js_mkfun(js_usleep));
-  js_set(js, ant_obj, "suppressReporting", js_mkfun(js_suppress_reporting));
+  js_set(js, ant_obj, "match", Ant_Function_Create(js_match));
+  js_set(js, ant_obj, "serve", Ant_Function_CreateWithArity(js_serve, 1));
+  js_set(js, ant_obj, "stats", Ant_Function_Create(js_stats_fn));
+  js_set(js, ant_obj, "signal", Ant_Function_Create(js_signal));
+  js_set(js, ant_obj, "sleep", Ant_Function_Create(js_sleep));
+  js_set(js, ant_obj, "msleep", Ant_Function_Create(js_msleep));
+  js_set(js, ant_obj, "usleep", Ant_Function_Create(js_usleep));
+  js_set(js, ant_obj, "suppressReporting", Ant_Function_Create(js_suppress_reporting));
   
-  ant_value_t hl_fn = js_heavy_mkfun_named(js, js_highlight, "highlight", 1, js_mkundef());
-  js_set(js, hl_fn, "render", js_mkfun(js_highlight_render));
-  js_set(js, hl_fn, "tags", js_mkfun(js_highlight_tags));
+  ant_value_t hl_fn = Ant_Function_CreateWithData(js, js_highlight, "highlight", 1, js_mkundef());
+  js_set(js, hl_fn, "render", Ant_Function_Create(js_highlight_render));
+  js_set(js, hl_fn, "tags", Ant_Function_Create(js_highlight_tags));
   js_set(js, ant_obj, "highlight", hl_fn);
 
   ant_value_t unsafe_obj = js_newobj(js);
@@ -456,10 +456,10 @@ void init_builtin_module(ant_t *js) {
   js_set(js, ant_obj, "unsafe", unsafe_obj);
 
   ant_value_t raw_obj = js_newobj(js);
-  js_set_getter_desc(js, js_as_obj(raw_obj), "stack", 5, js_mkfun(js_raw_stack), JS_DESC_C);
-  js_set(js, raw_obj, "typeof", js_mkfun(js_raw_typeof));
-  js_set(js, raw_obj, "gcMarkProfile", js_mkfun(js_raw_gc_mark_profile));
-  js_set(js, raw_obj, "gcMarkProfileEnable", js_mkfun(js_raw_gc_mark_profile_enable));
-  js_set(js, raw_obj, "gcMarkProfileReset", js_mkfun(js_raw_gc_mark_profile_reset));
+  js_set_getter_desc(js, js_as_obj(raw_obj), "stack", 5, Ant_Function_Create(js_raw_stack), JS_DESC_C);
+  js_set(js, raw_obj, "typeof", Ant_Function_Create(js_raw_typeof));
+  js_set(js, raw_obj, "gcMarkProfile", Ant_Function_Create(js_raw_gc_mark_profile));
+  js_set(js, raw_obj, "gcMarkProfileEnable", Ant_Function_Create(js_raw_gc_mark_profile_enable));
+  js_set(js, raw_obj, "gcMarkProfileReset", Ant_Function_Create(js_raw_gc_mark_profile_reset));
   js_set(js, ant_obj, "raw", raw_obj);
 }

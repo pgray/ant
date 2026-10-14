@@ -337,7 +337,7 @@ static void wasi_bind_func_export(
   ant_value_t obj = js_mkobj(js);
   GC_ROOT_PIN(js, obj);
   
-  js_set_slot(obj, SLOT_CFUNC, js_mkfun(wasi_exported_func_call));
+  js_set_slot(obj, SLOT_CFUNC, Ant_Function_Create(wasi_exported_func_call));
   js_set_native(obj, fenv, WASI_FUNC_TAG);
   js_set_slot_wb(js, obj, SLOT_ENTRIES, instance_obj);
   js_set_finalizer(obj, wasi_func_finalize);

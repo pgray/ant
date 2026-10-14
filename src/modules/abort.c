@@ -443,10 +443,10 @@ void init_abort_module(ant_t *js) {
   js->builtins.signal_proto = signal_proto;
   g_initialized = true;
 
-  js_set(js, signal_proto, "addEventListener",    js_mkfun(abort_signal_add_event_listener));
-  js_set(js, signal_proto, "removeEventListener", js_mkfun(abort_signal_remove_event_listener));
-  js_set(js, signal_proto, "dispatchEvent",       js_mkfun(abort_signal_dispatch_event));
-  js_set(js, signal_proto, "throwIfAborted",      js_mkfun(abort_signal_throw_if_aborted));
+  js_set(js, signal_proto, "addEventListener",    Ant_Function_Create(abort_signal_add_event_listener));
+  js_set(js, signal_proto, "removeEventListener", Ant_Function_Create(abort_signal_remove_event_listener));
+  js_set(js, signal_proto, "dispatchEvent",       Ant_Function_Create(abort_signal_dispatch_event));
+  js_set(js, signal_proto, "throwIfAborted",      Ant_Function_Create(abort_signal_throw_if_aborted));
   js_set_tostringtag(js, signal_proto, js_mkstr(js, "AbortSignal", 11));
 
   ant_value_t signal_ctor = js_mkobj(js);
@@ -455,19 +455,19 @@ void init_abort_module(ant_t *js) {
   js_set_function_name(js, signal_ctor, "AbortSignal", sizeof("AbortSignal") - 1);
 
   ant_value_t signal_fn = js_obj_to_func_ex(js, signal_ctor, SV_CALL_IS_DEFAULT_CTOR);
-  js_set(js, signal_fn, "abort",   js_mkfun(abort_signal_static_abort));
-  js_set(js, signal_fn, "timeout", js_mkfun_arity(abort_signal_static_timeout, 1));
-  js_set(js, signal_fn, "any",     js_mkfun_arity(abort_signal_static_any, 1));
+  js_set(js, signal_fn, "abort",   Ant_Function_Create(abort_signal_static_abort));
+  js_set(js, signal_fn, "timeout", Ant_Function_CreateWithArity(abort_signal_static_timeout, 1));
+  js_set(js, signal_fn, "any",     Ant_Function_CreateWithArity(abort_signal_static_any, 1));
 
   js_set(js, signal_proto, "constructor", signal_fn);
   js_set_descriptor(js, signal_proto, "constructor", 11, JS_DESC_W | JS_DESC_C);
 
   ant_value_t ctrl_proto = js_mkobj(js);
-  js_set(js, ctrl_proto, "abort", js_mkfun(abort_controller_abort));
+  js_set(js, ctrl_proto, "abort", Ant_Function_Create(abort_controller_abort));
   js_set_tostringtag(js, ctrl_proto, js_mkstr(js, "AbortController", 15));
 
   ant_value_t ctrl_ctor = js_mkobj(js);
-  js_set_slot(ctrl_ctor, SLOT_CFUNC, js_mkfun(abort_controller_ctor));
+  js_set_slot(ctrl_ctor, SLOT_CFUNC, Ant_Function_Create(abort_controller_ctor));
   js_mkprop_fast(js, ctrl_ctor, "prototype", 9, ctrl_proto);
   js_set_function_name(js, ctrl_ctor, "AbortController", sizeof("AbortController") - 1);
 

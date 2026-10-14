@@ -14,6 +14,7 @@
 #include "modules/domexception.h"
 #include "modules/blob.h"
 #include "modules/structured-clone.h"
+#include "modules/iterator.h"
 
 typedef struct sc_entry {
   ant_value_t key;
@@ -322,24 +323,39 @@ static ant_value_t sc_clone_error(ant_t *js, const char *message) {
   return js_throw(js, make_dom_exception(js, message, "DataCloneError"));
 }
 
+static ant_value_t sc_transfer_item_error(ant_t *js, sc_entry_t **transfer, ant_value_t item) {
+  ArrayBufferData *data = is_object_type(item) ? buffer_get_arraybuffer_data(item) : NULL;
+  if (!data || data->is_shared) return sc_clone_error(js, "Found invalid value in transferList.");
+  if (sc_find(transfer, item)) return sc_clone_error(js, "Transfer list contains duplicate ArrayBuffer");
+  if (!buffer_can_transfer(data)) return sc_clone_error(js, "Cannot transfer object of unsupported type.");
+  return js_mkundef();
+}
+
 static ant_value_t sc_collect_transfer(ant_t *js, ant_value_t options, sc_entry_t **transfer) {
-  if (!is_object_type(options)) return js_mkundef();
-  ant_value_t list = js_get(js, options, "transfer");
-  if (vtype(list) != kTypeArray) return js_mkundef();
+  if (vtype(options) == kTypeUndefined || vtype(options) == kTypeNull) return js_mkundef();
+  if (!is_object_type(options)) return js_mkerr_typed(
+    js, JS_ERR_TYPE, "Failed to execute 'structuredClone': Options cannot be converted to a dictionary"
+  );
   
-  ant_offset_t len = js_arr_len(js, list);
-  for (ant_offset_t i = 0; i < len; i++) {
-    ant_value_t item = js_arr_get(js, list, i);
-    ArrayBufferData *data = is_object_type(item) ? buffer_get_arraybuffer_data(item) : NULL;
-    
-    if (!data || data->is_shared) return sc_clone_error(js, "Found invalid value in transferList.");
-    if (sc_find(transfer, item)) return sc_clone_error(js, "Transfer list contains duplicate ArrayBuffer");
-    if (!buffer_can_transfer(data)) return sc_clone_error(js, "Cannot transfer object of unsupported type.");
-    
+  ant_value_t list = js_getprop_fallback(js, options, "transfer");
+  if (is_err(list) || vtype(list) == kTypeUndefined) return list;
+  
+  iterator_t it;
+  if (!is_object_type(list) || !js_iter_open(js, list, &it)) return Ant_Exception_Pending(js)
+    ? Ant_Exception_Current(js)
+    : js_mkerr_typed(js, JS_ERR_TYPE, "Failed to execute 'structuredClone': transfer in Options cannot be converted to a sequence");
+  
+  ant_value_t item;
+  while (js_iter_next(js, &it, &item)) {
+    ant_value_t error = sc_transfer_item_error(js, transfer, item);
+    if (is_err(error)) {
+      js_iter_close(js, &it);
+      return error;
+    }
     sc_add(transfer, item, js_mkundef());
   }
   
-  return js_mkundef();
+  return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : js_mkundef();
 }
 
 static void sc_commit_transfer(sc_entry_t **transfer) {
@@ -375,7 +391,7 @@ ant_value_t js_structured_clone(ant_params_t) {
 void init_structured_clone_module(ant_t *js) {
   ant_value_t global = js_glob(js);
 
-  js_set(js, global, "structuredClone", js_mkfun_arity(js_structured_clone, 2));
+  js_set(js, global, "structuredClone", Ant_Function_CreateWithArity(js_structured_clone, 2));
   js_set_descriptor(
     js, global, "structuredClone", 15,
     JS_DESC_W | JS_DESC_E | JS_DESC_C

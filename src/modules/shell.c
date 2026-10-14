@@ -769,13 +769,13 @@ static ant_value_t sh_runtime_context(ant_params_t) {
 ant_value_t shell_ops_library(ant_t *js) {
   ant_value_t lib = js_mkobj(js);
 
-  js_set(js, lib, "begin", js_mkfun(sh_runtime_begin));
-  js_set(js, lib, "arg", js_mkfun(sh_runtime_arg));
-  js_set(js, lib, "command", js_mkfun(sh_runtime_command));
-  js_set(js, lib, "redirect", js_mkfun(sh_runtime_redirect));
-  js_set(js, lib, "submit", js_mkfun(sh_runtime_submit));
-  js_set(js, lib, "finish", js_mkfun(sh_runtime_finish));
-  js_set(js, lib, "context", js_mkfun(sh_runtime_context));
+  js_set(js, lib, "begin", Ant_Function_Create(sh_runtime_begin));
+  js_set(js, lib, "arg", Ant_Function_Create(sh_runtime_arg));
+  js_set(js, lib, "command", Ant_Function_Create(sh_runtime_command));
+  js_set(js, lib, "redirect", Ant_Function_Create(sh_runtime_redirect));
+  js_set(js, lib, "submit", Ant_Function_Create(sh_runtime_submit));
+  js_set(js, lib, "finish", Ant_Function_Create(sh_runtime_finish));
+  js_set(js, lib, "context", Ant_Function_Create(sh_runtime_context));
   js_set(js, lib, "debugEnabled", sv_dump_shell_unlikely ? js_true : js_false);
   js_set_tostringtag(js, lib, js_mkstr(js, "shell ops", 9));
 

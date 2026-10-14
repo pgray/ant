@@ -745,11 +745,11 @@ static void child_process_init_constructor(ant_t *js) {
 
   js->builtins.child_process_proto = js_mkobj(js);
   if (is_object_type(ee_proto)) js_set_proto_init(js->builtins.child_process_proto, ee_proto);
-  js_set(js, js->builtins.child_process_proto, "kill", js_mkfun_arity(child_kill, 1));
-  js_set(js, js->builtins.child_process_proto, "ref", js_mkfun(child_ref));
-  js_set(js, js->builtins.child_process_proto, "unref", js_mkfun(child_unref));
+  js_set(js, js->builtins.child_process_proto, "kill", Ant_Function_CreateWithArity(child_kill, 1));
+  js_set(js, js->builtins.child_process_proto, "ref", Ant_Function_Create(child_ref));
+  js_set(js, js->builtins.child_process_proto, "unref", Ant_Function_Create(child_unref));
 
-  js->builtins.child_process_ctor = js_make_ctor(js, child_process_ctor, js->builtins.child_process_proto, "ChildProcess", 0);
+  js->builtins.child_process_ctor = Ant_Function_CreateConstructor(js, child_process_ctor, js->builtins.child_process_proto, "ChildProcess", 0);
 }
 
 static uv_handle_t *child_stream_handle(child_process_t *cp, child_stream_kind_t kind) {
@@ -871,18 +871,18 @@ static void child_stream_init_protos(ant_t *js) {
 
   js->builtins.child_readable_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.child_readable_proto, stream_readable_prototype(js));
-  js_set(js, js->builtins.child_readable_proto, "ref", js_mkfun(child_stream_ref));
-  js_set(js, js->builtins.child_readable_proto, "unref", js_mkfun(child_stream_unref));
-  js_set(js, js->builtins.child_readable_proto, "_destroy", js_mkfun(child_stream__destroy));
-  js_set(js, js->builtins.child_readable_proto, "_read", js_mkfun(child_stream__read));
+  js_set(js, js->builtins.child_readable_proto, "ref", Ant_Function_Create(child_stream_ref));
+  js_set(js, js->builtins.child_readable_proto, "unref", Ant_Function_Create(child_stream_unref));
+  js_set(js, js->builtins.child_readable_proto, "_destroy", Ant_Function_Create(child_stream__destroy));
+  js_set(js, js->builtins.child_readable_proto, "_read", Ant_Function_Create(child_stream__read));
 
   js->builtins.child_writable_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.child_writable_proto, stream_writable_prototype(js));
-  js_set(js, js->builtins.child_writable_proto, "ref", js_mkfun(child_stream_ref));
-  js_set(js, js->builtins.child_writable_proto, "unref", js_mkfun(child_stream_unref));
-  js_set(js, js->builtins.child_writable_proto, "_destroy", js_mkfun(child_stream__destroy));
-  js_set(js, js->builtins.child_writable_proto, "_write", js_mkfun(child_stream__write));
-  js_set(js, js->builtins.child_writable_proto, "_final", js_mkfun(child_stream__final));
+  js_set(js, js->builtins.child_writable_proto, "ref", Ant_Function_Create(child_stream_ref));
+  js_set(js, js->builtins.child_writable_proto, "unref", Ant_Function_Create(child_stream_unref));
+  js_set(js, js->builtins.child_writable_proto, "_destroy", Ant_Function_Create(child_stream__destroy));
+  js_set(js, js->builtins.child_writable_proto, "_write", Ant_Function_Create(child_stream__write));
+  js_set(js, js->builtins.child_writable_proto, "_final", Ant_Function_Create(child_stream__final));
 }
 
 static ant_value_t create_child_stream_object(ant_t *js, child_process_t *cp, child_stream_kind_t kind) {
@@ -964,11 +964,11 @@ static ant_value_t create_child_object(ant_t *js, child_process_t *cp) {
     js_set(js, obj, streams[i].name, *stream_objs[i]);
   }
   
-  js_set(js, obj, "ref", js_mkfun(child_ref));
-  js_set(js, obj, "unref", js_mkfun(child_unref));
-  js_set(js, obj, "kill", js_mkfun_arity(child_kill, 1));
-  js_set(js, obj, "write", js_mkfun(child_write));
-  js_set(js, obj, "end", js_mkfun(child_end));
+  js_set(js, obj, "ref", Ant_Function_Create(child_ref));
+  js_set(js, obj, "unref", Ant_Function_Create(child_unref));
+  js_set(js, obj, "kill", Ant_Function_CreateWithArity(child_kill, 1));
+  js_set(js, obj, "write", Ant_Function_Create(child_write));
+  js_set(js, obj, "end", Ant_Function_Create(child_end));
   
   js_set_tostringtag(js, obj, js_mkstr(js, "ChildProcess", 12));
   
@@ -2653,8 +2653,8 @@ static ant_value_t builtin_fork(ant_params_t) {
 ant_value_t child_process_library(ant_t *js) {
   ant_value_t lib = js_mkobj(js);
   
-  ant_value_t exec_fn = js_heavy_mkfun_named(js, builtin_exec, "exec", 3, js_mkundef());
-  ant_value_t exec_file_fn = js_heavy_mkfun_named(js, builtin_execFile, "execFile", 4, js_mkundef());
+  ant_value_t exec_fn = Ant_Function_CreateWithData(js, builtin_exec, "exec", 3, js_mkundef());
+  ant_value_t exec_file_fn = Ant_Function_CreateWithData(js, builtin_execFile, "execFile", 4, js_mkundef());
   
   child_process_init_constructor(js);
   
@@ -2669,13 +2669,13 @@ ant_value_t child_process_library(ant_t *js) {
   );
   
   js_set(js, lib, "ChildProcess", js->builtins.child_process_ctor);
-  js_set(js, lib, "spawn", js_mkfun_arity(builtin_spawn, 3));
+  js_set(js, lib, "spawn", Ant_Function_CreateWithArity(builtin_spawn, 3));
   js_set(js, lib, "exec", exec_fn);
   js_set(js, lib, "execFile", exec_file_fn);
-  js_set(js, lib, "execSync", js_mkfun_arity(builtin_execSync, 2));
-  js_set(js, lib, "execFileSync", js_mkfun_arity(builtin_execFileSync, 3));
-  js_set(js, lib, "spawnSync", js_mkfun_arity(builtin_spawnSync, 3));
-  js_set(js, lib, "fork", js_mkfun_arity(builtin_fork, 1));
+  js_set(js, lib, "execSync", Ant_Function_CreateWithArity(builtin_execSync, 2));
+  js_set(js, lib, "execFileSync", Ant_Function_CreateWithArity(builtin_execFileSync, 3));
+  js_set(js, lib, "spawnSync", Ant_Function_CreateWithArity(builtin_spawnSync, 3));
+  js_set(js, lib, "fork", Ant_Function_CreateWithArity(builtin_fork, 1));
   js_set_tostringtag(js, lib, js_mkstr(js, "child_process", 13));
   
   return lib;

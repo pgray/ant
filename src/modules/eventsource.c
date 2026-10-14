@@ -450,13 +450,13 @@ void init_eventsource_module(ant_t *js) {
   js->builtins.eventsource_proto = js_mkobj(js);
   
   if (is_object_type(eventtarget_proto)) js_set_proto_init(js->builtins.eventsource_proto, eventtarget_proto);
-  js_set(js, js->builtins.eventsource_proto, "close", js_mkfun(js_eventsource_close));
+  js_set(js, js->builtins.eventsource_proto, "close", Ant_Function_Create(js_eventsource_close));
   js_set(js, js->builtins.eventsource_proto, "CONNECTING", js_mknum(ES_CONNECTING));
   js_set(js, js->builtins.eventsource_proto, "OPEN", js_mknum(ES_OPEN));
   js_set(js, js->builtins.eventsource_proto, "CLOSED", js_mknum(ES_CLOSED));
   js_set_tostringtag(js, js->builtins.eventsource_proto, js_mkstr(js, "EventSource", 11));
 
-  js->builtins.eventsource_ctor = js_make_intrinsic_ctor(js, js_eventsource_ctor, js->builtins.eventsource_proto, "EventSource", 1);
+  js->builtins.eventsource_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_eventsource_ctor, js->builtins.eventsource_proto, "EventSource", 1);
   js_set(js, js->builtins.eventsource_ctor, "CONNECTING", js_mknum(ES_CONNECTING));
   js_set(js, js->builtins.eventsource_ctor, "OPEN", js_mknum(ES_OPEN));
   js_set(js, js->builtins.eventsource_ctor, "CLOSED", js_mknum(ES_CLOSED));

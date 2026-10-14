@@ -761,7 +761,7 @@ static ant_value_t ffi_make_function(ant_t *js, ffi_library_handle_t *library, c
   }
 
   if (js->builtins.ffi_function_proto) js_set_proto_init(obj, js->builtins.ffi_function_proto);
-  js_set_slot(obj, SLOT_CFUNC, js_mkfun(ffi_function_call));
+  js_set_slot(obj, SLOT_CFUNC, Ant_Function_Create(ffi_function_call));
   js_set_native(obj, handle, FFI_FUNCTION_NATIVE_TAG);
   js_set_slot_wb(js, obj, SLOT_ENTRIES, library ? library->obj : js_mkundef());
   js_set_finalizer(obj, ffi_function_finalize);
@@ -931,21 +931,21 @@ static void ffi_init_prototypes(ant_t *js) {
   js_set_tostringtag(js, js->builtins.ffi_pointer_proto, ANT_STRING("FFIPointer"));
   js_set_tostringtag(js, js->builtins.ffi_callback_proto, ANT_STRING("FFICallback"));
 
-  js_set(js, js->builtins.ffi_library_proto, "define", js_mkfun(ffi_library_define));
-  js_set(js, js->builtins.ffi_library_proto, "call", js_mkfun(ffi_library_call));
-  js_set(js, js->builtins.ffi_library_proto, "close", js_mkfun(ffi_library_close));
+  js_set(js, js->builtins.ffi_library_proto, "define", Ant_Function_Create(ffi_library_define));
+  js_set(js, js->builtins.ffi_library_proto, "call", Ant_Function_Create(ffi_library_call));
+  js_set(js, js->builtins.ffi_library_proto, "close", Ant_Function_Create(ffi_library_close));
 
-  js_set(js, js->builtins.ffi_pointer_proto, "address", js_mkfun(ffi_pointer_address));
-  js_set(js, js->builtins.ffi_pointer_proto, "isNull", js_mkfun(ffi_pointer_is_null));
-  js_set(js, js->builtins.ffi_pointer_proto, "read", js_mkfun(ffi_pointer_read));
-  js_set(js, js->builtins.ffi_pointer_proto, "write", js_mkfun(ffi_pointer_write));
-  js_set(js, js->builtins.ffi_pointer_proto, "offset", js_mkfun(ffi_pointer_offset));
-  js_set(js, js->builtins.ffi_pointer_proto, "free", js_mkfun(ffi_pointer_free));
+  js_set(js, js->builtins.ffi_pointer_proto, "address", Ant_Function_Create(ffi_pointer_address));
+  js_set(js, js->builtins.ffi_pointer_proto, "isNull", Ant_Function_Create(ffi_pointer_is_null));
+  js_set(js, js->builtins.ffi_pointer_proto, "read", Ant_Function_Create(ffi_pointer_read));
+  js_set(js, js->builtins.ffi_pointer_proto, "write", Ant_Function_Create(ffi_pointer_write));
+  js_set(js, js->builtins.ffi_pointer_proto, "offset", Ant_Function_Create(ffi_pointer_offset));
+  js_set(js, js->builtins.ffi_pointer_proto, "free", Ant_Function_Create(ffi_pointer_free));
 
-  js_set(js, js->builtins.ffi_callback_proto, "address", js_mkfun(ffi_callback_address));
-  js_set(js, js->builtins.ffi_callback_proto, "close", js_mkfun(ffi_callback_close));
+  js_set(js, js->builtins.ffi_callback_proto, "address", Ant_Function_Create(ffi_callback_address));
+  js_set(js, js->builtins.ffi_callback_proto, "close", Ant_Function_Create(ffi_callback_close));
 
-  js_set(js, js->builtins.ffi_function_proto, "address", js_mkfun(ffi_function_address));
+  js_set(js, js->builtins.ffi_function_proto, "address", Ant_Function_Create(ffi_function_address));
 }
 
 static ant_value_t ffi_dlopen(ant_params_t) {
@@ -1421,10 +1421,10 @@ ant_value_t ffi_library(ant_t *js) {
 
   ffi_init_prototypes(js);
 
-  js_set(js, ffi_obj, "dlopen", js_mkfun(ffi_dlopen));
-  js_set(js, ffi_obj, "alloc", js_mkfun(ffi_alloc_memory));
-  js_set(js, ffi_obj, "pointer", js_mkfun(ffi_pointer_value));
-  js_set(js, ffi_obj, "callback", js_mkfun(ffi_create_callback));
+  js_set(js, ffi_obj, "dlopen", Ant_Function_Create(ffi_dlopen));
+  js_set(js, ffi_obj, "alloc", Ant_Function_Create(ffi_alloc_memory));
+  js_set(js, ffi_obj, "pointer", Ant_Function_Create(ffi_pointer_value));
+  js_set(js, ffi_obj, "callback", Ant_Function_Create(ffi_create_callback));
 
 #ifdef __APPLE__
   suffix = "dylib";

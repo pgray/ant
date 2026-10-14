@@ -331,33 +331,33 @@ static ant_value_t assert_assertion_error_ctor(ant_params_t) {
 
 ant_value_t assert_library(ant_t *js) {
   ant_value_t assert_obj = js_mkobj(js);
-  js_set_slot(assert_obj, SLOT_CFUNC, js_mkfun(assert_ok));
+  js_set_slot(assert_obj, SLOT_CFUNC, Ant_Function_Create(assert_ok));
   js_define_function_length(js, assert_obj, 0);
   js_set_function_name(js, assert_obj, "assert", 6);
 
-  js_set(js, assert_obj, "ok", js_mkfun(assert_ok));
-  js_set(js, assert_obj, "fail", js_mkfun_arity(assert_fail, 1));
-  js_set(js, assert_obj, "ifError", js_mkfun_arity(assert_if_error, 1));
-  js_set(js, assert_obj, "equal", js_mkfun_arity(assert_equal, 2));
-  js_set(js, assert_obj, "notEqual", js_mkfun_arity(assert_not_equal, 2));
-  js_set(js, assert_obj, "strictEqual", js_mkfun_arity(assert_strict_equal, 2));
-  js_set(js, assert_obj, "notStrictEqual", js_mkfun_arity(assert_not_strict_equal, 2));
-  js_set(js, assert_obj, "deepEqual", js_mkfun_arity(assert_deep_equal, 2));
-  js_set(js, assert_obj, "notDeepEqual", js_mkfun_arity(assert_not_deep_equal, 2));
-  js_set(js, assert_obj, "deepStrictEqual", js_mkfun_arity(assert_deep_strict_equal, 2));
-  js_set(js, assert_obj, "notDeepStrictEqual", js_mkfun_arity(assert_not_deep_strict_equal, 2));
-  js_set(js, assert_obj, "throws", js_mkfun_arity(assert_throws, 1));
-  js_set(js, assert_obj, "doesNotThrow", js_mkfun_arity(assert_does_not_throw, 1));
-  js_set(js, assert_obj, "rejects", js_mkfun_arity(assert_rejects, 1));
-  js_set(js, assert_obj, "doesNotReject", js_mkfun_arity(assert_does_not_reject, 1));
-  js_set(js, assert_obj, "match", js_mkfun_arity(assert_match, 2));
-  js_set(js, assert_obj, "doesNotMatch", js_mkfun_arity(assert_does_not_match, 2));
+  js_set(js, assert_obj, "ok", Ant_Function_Create(assert_ok));
+  js_set(js, assert_obj, "fail", Ant_Function_CreateWithArity(assert_fail, 1));
+  js_set(js, assert_obj, "ifError", Ant_Function_CreateWithArity(assert_if_error, 1));
+  js_set(js, assert_obj, "equal", Ant_Function_CreateWithArity(assert_equal, 2));
+  js_set(js, assert_obj, "notEqual", Ant_Function_CreateWithArity(assert_not_equal, 2));
+  js_set(js, assert_obj, "strictEqual", Ant_Function_CreateWithArity(assert_strict_equal, 2));
+  js_set(js, assert_obj, "notStrictEqual", Ant_Function_CreateWithArity(assert_not_strict_equal, 2));
+  js_set(js, assert_obj, "deepEqual", Ant_Function_CreateWithArity(assert_deep_equal, 2));
+  js_set(js, assert_obj, "notDeepEqual", Ant_Function_CreateWithArity(assert_not_deep_equal, 2));
+  js_set(js, assert_obj, "deepStrictEqual", Ant_Function_CreateWithArity(assert_deep_strict_equal, 2));
+  js_set(js, assert_obj, "notDeepStrictEqual", Ant_Function_CreateWithArity(assert_not_deep_strict_equal, 2));
+  js_set(js, assert_obj, "throws", Ant_Function_CreateWithArity(assert_throws, 1));
+  js_set(js, assert_obj, "doesNotThrow", Ant_Function_CreateWithArity(assert_does_not_throw, 1));
+  js_set(js, assert_obj, "rejects", Ant_Function_CreateWithArity(assert_rejects, 1));
+  js_set(js, assert_obj, "doesNotReject", Ant_Function_CreateWithArity(assert_does_not_reject, 1));
+  js_set(js, assert_obj, "match", Ant_Function_CreateWithArity(assert_match, 2));
+  js_set(js, assert_obj, "doesNotMatch", Ant_Function_CreateWithArity(assert_does_not_match, 2));
 
   ant_value_t ae_ctor = js_mkobj(js);
   ant_value_t ae_proto = js_mkobj(js);
   
   js_set(js, ae_proto, "name", js_mkstr(js, "AssertionError", 14));
-  js_set_slot(ae_ctor, SLOT_CFUNC, js_mkfun_arity(assert_assertion_error_ctor, 1));
+  js_set_slot(ae_ctor, SLOT_CFUNC, Ant_Function_CreateWithArity(assert_assertion_error_ctor, 1));
   js_mkprop_fast(js, ae_ctor, "prototype", 9, ae_proto);
   js_set_function_name(js, ae_ctor, "AssertionError", 14);
   

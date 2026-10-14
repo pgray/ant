@@ -52,8 +52,8 @@ ant_value_t DesktopMenuBuildFromTemplate(ant_params_t) {
   ant_desktop_state_attach(menu, state);
   js_set(js, menu, "_template", args[0]);
   js_set(js, menu, "items", args[0]);
-  js_set(js, menu, "append", js_mkfun(DesktopMenuAppend));
-  js_set(js, menu, "insert", js_mkfun(DesktopMenuInsert));
+  js_set(js, menu, "append", Ant_Function_Create(DesktopMenuAppend));
+  js_set(js, menu, "insert", Ant_Function_Create(DesktopMenuInsert));
   return menu;
 }
 

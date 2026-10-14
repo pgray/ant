@@ -64,8 +64,8 @@ int main(void) {
   init_timer_module(b);
 
   // jobs drain only in their own isolate
-  queue_microtask(a, js_mkfun(on_a));
-  queue_next_tick(b, js_mkfun(on_b));
+  queue_microtask(a, Ant_Function_Create(on_a));
+  queue_next_tick(b, Ant_Function_Create(on_b));
   assert(has_pending_microtasks(a) && has_pending_microtasks(b));
   process_microtasks(b);
   assert(b_calls == 1 && a_calls == 0 && has_pending_microtasks(a));
@@ -73,17 +73,17 @@ int main(void) {
   assert(a_calls == 1 && !has_pending_microtasks(a));
 
   // timers fire in the isolate that set them
-  schedule(a, "setTimeout", js_mkfun(on_a), 1);
-  schedule(b, "setTimeout", js_mkfun(on_b), 1);
+  schedule(a, "setTimeout", Ant_Function_Create(on_a), 1);
+  schedule(b, "setTimeout", Ant_Function_Create(on_b), 1);
   assert(has_pending_timers(a) && has_pending_timers(b));
   run_loop_while(either_has_timers);
   assert(a_calls == 2 && b_calls == 2);
 
   // destroying A closes its interval and drops its jobs; B's timer still
   // fires, and no timer of A's is left on the shared loop
-  schedule(a, "setInterval", js_mkfun(on_a), 1);
-  schedule(b, "setTimeout", js_mkfun(on_b), 5);
-  queue_microtask(a, js_mkfun(on_a));
+  schedule(a, "setInterval", Ant_Function_Create(on_a), 1);
+  schedule(b, "setTimeout", Ant_Function_Create(on_b), 5);
+  queue_microtask(a, Ant_Function_Create(on_a));
   assert(active_timers() == 2);
   js_destroy(a);
   run_loop_while(b_has_timers);

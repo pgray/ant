@@ -279,12 +279,12 @@ static ant_value_t js_sd_ctor(ant_params_t) {
 ant_value_t string_decoder_library(ant_t *js) {
   js->builtins.string_decoder_proto = js_mkobj(js);
   
-  js_set_getter_desc(js, js->builtins.string_decoder_proto, "encoding", 8, js_mkfun(js_sd_get_encoding), JS_DESC_C);
-  js_set(js, js->builtins.string_decoder_proto, "write", js_mkfun_arity(js_sd_write, 1));
-  js_set(js, js->builtins.string_decoder_proto, "end",   js_mkfun_arity(js_sd_end, 1));
+  js_set_getter_desc(js, js->builtins.string_decoder_proto, "encoding", 8, Ant_Function_Create(js_sd_get_encoding), JS_DESC_C);
+  js_set(js, js->builtins.string_decoder_proto, "write", Ant_Function_CreateWithArity(js_sd_write, 1));
+  js_set(js, js->builtins.string_decoder_proto, "end",   Ant_Function_CreateWithArity(js_sd_end, 1));
   js_set_tostringtag(js, js->builtins.string_decoder_proto, js_mkstr(js, "StringDecoder", 13));
 
-  ant_value_t ctor = js_make_ctor(js, js_sd_ctor, js->builtins.string_decoder_proto, "StringDecoder", 1);
+  ant_value_t ctor = Ant_Function_CreateConstructor(js, js_sd_ctor, js->builtins.string_decoder_proto, "StringDecoder", 1);
   ant_value_t lib = js_mkobj(js);
   js_set(js, lib, "StringDecoder", ctor);
   

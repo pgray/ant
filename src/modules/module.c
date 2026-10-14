@@ -124,7 +124,7 @@ static ant_value_t builtin_module_registerHooks(ant_params_t) {
   GC_ROOT_SAVE(root_mark, js);
   ant_value_t dereg_obj = js_mkobj(js);
   GC_ROOT_PIN(js, dereg_obj);
-  js_set_slot(dereg_obj, SLOT_CFUNC, js_mkfun(builtin_module_deregisterHooks));
+  js_set_slot(dereg_obj, SLOT_CFUNC, Ant_Function_Create(builtin_module_deregisterHooks));
   js_set_slot(dereg_obj, SLOT_DATA, args[0]);
 
   ant_value_t out = js_mkobj(js);
@@ -151,18 +151,18 @@ ant_value_t module_library(ant_t *js) {
   GC_ROOT_PIN(js, proto);
   
   js_set_proto_init(proto, js->sym.object_proto);
-  ant_value_t lib = js_make_ctor(js, builtin_module_constructor, proto, "Module", 0);
+  ant_value_t lib = Ant_Function_CreateConstructor(js, builtin_module_constructor, proto, "Module", 0);
   js->modules.cjs.constructor = lib;
   GC_ROOT_RESTORE(js, root_mark);
   
   js_set(js, lib, "_cache", cache);
   js->modules.cjs.cache = js_mkundef();
   js_set(js, lib, "Module", lib);
-  js_set(js, proto, "require", js_mkfun_arity(esm_cjs_require_module, 1));
+  js_set(js, proto, "require", Ant_Function_CreateWithArity(esm_cjs_require_module, 1));
 
-  js_set(js, lib, "createRequire", js_mkfun_arity(builtin_createRequire, 1));
-  js_set(js, lib, "registerHooks", js_mkfun_arity(builtin_module_registerHooks, 1));
-  js_set(js, lib, "isBuiltin", js_mkfun_arity(builtin_module_isBuiltin, 1));
+  js_set(js, lib, "createRequire", Ant_Function_CreateWithArity(builtin_createRequire, 1));
+  js_set(js, lib, "registerHooks", Ant_Function_CreateWithArity(builtin_module_registerHooks, 1));
+  js_set(js, lib, "isBuiltin", Ant_Function_CreateWithArity(builtin_module_isBuiltin, 1));
 
   ant_value_t modules_arr = js_mkarr(js);
   builtin_iter_ctx_t ctx = { js, modules_arr };
@@ -170,7 +170,7 @@ ant_value_t module_library(ant_t *js) {
   esm_builtin_bundle_foreach(push_builtin_name, &ctx);
   
   js_set(js, lib, "builtinModules", modules_arr);
-  js_set(js, lib, "_resolveFilename", js_mkfun_arity(builtin_resolveFilename, 4));
+  js_set(js, lib, "_resolveFilename", Ant_Function_CreateWithArity(builtin_resolveFilename, 4));
   js_set_tostringtag(js, lib, js_mkstr(js, "Module", 6));
 
   return lib;

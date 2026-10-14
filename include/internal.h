@@ -340,6 +340,9 @@ ant_value_t js_delete_sym_prop(ant_t *js, ant_value_t obj, ant_value_t sym);
 
 ant_value_t js_cfunc_promote(ant_t *js, ant_value_t cfunc);
 ant_value_t js_cfunc_expose_named(ant_t *js, ant_value_t cfunc, const char *name, size_t name_len);
+
+typedef enum { JS_CFUNC_VALUE, JS_CFUNC_GETTER, JS_CFUNC_SETTER } js_cfunc_role_t;
+ant_value_t js_cfunc_expose_property(ant_t *js, ant_value_t fn, js_cfunc_role_t role, const char *key, size_t key_len, bool symbol);
 ant_value_t js_set_function_name(ant_t *js, ant_value_t fn, const char *name, size_t name_len);
 ant_value_t js_define_function_length(ant_t *js, ant_value_t fn, int length);
 
@@ -570,6 +573,12 @@ static inline ant_value_t defmethod(ant_t *js, ant_value_t obj, const char *name
   return mkprop_interned(js, obj, interned, fn, ANT_PROP_ATTR_METHOD);
 }
 
+static inline ant_value_t defmethod_sym(ant_t *js, ant_value_t obj, ant_value_t sym, ant_value_t fn) {
+  const char *desc = js_sym_desc(sym);
+  fn = js_cfunc_expose_property(js, fn, JS_CFUNC_VALUE, desc, desc ? strlen(desc) : 0, true);
+  return is_err(fn) ? fn : mkprop(js, obj, sym, fn, ANT_PROP_ATTR_METHOD);
+}
+
 static inline ant_value_t defhidden(ant_t *js, ant_value_t obj, const char *name, size_t len, ant_value_t value) {
   const char *interned = intern_string(name, len);
   if (!interned) return js_mkerr(js, "oom");
@@ -580,6 +589,14 @@ static inline ant_value_t defalias(ant_t *js, ant_value_t obj, const char *name,
   const char *interned = intern_string(name, len);
   if (!interned) return js_mkerr(js, "oom");
   return mkprop_interned_exact(js, obj, interned, fn, ANT_PROP_ATTR_WRITABLE | ANT_PROP_ATTR_CONFIGURABLE);
+}
+
+static inline ant_value_t defalias_of(ant_t *js, ant_value_t obj, const char *alias, const char *target) {
+  return defalias(js, obj, alias, strlen(alias), js_get(js, obj, target));
+}
+
+static inline ant_value_t defalias_sym_of(ant_t *js, ant_value_t obj, ant_value_t sym, const char *target) {
+  return mkprop(js, obj, sym, js_get(js, obj, target), ANT_PROP_ATTR_METHOD);
 }
 
 static inline void js_set_global_builtin(

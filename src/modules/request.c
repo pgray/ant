@@ -1524,16 +1524,16 @@ void init_request_module(ant_t *js) {
   ant_value_t g = js_glob(js);
   js->builtins.request_proto = js_mkobj(js);
 
-  js_set(js, js->builtins.request_proto, "text", js_mkfun(js_req_text));
-  js_set(js, js->builtins.request_proto, "json", js_mkfun(js_req_json));
-  js_set(js, js->builtins.request_proto, "arrayBuffer", js_mkfun(js_req_array_buffer));
-  js_set(js, js->builtins.request_proto, "blob", js_mkfun(js_req_blob));
-  js_set(js, js->builtins.request_proto, "formData", js_mkfun(js_req_form_data));
-  js_set(js, js->builtins.request_proto, "bytes", js_mkfun(js_req_bytes));
-  js_set(js, js->builtins.request_proto, "clone", js_mkfun(js_request_clone));
+  js_set(js, js->builtins.request_proto, "text", Ant_Function_Create(js_req_text));
+  js_set(js, js->builtins.request_proto, "json", Ant_Function_Create(js_req_json));
+  js_set(js, js->builtins.request_proto, "arrayBuffer", Ant_Function_Create(js_req_array_buffer));
+  js_set(js, js->builtins.request_proto, "blob", Ant_Function_Create(js_req_blob));
+  js_set(js, js->builtins.request_proto, "formData", Ant_Function_Create(js_req_form_data));
+  js_set(js, js->builtins.request_proto, "bytes", Ant_Function_Create(js_req_bytes));
+  js_set(js, js->builtins.request_proto, "clone", Ant_Function_Create(js_request_clone));
 
 #define GETTER(prop, fn) \
-  js_set_getter_desc(js, js->builtins.request_proto, prop, sizeof(prop)-1, js_mkfun(js_req_get_##fn), JS_DESC_C)
+  js_set_getter_desc(js, js->builtins.request_proto, prop, sizeof(prop)-1, Ant_Function_Create(js_req_get_##fn), JS_DESC_C)
   GETTER("method",            method);
   GETTER("url",               url);
   GETTER("headers",           headers);
@@ -1554,9 +1554,9 @@ void init_request_module(ant_t *js) {
   GETTER("bodyUsed",          body_used);
 #undef GETTER
 
-  js_set_sym(js, js->builtins.request_proto, js->sym.inspect_sym, js_mkfun(request_inspect));
+  js_set_sym(js, js->builtins.request_proto, js->sym.inspect_sym, Ant_Function_Create(request_inspect));
   js_set_tostringtag(js, js->builtins.request_proto, js_mkstr(js, "Request", 7));
-  ant_value_t ctor = js_make_intrinsic_ctor(js, js_request_ctor, js->builtins.request_proto, "Request", 1);
+  ant_value_t ctor = Ant_Function_CreateIntrinsicConstructor(js, js_request_ctor, js->builtins.request_proto, "Request", 1);
   
   js_set(js, g, "Request", ctor);
   js_set_descriptor(js, g, "Request", 7, JS_DESC_W | JS_DESC_C);

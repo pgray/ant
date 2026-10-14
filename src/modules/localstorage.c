@@ -280,14 +280,14 @@ void init_localstorage_module(ant_t *js) {
   
   ant_value_t storage_obj = js_mkobj(js);
   
-  js_set(js, storage_obj, "setItem", js_mkfun(js_localstorage_setItem));
-  js_set(js, storage_obj, "getItem", js_mkfun(js_localstorage_getItem));
-  js_set(js, storage_obj, "removeItem", js_mkfun(js_localstorage_removeItem));
-  js_set(js, storage_obj, "clear", js_mkfun(js_localstorage_clear));
-  js_set(js, storage_obj, "key", js_mkfun(js_localstorage_key));
-  js_set(js, storage_obj, "setFile", js_mkfun(js_localstorage_setFile));
+  js_set(js, storage_obj, "setItem", Ant_Function_Create(js_localstorage_setItem));
+  js_set(js, storage_obj, "getItem", Ant_Function_Create(js_localstorage_getItem));
+  js_set(js, storage_obj, "removeItem", Ant_Function_Create(js_localstorage_removeItem));
+  js_set(js, storage_obj, "clear", Ant_Function_Create(js_localstorage_clear));
+  js_set(js, storage_obj, "key", Ant_Function_Create(js_localstorage_key));
+  js_set(js, storage_obj, "setFile", Ant_Function_Create(js_localstorage_setFile));
   
-  ant_value_t length_getter = js_mkfun(js_localstorage_length);
+  ant_value_t length_getter = Ant_Function_Create(js_localstorage_length);
   js_set_getter_desc(js, storage_obj, "length", 6, length_getter, 0);
   
   js_set_tostringtag(js, storage_obj, js_mkstr(js, "Storage", 7));

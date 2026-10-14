@@ -160,13 +160,13 @@ void init_sessionstorage_module(ant_t *js) {
   ant_value_t glob = js_glob(js);
   ant_value_t storage_obj = js_mkobj(js);
   
-  js_set(js, storage_obj, "setItem", js_mkfun(js_sessionstorage_setItem));
-  js_set(js, storage_obj, "getItem", js_mkfun(js_sessionstorage_getItem));
-  js_set(js, storage_obj, "removeItem", js_mkfun(js_sessionstorage_removeItem));
-  js_set(js, storage_obj, "clear", js_mkfun(js_sessionstorage_clear));
-  js_set(js, storage_obj, "key", js_mkfun(js_sessionstorage_key));
+  js_set(js, storage_obj, "setItem", Ant_Function_Create(js_sessionstorage_setItem));
+  js_set(js, storage_obj, "getItem", Ant_Function_Create(js_sessionstorage_getItem));
+  js_set(js, storage_obj, "removeItem", Ant_Function_Create(js_sessionstorage_removeItem));
+  js_set(js, storage_obj, "clear", Ant_Function_Create(js_sessionstorage_clear));
+  js_set(js, storage_obj, "key", Ant_Function_Create(js_sessionstorage_key));
   
-  ant_value_t length_getter = js_mkfun(js_sessionstorage_length);
+  ant_value_t length_getter = Ant_Function_Create(js_sessionstorage_length);
   js_set_getter_desc(js, storage_obj, "length", 6, length_getter, 0);
   
   js_set_tostringtag(js, storage_obj, ANT_STRING("Storage"));

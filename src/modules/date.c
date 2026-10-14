@@ -1281,7 +1281,6 @@ void init_date_module(ant_t *js) {
     { builtin_Date_valueOf,            "valueOf",            0, 0 },
     { builtin_Date_toString,           "toString",           0, 0 },
     { builtin_Date_toUTCString,        "toUTCString",        0, 0 },
-    { builtin_Date_toUTCString,        "toGMTString",        0, 0 },
     { builtin_Date_toISOString,        "toISOString",        0, 0 },
     { builtin_Date_toDateString,       "toDateString",       0, 0 },
     { builtin_Date_toTimeString,       "toTimeString",       0, 0 },
@@ -1327,13 +1326,14 @@ void init_date_module(ant_t *js) {
   };
   
   js_define_methods(js, date_proto, date_proto_methods, countof(date_proto_methods), ANT_PROP_ATTR_METHOD);
+  defalias_of(js, date_proto, "toGMTString", "toUTCString");
 
   ant_value_t to_primitive_sym = js->sym.toPrimitive_sym;
-  if (vtype(to_primitive_sym) == kTypeSymbol) js_set_sym(js, date_proto, to_primitive_sym, js_mkfun(date_toPrimitive));
+  if (vtype(to_primitive_sym) == kTypeSymbol) js_set_sym(js, date_proto, to_primitive_sym, Ant_Function_CreateWithArity(date_toPrimitive, 1));
 
   ant_value_t date_ctor_obj = js_mkobj(js);
   js_set_proto_init(date_ctor_obj, function_proto);
-  js_set_slot(date_ctor_obj, SLOT_CFUNC, js_mkfun_arity(builtin_Date, 7));
+  js_set_slot(date_ctor_obj, SLOT_CFUNC, Ant_Function_CreateWithArity(builtin_Date, 7));
   
   static const ant_cfunc_meta_t date_ctor_methods[] = {
     { builtin_Date_now,   "now",   0, 0 },

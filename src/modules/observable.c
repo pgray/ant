@@ -74,8 +74,8 @@ static ant_value_t js_subscription_unsubscribe(ant_params_t) {
 }
 
 static void setup_subscription_methods(ant_t *js, ant_value_t subscription) {
-  js_set(js, subscription, "unsubscribe", js_mkfun(js_subscription_unsubscribe));
-  ant_value_t closed_getter = js_mkfun(js_subscription_get_closed);
+  js_set(js, subscription, "unsubscribe", Ant_Function_Create(js_subscription_unsubscribe));
+  ant_value_t closed_getter = Ant_Function_Create(js_subscription_get_closed);
   js_set_getter_desc(js, subscription, "closed", 6, closed_getter, JS_DESC_E | JS_DESC_C);
 }
 
@@ -193,12 +193,12 @@ static ant_value_t create_subscription_observer(ant_t *js, ant_value_t subscript
   ant_value_t subobs = js_mkobj(js);
   
   js_set_slot(subobs, SLOT_DATA, subscription);
-  js_set(js, subobs, "next", js_mkfun(js_subobs_next));
-  js_set(js, subobs, "error", js_mkfun(js_subobs_error));
-  js_set(js, subobs, "complete", js_mkfun(js_subobs_complete));
+  js_set(js, subobs, "next", Ant_Function_Create(js_subobs_next));
+  js_set(js, subobs, "error", Ant_Function_Create(js_subobs_error));
+  js_set(js, subobs, "complete", Ant_Function_Create(js_subobs_complete));
   js_set_tostringtag(js, subobs, js_mkstr(js, "SubscriptionObserver", 20));
   
-  ant_value_t closed_getter = js_mkfun(js_subobs_get_closed);
+  ant_value_t closed_getter = Ant_Function_Create(js_subobs_get_closed);
   js_set_getter_desc(js, subobs, "closed", 6, closed_getter, JS_DESC_E | JS_DESC_C);
   
   return subobs;
@@ -236,7 +236,7 @@ static ant_value_t execute_subscriber(ant_t *js, ant_value_t subscriber, ant_val
     
     ant_value_t cleanupFunction = js_mkobj(js);
     js_set_slot(cleanupFunction, SLOT_DATA, subscriberResult);
-    js_set_slot(cleanupFunction, SLOT_CFUNC, js_mkfun(js_cleanup_fn));
+    js_set_slot(cleanupFunction, SLOT_CFUNC, Ant_Function_Create(js_cleanup_fn));
 
     return js_obj_to_func(js, cleanupFunction);
   }
@@ -479,15 +479,15 @@ void init_observable_module(ant_t *js) {
   ant_value_t observable_proto = js_mkobj(js);
   js->builtins.observable_proto = observable_proto;
   
-  js_set(js, observable_proto, "subscribe", js_mkfun(js_observable_subscribe));
-  js_set_sym(js, observable_proto, js->sym.observable_sym, js_mkfun(js_observable_symbol_observable));
+  js_set(js, observable_proto, "subscribe", Ant_Function_Create(js_observable_subscribe));
+  js_set_sym(js, observable_proto, js->sym.observable_sym, Ant_Function_Create(js_observable_symbol_observable));
   js_set_tostringtag(js, observable_proto, js_mkstr(js, "Observable", 10));
   
-  js_set_slot(observable_ctor, SLOT_CFUNC, js_mkfun_arity(js_observable_constructor, 1));
+  js_set_slot(observable_ctor, SLOT_CFUNC, Ant_Function_CreateWithArity(js_observable_constructor, 1));
   js_mkprop_fast(js, observable_ctor, "prototype", 9, observable_proto);
   js_set_function_name(js, observable_ctor, "Observable", sizeof("Observable") - 1);
-  js_set(js, observable_ctor, "of", js_mkfun(js_observable_of));
-  js_set(js, observable_ctor, "from", js_mkfun(js_observable_from));
+  js_set(js, observable_ctor, "of", Ant_Function_Create(js_observable_of));
+  js_set(js, observable_ctor, "from", Ant_Function_Create(js_observable_from));
   
   ant_value_t Observable = js_obj_to_func(js, observable_ctor);
   js_set(js, observable_proto, "constructor", Observable);

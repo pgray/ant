@@ -1294,16 +1294,16 @@ void init_response_module(ant_t *js) {
 
   js->builtins.response_proto = js_mkobj(js);
 
-  js_set(js, js->builtins.response_proto, "text", js_mkfun(js_res_text));
-  js_set(js, js->builtins.response_proto, "json", js_mkfun(js_res_json));
-  js_set(js, js->builtins.response_proto, "arrayBuffer", js_mkfun(js_res_array_buffer));
-  js_set(js, js->builtins.response_proto, "blob", js_mkfun(js_res_blob));
-  js_set(js, js->builtins.response_proto, "formData", js_mkfun(js_res_form_data));
-  js_set(js, js->builtins.response_proto, "bytes", js_mkfun(js_res_bytes));
-  js_set(js, js->builtins.response_proto, "clone", js_mkfun(js_response_clone));
+  js_set(js, js->builtins.response_proto, "text", Ant_Function_Create(js_res_text));
+  js_set(js, js->builtins.response_proto, "json", Ant_Function_Create(js_res_json));
+  js_set(js, js->builtins.response_proto, "arrayBuffer", Ant_Function_Create(js_res_array_buffer));
+  js_set(js, js->builtins.response_proto, "blob", Ant_Function_Create(js_res_blob));
+  js_set(js, js->builtins.response_proto, "formData", Ant_Function_Create(js_res_form_data));
+  js_set(js, js->builtins.response_proto, "bytes", Ant_Function_Create(js_res_bytes));
+  js_set(js, js->builtins.response_proto, "clone", Ant_Function_Create(js_response_clone));
 
 #define GETTER(prop, fn) \
-  js_set_getter_desc(js, js->builtins.response_proto, prop, sizeof(prop) - 1, js_mkfun(js_res_get_##fn), JS_DESC_C)
+  js_set_getter_desc(js, js->builtins.response_proto, prop, sizeof(prop) - 1, Ant_Function_Create(js_res_get_##fn), JS_DESC_C)
   GETTER("type", type);
   GETTER("url", url);
   GETTER("redirected", redirected);
@@ -1315,12 +1315,12 @@ void init_response_module(ant_t *js) {
   GETTER("bodyUsed", body_used);
 #undef GETTER
 
-  js_set_sym(js, js->builtins.response_proto, js->sym.inspect_sym, js_mkfun(response_inspect));
+  js_set_sym(js, js->builtins.response_proto, js->sym.inspect_sym, Ant_Function_Create(response_inspect));
   js_set_tostringtag(js, js->builtins.response_proto, js_mkstr(js, "Response", 8));
-  ctor = js_make_intrinsic_ctor(js, js_response_ctor, js->builtins.response_proto, "Response", 0);
-  js_set(js, ctor, "error", js_mkfun(js_response_error));
-  js_set(js, ctor, "redirect", js_mkfun_arity(js_response_redirect, 1));
-  js_set(js, ctor, "json", js_mkfun_arity(js_response_json_static, 1));
+  ctor = Ant_Function_CreateIntrinsicConstructor(js, js_response_ctor, js->builtins.response_proto, "Response", 0);
+  js_set(js, ctor, "error", Ant_Function_Create(js_response_error));
+  js_set(js, ctor, "redirect", Ant_Function_CreateWithArity(js_response_redirect, 1));
+  js_set(js, ctor, "json", Ant_Function_CreateWithArity(js_response_json_static, 1));
   js_set(js, g, "Response", ctor);
   js_set_descriptor(js, g, "Response", 8, JS_DESC_W | JS_DESC_C);
 }

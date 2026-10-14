@@ -1424,8 +1424,8 @@ ant_value_t json_stringify_value(ant_t *js, ant_value_t value) {
 void init_json_module(ant_t *js) {
   ant_value_t json_obj = js_mkobj(js);
   
-  js_set(js, json_obj, "parse", js_mkfun_arity(js_json_parse, 2));
-  js_set(js, json_obj, "stringify", js_mkfun_arity(js_json_stringify, 3));
+  js_set(js, json_obj, "parse", Ant_Function_CreateWithArity(js_json_parse, 2));
+  js_set(js, json_obj, "stringify", Ant_Function_CreateWithArity(js_json_stringify, 3));
   
   js_set_tostringtag(js, json_obj, js_mkstr(js, "JSON", 4));
   js_set_global_builtin(js, "JSON", json_obj);

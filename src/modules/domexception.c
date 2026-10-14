@@ -150,7 +150,7 @@ void init_domexception_module(ant_t *js) {
   set_constants(js, proto);
 
   ant_value_t ctor = js_mkobj(js);
-  js_set_slot(ctor, SLOT_CFUNC, js_mkfun(domexception_ctor));
+  js_set_slot(ctor, SLOT_CFUNC, Ant_Function_Create(domexception_ctor));
   js_mkprop_fast(js, ctor, "prototype", 9, proto);
   js_set_descriptor(js, ctor, "prototype", 9, 0);
   

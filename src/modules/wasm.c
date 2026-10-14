@@ -1954,38 +1954,38 @@ void init_wasm_module(ant_t *js) {
   js_set_proto_init(js->builtins.wasm_linkerror_proto, error_proto);
   js_set_proto_init(js->builtins.wasm_runtimeerror_proto, error_proto);
 
-  js_set(js, js->builtins.wasm_global_proto, "valueOf", js_mkfun(js_wasm_global_value_of));
-  js_set_getter_desc(js, js->builtins.wasm_global_proto, "value", 5, js_mkfun(js_wasm_global_value_getter), JS_DESC_C);
-  js_set_setter_desc(js, js->builtins.wasm_global_proto, "value", 5, js_mkfun(js_wasm_global_value_setter), JS_DESC_C);
+  js_set(js, js->builtins.wasm_global_proto, "valueOf", Ant_Function_Create(js_wasm_global_value_of));
+  js_set_getter_desc(js, js->builtins.wasm_global_proto, "value", 5, Ant_Function_Create(js_wasm_global_value_getter), JS_DESC_C);
+  js_set_setter_desc(js, js->builtins.wasm_global_proto, "value", 5, Ant_Function_Create(js_wasm_global_value_setter), JS_DESC_C);
 
-  js_set_getter_desc(js, js->builtins.wasm_instance_proto, "exports", 7, js_mkfun(js_wasm_instance_exports_getter), JS_DESC_C);
-  js_set_getter_desc(js, js->builtins.wasm_memory_proto, "buffer", 6, js_mkfun(js_wasm_memory_buffer_getter), JS_DESC_C);
-  js_set(js, js->builtins.wasm_memory_proto, "grow", js_mkfun_arity(js_wasm_memory_grow, 1));
+  js_set_getter_desc(js, js->builtins.wasm_instance_proto, "exports", 7, Ant_Function_Create(js_wasm_instance_exports_getter), JS_DESC_C);
+  js_set_getter_desc(js, js->builtins.wasm_memory_proto, "buffer", 6, Ant_Function_Create(js_wasm_memory_buffer_getter), JS_DESC_C);
+  js_set(js, js->builtins.wasm_memory_proto, "grow", Ant_Function_CreateWithArity(js_wasm_memory_grow, 1));
 
-  js_set_getter_desc(js, js->builtins.wasm_table_proto, "length", 6, js_mkfun(js_wasm_table_length_getter), JS_DESC_C);
-  js_set(js, js->builtins.wasm_table_proto, "get", js_mkfun_arity(js_wasm_table_get, 1));
-  js_set(js, js->builtins.wasm_table_proto, "set", js_mkfun_arity(js_wasm_table_set, 1));
-  js_set(js, js->builtins.wasm_table_proto, "grow", js_mkfun_arity(js_wasm_table_grow, 1));
+  js_set_getter_desc(js, js->builtins.wasm_table_proto, "length", 6, Ant_Function_Create(js_wasm_table_length_getter), JS_DESC_C);
+  js_set(js, js->builtins.wasm_table_proto, "get", Ant_Function_CreateWithArity(js_wasm_table_get, 1));
+  js_set(js, js->builtins.wasm_table_proto, "set", Ant_Function_CreateWithArity(js_wasm_table_set, 1));
+  js_set(js, js->builtins.wasm_table_proto, "grow", Ant_Function_CreateWithArity(js_wasm_table_grow, 1));
 
-  ant_value_t module_ctor = js_make_intrinsic_ctor(js, js_wasm_module_ctor, js->builtins.wasm_module_proto, "Module", 1);
-  ant_value_t instance_ctor = js_make_intrinsic_ctor(js, js_wasm_instance_ctor, js->builtins.wasm_instance_proto, "Instance", 1);
-  ant_value_t global_ctor = js_make_intrinsic_ctor(js, js_wasm_global_ctor, js->builtins.wasm_global_proto, "Global", 1);
-  ant_value_t memory_ctor = js_make_intrinsic_ctor(js, js_wasm_memory_ctor, js->builtins.wasm_memory_proto, "Memory", 1);
-  ant_value_t table_ctor = js_make_intrinsic_ctor(js, js_wasm_table_ctor, js->builtins.wasm_table_proto, "Table", 1);
-  ant_value_t tag_ctor = js_make_intrinsic_ctor(js, js_wasm_tag_ctor, js->builtins.wasm_tag_proto, "Tag", 1);
-  ant_value_t exception_ctor = js_make_intrinsic_ctor(js, js_wasm_exception_ctor, js->builtins.wasm_exception_proto, "Exception", 2);
+  ant_value_t module_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_wasm_module_ctor, js->builtins.wasm_module_proto, "Module", 1);
+  ant_value_t instance_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_wasm_instance_ctor, js->builtins.wasm_instance_proto, "Instance", 1);
+  ant_value_t global_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_wasm_global_ctor, js->builtins.wasm_global_proto, "Global", 1);
+  ant_value_t memory_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_wasm_memory_ctor, js->builtins.wasm_memory_proto, "Memory", 1);
+  ant_value_t table_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_wasm_table_ctor, js->builtins.wasm_table_proto, "Table", 1);
+  ant_value_t tag_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_wasm_tag_ctor, js->builtins.wasm_tag_proto, "Tag", 1);
+  ant_value_t exception_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_wasm_exception_ctor, js->builtins.wasm_exception_proto, "Exception", 2);
 
-  ant_value_t compile_error_ctor = js_make_intrinsic_ctor(js, js_wasm_compile_error_ctor, js->builtins.wasm_compileerror_proto, "CompileError", 1);
-  ant_value_t link_error_ctor = js_make_intrinsic_ctor(js, js_wasm_link_error_ctor, js->builtins.wasm_linkerror_proto, "LinkError", 1);
-  ant_value_t runtime_error_ctor = js_make_intrinsic_ctor(js, js_wasm_runtime_error_ctor, js->builtins.wasm_runtimeerror_proto, "RuntimeError", 1);
+  ant_value_t compile_error_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_wasm_compile_error_ctor, js->builtins.wasm_compileerror_proto, "CompileError", 1);
+  ant_value_t link_error_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_wasm_link_error_ctor, js->builtins.wasm_linkerror_proto, "LinkError", 1);
+  ant_value_t runtime_error_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_wasm_runtime_error_ctor, js->builtins.wasm_runtimeerror_proto, "RuntimeError", 1);
 
-  js_set(js, module_ctor, "imports", js_mkfun(js_wasm_module_imports));
-  js_set(js, module_ctor, "exports", js_mkfun(js_wasm_module_exports));
-  js_set(js, module_ctor, "customSections", js_mkfun(js_wasm_module_custom_sections));
+  js_set(js, module_ctor, "imports", Ant_Function_Create(js_wasm_module_imports));
+  js_set(js, module_ctor, "exports", Ant_Function_Create(js_wasm_module_exports));
+  js_set(js, module_ctor, "customSections", Ant_Function_Create(js_wasm_module_custom_sections));
 
-  js_set(js, ns, "validate", js_mkfun_arity(js_wasm_validate, 1));
-  js_set(js, ns, "compile", js_mkfun_arity(js_wasm_compile, 1));
-  js_set(js, ns, "instantiate", js_mkfun_arity(js_wasm_instantiate, 1));
+  js_set(js, ns, "validate", Ant_Function_CreateWithArity(js_wasm_validate, 1));
+  js_set(js, ns, "compile", Ant_Function_CreateWithArity(js_wasm_compile, 1));
+  js_set(js, ns, "instantiate", Ant_Function_CreateWithArity(js_wasm_instantiate, 1));
 
   js_set(js, ns, "Module", module_ctor);
   js_set(js, ns, "Instance", instance_ctor);

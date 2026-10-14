@@ -464,22 +464,22 @@ void init_formdata_module(ant_t *js) {
   ant_value_t g = js_glob(js);
   js->builtins.formdata_proto = js_mkobj(js);
 
-  js_set(js, js->builtins.formdata_proto, "append",  js_mkfun(js_formdata_append));
-  js_set(js, js->builtins.formdata_proto, "set",     js_mkfun(js_formdata_set));
-  js_set(js, js->builtins.formdata_proto, "get",     js_mkfun(js_formdata_get));
-  js_set(js, js->builtins.formdata_proto, "getAll",  js_mkfun(js_formdata_get_all));
-  js_set(js, js->builtins.formdata_proto, "has",     js_mkfun(js_formdata_has));
-  js_set(js, js->builtins.formdata_proto, "delete",  js_mkfun(js_formdata_delete));
-  js_set(js, js->builtins.formdata_proto, "forEach", js_mkfun(js_formdata_foreach));
-  js_set(js, js->builtins.formdata_proto, "entries", js_mkfun(js_formdata_entries));
-  js_set(js, js->builtins.formdata_proto, "keys",    js_mkfun(js_formdata_keys));
-  js_set(js, js->builtins.formdata_proto, "values",  js_mkfun(js_formdata_values));
+  js_set(js, js->builtins.formdata_proto, "append",  Ant_Function_Create(js_formdata_append));
+  js_set(js, js->builtins.formdata_proto, "set",     Ant_Function_Create(js_formdata_set));
+  js_set(js, js->builtins.formdata_proto, "get",     Ant_Function_Create(js_formdata_get));
+  js_set(js, js->builtins.formdata_proto, "getAll",  Ant_Function_Create(js_formdata_get_all));
+  js_set(js, js->builtins.formdata_proto, "has",     Ant_Function_Create(js_formdata_has));
+  js_set(js, js->builtins.formdata_proto, "delete",  Ant_Function_Create(js_formdata_delete));
+  js_set(js, js->builtins.formdata_proto, "forEach", Ant_Function_Create(js_formdata_foreach));
+  js_set(js, js->builtins.formdata_proto, "entries", Ant_Function_Create(js_formdata_entries));
+  js_set(js, js->builtins.formdata_proto, "keys",    Ant_Function_Create(js_formdata_keys));
+  js_set(js, js->builtins.formdata_proto, "values",  Ant_Function_Create(js_formdata_values));
 
   js_set_sym(js, js->builtins.formdata_proto, js->sym.iterator_sym,    js_get(js, js->builtins.formdata_proto, "entries"));
   js_set_tostringtag(js, js->builtins.formdata_proto, js_mkstr(js, "FormData", 8));
 
   ant_value_t ctor_obj = js_mkobj(js);
-  js_set_slot(ctor_obj, SLOT_CFUNC, js_mkfun(js_formdata_ctor));
+  js_set_slot(ctor_obj, SLOT_CFUNC, Ant_Function_Create(js_formdata_ctor));
   js_mkprop_fast(js, ctor_obj, "prototype", 9, js->builtins.formdata_proto);
   js_set_function_name(js, ctor_obj, "FormData", sizeof("FormData") - 1);
 
@@ -492,7 +492,7 @@ void init_formdata_module(ant_t *js) {
 
   js->builtins.formdata_iter_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.formdata_iter_proto, js->sym.iterator_proto);
-  js_set(js, js->builtins.formdata_iter_proto, "next", js_mkfun(formdata_iter_next));
+  js_set(js, js->builtins.formdata_iter_proto, "next", Ant_Function_Create(formdata_iter_next));
   js_set_descriptor(js, js->builtins.formdata_iter_proto, "next", 4, JS_DESC_W | JS_DESC_E | JS_DESC_C);
-  js_set_sym(js, js->builtins.formdata_iter_proto, js->sym.iterator_sym, js_mkfun(sym_this_cb));
+  js_set_sym(js, js->builtins.formdata_iter_proto, js->sym.iterator_sym, Ant_Function_Create(sym_this_cb));
 }

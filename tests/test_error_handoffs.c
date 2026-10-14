@@ -79,7 +79,7 @@ static void CheckFunctionAllocationFailure(ant_t *js) {
   GC_ROOT_PIN(js, obj);
   ant_value_t oom = js->exception_oom;
   GC_ROOT_PIN(js, oom);
-  ant_value_t native = js_mkfun(handled_native_failure);
+  ant_value_t native = Ant_Function_Create(handled_native_failure);
   ant_value_t bind = js_getprop_fallback(js, native, "bind");
   assert(vtype(bind) == kTypeBuiltin);
   const char *source = "globalThis.__allocationProxy = new Proxy(function () {}, {});";
@@ -165,7 +165,7 @@ static void CheckFinallyCompletionRoots(ant_t *js) {
   init_intrinsic_symbols(js);
   init_iterator_module(js);
   init_generator_module(js);
-  js_set(js, js->global, "__collectFinally", js_mkfun(collect_finally_completion));
+  js_set(js, js->global, "__collectFinally", Ant_Function_Create(collect_finally_completion));
   uintptr_t stack_base = (uintptr_t)js->cstk.main_base;
   js_setstackbase(js, NULL);
   const char *active =
@@ -208,7 +208,7 @@ static ant_value_t capture_await_coroutine(ant_params_t) {
 }
 
 static ant_value_t StartTestAwait(ant_t *js, ant_value_t value, coroutine_t **coro) {
-  js_set(js, js->global, "__captureAwaitCoro", js_mkfun(capture_await_coroutine));
+  js_set(js, js->global, "__captureAwaitCoro", Ant_Function_Create(capture_await_coroutine));
   js_set(js, js->global, "__awaitInput", value);
   const char *source =
     "globalThis.__awaitOutput = (async function() {"
@@ -449,14 +449,14 @@ static void CheckOnceAttachmentCleanup(ant_t *js) {
       ant_value_t options = js_mkobj(js);
       GC_ROOT_PIN(js, options);
       js_set(js, options, "signal", once_signal);
-      js_set(js, target, "removeListener", js_mkfun(RemoveOnceListener));
-      js_set(js, target, "on", js_mkfun(handled_native_failure));
+      js_set(js, target, "removeListener", Ant_Function_Create(RemoveOnceListener));
+      js_set(js, target, "on", Ant_Function_Create(handled_native_failure));
       const char *name = failures[failure].name;
       if (failures[failure].getter)
-        js_set_getter_desc(js, target, name, strlen(name), js_mkfun(FailOnceAttachment), JS_DESC_C);
-      else js_set(js, target, name, js_mkfun(FailOnceAttachment));
+        js_set_getter_desc(js, target, name, strlen(name), Ant_Function_Create(FailOnceAttachment), JS_DESC_C);
+      else js_set(js, target, name, Ant_Function_Create(FailOnceAttachment));
 
-      abort_signal_add_listener(js, once_signal, js_mkfun(UnrelatedAbortListener));
+      abort_signal_add_listener(js, once_signal, Ant_Function_Create(UnrelatedAbortListener));
       expected_reason = reasons[i];
       once_removes = once_unrelated_aborts = 0;
       ant_value_t args[] = { target, event_name, options };
@@ -720,11 +720,11 @@ int main(void) {
 
     ant_value_t args[9] = { js_throw(js, expected_reason), js_mknum(42) };
     ant_value_t original = args[0];
-    ant_value_t result = Ant_Error_CallCallback(js, js_mkfun(check_callback), js_mkundef(), args, 9);
+    ant_value_t result = Ant_Error_CallCallback(js, Ant_Function_Create(check_callback), js_mkundef(), args, 9);
     assert(!is_err(result) && !Ant_Exception_Pending(js) && args[0] == original && args[1] == js_mknum(42));
     callback_throw = expected_reason;
     args[0] = js_throw(js, expected_reason);
-    result = Ant_Error_CallCallback(js, js_mkfun(throwing_callback), js_mkundef(), args, 2);
+    result = Ant_Error_CallCallback(js, Ant_Function_Create(throwing_callback), js_mkundef(), args, 2);
     assert(is_err(result) && Ant_Exception_Pending(js) && Ant_Exception_Value(js, Ant_Exception_Peek(js)) == callback_throw);
     js_take_thrown(js, result);
   }
@@ -739,8 +739,8 @@ int main(void) {
   // Internal observation queues setup failures; it does not call the owner inline.
   expected_reason = js_mkundef();
   p = promise(js);
-  js_set_getter_desc(js, js_as_obj(p), "constructor", 11, js_mkfun(constructor_getter), JS_DESC_C);
-  Ant_Promise_Observe(js, p, js_mkundef(), js_mkfun(check_callback));
+  js_set_getter_desc(js, js_as_obj(p), "constructor", 11, Ant_Function_Create(constructor_getter), JS_DESC_C);
+  Ant_Promise_Observe(js, p, js_mkundef(), Ant_Function_Create(check_callback));
   assert(!Ant_Exception_Pending(js) && callback_calls == 10);
   process_microtasks(js);
   assert(callback_calls == 11 && !Ant_Exception_Pending(js));
@@ -803,10 +803,10 @@ int main(void) {
   // The VM's builtin fast path must enforce the same scope as other native
   // entries, including when it is called without an active JS frame.
   second = js_throw(js, error);
-  success = sv_vm_call(js->vm, js, js_mkfun(handled_native_failure), js_mkundef(), NULL, 0, NULL, js_mkundef());
+  success = sv_vm_call(js->vm, js, Ant_Function_Create(handled_native_failure), js_mkundef(), NULL, 0, NULL, js_mkundef());
   assert(success == js_mknum(42) && Ant_Exception_Peek(js) == second);
   Ant_Exception_Clear(js);
-  escaped = sv_vm_call(js->vm, js, js_mkfun(forgotten_native_failure), js_mkundef(), NULL, 0, NULL, js_mkundef());
+  escaped = sv_vm_call(js->vm, js, Ant_Function_Create(forgotten_native_failure), js_mkundef(), NULL, 0, NULL, js_mkundef());
   assert(is_err(escaped) && Ant_Exception_Peek(js) == escaped);
   assert(vtype(js_take_thrown(js, escaped)) == kTypeNull);
 

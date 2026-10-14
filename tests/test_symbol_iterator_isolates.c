@@ -68,8 +68,8 @@ static void CheckGrowth(ant_t *js) {
     GC_ROOT_SAVE(setup_mark, js);
     protos[i] = js_mkobj(js);
     GC_ROOT_PIN(js, protos[i]);
-    js_set(js, protos[i], "next", js_mkfun(Next));
-    js_set_sym(js, protos[i], js->sym.iterator_sym, js_mkfun(sym_this_cb));
+    js_set(js, protos[i], "next", Ant_Function_Create(Next));
+    js_set_sym(js, protos[i], js->sym.iterator_sym, Ant_Function_Create(sym_this_cb));
     js_iter_register_advance(js, protos[i], Advance);
     GC_ROOT_RESTORE(js, setup_mark);
   }
@@ -87,7 +87,7 @@ static void CheckGrowth(ant_t *js) {
     assert(js_iter_open(js, iterator, &it) && it.advance == Advance);
     ant_value_t value;
     assert(js_iter_next(js, &it, &value) && js_getnum(value) == 17);
-    js_set(js, iterator, "next", js_mkfun(OtherNext));
+    js_set(js, iterator, "next", Ant_Function_Create(OtherNext));
     assert(js_iter_open(js, iterator, &it) && !it.advance);
     assert(js_iter_next(js, &it, &value) && js_getnum(value) == 99);
     GC_ROOT_RESTORE(js, mark);

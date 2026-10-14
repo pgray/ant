@@ -177,7 +177,7 @@ void temporal_init_plain_monthday(ant_t *js, ant_value_t temporal) {
   TEMPORAL_METHOD(js, proto, "valueOf", temporal_plain_monthday_value_of, 0);
   TEMPORAL_METHOD(js, proto, "with", temporal_plain_monthday_with, 1);
   temporal_set_to_string_tag(js, proto, "Temporal.PlainMonthDay");
-  ant_value_t ctor = js_make_intrinsic_ctor(js, temporal_plain_monthday_ctor, proto, "PlainMonthDay", 2);
+  ant_value_t ctor = Ant_Function_CreateIntrinsicConstructor(js, temporal_plain_monthday_ctor, proto, "PlainMonthDay", 2);
   TEMPORAL_METHOD(js, ctor, "from", temporal_plain_monthday_from, 1);
   temporal_set_namespace_property(js, temporal, "PlainMonthDay", ctor);
 }

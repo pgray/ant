@@ -550,23 +550,27 @@ static ant_value_t js_arraybuffer_byteLength_getter(ant_params_t) {
   return js_mknum((double)data->length);
 }
 
+static __attribute__((noinline, cold)) ant_value_t typedarray_receiver_error(ant_t *js, const char *getter) {
+  return js_mkerr_typed(js, JS_ERR_TYPE, "Method get TypedArray.prototype.%s called on incompatible receiver", getter);
+}
+
 static ant_value_t js_typedarray_length_getter(ant_params_t) {
   TypedArrayData *data = buffer_get_typedarray_data(js_getthis(js));
-  if (!data) return js_mkerr_typed(js, JS_ERR_TYPE, "Not a TypedArray");
+  if (!data) return typedarray_receiver_error(js, "length");
   if (!data->buffer || data->buffer->is_detached) return js_mknum(0);
   return js_mknum((double)data->length);
 }
 
 static ant_value_t js_typedarray_byteLength_getter(ant_params_t) {
   TypedArrayData *data = buffer_get_typedarray_data(js_getthis(js));
-  if (!data) return js_mkerr_typed(js, JS_ERR_TYPE, "Not a TypedArray");
+  if (!data) return typedarray_receiver_error(js, "byteLength");
   if (!data->buffer || data->buffer->is_detached) return js_mknum(0);
   return js_mknum((double)data->byte_length);
 }
 
 static ant_value_t js_typedarray_byteOffset_getter(ant_params_t) {
   TypedArrayData *data = buffer_get_typedarray_data(js_getthis(js));
-  if (!data) return js_mkerr_typed(js, JS_ERR_TYPE, "Not a TypedArray");
+  if (!data) return typedarray_receiver_error(js, "byteOffset");
   if (!data->buffer || data->buffer->is_detached) return js_mknum(0);
   return js_mknum((double)data->byte_offset);
 }
@@ -580,7 +584,7 @@ static ant_value_t js_dataview_buffer_getter(ant_params_t) {
 
 static ant_value_t js_typedarray_buffer_getter(ant_params_t) {
   ant_value_t this_val = js_getthis(js);
-  if (!buffer_get_typedarray_data(this_val)) return js_mkerr_typed(js, JS_ERR_TYPE, "Not a TypedArray");
+  if (!buffer_get_typedarray_data(this_val)) return typedarray_receiver_error(js, "buffer");
   return js_get_slot(this_val, SLOT_DATA);
 }
 
@@ -1975,7 +1979,7 @@ static void setup_typedarray_kind(ant_t *js, TypedArrayType type, ant_value_t ba
   js_set_proto_init(ctor_obj, base_ctor);
   js_set_proto_init(proto, base_proto);
   js->builtins.typedarray_protos[type] = proto;
-  js_set_slot(ctor_obj, SLOT_CFUNC, js_mkfun(js_typedarray_kind_constructor));
+  js_set_slot(ctor_obj, SLOT_CFUNC, Ant_Function_Create(js_typedarray_kind_constructor));
   js_set_slot(ctor_obj, SLOT_AUX, js_mknum((double)type));
   
   mkprop(js, ctor_obj, js->length_str, js_mknum(3), ANT_PROP_ATTR_CONFIGURABLE);
@@ -2393,6 +2397,8 @@ static ant_value_t js_buffer_from(ant_params_t) {
   }
 
   ArrayBufferData *arraybuffer = buffer_get_arraybuffer_data(args[0]);
+  if (arraybuffer && arraybuffer->is_detached)
+    return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot perform Construct on a detached ArrayBuffer");
   if (arraybuffer) {
     size_t byte_offset = 0;
     size_t byte_length = arraybuffer->length;
@@ -3492,23 +3498,25 @@ static __attribute__((noinline, cold)) ant_value_t buffer_bounds_error(ant_t *js
   if (max < 0) return js_mkerr_code(js, JS_ERR_RANGE, "ERR_BUFFER_OUT_OF_BOUNDS", "Attempt to access memory outside buffer bounds");
   
   char range[64];
-  snprintf(range, sizeof(range), ">= 0 and <= %.0f", max);
+  if (isnan(max)) snprintf(range, sizeof(range), ">= 0 and <= NaN");
+  else snprintf(range, sizeof(range), ">= 0 and <= %.0f", max);
   return buffer_out_of_range(js, "offset", range, offset);
 }
 
 static ant_value_t buffer_access_ptr(ant_t *js, ant_value_t offset_value, size_t width, uint8_t **ptr, size_t *offset) {
-  TypedArrayData *ta = buffer_get_typedarray_data(js_getthis(js));
-  if (!ta) return js_mkerr(js, "Invalid Buffer");
-  
-  if (!ta->buffer || ta->buffer->is_detached)
-    return js_mkerr(js, "Cannot operate on a detached TypedArray");
-
   if (vtype(offset_value) == kTypeUndefined) offset_value = js_mknum(0);
   if (vtype(offset_value) != kTypeNumber) return buffer_arg_type_error(js, "offset", offset_value);
+  
+  ant_value_t receiver = js_getthis(js);
+  TypedArrayData *ta = buffer_get_typedarray_data(receiver);
+  if (ta && (!ta->buffer || ta->buffer->is_detached))
+    return js_mkerr(js, "Cannot operate on a detached TypedArray");
 
   double n = js_getnum(offset_value);
-  double max = (double)ta->byte_length - (double)width;
-  if (floor(n) != n || n < 0 || n > max) return buffer_bounds_error(js, offset_value, max);
+  double length = ta ? (double)ta->byte_length : js_to_number(js, js_getprop_fallback(js, receiver, "length"));
+  double max = length - (double)width;
+  if (floor(n) != n || n < 0 || !(n <= max)) return buffer_bounds_error(js, offset_value, max);
+  if (!ta) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid Buffer");
 
   *offset = (size_t)n;
   *ptr = ta->buffer->data + ta->byte_offset + *offset;
@@ -4072,18 +4080,18 @@ void init_buffer_module(ant_t *js) {
   js_set_proto_init(arraybuffer_proto, object_proto);
   js->builtins.arraybuffer_proto = arraybuffer_proto;
   
-  defmethod(js, arraybuffer_proto, "slice", 5, js_mkfun_arity(js_arraybuffer_slice, 2));
-  defmethod(js, arraybuffer_proto, "transfer", 8, js_mkfun(js_arraybuffer_transfer));
-  defmethod(js, arraybuffer_proto, "transferToFixedLength", 21, js_mkfun(js_arraybuffer_transferToFixedLength));
+  defmethod(js, arraybuffer_proto, "slice", 5, Ant_Function_CreateWithArity(js_arraybuffer_slice, 2));
+  defmethod(js, arraybuffer_proto, "transfer", 8, Ant_Function_Create(js_arraybuffer_transfer));
+  defmethod(js, arraybuffer_proto, "transferToFixedLength", 21, Ant_Function_Create(js_arraybuffer_transferToFixedLength));
   
-  js_set_getter_desc(js, arraybuffer_proto, "detached", 8, js_mkfun(js_arraybuffer_detached_getter), JS_DESC_C);
+  js_set_getter_desc(js, arraybuffer_proto, "detached", 8, Ant_Function_Create(js_arraybuffer_detached_getter), JS_DESC_C);
   js_set_getter_desc(js, arraybuffer_proto, "byteLength", 10, js_mkfun_meta(&arraybuffer_byte_length_getter.meta), JS_DESC_C);
   js_set_tostringtag(js, arraybuffer_proto, js_mkstr(js, "ArrayBuffer", 11));
   
-  js_set_slot(arraybuffer_ctor_obj, SLOT_CFUNC, js_mkfun_arity(js_arraybuffer_constructor, 1));
+  js_set_slot(arraybuffer_ctor_obj, SLOT_CFUNC, Ant_Function_CreateWithArity(js_arraybuffer_constructor, 1));
   mkprop_exact_attrs(js, arraybuffer_ctor_obj, ANT_STRING("prototype"), arraybuffer_proto, 0);
   mkprop_exact_attrs(js, arraybuffer_ctor_obj, ANT_STRING("name"), ANT_STRING("ArrayBuffer"), ANT_PROP_ATTR_CONFIGURABLE);
-  defmethod(js, arraybuffer_ctor_obj, "isView", 6, js_mkfun_arity(js_arraybuffer_isView, 1));
+  defmethod(js, arraybuffer_ctor_obj, "isView", 6, Ant_Function_CreateWithArity(js_arraybuffer_isView, 1));
   js_define_species_getter(js, arraybuffer_ctor_obj);
   
   ant_value_t arraybuffer_ctor = js_obj_to_func(js, arraybuffer_ctor_obj);
@@ -4098,42 +4106,42 @@ void init_buffer_module(ant_t *js) {
   js_set_getter_desc(js, typedarray_proto, "byteLength", 10, js_mkfun_meta(&typedarray_byte_length_getter.meta), JS_DESC_C);
   js_set_getter_desc(js, typedarray_proto, "byteOffset", 10, js_mkfun_meta(&typedarray_byte_offset_getter.meta), JS_DESC_C);
   
-  defmethod(js, typedarray_proto, "at", 2, js_mkfun_arity(js_typedarray_at, 1));
-  defmethod(js, typedarray_proto, "set", 3, js_mkfun_arity(js_typedarray_set, 1));
-  defmethod(js, typedarray_proto, "copyWithin", 10, js_mkfun_arity(js_typedarray_copyWithin, 2));
-  defmethod(js, typedarray_proto, "slice", 5, js_mkfun_arity(js_typedarray_slice, 2));
-  defmethod(js, typedarray_proto, "subarray", 8, js_mkfun_arity(js_typedarray_subarray, 2));
-  defmethod(js, typedarray_proto, "fill", 4, js_mkfun_arity(js_typedarray_fill, 1));
-  defmethod(js, typedarray_proto, "toReversed", 10, js_mkfun(js_typedarray_toReversed));
-  defmethod(js, typedarray_proto, "toSorted", 8, js_mkfun_arity(js_typedarray_toSorted, 1));
-  defmethod(js, typedarray_proto, "with", 4, js_mkfun_arity(js_typedarray_with, 2));
-  defmethod(js, typedarray_proto, "toString", 8, js_mkfun(js_typedarray_toString));
-  defmethod(js, typedarray_proto, "join", 4, js_mkfun_arity(js_typedarray_join, 1));
-  defmethod(js, typedarray_proto, "indexOf", 7, js_mkfun_arity(js_typedarray_indexOf, 1));
-  defmethod(js, typedarray_proto, "lastIndexOf", 11, js_mkfun_arity(js_typedarray_lastIndexOf, 1));
-  defmethod(js, typedarray_proto, "includes", 8, js_mkfun_arity(js_typedarray_includes, 1));
-  defmethod(js, typedarray_proto, "every", 5, js_mkfun_arity(js_typedarray_every, 1));
-  defmethod(js, typedarray_proto, "filter", 6, js_mkfun_arity(js_typedarray_filter, 1));
-  defmethod(js, typedarray_proto, "find", 4, js_mkfun_arity(js_typedarray_find, 1));
-  defmethod(js, typedarray_proto, "findIndex", 9, js_mkfun_arity(js_typedarray_findIndex, 1));
-  defmethod(js, typedarray_proto, "forEach", 7, js_mkfun_arity(js_typedarray_forEach, 1));
-  defmethod(js, typedarray_proto, "map", 3, js_mkfun_arity(js_typedarray_map, 1));
-  defmethod(js, typedarray_proto, "reduce", 6, js_mkfun_arity(js_typedarray_reduce, 1));
-  defmethod(js, typedarray_proto, "reduceRight", 11, js_mkfun_arity(js_typedarray_reduceRight, 1));
-  defmethod(js, typedarray_proto, "reverse", 7, js_mkfun(js_typedarray_reverse));
-  defmethod(js, typedarray_proto, "some", 4, js_mkfun_arity(js_typedarray_some, 1));
-  defmethod(js, typedarray_proto, "sort", 4, js_mkfun_arity(js_typedarray_sort, 1));
-  js_set_sym_getter_desc(js, typedarray_proto, js->sym.toStringTag_sym, js_mkfun(js_typedarray_toStringTag_getter), JS_DESC_C);
+  defmethod(js, typedarray_proto, "at", 2, Ant_Function_CreateWithArity(js_typedarray_at, 1));
+  defmethod(js, typedarray_proto, "set", 3, Ant_Function_CreateWithArity(js_typedarray_set, 1));
+  defmethod(js, typedarray_proto, "copyWithin", 10, Ant_Function_CreateWithArity(js_typedarray_copyWithin, 2));
+  defmethod(js, typedarray_proto, "slice", 5, Ant_Function_CreateWithArity(js_typedarray_slice, 2));
+  defmethod(js, typedarray_proto, "subarray", 8, Ant_Function_CreateWithArity(js_typedarray_subarray, 2));
+  defmethod(js, typedarray_proto, "fill", 4, Ant_Function_CreateWithArity(js_typedarray_fill, 1));
+  defmethod(js, typedarray_proto, "toReversed", 10, Ant_Function_Create(js_typedarray_toReversed));
+  defmethod(js, typedarray_proto, "toSorted", 8, Ant_Function_CreateWithArity(js_typedarray_toSorted, 1));
+  defmethod(js, typedarray_proto, "with", 4, Ant_Function_CreateWithArity(js_typedarray_with, 2));
+  defmethod(js, typedarray_proto, "toString", 8, Ant_Function_Create(js_typedarray_toString));
+  defmethod(js, typedarray_proto, "join", 4, Ant_Function_CreateWithArity(js_typedarray_join, 1));
+  defmethod(js, typedarray_proto, "indexOf", 7, Ant_Function_CreateWithArity(js_typedarray_indexOf, 1));
+  defmethod(js, typedarray_proto, "lastIndexOf", 11, Ant_Function_CreateWithArity(js_typedarray_lastIndexOf, 1));
+  defmethod(js, typedarray_proto, "includes", 8, Ant_Function_CreateWithArity(js_typedarray_includes, 1));
+  defmethod(js, typedarray_proto, "every", 5, Ant_Function_CreateWithArity(js_typedarray_every, 1));
+  defmethod(js, typedarray_proto, "filter", 6, Ant_Function_CreateWithArity(js_typedarray_filter, 1));
+  defmethod(js, typedarray_proto, "find", 4, Ant_Function_CreateWithArity(js_typedarray_find, 1));
+  defmethod(js, typedarray_proto, "findIndex", 9, Ant_Function_CreateWithArity(js_typedarray_findIndex, 1));
+  defmethod(js, typedarray_proto, "forEach", 7, Ant_Function_CreateWithArity(js_typedarray_forEach, 1));
+  defmethod(js, typedarray_proto, "map", 3, Ant_Function_CreateWithArity(js_typedarray_map, 1));
+  defmethod(js, typedarray_proto, "reduce", 6, Ant_Function_CreateWithArity(js_typedarray_reduce, 1));
+  defmethod(js, typedarray_proto, "reduceRight", 11, Ant_Function_CreateWithArity(js_typedarray_reduceRight, 1));
+  defmethod(js, typedarray_proto, "reverse", 7, Ant_Function_Create(js_typedarray_reverse));
+  defmethod(js, typedarray_proto, "some", 4, Ant_Function_CreateWithArity(js_typedarray_some, 1));
+  defmethod(js, typedarray_proto, "sort", 4, Ant_Function_CreateWithArity(js_typedarray_sort, 1));
+  js_set_sym_getter_desc(js, typedarray_proto, js->sym.toStringTag_sym, Ant_Function_Create(js_typedarray_toStringTag_getter), JS_DESC_C);
 
   ant_value_t typedarray_ctor_obj = js_mkobj(js);
   js_set_proto_init(typedarray_ctor_obj, function_proto);
-  js_set_slot(typedarray_ctor_obj, SLOT_CFUNC, js_mkfun(js_typedarray_base_constructor));
+  js_set_slot(typedarray_ctor_obj, SLOT_CFUNC, Ant_Function_Create(js_typedarray_base_constructor));
   mkprop(js, typedarray_ctor_obj, js->length_str, js_mknum(0), ANT_PROP_ATTR_CONFIGURABLE);
   mkprop(js, typedarray_ctor_obj, ANT_STRING("name"), ANT_STRING("TypedArray"), ANT_PROP_ATTR_CONFIGURABLE);
   mkprop_exact_attrs(js, typedarray_ctor_obj, ANT_STRING("prototype"), typedarray_proto, 0);
   
-  defmethod(js, typedarray_ctor_obj, "of", 2, js_mkfun_arity(js_typedarray_static_of, 0));
-  defmethod(js, typedarray_ctor_obj, "from", 4, js_mkfun_arity(js_typedarray_static_from, 1));
+  defmethod(js, typedarray_ctor_obj, "of", 2, Ant_Function_CreateWithArity(js_typedarray_static_of, 0));
+  defmethod(js, typedarray_ctor_obj, "from", 4, Ant_Function_CreateWithArity(js_typedarray_static_from, 1));
   js_define_species_getter(js, typedarray_ctor_obj);
   
   ant_value_t typedarray_ctor = js_obj_to_func(js, typedarray_ctor_obj);
@@ -4141,12 +4149,12 @@ void init_buffer_module(ant_t *js) {
 
   js->builtins.typedarray_iter_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.typedarray_iter_proto, js->sym.iterator_proto);
-  js_set(js, js->builtins.typedarray_iter_proto, "next", js_mkfun(ta_iter_next));
+  js_set(js, js->builtins.typedarray_iter_proto, "next", Ant_Function_Create(ta_iter_next));
   js_iter_register_advance(js, js->builtins.typedarray_iter_proto, advance_typedarray);
 
-  defmethod(js, typedarray_proto, "values", 6, js_mkfun(ta_values));
-  defmethod(js, typedarray_proto, "keys", 4, js_mkfun(ta_keys));
-  defmethod(js, typedarray_proto, "entries", 7, js_mkfun(ta_entries));
+  defmethod(js, typedarray_proto, "values", 6, Ant_Function_Create(ta_values));
+  defmethod(js, typedarray_proto, "keys", 4, Ant_Function_Create(ta_keys));
+  defmethod(js, typedarray_proto, "entries", 7, Ant_Function_Create(ta_entries));
   js_set_sym(js, typedarray_proto, js->sym.iterator_sym, js_get(js, typedarray_proto, "values"));
   
   for (TypedArrayType type = TYPED_ARRAY_INT8; type <= TYPED_ARRAY_BIGUINT64; type++)
@@ -4155,12 +4163,12 @@ void init_buffer_module(ant_t *js) {
   ant_value_t uint8array_codec_ctor = js_get(js, glob, "Uint8Array");
   ant_value_t uint8array_codec_proto = js_get(js, uint8array_codec_ctor, "prototype");
   
-  defmethod(js, uint8array_codec_ctor, "fromHex", 7, js_mkfun_arity(js_uint8array_fromHex, 1));
-  defmethod(js, uint8array_codec_ctor, "fromBase64", 10, js_mkfun_arity(js_uint8array_fromBase64, 1));
-  defmethod(js, uint8array_codec_proto, "toHex", 5, js_mkfun(js_uint8array_toHex));
-  defmethod(js, uint8array_codec_proto, "toBase64", 8, js_mkfun(js_uint8array_toBase64));
-  defmethod(js, uint8array_codec_proto, "setFromHex", 10, js_mkfun_arity(js_uint8array_setFromHex, 1));
-  defmethod(js, uint8array_codec_proto, "setFromBase64", 13, js_mkfun_arity(js_uint8array_setFromBase64, 1));
+  defmethod(js, uint8array_codec_ctor, "fromHex", 7, Ant_Function_CreateWithArity(js_uint8array_fromHex, 1));
+  defmethod(js, uint8array_codec_ctor, "fromBase64", 10, Ant_Function_CreateWithArity(js_uint8array_fromBase64, 1));
+  defmethod(js, uint8array_codec_proto, "toHex", 5, Ant_Function_Create(js_uint8array_toHex));
+  defmethod(js, uint8array_codec_proto, "toBase64", 8, Ant_Function_Create(js_uint8array_toBase64));
+  defmethod(js, uint8array_codec_proto, "setFromHex", 10, Ant_Function_CreateWithArity(js_uint8array_setFromHex, 1));
+  defmethod(js, uint8array_codec_proto, "setFromBase64", 13, Ant_Function_CreateWithArity(js_uint8array_setFromBase64, 1));
   
   ant_value_t dataview_ctor_obj = js_mkobj(js);
   ant_value_t dataview_proto = js_mkobj(js);
@@ -4174,7 +4182,7 @@ void init_buffer_module(ant_t *js) {
   js_set_getter_desc(js, dataview_proto, "byteOffset", 10, js_mkfun_meta(&dataview_byte_offset_getter.meta), JS_DESC_C);
   js_set_tostringtag(js, dataview_proto, js_mkstr(js, "DataView", 8));
 
-  js_set_slot(dataview_ctor_obj, SLOT_CFUNC, js_mkfun_arity(js_dataview_constructor, 1));
+  js_set_slot(dataview_ctor_obj, SLOT_CFUNC, Ant_Function_CreateWithArity(js_dataview_constructor, 1));
   mkprop_exact_attrs(js, dataview_ctor_obj, ANT_STRING("prototype"), dataview_proto, 0);
   mkprop_exact_attrs(js, dataview_ctor_obj, ANT_STRING("name"), ANT_STRING("DataView"), ANT_PROP_ATTR_CONFIGURABLE);
   
@@ -4187,11 +4195,11 @@ void init_buffer_module(ant_t *js) {
   js_set_proto_init(sharedarraybuffer_proto, object_proto);
   js->builtins.sharedarraybuffer_proto = sharedarraybuffer_proto;
   
-  defmethod(js, sharedarraybuffer_proto, "slice", 5, js_mkfun_arity(js_arraybuffer_slice, 2));
+  defmethod(js, sharedarraybuffer_proto, "slice", 5, Ant_Function_CreateWithArity(js_arraybuffer_slice, 2));
   js_set_getter_desc(js, sharedarraybuffer_proto, "byteLength", 10, js_mkfun_meta(&sharedarraybuffer_byte_length_getter.meta), JS_DESC_C);
   js_set_tostringtag(js, sharedarraybuffer_proto, js_mkstr(js, "SharedArrayBuffer", 17));
   
-  js_set_slot(sharedarraybuffer_ctor_obj, SLOT_CFUNC, js_mkfun_arity(js_sharedarraybuffer_constructor, 1));
+  js_set_slot(sharedarraybuffer_ctor_obj, SLOT_CFUNC, Ant_Function_CreateWithArity(js_sharedarraybuffer_constructor, 1));
   mkprop_exact_attrs(js, sharedarraybuffer_ctor_obj, ANT_STRING("prototype"), sharedarraybuffer_proto, 0);
   mkprop_exact_attrs(js, sharedarraybuffer_ctor_obj, ANT_STRING("name"), ANT_STRING("SharedArrayBuffer"), ANT_PROP_ATTR_CONFIGURABLE);
   js_define_species_getter(js, sharedarraybuffer_ctor_obj);
@@ -4226,6 +4234,7 @@ void init_buffer_module(ant_t *js) {
   };
   
   js_define_methods(js, buffer_proto, buffer_proto_methods, countof(buffer_proto_methods), ANT_PROP_ATTR_DEFAULT);
+  mkprop_interned_exact(js, buffer_proto, intern_string("toLocaleString", 14), js_get(js, buffer_proto, "toString"), ANT_PROP_ATTR_DEFAULT);
   
   for (size_t i = 0; i < sizeof(buffer_num_methods) / sizeof(buffer_num_methods[0]); i++) {
     const buffer_num_method_t *m = &buffer_num_methods[i];
@@ -4240,20 +4249,20 @@ void init_buffer_module(ant_t *js) {
   
   if (vtype(uint8array_ctor) == kTypeFunction) js_set_proto_init(buffer_ctor_obj, uint8array_ctor);
   js_set(js, buffer_ctor_obj, "poolSize", js_mknum(8192));
-  js_set(js, buffer_ctor_obj, "from", js_mkfun_arity(js_buffer_from, 3));
-  js_set(js, buffer_ctor_obj, "copyBytesFrom", js_mkfun_arity(js_buffer_copyBytesFrom, 3));
-  js_set(js, buffer_ctor_obj, "of", js_mkfun(js_buffer_of));
-  js_set(js, buffer_ctor_obj, "alloc", js_mkfun_arity(js_buffer_alloc, 3));
-  js_set(js, buffer_ctor_obj, "allocUnsafe", js_mkfun_arity(js_buffer_allocUnsafe, 1));
-  js_set(js, buffer_ctor_obj, "allocUnsafeSlow", js_mkfun_arity(js_buffer_allocUnsafeSlow, 1));
-  js_set(js, buffer_ctor_obj, "isBuffer", js_mkfun_arity(js_buffer_isBuffer, 1));
-  js_set(js, buffer_ctor_obj, "compare", js_mkfun_arity(js_buffer_compare, 2));
-  js_set(js, buffer_ctor_obj, "isEncoding", js_mkfun_arity(js_buffer_isEncoding, 1));
-  js_set(js, buffer_ctor_obj, "concat", js_mkfun_arity(js_buffer_concat, 2));
-  js_set(js, buffer_ctor_obj, "byteLength", js_mkfun_arity(js_buffer_byteLength, 2));
+  js_set(js, buffer_ctor_obj, "from", Ant_Function_CreateWithArity(js_buffer_from, 3));
+  js_set(js, buffer_ctor_obj, "copyBytesFrom", Ant_Function_CreateWithArity(js_buffer_copyBytesFrom, 3));
+  js_set(js, buffer_ctor_obj, "of", Ant_Function_Create(js_buffer_of));
+  js_set(js, buffer_ctor_obj, "alloc", Ant_Function_CreateWithArity(js_buffer_alloc, 3));
+  js_set(js, buffer_ctor_obj, "allocUnsafe", Ant_Function_CreateWithArity(js_buffer_allocUnsafe, 1));
+  js_set(js, buffer_ctor_obj, "allocUnsafeSlow", Ant_Function_CreateWithArity(js_buffer_allocUnsafeSlow, 1));
+  js_set(js, buffer_ctor_obj, "isBuffer", Ant_Function_CreateWithArity(js_buffer_isBuffer, 1));
+  js_set(js, buffer_ctor_obj, "compare", Ant_Function_CreateWithArity(js_buffer_compare, 2));
+  js_set(js, buffer_ctor_obj, "isEncoding", Ant_Function_CreateWithArity(js_buffer_isEncoding, 1));
+  js_set(js, buffer_ctor_obj, "concat", Ant_Function_CreateWithArity(js_buffer_concat, 2));
+  js_set(js, buffer_ctor_obj, "byteLength", Ant_Function_CreateWithArity(js_buffer_byteLength, 2));
   js_define_species_getter(js, buffer_ctor_obj);
 
-  js_set_slot(buffer_ctor_obj, SLOT_CFUNC, js_mkfun_arity(js_buffer_from, 3));
+  js_set_slot(buffer_ctor_obj, SLOT_CFUNC, Ant_Function_CreateWithArity(js_buffer_from, 3));
   mkprop_exact_attrs(js, buffer_ctor_obj, ANT_STRING("prototype"), buffer_proto, ANT_PROP_ATTR_WRITABLE);
   mkprop_exact_attrs(js, buffer_ctor_obj, ANT_STRING("name"), ANT_STRING("Buffer"), ANT_PROP_ATTR_CONFIGURABLE);
   

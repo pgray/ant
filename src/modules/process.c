@@ -1893,25 +1893,25 @@ static ant_value_t process_get_builtin_module(ant_params_t) {
 }
 
 static void process_set_methods(ant_t *js, ant_value_t obj, bool include_event_methods) {
-  js_set(js, obj, "exit", js_mkfun_arity(process_exit, 1));
-  js_set(js, obj, "cwd", js_mkfun(process_cwd));
-  js_set(js, obj, "chdir", js_mkfun_arity(process_chdir, 1));
-  js_set(js, obj, "uptime", js_mkfun(process_uptime));
-  js_set(js, obj, "cpuUsage", js_mkfun_arity(process_cpu_usage, 1));
-  js_set(js, obj, "kill", js_mkfun_arity(process_kill, 2));
-  js_set(js, obj, "abort", js_mkfun(process_abort));
-  js_set(js, obj, "umask", js_mkfun_arity(process_umask, 1));
-  js_set(js, obj, "nextTick", js_mkfun_arity(process_next_tick, 1));
-  js_set(js, obj, "emitWarning", js_mkfun_arity(process_emit_warning, 4));
-  js_set(js, obj, "getBuiltinModule", js_mkfun_arity(process_get_builtin_module, 1));
-  js_set(js, obj, "dlopen", js_mkfun(napi_process_dlopen_js));
+  js_set(js, obj, "exit", Ant_Function_CreateWithArity(process_exit, 1));
+  js_set(js, obj, "cwd", Ant_Function_Create(process_cwd));
+  js_set(js, obj, "chdir", Ant_Function_CreateWithArity(process_chdir, 1));
+  js_set(js, obj, "uptime", Ant_Function_Create(process_uptime));
+  js_set(js, obj, "cpuUsage", Ant_Function_CreateWithArity(process_cpu_usage, 1));
+  js_set(js, obj, "kill", Ant_Function_CreateWithArity(process_kill, 2));
+  js_set(js, obj, "abort", Ant_Function_Create(process_abort));
+  js_set(js, obj, "umask", Ant_Function_CreateWithArity(process_umask, 1));
+  js_set(js, obj, "nextTick", Ant_Function_CreateWithArity(process_next_tick, 1));
+  js_set(js, obj, "emitWarning", Ant_Function_CreateWithArity(process_emit_warning, 4));
+  js_set(js, obj, "getBuiltinModule", Ant_Function_CreateWithArity(process_get_builtin_module, 1));
+  js_set(js, obj, "dlopen", Ant_Function_Create(napi_process_dlopen_js));
 
-  ant_value_t mem_usage_fn = js_heavy_mkfun_named(js, process_memory_usage, "memoryUsage", 0, js_mkundef());
-  js_set(js, mem_usage_fn, "rss", js_mkfun(process_memory_usage_rss));
+  ant_value_t mem_usage_fn = Ant_Function_CreateWithData(js, process_memory_usage, "memoryUsage", 0, js_mkundef());
+  js_set(js, mem_usage_fn, "rss", Ant_Function_Create(process_memory_usage_rss));
   js_set(js, obj, "memoryUsage", mem_usage_fn);
 
-  ant_value_t hrtime_fn = js_heavy_mkfun_named(js, process_hrtime, "hrtime", 1, js_mkundef());
-  js_set(js, hrtime_fn, "bigint", js_mkfun(process_hrtime_bigint));
+  ant_value_t hrtime_fn = Ant_Function_CreateWithData(js, process_hrtime, "hrtime", 1, js_mkundef());
+  js_set(js, hrtime_fn, "bigint", Ant_Function_Create(process_hrtime_bigint));
   js_set(js, obj, "hrtime", hrtime_fn);
 
   if (include_event_methods) {
@@ -1920,17 +1920,17 @@ static void process_set_methods(ant_t *js, ant_value_t obj, bool include_event_m
   }
 
 #ifndef _WIN32
-  js_set(js, obj, "getuid", js_mkfun(process_getuid));
-  js_set(js, obj, "geteuid", js_mkfun(process_geteuid));
-  js_set(js, obj, "getgid", js_mkfun(process_getgid));
-  js_set(js, obj, "getegid", js_mkfun(process_getegid));
-  js_set(js, obj, "getgroups", js_mkfun(process_getgroups));
-  js_set(js, obj, "setuid", js_mkfun_arity(process_setuid, 1));
-  js_set(js, obj, "setgid", js_mkfun_arity(process_setgid, 1));
-  js_set(js, obj, "seteuid", js_mkfun_arity(process_seteuid, 1));
-  js_set(js, obj, "setegid", js_mkfun_arity(process_setegid, 1));
-  js_set(js, obj, "setgroups", js_mkfun_arity(process_setgroups, 1));
-  js_set(js, obj, "initgroups", js_mkfun_arity(process_initgroups, 2));
+  js_set(js, obj, "getuid", Ant_Function_Create(process_getuid));
+  js_set(js, obj, "geteuid", Ant_Function_Create(process_geteuid));
+  js_set(js, obj, "getgid", Ant_Function_Create(process_getgid));
+  js_set(js, obj, "getegid", Ant_Function_Create(process_getegid));
+  js_set(js, obj, "getgroups", Ant_Function_Create(process_getgroups));
+  js_set(js, obj, "setuid", Ant_Function_CreateWithArity(process_setuid, 1));
+  js_set(js, obj, "setgid", Ant_Function_CreateWithArity(process_setgid, 1));
+  js_set(js, obj, "seteuid", Ant_Function_CreateWithArity(process_seteuid, 1));
+  js_set(js, obj, "setegid", Ant_Function_CreateWithArity(process_setegid, 1));
+  js_set(js, obj, "setgroups", Ant_Function_CreateWithArity(process_setgroups, 1));
+  js_set(js, obj, "initgroups", Ant_Function_CreateWithArity(process_initgroups, 2));
 #endif
 }
 
@@ -1966,17 +1966,17 @@ void init_process_module(ant_t *js) {
   eventemitter_set_listener_change_hook(js, process_obj, process_listener_change, ps);
   
   process_set_methods(js, process_obj, false);
-  js_set(js, process_obj, "binding", js_mkfun_arity(process_binding, 1));
+  js_set(js, process_obj, "binding", Ant_Function_CreateWithArity(process_binding, 1));
   js_set(js, process_obj, "_exiting", js_false);
   
   js_set_accessor_desc(
     js, process_obj, "exitCode", 8,
-    js_mkfun(process_exit_code_getter), js_mkfun(process_exit_code_setter), JS_DESC_E
+    Ant_Function_Create(process_exit_code_getter), Ant_Function_Create(process_exit_code_setter), JS_DESC_E
   );
 
   load_dotenv_file();
-  defmethod(js, env_obj, "toObject", 8, js_mkfun(env_to_object));
-  defmethod(js, env_obj, "toString", 8, js_mkfun(env_toString));
+  defmethod(js, env_obj, "toObject", 8, Ant_Function_Create(env_to_object));
+  defmethod(js, env_obj, "toString", 8, Ant_Function_Create(env_toString));
   
   ant_value_t env_proxy = js_mkproxy_host(js, env_obj, &env_host_ops);
   if (is_err(env_proxy)) return;
@@ -2067,12 +2067,12 @@ void init_process_module(ant_t *js) {
   
   ant_value_t stdin_proto = js_mkobj(js);
   if (is_object_type(ee_proto)) js_set_proto_init(stdin_proto, ee_proto);
-  js_set(js, stdin_proto, "setRawMode", js_mkfun(js_stdin_set_raw_mode));
-  js_set(js, stdin_proto, "setEncoding", js_mkfun(js_stdin_set_encoding));
-  js_set(js, stdin_proto, "resume", js_mkfun(js_stdin_resume));
-  js_set(js, stdin_proto, "pause", js_mkfun(js_stdin_pause));
-  js_set(js, stdin_proto, "ref", js_mkfun(js_stdin_ref));
-  js_set(js, stdin_proto, "unref", js_mkfun(js_stdin_unref));
+  js_set(js, stdin_proto, "setRawMode", Ant_Function_Create(js_stdin_set_raw_mode));
+  js_set(js, stdin_proto, "setEncoding", Ant_Function_Create(js_stdin_set_encoding));
+  js_set(js, stdin_proto, "resume", Ant_Function_Create(js_stdin_resume));
+  js_set(js, stdin_proto, "pause", Ant_Function_Create(js_stdin_pause));
+  js_set(js, stdin_proto, "ref", Ant_Function_Create(js_stdin_ref));
+  js_set(js, stdin_proto, "unref", Ant_Function_Create(js_stdin_unref));
   js_set_tostringtag(js, stdin_proto, js_mkstr(js, "ReadStream", 10));
   
   ant_value_t stdin_obj = js_mkobj(js);
@@ -2085,8 +2085,8 @@ void init_process_module(ant_t *js) {
   
   ant_value_t stdout_proto = js_mkobj(js);
   if (is_object_type(ee_proto)) js_set_proto_init(stdout_proto, ee_proto);
-  js_set(js, stdout_proto, "write", js_mkfun(js_stdout_write));
-  js_set(js, stdout_proto, "getWindowSize", js_mkfun(js_stdout_get_window_size));
+  js_set(js, stdout_proto, "write", Ant_Function_Create(js_stdout_write));
+  js_set(js, stdout_proto, "getWindowSize", Ant_Function_Create(js_stdout_get_window_size));
   js_set_tostringtag(js, stdout_proto, js_mkstr(js, "WriteStream", 11));
   
   ant_value_t stdout_obj = js_mkobj(js);
@@ -2094,13 +2094,13 @@ void init_process_module(ant_t *js) {
   ps->stdout_obj = stdout_obj;
   eventemitter_set_listener_change_hook(js, stdout_obj, process_listener_change, ps);
   js_set(js, stdout_obj, "isTTY", js_bool(stdout_is_tty(js)));
-  js_set_getter_desc(js, stdout_obj, "rows", 4, js_mkfun(js_stdout_rows_getter), JS_DESC_E | JS_DESC_C);
-  js_set_getter_desc(js, stdout_obj, "columns", 7, js_mkfun(js_stdout_columns_getter), JS_DESC_E | JS_DESC_C);
+  js_set_getter_desc(js, stdout_obj, "rows", 4, Ant_Function_Create(js_stdout_rows_getter), JS_DESC_E | JS_DESC_C);
+  js_set_getter_desc(js, stdout_obj, "columns", 7, Ant_Function_Create(js_stdout_columns_getter), JS_DESC_E | JS_DESC_C);
   js_set(js, process_obj, "stdout", stdout_obj);
   
   ant_value_t stderr_proto = js_mkobj(js);
   if (is_object_type(ee_proto)) js_set_proto_init(stderr_proto, ee_proto);
-  js_set(js, stderr_proto, "write", js_mkfun(js_stderr_write));
+  js_set(js, stderr_proto, "write", Ant_Function_Create(js_stderr_write));
   js_set_tostringtag(js, stderr_proto, js_mkstr(js, "WriteStream", 11));
   
   ant_value_t stderr_obj = js_mkobj(js);

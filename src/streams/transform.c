@@ -1030,25 +1030,25 @@ void init_transform_stream_module(ant_t *js) {
   ant_value_t g = js_glob(js);
 
   js->builtins.ts_ctrl_proto = js_mkobj(js);
-  js_set_getter_desc(js, js->builtins.ts_ctrl_proto, "desiredSize", 11, js_mkfun(js_ts_ctrl_get_desired_size), JS_DESC_C);
-  js_set(js, js->builtins.ts_ctrl_proto, "enqueue", js_mkfun(js_ts_ctrl_enqueue));
+  js_set_getter_desc(js, js->builtins.ts_ctrl_proto, "desiredSize", 11, Ant_Function_Create(js_ts_ctrl_get_desired_size), JS_DESC_C);
+  js_set(js, js->builtins.ts_ctrl_proto, "enqueue", Ant_Function_Create(js_ts_ctrl_enqueue));
   js_set_descriptor(js, js->builtins.ts_ctrl_proto, "enqueue", 7, JS_DESC_W | JS_DESC_C);
-  js_set(js, js->builtins.ts_ctrl_proto, "error", js_mkfun(js_ts_ctrl_error));
+  js_set(js, js->builtins.ts_ctrl_proto, "error", Ant_Function_Create(js_ts_ctrl_error));
   js_set_descriptor(js, js->builtins.ts_ctrl_proto, "error", 5, JS_DESC_W | JS_DESC_C);
-  js_set(js, js->builtins.ts_ctrl_proto, "terminate", js_mkfun(js_ts_ctrl_terminate));
+  js_set(js, js->builtins.ts_ctrl_proto, "terminate", Ant_Function_Create(js_ts_ctrl_terminate));
   js_set_descriptor(js, js->builtins.ts_ctrl_proto, "terminate", 9, JS_DESC_W | JS_DESC_C);
   js_set_tostringtag(js, js->builtins.ts_ctrl_proto, js_mkstr(js, "TransformStreamDefaultController", 32));
 
-  ant_value_t ctrl_ctor = js_make_intrinsic_ctor(js, js_ts_ctrl_ctor, js->builtins.ts_ctrl_proto, "TransformStreamDefaultController", 0);
+  ant_value_t ctrl_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_ts_ctrl_ctor, js->builtins.ts_ctrl_proto, "TransformStreamDefaultController", 0);
   js_set(js, g, "TransformStreamDefaultController", ctrl_ctor);
   js_set_descriptor(js, g, "TransformStreamDefaultController", 32, JS_DESC_W | JS_DESC_C);
 
   js->builtins.ts_proto = js_mkobj(js);
-  js_set_getter_desc(js, js->builtins.ts_proto, "readable", 8, js_mkfun(js_ts_get_readable), JS_DESC_C);
-  js_set_getter_desc(js, js->builtins.ts_proto, "writable", 8, js_mkfun(js_ts_get_writable), JS_DESC_C);
+  js_set_getter_desc(js, js->builtins.ts_proto, "readable", 8, Ant_Function_Create(js_ts_get_readable), JS_DESC_C);
+  js_set_getter_desc(js, js->builtins.ts_proto, "writable", 8, Ant_Function_Create(js_ts_get_writable), JS_DESC_C);
   js_set_tostringtag(js, js->builtins.ts_proto, js_mkstr(js, "TransformStream", 15));
 
-  ant_value_t ts_ctor = js_make_intrinsic_ctor(js, js_ts_ctor, js->builtins.ts_proto, "TransformStream", 0);
+  ant_value_t ts_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_ts_ctor, js->builtins.ts_proto, "TransformStream", 0);
   js_set(js, g, "TransformStream", ts_ctor);
   js_set_descriptor(js, g, "TransformStream", 15, JS_DESC_W | JS_DESC_C);
 }

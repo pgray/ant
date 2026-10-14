@@ -245,11 +245,11 @@ static ant_value_t js_http_writer_write_head(ant_params_t) {
 ant_value_t internal_http_writer_library(ant_t *js) {
   ant_value_t lib = js_mkobj(js);
 
-  js_set(js, lib, "defaultStatusText", js_mkfun(js_http_writer_default_status_text));
-  js_set(js, lib, "writeHead", js_mkfun(js_http_writer_write_head));
-  js_set(js, lib, "writeBasicResponse", js_mkfun(js_http_writer_write_basic_response));
-  js_set(js, lib, "writeChunk", js_mkfun(js_http_writer_write_chunk));
-  js_set(js, lib, "writeFinalChunk", js_mkfun(js_http_writer_write_final_chunk));
+  js_set(js, lib, "defaultStatusText", Ant_Function_Create(js_http_writer_default_status_text));
+  js_set(js, lib, "writeHead", Ant_Function_Create(js_http_writer_write_head));
+  js_set(js, lib, "writeBasicResponse", Ant_Function_Create(js_http_writer_write_basic_response));
+  js_set(js, lib, "writeChunk", Ant_Function_Create(js_http_writer_write_chunk));
+  js_set(js, lib, "writeFinalChunk", Ant_Function_Create(js_http_writer_write_final_chunk));
   
   return lib;
 }

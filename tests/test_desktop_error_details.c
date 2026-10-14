@@ -35,7 +35,7 @@ static void CheckMessageAccessors(ant_t *js) {
     if (inherited) js_set_proto_init(value, proto);
     js_set(js, value, "detail", js_mkstr(js, "original thrown detail", 22));
     js_set_getter_desc(js, inherited ? proto : value, "message", 7,
-      js_mkfun(ThrowingMessageGetter), JS_DESC_C | JS_DESC_E);
+      Ant_Function_Create(ThrowingMessageGetter), JS_DESC_C | JS_DESC_E);
     ant_value_t record = Ant_Exception_Raise(js, value, js_mkundef());
     GC_ROOT_PIN(js, record);
     Ant_Exception_Clear(js);

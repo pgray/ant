@@ -686,10 +686,10 @@ static ant_value_t zlib_create_stream(ant_t *js, zlib_kind_t kind, ant_value_t o
 
   stream_init_readable_object(js, obj, opts_val);
   js_set(js, obj, "writable", js_true);
-  js_set(js, obj, "_processChunk", js_mkfun(js_zlib_process_chunk));
+  js_set(js, obj, "_processChunk", Ant_Function_Create(js_zlib_process_chunk));
 
   ant_value_t handle_obj = js_mkobj(js);
-  js_set(js, handle_obj, "close", js_mkfun(js_zlib_close));
+  js_set(js, handle_obj, "close", Ant_Function_Create(js_zlib_close));
   js_set(js, obj, "_handle", handle_obj);
 
   st->obj = obj;
@@ -1098,16 +1098,16 @@ static void zlib_init_proto(ant_t *js) {
   js->builtins.zlib_transform_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.zlib_transform_proto, stream_readable_prototype(js));
 
-  js_set(js, js->builtins.zlib_transform_proto, "write",    js_mkfun(js_zlib_write));
-  js_set(js, js->builtins.zlib_transform_proto, "end",      js_mkfun(js_zlib_end));
-  js_set(js, js->builtins.zlib_transform_proto, "_destroy", js_mkfun(js_zlib__destroy));
-  js_set(js, js->builtins.zlib_transform_proto, "close",    js_mkfun(js_zlib_close));
-  js_set(js, js->builtins.zlib_transform_proto, "flush",    js_mkfun(js_zlib_flush));
-  js_set(js, js->builtins.zlib_transform_proto, "params",   js_mkfun(js_zlib_params));
-  js_set(js, js->builtins.zlib_transform_proto, "reset",    js_mkfun(js_zlib_reset));
+  js_set(js, js->builtins.zlib_transform_proto, "write",    Ant_Function_Create(js_zlib_write));
+  js_set(js, js->builtins.zlib_transform_proto, "end",      Ant_Function_Create(js_zlib_end));
+  js_set(js, js->builtins.zlib_transform_proto, "_destroy", Ant_Function_Create(js_zlib__destroy));
+  js_set(js, js->builtins.zlib_transform_proto, "close",    Ant_Function_Create(js_zlib_close));
+  js_set(js, js->builtins.zlib_transform_proto, "flush",    Ant_Function_Create(js_zlib_flush));
+  js_set(js, js->builtins.zlib_transform_proto, "params",   Ant_Function_Create(js_zlib_params));
+  js_set(js, js->builtins.zlib_transform_proto, "reset",    Ant_Function_Create(js_zlib_reset));
 
   js_set_getter_desc(js, js->builtins.zlib_transform_proto, "bytesWritten", 12,
-  js_mkfun(js_zlib_get_bytes_written), JS_DESC_C);
+  Ant_Function_Create(js_zlib_get_bytes_written), JS_DESC_C);
 }
 
 typedef struct {
@@ -1164,7 +1164,7 @@ static void zlib_define_kind(ant_t *js, ant_value_t lib, zlib_kind_t kind) {
 
   js_set(js, lib, entry->async.name, js_mkfun_meta(&entry->async));
   js_set(js, lib, entry->sync.name, js_mkfun_meta(&entry->sync));
-  js_set(js, lib, entry->ctor.name, js_make_ctor_meta(js, &entry->ctor, proto, ANT_PROP_ATTR_WRITABLE));
+  js_set(js, lib, entry->ctor.name, js_make_ctor_cfunc(js, js_mkfun_meta(&entry->ctor), proto, ANT_PROP_ATTR_WRITABLE));
   js_set(js, lib, entry->create.name, js_mkfun_meta(&entry->create));
 }
 
@@ -1181,7 +1181,7 @@ ant_value_t zlib_library(ant_t *js) {
   js_set(js, lib, "constants", consts);
   js_set(js, lib, "codes", codes);
   zlib_install_constants(js, lib);
-  js_set(js, lib, "crc32", js_mkfun_arity(js_zlib_crc32, 1));
+  js_set(js, lib, "crc32", Ant_Function_CreateWithArity(js_zlib_crc32, 1));
   js_set_tostringtag(js, lib, js_mkstr(js, "zlib", 4));
   
   return lib;

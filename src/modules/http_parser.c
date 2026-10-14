@@ -113,6 +113,6 @@ static ant_value_t js_http_parser_parse_request(ant_params_t) {
 
 ant_value_t internal_http_parser_library(ant_t *js) {
   ant_value_t lib = js_mkobj(js);
-  js_set(js, lib, "parseRequest", js_mkfun(js_http_parser_parse_request));
+  js_set(js, lib, "parseRequest", Ant_Function_Create(js_http_parser_parse_request));
   return lib;
 }

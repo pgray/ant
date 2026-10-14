@@ -175,8 +175,8 @@ void js_error_define_stack(ant_t *js, ant_value_t obj, ant_value_t record, ant_v
     js_set_slot_wb(js, obj, SLOT_ERROR_STACK_TEXT, text);
   js_define_accessor_desc(
     js, js_as_obj(obj), "stack", 5,
-    js_mkfun(builtin_error_stack_get),
-    js_mkfun(builtin_error_stack_set), JS_DESC_C
+    Ant_Function_Create(builtin_error_stack_get),
+    Ant_Function_Create(builtin_error_stack_set), JS_DESC_C
   );
 }
 

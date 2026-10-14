@@ -206,10 +206,10 @@ static void execute_lock_callback(ant_t *js, const char *name, lock_mode_t mode,
     ant_value_t name_str = js_mkstr(js, name, strlen(name));
 
     GC_ROOT_PIN(js, name_str);
-    ant_value_t on_resolve = make_lock_handler(js, js_mkfun(lock_then_handler), name_str, outer_promise);
+    ant_value_t on_resolve = make_lock_handler(js, Ant_Function_Create(lock_then_handler), name_str, outer_promise);
 
     GC_ROOT_PIN(js, on_resolve);
-    ant_value_t on_reject = make_lock_handler(js, js_mkfun(lock_catch_handler), name_str, outer_promise);
+    ant_value_t on_reject = make_lock_handler(js, Ant_Function_Create(lock_catch_handler), name_str, outer_promise);
 
     GC_ROOT_PIN(js, on_reject);
     ant_value_t then_result = js_promise_then(js, result, on_resolve, on_reject);
@@ -318,13 +318,13 @@ static ant_value_t locks_request(ant_params_t) {
       GC_ROOT_PIN(js, promise);
 
       ant_value_t on_resolve = make_lock_handler(
-        js, js_mkfun(lock_then_handler),
+        js, Ant_Function_Create(lock_then_handler),
         js_mkundef(), promise
       );
 
       GC_ROOT_PIN(js, on_resolve);
       ant_value_t on_reject = make_lock_handler(
-        js, js_mkfun(lock_catch_handler),
+        js, Ant_Function_Create(lock_catch_handler),
         js_mkundef(), promise
       );
 
@@ -419,8 +419,8 @@ void init_navigator_module(ant_t *js) {
   js_set(js, navigator_obj, "userAgent", js_mkstr(js, user_agent, strlen(user_agent)));
   
   ant_value_t locks_obj = js_mkobj(js);
-  js_set(js, locks_obj, "request", js_mkfun(locks_request));
-  js_set(js, locks_obj, "query", js_mkfun(locks_query));
+  js_set(js, locks_obj, "request", Ant_Function_Create(locks_request));
+  js_set(js, locks_obj, "query", Ant_Function_Create(locks_query));
   js_set_tostringtag(js, locks_obj, js_mkstr(js, "LockManager", 11));
   js_set(js, navigator_obj, "locks", locks_obj);
   

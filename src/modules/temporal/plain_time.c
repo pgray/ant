@@ -263,7 +263,7 @@ void temporal_init_plain_time(ant_t *js, ant_value_t temporal) {
   TEMPORAL_METHOD(js, proto, "valueOf", temporal_plain_time_value_of, 0);
   TEMPORAL_METHOD(js, proto, "with", temporal_plain_time_with, 1);
   temporal_set_to_string_tag(js, proto, "Temporal.PlainTime");
-  ant_value_t ctor = js_make_intrinsic_ctor(js, temporal_plain_time_ctor, proto, "PlainTime", 0);
+  ant_value_t ctor = Ant_Function_CreateIntrinsicConstructor(js, temporal_plain_time_ctor, proto, "PlainTime", 0);
   TEMPORAL_METHOD(js, ctor, "compare", temporal_plain_time_compare, 2);
   TEMPORAL_METHOD(js, ctor, "from", temporal_plain_time_from, 1);
   temporal_set_namespace_property(js, temporal, "PlainTime", ctor);

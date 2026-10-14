@@ -364,9 +364,7 @@ static ant_value_t mdb_val_to_js(ant_t *js, MDB_val *val, bool as_string) {
     memcpy(ab->data, val->mv_data, val->mv_size);
   }
 
-  ant_value_t out = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, ab->length, js->builtins.typedarray_protos[TYPED_ARRAY_UINT8]);
-  if (vtype(out) == kTypeError) free_array_buffer_data(js, ab);
-  return out;
+  return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, ab->length, js->builtins.typedarray_protos[TYPED_ARRAY_UINT8]);
 }
 
 static bool parse_get_encoding(ant_t *js, ant_value_t encoding, bool *as_string) {
@@ -1008,14 +1006,14 @@ static void ensure_lmdb_prototypes(ant_t *js) {
   ant_value_t env_proto = js_mkobj(js);
   
   js_set_proto_init(env_proto, object_proto);
-  js_set(js, env_proto, "openDB", js_mkfun(lmdb_env_open_db));
-  js_set(js, env_proto, "beginTxn", js_mkfun(lmdb_env_begin_txn));
-  js_set(js, env_proto, "close", js_mkfun(lmdb_env_close_method));
-  js_set(js, env_proto, "sync", js_mkfun(lmdb_env_sync_method));
-  js_set(js, env_proto, "stat", js_mkfun(lmdb_env_stat_method));
-  js_set(js, env_proto, "info", js_mkfun(lmdb_env_info_method));
+  js_set(js, env_proto, "openDB", Ant_Function_Create(lmdb_env_open_db));
+  js_set(js, env_proto, "beginTxn", Ant_Function_Create(lmdb_env_begin_txn));
+  js_set(js, env_proto, "close", Ant_Function_Create(lmdb_env_close_method));
+  js_set(js, env_proto, "sync", Ant_Function_Create(lmdb_env_sync_method));
+  js_set(js, env_proto, "stat", Ant_Function_Create(lmdb_env_stat_method));
+  js_set(js, env_proto, "info", Ant_Function_Create(lmdb_env_info_method));
   js_set_tostringtag(js, env_proto, js_mkstr(js, "LMDBEnv", 7));
-  js_set_slot(env_ctor_obj, SLOT_CFUNC, js_mkfun(lmdb_env_constructor));
+  js_set_slot(env_ctor_obj, SLOT_CFUNC, Ant_Function_Create(lmdb_env_constructor));
   js_mkprop_fast(js, env_ctor_obj, "prototype", 9, env_proto);
   js_set_function_name(js, env_ctor_obj, "LMDBEnv", sizeof("LMDBEnv") - 1);
 
@@ -1023,16 +1021,16 @@ static void ensure_lmdb_prototypes(ant_t *js) {
   ant_value_t db_proto = js_mkobj(js);
   
   js_set_proto_init(db_proto, object_proto);
-  js_set(js, db_proto, "get", js_mkfun(lmdb_db_get));
-  js_set(js, db_proto, "getBytes", js_mkfun(lmdb_db_get_bytes));
-  js_set(js, db_proto, "getString", js_mkfun(lmdb_db_get_string));
-  js_set(js, db_proto, "put", js_mkfun(lmdb_db_put));
-  js_set(js, db_proto, "del", js_mkfun(lmdb_db_del));
-  js_set(js, db_proto, "clear", js_mkfun(lmdb_db_clear));
-  js_set(js, db_proto, "drop", js_mkfun(lmdb_db_drop));
-  js_set(js, db_proto, "close", js_mkfun(lmdb_db_close));
+  js_set(js, db_proto, "get", Ant_Function_Create(lmdb_db_get));
+  js_set(js, db_proto, "getBytes", Ant_Function_Create(lmdb_db_get_bytes));
+  js_set(js, db_proto, "getString", Ant_Function_Create(lmdb_db_get_string));
+  js_set(js, db_proto, "put", Ant_Function_Create(lmdb_db_put));
+  js_set(js, db_proto, "del", Ant_Function_Create(lmdb_db_del));
+  js_set(js, db_proto, "clear", Ant_Function_Create(lmdb_db_clear));
+  js_set(js, db_proto, "drop", Ant_Function_Create(lmdb_db_drop));
+  js_set(js, db_proto, "close", Ant_Function_Create(lmdb_db_close));
   js_set_tostringtag(js, db_proto, js_mkstr(js, "LMDBDatabase", 12));
-  js_set_slot(db_ctor_obj, SLOT_CFUNC, js_mkfun(lmdb_db_constructor));
+  js_set_slot(db_ctor_obj, SLOT_CFUNC, Ant_Function_Create(lmdb_db_constructor));
   js_mkprop_fast(js, db_ctor_obj, "prototype", 9, db_proto);
   js_set_function_name(js, db_ctor_obj, "LMDBDatabase", sizeof("LMDBDatabase") - 1);
 
@@ -1040,15 +1038,15 @@ static void ensure_lmdb_prototypes(ant_t *js) {
   ant_value_t txn_proto = js_mkobj(js);
   
   js_set_proto_init(txn_proto, object_proto);
-  js_set(js, txn_proto, "get", js_mkfun(lmdb_txn_get));
-  js_set(js, txn_proto, "getBytes", js_mkfun(lmdb_txn_get_bytes));
-  js_set(js, txn_proto, "getString", js_mkfun(lmdb_txn_get_string));
-  js_set(js, txn_proto, "put", js_mkfun(lmdb_txn_put));
-  js_set(js, txn_proto, "del", js_mkfun(lmdb_txn_del));
-  js_set(js, txn_proto, "commit", js_mkfun(lmdb_txn_commit));
-  js_set(js, txn_proto, "abort", js_mkfun(lmdb_txn_abort));
+  js_set(js, txn_proto, "get", Ant_Function_Create(lmdb_txn_get));
+  js_set(js, txn_proto, "getBytes", Ant_Function_Create(lmdb_txn_get_bytes));
+  js_set(js, txn_proto, "getString", Ant_Function_Create(lmdb_txn_get_string));
+  js_set(js, txn_proto, "put", Ant_Function_Create(lmdb_txn_put));
+  js_set(js, txn_proto, "del", Ant_Function_Create(lmdb_txn_del));
+  js_set(js, txn_proto, "commit", Ant_Function_Create(lmdb_txn_commit));
+  js_set(js, txn_proto, "abort", Ant_Function_Create(lmdb_txn_abort));
   js_set_tostringtag(js, txn_proto, js_mkstr(js, "LMDBTxn", 7));
-  js_set_slot(txn_ctor_obj, SLOT_CFUNC, js_mkfun(lmdb_txn_constructor));
+  js_set_slot(txn_ctor_obj, SLOT_CFUNC, Ant_Function_Create(lmdb_txn_constructor));
   js_mkprop_fast(js, txn_ctor_obj, "prototype", 9, txn_proto);
   js_set_function_name(js, txn_ctor_obj, "LMDBTxn", sizeof("LMDBTxn") - 1);
 
@@ -1096,8 +1094,8 @@ static ant_value_t make_txn_obj(ant_t *js, lmdb_txn_handle_t *txn, ant_value_t e
 ant_value_t lmdb_library(ant_t *js) {
   ensure_lmdb_prototypes(js);
   ant_value_t lib = js_mkobj(js);
-  js_set(js, lib, "open", js_mkfun(lmdb_open));
-  js_set(js, lib, "strerror", js_mkfun(lmdb_strerror_fn));
+  js_set(js, lib, "open", Ant_Function_Create(lmdb_open));
+  js_set(js, lib, "strerror", Ant_Function_Create(lmdb_strerror_fn));
   js_set(js, lib, "Env", lmdb_types.env_ctor);
   js_set(js, lib, "Database", lmdb_types.db_ctor);
   js_set(js, lib, "Txn", lmdb_types.txn_ctor);

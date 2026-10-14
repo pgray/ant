@@ -1190,9 +1190,9 @@ static ant_value_t rl_get_async_iter_proto(ant_t *js) {
   if (is_object_type(js->builtins.rl_async_iter_proto)) return js->builtins.rl_async_iter_proto;
 
   js->builtins.rl_async_iter_proto = js_mkobj(js);
-  js_set(js, js->builtins.rl_async_iter_proto, "next", js_mkfun(rl_async_iter_next));
-  js_set(js, js->builtins.rl_async_iter_proto, "return", js_mkfun(rl_async_iter_return));
-  js_set_sym(js, js->builtins.rl_async_iter_proto, js->sym.asyncIterator_sym, js_mkfun(sym_this_cb));
+  js_set(js, js->builtins.rl_async_iter_proto, "next", Ant_Function_Create(rl_async_iter_next));
+  js_set(js, js->builtins.rl_async_iter_proto, "return", Ant_Function_Create(rl_async_iter_return));
+  js_set_sym(js, js->builtins.rl_async_iter_proto, js->sym.asyncIterator_sym, Ant_Function_Create(sym_this_cb));
   js_set_tostringtag(js, js->builtins.rl_async_iter_proto, js_mkstr(js, "AsyncIterator", 13));
 
   return js->builtins.rl_async_iter_proto;
@@ -1243,20 +1243,20 @@ static ant_value_t rl_get_interface_proto(ant_t *js) {
   js->builtins.rl_interface_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.rl_interface_proto, eventemitter_prototype(js));
 
-  js_set(js, js->builtins.rl_interface_proto, "close", js_mkfun(rl_interface_close));
-  js_set(js, js->builtins.rl_interface_proto, "pause", js_mkfun(rl_interface_pause));
-  js_set(js, js->builtins.rl_interface_proto, "resume", js_mkfun(rl_interface_resume));
-  js_set(js, js->builtins.rl_interface_proto, "prompt", js_mkfun(rl_interface_prompt));
-  js_set(js, js->builtins.rl_interface_proto, "setPrompt", js_mkfun(rl_interface_set_prompt));
-  js_set(js, js->builtins.rl_interface_proto, "getPrompt", js_mkfun(rl_interface_get_prompt));
-  js_set(js, js->builtins.rl_interface_proto, "write", js_mkfun(rl_interface_write));
-  js_set(js, js->builtins.rl_interface_proto, "question", js_mkfun(rl_interface_question_callback));
-  js_set(js, js->builtins.rl_interface_proto, "getCursorPos", js_mkfun(rl_interface_get_cursor_pos));
+  js_set(js, js->builtins.rl_interface_proto, "close", Ant_Function_Create(rl_interface_close));
+  js_set(js, js->builtins.rl_interface_proto, "pause", Ant_Function_Create(rl_interface_pause));
+  js_set(js, js->builtins.rl_interface_proto, "resume", Ant_Function_Create(rl_interface_resume));
+  js_set(js, js->builtins.rl_interface_proto, "prompt", Ant_Function_Create(rl_interface_prompt));
+  js_set(js, js->builtins.rl_interface_proto, "setPrompt", Ant_Function_Create(rl_interface_set_prompt));
+  js_set(js, js->builtins.rl_interface_proto, "getPrompt", Ant_Function_Create(rl_interface_get_prompt));
+  js_set(js, js->builtins.rl_interface_proto, "write", Ant_Function_Create(rl_interface_write));
+  js_set(js, js->builtins.rl_interface_proto, "question", Ant_Function_Create(rl_interface_question_callback));
+  js_set(js, js->builtins.rl_interface_proto, "getCursorPos", Ant_Function_Create(rl_interface_get_cursor_pos));
 
-  js_set_getter_desc(js, js->builtins.rl_interface_proto, "line", 4, js_mkfun(rl_interface_line_getter), JS_DESC_E | JS_DESC_C);
-  js_set_getter_desc(js, js->builtins.rl_interface_proto, "cursor", 6, js_mkfun(rl_interface_cursor_getter), JS_DESC_E | JS_DESC_C);
-  js_set_getter_desc(js, js->builtins.rl_interface_proto, "closed", 6, js_mkfun(rl_interface_closed_getter), JS_DESC_E | JS_DESC_C);
-  js_set_sym(js, js->builtins.rl_interface_proto, js->sym.asyncIterator_sym, js_mkfun(rl_interface_async_iterator));
+  js_set_getter_desc(js, js->builtins.rl_interface_proto, "line", 4, Ant_Function_Create(rl_interface_line_getter), JS_DESC_E | JS_DESC_C);
+  js_set_getter_desc(js, js->builtins.rl_interface_proto, "cursor", 6, Ant_Function_Create(rl_interface_cursor_getter), JS_DESC_E | JS_DESC_C);
+  js_set_getter_desc(js, js->builtins.rl_interface_proto, "closed", 6, Ant_Function_Create(rl_interface_closed_getter), JS_DESC_E | JS_DESC_C);
+  js_set_sym(js, js->builtins.rl_interface_proto, js->sym.asyncIterator_sym, Ant_Function_Create(rl_interface_async_iterator));
   js_set_tostringtag(js, js->builtins.rl_interface_proto, js_mkstr(js, "Interface", 9));
 
   return js->builtins.rl_interface_proto;
@@ -1369,7 +1369,7 @@ static ant_value_t rl_create_interface(ant_params_t) {
 static ant_value_t rl_create_interface_promises(ant_params_t) {
   ant_value_t iface_obj = rl_create_interface(js, args, nargs, js_mkundef());
   if (vtype(iface_obj) == kTypeError) return iface_obj;
-  js_set(js, iface_obj, "question", js_mkfun(rl_interface_question_promise));
+  js_set(js, iface_obj, "question", Ant_Function_Create(rl_interface_question_promise));
   
   return iface_obj;
 }
@@ -1377,12 +1377,12 @@ static ant_value_t rl_create_interface_promises(ant_params_t) {
 ant_value_t readline_library(ant_t *js) {
   ant_value_t lib = js_mkobj(js);
 
-  js_set(js, lib, "createInterface", js_mkfun_arity(rl_create_interface, 4));
-  js_set(js, lib, "clearLine", js_mkfun_arity(rl_clear_line, 3));
-  js_set(js, lib, "clearScreenDown", js_mkfun_arity(rl_clear_screen_down, 2));
-  js_set(js, lib, "cursorTo", js_mkfun_arity(rl_cursor_to, 4));
-  js_set(js, lib, "moveCursor", js_mkfun_arity(rl_move_cursor, 4));
-  js_set(js, lib, "emitKeypressEvents", js_mkfun_arity(rl_emit_keypress_events, 1));
+  js_set(js, lib, "createInterface", Ant_Function_CreateWithArity(rl_create_interface, 4));
+  js_set(js, lib, "clearLine", Ant_Function_CreateWithArity(rl_clear_line, 3));
+  js_set(js, lib, "clearScreenDown", Ant_Function_CreateWithArity(rl_clear_screen_down, 2));
+  js_set(js, lib, "cursorTo", Ant_Function_CreateWithArity(rl_cursor_to, 4));
+  js_set(js, lib, "moveCursor", Ant_Function_CreateWithArity(rl_move_cursor, 4));
+  js_set(js, lib, "emitKeypressEvents", Ant_Function_CreateWithArity(rl_emit_keypress_events, 1));
   js_set_tostringtag(js, lib, js_mkstr(js, "readline", 8));
   
   return lib;
@@ -1391,12 +1391,12 @@ ant_value_t readline_library(ant_t *js) {
 ant_value_t readline_promises_library(ant_t *js) {
   ant_value_t lib = js_mkobj(js);
 
-  js_set(js, lib, "createInterface", js_mkfun(rl_create_interface_promises));
-  js_set(js, lib, "clearLine", js_mkfun_arity(rl_clear_line, 3));
-  js_set(js, lib, "clearScreenDown", js_mkfun_arity(rl_clear_screen_down, 2));
-  js_set(js, lib, "cursorTo", js_mkfun_arity(rl_cursor_to, 4));
-  js_set(js, lib, "moveCursor", js_mkfun_arity(rl_move_cursor, 4));
-  js_set(js, lib, "emitKeypressEvents", js_mkfun_arity(rl_emit_keypress_events, 1));
+  js_set(js, lib, "createInterface", Ant_Function_Create(rl_create_interface_promises));
+  js_set(js, lib, "clearLine", Ant_Function_CreateWithArity(rl_clear_line, 3));
+  js_set(js, lib, "clearScreenDown", Ant_Function_CreateWithArity(rl_clear_screen_down, 2));
+  js_set(js, lib, "cursorTo", Ant_Function_CreateWithArity(rl_cursor_to, 4));
+  js_set(js, lib, "moveCursor", Ant_Function_CreateWithArity(rl_move_cursor, 4));
+  js_set(js, lib, "emitKeypressEvents", Ant_Function_CreateWithArity(rl_emit_keypress_events, 1));
   js_set_tostringtag(js, lib, js_mkstr(js, "readline/promises", 17));
   
   return lib;

@@ -689,7 +689,7 @@ static ant_value_t ant_c_make_function(
 
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, obj);
-  js_set_slot(obj, SLOT_CFUNC, js_mkfun(ant_c_function_call));
+  js_set_slot(obj, SLOT_CFUNC, Ant_Function_Create(ant_c_function_call));
   js_set_native(obj, function, ANT_C_FUNCTION_NATIVE_TAG);
   js_set_finalizer(obj, ant_c_function_finalize);
 
@@ -886,7 +886,7 @@ static ant_value_t js_unsafe_c(ant_params_t) {
 
     GC_ROOT_SAVE(root_mark, js);
     GC_ROOT_PIN(js, tag);
-    js_set_slot(tag, SLOT_CFUNC, js_mkfun(ant_c_configured_tag));
+    js_set_slot(tag, SLOT_CFUNC, Ant_Function_Create(ant_c_configured_tag));
     js_set_slot_wb(js, tag, SLOT_DATA, args[0]);
     ant_value_t result = js_obj_to_func(js, tag);
     GC_ROOT_RESTORE(js, root_mark);
@@ -897,5 +897,5 @@ static ant_value_t js_unsafe_c(ant_params_t) {
 }
 
 void init_cjit_module(ant_t *js, ant_value_t unsafe_obj) {
-  js_set(js, unsafe_obj, "c", js_mkfun_arity(js_unsafe_c, 1));
+  js_set(js, unsafe_obj, "c", Ant_Function_CreateWithArity(js_unsafe_c, 1));
 }

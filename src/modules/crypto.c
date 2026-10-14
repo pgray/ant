@@ -1696,8 +1696,8 @@ static ant_value_t js_crypto_create_hash(ant_params_t) {
   }
 
   ant_value_t obj = js_mkobj(js);
-  js_set(js, obj, "update", js_mkfun(js_hash_update));
-  js_set(js, obj, "digest", js_mkfun(js_hash_digest));
+  js_set(js, obj, "update", Ant_Function_Create(js_hash_update));
+  js_set(js, obj, "digest", Ant_Function_Create(js_hash_digest));
   
   js_set_native(obj, state, CRYPTO_HASH_NATIVE_TAG);
   js_set_finalizer(obj, crypto_hash_finalize);
@@ -1796,8 +1796,8 @@ static ant_value_t js_crypto_create_hmac(ant_params_t) {
   if (owned) free(owned);
 
   ant_value_t obj = js_mkobj(js);
-  js_set(js, obj, "update", js_mkfun(js_hmac_update));
-  js_set(js, obj, "digest", js_mkfun(js_hmac_digest));
+  js_set(js, obj, "update", Ant_Function_Create(js_hmac_update));
+  js_set(js, obj, "digest", Ant_Function_Create(js_hmac_digest));
   js_set_native(obj, state, CRYPTO_HMAC_NATIVE_TAG);
   js_set_finalizer(obj, crypto_hmac_finalize);
   js_set_tostringtag(js, obj, js_mkstr(js, "Hmac", 4));
@@ -2060,12 +2060,12 @@ static ant_value_t crypto_create_cipheriv(ant_native_params_t, bool encrypt) {
   }
 
   ant_value_t obj = js_mkobj(js);
-  js_set(js, obj, "update", js_mkfun(js_cipher_update));
-  js_set(js, obj, "final", js_mkfun(js_cipher_final));
-  js_set(js, obj, "setAAD", js_mkfun(js_cipher_set_aad));
-  js_set(js, obj, "getAuthTag", js_mkfun(js_cipher_get_auth_tag));
-  js_set(js, obj, "setAuthTag", js_mkfun(js_cipher_set_auth_tag));
-  js_set(js, obj, "setAutoPadding", js_mkfun(js_cipher_set_auto_padding));
+  js_set(js, obj, "update", Ant_Function_Create(js_cipher_update));
+  js_set(js, obj, "final", Ant_Function_Create(js_cipher_final));
+  js_set(js, obj, "setAAD", Ant_Function_Create(js_cipher_set_aad));
+  js_set(js, obj, "getAuthTag", Ant_Function_Create(js_cipher_get_auth_tag));
+  js_set(js, obj, "setAuthTag", Ant_Function_Create(js_cipher_set_auth_tag));
+  js_set(js, obj, "setAutoPadding", Ant_Function_Create(js_cipher_set_auto_padding));
   js_set_native(obj, state, CRYPTO_CIPHER_NATIVE_TAG);
   js_set_finalizer(obj, crypto_cipher_finalize);
   return obj;
@@ -2235,23 +2235,23 @@ static ant_value_t create_crypto_obj(ant_t *js) {
   ant_value_t crypto_obj = js_mkobj(js);
   ant_value_t subtle_obj = js_mkobj(js);
   
-  js_set(js, crypto_obj, "random", js_mkfun(js_crypto_random));
-  js_set(js, crypto_obj, "randomBytes", js_mkfun_arity(js_crypto_random_bytes, 2));
-  js_set(js, crypto_obj, "randomFillSync", js_mkfun_arity(js_crypto_random_fill_sync, 1));
-  js_set(js, crypto_obj, "randomUUID", js_mkfun_arity(js_crypto_random_uuid, 1));
-  js_set(js, crypto_obj, "randomUUIDv7", js_mkfun(js_crypto_random_uuidv7));
-  js_set(js, crypto_obj, "getRandomValues", js_mkfun(js_crypto_get_random_values));
+  js_set(js, crypto_obj, "random", Ant_Function_Create(js_crypto_random));
+  js_set(js, crypto_obj, "randomBytes", Ant_Function_CreateWithArity(js_crypto_random_bytes, 2));
+  js_set(js, crypto_obj, "randomFillSync", Ant_Function_CreateWithArity(js_crypto_random_fill_sync, 1));
+  js_set(js, crypto_obj, "randomUUID", Ant_Function_CreateWithArity(js_crypto_random_uuid, 1));
+  js_set(js, crypto_obj, "randomUUIDv7", Ant_Function_Create(js_crypto_random_uuidv7));
+  js_set(js, crypto_obj, "getRandomValues", Ant_Function_Create(js_crypto_get_random_values));
   // TODO: add remaining WebCrypto key formats, key derivation, wrapping, and asymmetric algorithms.
-  js_set(js, subtle_obj, "digest", js_mkfun(js_crypto_subtle_digest));
-  js_set(js, subtle_obj, "importKey", js_mkfun(js_crypto_subtle_import_key));
-  js_set(js, subtle_obj, "generateKey", js_mkfun(js_crypto_subtle_generate_key));
-  js_set(js, subtle_obj, "exportKey", js_mkfun(js_crypto_subtle_export_key));
-  js_set(js, subtle_obj, "deriveBits", js_mkfun(js_crypto_subtle_derive_bits));
-  js_set(js, subtle_obj, "sign", js_mkfun(js_crypto_subtle_sign));
-  js_set(js, subtle_obj, "verify", js_mkfun(js_crypto_subtle_verify));
-  js_set(js, subtle_obj, "encrypt", js_mkfun(js_crypto_subtle_encrypt));
-  js_set(js, subtle_obj, "decrypt", js_mkfun(js_crypto_subtle_decrypt));
-  js_set(js, subtle_obj, "timingSafeEqual", js_mkfun(js_crypto_timing_safe_equal));
+  js_set(js, subtle_obj, "digest", Ant_Function_Create(js_crypto_subtle_digest));
+  js_set(js, subtle_obj, "importKey", Ant_Function_Create(js_crypto_subtle_import_key));
+  js_set(js, subtle_obj, "generateKey", Ant_Function_Create(js_crypto_subtle_generate_key));
+  js_set(js, subtle_obj, "exportKey", Ant_Function_Create(js_crypto_subtle_export_key));
+  js_set(js, subtle_obj, "deriveBits", Ant_Function_Create(js_crypto_subtle_derive_bits));
+  js_set(js, subtle_obj, "sign", Ant_Function_Create(js_crypto_subtle_sign));
+  js_set(js, subtle_obj, "verify", Ant_Function_Create(js_crypto_subtle_verify));
+  js_set(js, subtle_obj, "encrypt", Ant_Function_Create(js_crypto_subtle_encrypt));
+  js_set(js, subtle_obj, "decrypt", Ant_Function_Create(js_crypto_subtle_decrypt));
+  js_set(js, subtle_obj, "timingSafeEqual", Ant_Function_Create(js_crypto_timing_safe_equal));
   js_set_tostringtag(js, subtle_obj, js_mkstr(js, "SubtleCrypto", 12));
   js_set(js, crypto_obj, "subtle", subtle_obj);
   
@@ -2273,23 +2273,23 @@ ant_value_t crypto_library(ant_t *js) {
   
   js_set(js, lib, "webcrypto", webcrypto);
   js_set(js, lib, "subtle", js_get(js, webcrypto, "subtle"));
-  js_set(js, lib, "hash", js_mkfun_arity(js_crypto_hash, 3));
-  js_set(js, lib, "createHash", js_mkfun_arity(js_crypto_create_hash, 2));
-  js_set(js, lib, "createHmac", js_mkfun_arity(js_crypto_create_hmac, 3));
-  js_set(js, lib, "createCipheriv", js_mkfun_arity(js_crypto_create_cipheriv, 4));
-  js_set(js, lib, "createDecipheriv", js_mkfun_arity(js_crypto_create_decipheriv, 4));
-  js_set(js, lib, "pbkdf2", js_mkfun_arity(js_crypto_pbkdf2, 6));
-  js_set(js, lib, "pbkdf2Sync", js_mkfun_arity(js_crypto_pbkdf2_sync, 5));
-  js_set(js, lib, "scrypt", js_mkfun_arity(js_crypto_scrypt, 4));
-  js_set(js, lib, "scryptSync", js_mkfun_arity(js_crypto_scrypt_sync, 3));
-  js_set(js, lib, "randomBytes", js_mkfun_arity(js_crypto_random_bytes, 2));
-  js_set(js, lib, "randomFillSync", js_mkfun_arity(js_crypto_random_fill_sync, 1));
-  js_set(js, lib, "randomUUID", js_mkfun_arity(js_crypto_random_uuid, 1));
-  js_set(js, lib, "getRandomValues", js_mkfun(js_crypto_get_random_values));
-  js_set(js, lib, "getCiphers", js_mkfun(js_crypto_get_ciphers));
-  js_set(js, lib, "getCurves", js_mkfun(js_crypto_get_curves));
-  js_set(js, lib, "getHashes", js_mkfun(js_crypto_get_hashes));
-  js_set(js, lib, "timingSafeEqual", js_mkfun(js_crypto_timing_safe_equal));
+  js_set(js, lib, "hash", Ant_Function_CreateWithArity(js_crypto_hash, 3));
+  js_set(js, lib, "createHash", Ant_Function_CreateWithArity(js_crypto_create_hash, 2));
+  js_set(js, lib, "createHmac", Ant_Function_CreateWithArity(js_crypto_create_hmac, 3));
+  js_set(js, lib, "createCipheriv", Ant_Function_CreateWithArity(js_crypto_create_cipheriv, 4));
+  js_set(js, lib, "createDecipheriv", Ant_Function_CreateWithArity(js_crypto_create_decipheriv, 4));
+  js_set(js, lib, "pbkdf2", Ant_Function_CreateWithArity(js_crypto_pbkdf2, 6));
+  js_set(js, lib, "pbkdf2Sync", Ant_Function_CreateWithArity(js_crypto_pbkdf2_sync, 5));
+  js_set(js, lib, "scrypt", Ant_Function_CreateWithArity(js_crypto_scrypt, 4));
+  js_set(js, lib, "scryptSync", Ant_Function_CreateWithArity(js_crypto_scrypt_sync, 3));
+  js_set(js, lib, "randomBytes", Ant_Function_CreateWithArity(js_crypto_random_bytes, 2));
+  js_set(js, lib, "randomFillSync", Ant_Function_CreateWithArity(js_crypto_random_fill_sync, 1));
+  js_set(js, lib, "randomUUID", Ant_Function_CreateWithArity(js_crypto_random_uuid, 1));
+  js_set(js, lib, "getRandomValues", Ant_Function_Create(js_crypto_get_random_values));
+  js_set(js, lib, "getCiphers", Ant_Function_Create(js_crypto_get_ciphers));
+  js_set(js, lib, "getCurves", Ant_Function_Create(js_crypto_get_curves));
+  js_set(js, lib, "getHashes", Ant_Function_Create(js_crypto_get_hashes));
+  js_set(js, lib, "timingSafeEqual", Ant_Function_Create(js_crypto_timing_safe_equal));
   js_set_tostringtag(js, lib, js_mkstr(js, "crypto", 6));
 
   return lib;

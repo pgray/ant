@@ -787,46 +787,46 @@ static ant_value_t util_types_is_module_namespace_object(ant_params_t) {
 ant_value_t util_types_library(ant_t *js) {
   ant_value_t types = js_mkobj(js);
 
-  js_set(js, types, "isAnyArrayBuffer", js_mkfun(util_types_is_any_array_buffer));
-  js_set(js, types, "isArrayBuffer", js_mkfun(util_types_is_array_buffer));
-  js_set(js, types, "isArgumentsObject", js_mkfun(util_types_is_arguments_object));
-  js_set(js, types, "isArrayBufferView", js_mkfun(util_types_is_array_buffer_view));
-  js_set(js, types, "isAsyncFunction", js_mkfun(util_types_is_async_function));
-  js_set(js, types, "isBigInt64Array", js_mkfun(util_types_is_bigint64_array));
-  js_set(js, types, "isBigIntObject", js_mkfun(util_types_is_bigint_object));
-  js_set(js, types, "isBigUint64Array", js_mkfun(util_types_is_biguint64_array));
-  js_set(js, types, "isBooleanObject", js_mkfun(util_types_is_boolean_object));
-  js_set(js, types, "isBoxedPrimitive", js_mkfun(util_types_is_boxed_primitive));
-  js_set(js, types, "isDataView", js_mkfun(util_types_is_data_view));
-  js_set(js, types, "isDate", js_mkfun(util_types_is_date));
-  js_set(js, types, "isFloat16Array", js_mkfun(util_types_is_float16_array));
-  js_set(js, types, "isFloat32Array", js_mkfun(util_types_is_float32_array));
-  js_set(js, types, "isFloat64Array", js_mkfun(util_types_is_float64_array));
-  js_set(js, types, "isGeneratorFunction", js_mkfun(util_types_is_generator_function));
-  js_set(js, types, "isGeneratorObject", js_mkfun(util_types_is_generator_object));
-  js_set(js, types, "isInt8Array", js_mkfun(util_types_is_int8_array));
-  js_set(js, types, "isInt16Array", js_mkfun(util_types_is_int16_array));
-  js_set(js, types, "isInt32Array", js_mkfun(util_types_is_int32_array));
-  js_set(js, types, "isMap", js_mkfun(util_types_is_map));
-  js_set(js, types, "isMapIterator", js_mkfun(util_types_is_map_iterator));
-  js_set(js, types, "isModuleNamespaceObject", js_mkfun(util_types_is_module_namespace_object));
-  js_set(js, types, "isNativeError", js_mkfun(util_types_is_native_error));
-  js_set(js, types, "isNumberObject", js_mkfun(util_types_is_number_object));
-  js_set(js, types, "isPromise", js_mkfun(util_types_is_promise));
-  js_set(js, types, "isProxy", js_mkfun(util_types_is_proxy));
-  js_set(js, types, "isRegExp", js_mkfun(util_types_is_regexp));
-  js_set(js, types, "isSet", js_mkfun(util_types_is_set));
-  js_set(js, types, "isSetIterator", js_mkfun(util_types_is_set_iterator));
-  js_set(js, types, "isSharedArrayBuffer", js_mkfun(util_types_is_shared_array_buffer));
-  js_set(js, types, "isStringObject", js_mkfun(util_types_is_string_object));
-  js_set(js, types, "isSymbolObject", js_mkfun(util_types_is_symbol_object));
-  js_set(js, types, "isTypedArray", js_mkfun(util_types_is_typed_array));
-  js_set(js, types, "isUint8Array", js_mkfun(util_types_is_uint8_array));
-  js_set(js, types, "isUint8ClampedArray", js_mkfun(util_types_is_uint8_clamped_array));
-  js_set(js, types, "isUint16Array", js_mkfun(util_types_is_uint16_array));
-  js_set(js, types, "isUint32Array", js_mkfun(util_types_is_uint32_array));
-  js_set(js, types, "isWeakMap", js_mkfun(util_types_is_weak_map));
-  js_set(js, types, "isWeakSet", js_mkfun(util_types_is_weak_set));
+  js_set(js, types, "isAnyArrayBuffer", Ant_Function_Create(util_types_is_any_array_buffer));
+  js_set(js, types, "isArrayBuffer", Ant_Function_Create(util_types_is_array_buffer));
+  js_set(js, types, "isArgumentsObject", Ant_Function_Create(util_types_is_arguments_object));
+  js_set(js, types, "isArrayBufferView", Ant_Function_Create(util_types_is_array_buffer_view));
+  js_set(js, types, "isAsyncFunction", Ant_Function_Create(util_types_is_async_function));
+  js_set(js, types, "isBigInt64Array", Ant_Function_Create(util_types_is_bigint64_array));
+  js_set(js, types, "isBigIntObject", Ant_Function_Create(util_types_is_bigint_object));
+  js_set(js, types, "isBigUint64Array", Ant_Function_Create(util_types_is_biguint64_array));
+  js_set(js, types, "isBooleanObject", Ant_Function_Create(util_types_is_boolean_object));
+  js_set(js, types, "isBoxedPrimitive", Ant_Function_Create(util_types_is_boxed_primitive));
+  js_set(js, types, "isDataView", Ant_Function_Create(util_types_is_data_view));
+  js_set(js, types, "isDate", Ant_Function_Create(util_types_is_date));
+  js_set(js, types, "isFloat16Array", Ant_Function_Create(util_types_is_float16_array));
+  js_set(js, types, "isFloat32Array", Ant_Function_Create(util_types_is_float32_array));
+  js_set(js, types, "isFloat64Array", Ant_Function_Create(util_types_is_float64_array));
+  js_set(js, types, "isGeneratorFunction", Ant_Function_Create(util_types_is_generator_function));
+  js_set(js, types, "isGeneratorObject", Ant_Function_Create(util_types_is_generator_object));
+  js_set(js, types, "isInt8Array", Ant_Function_Create(util_types_is_int8_array));
+  js_set(js, types, "isInt16Array", Ant_Function_Create(util_types_is_int16_array));
+  js_set(js, types, "isInt32Array", Ant_Function_Create(util_types_is_int32_array));
+  js_set(js, types, "isMap", Ant_Function_Create(util_types_is_map));
+  js_set(js, types, "isMapIterator", Ant_Function_Create(util_types_is_map_iterator));
+  js_set(js, types, "isModuleNamespaceObject", Ant_Function_Create(util_types_is_module_namespace_object));
+  js_set(js, types, "isNativeError", Ant_Function_Create(util_types_is_native_error));
+  js_set(js, types, "isNumberObject", Ant_Function_Create(util_types_is_number_object));
+  js_set(js, types, "isPromise", Ant_Function_Create(util_types_is_promise));
+  js_set(js, types, "isProxy", Ant_Function_Create(util_types_is_proxy));
+  js_set(js, types, "isRegExp", Ant_Function_Create(util_types_is_regexp));
+  js_set(js, types, "isSet", Ant_Function_Create(util_types_is_set));
+  js_set(js, types, "isSetIterator", Ant_Function_Create(util_types_is_set_iterator));
+  js_set(js, types, "isSharedArrayBuffer", Ant_Function_Create(util_types_is_shared_array_buffer));
+  js_set(js, types, "isStringObject", Ant_Function_Create(util_types_is_string_object));
+  js_set(js, types, "isSymbolObject", Ant_Function_Create(util_types_is_symbol_object));
+  js_set(js, types, "isTypedArray", Ant_Function_Create(util_types_is_typed_array));
+  js_set(js, types, "isUint8Array", Ant_Function_Create(util_types_is_uint8_array));
+  js_set(js, types, "isUint8ClampedArray", Ant_Function_Create(util_types_is_uint8_clamped_array));
+  js_set(js, types, "isUint16Array", Ant_Function_Create(util_types_is_uint16_array));
+  js_set(js, types, "isUint32Array", Ant_Function_Create(util_types_is_uint32_array));
+  js_set(js, types, "isWeakMap", Ant_Function_Create(util_types_is_weak_map));
+  js_set(js, types, "isWeakSet", Ant_Function_Create(util_types_is_weak_set));
 
   return types;
 }
@@ -841,7 +841,7 @@ static ant_value_t util_debuglog_call(ant_params_t) {
 }
 
 static ant_value_t util_debuglog(ant_params_t) {
-  ant_value_t logger = js_mkfun(util_debuglog_call);
+  ant_value_t logger = Ant_Function_Create(util_debuglog_call);
   js_set(js, logger, "enabled", js_false);
 
   if (nargs >= 2 && is_callable(args[1])) {
@@ -1395,26 +1395,26 @@ ant_value_t util_library(ant_t *js) {
   ant_value_t lib = js_mkobj(js);
   ant_value_t types = util_get_types_object(js);
   
-  ant_value_t promisify = js_heavy_mkfun_named(js, util_promisify, "promisify", 1, js_mkundef());
+  ant_value_t promisify = Ant_Function_CreateWithData(js, util_promisify, "promisify", 1, js_mkundef());
   js_set(js, promisify, "custom", js_mksym_for(js, "nodejs.util.promisify.custom"));
 
   js_set(js, lib, "types", types);
   js_set(js, lib, "promisify", promisify);
   
-  js_set(js, lib, "format", js_mkfun(util_format));
-  js_set(js, lib, "inspect", js_mkfun_arity(util_inspect, 2));
-  js_set(js, lib, "aborted", js_mkfun(util_aborted));
-  js_set(js, lib, "debuglog", js_mkfun_arity(util_debuglog, 2));
-  js_set(js, lib, "inherits", js_mkfun_arity(util_inherits, 2));
-  js_set(js, lib, "parseEnv", js_mkfun_arity(util_parse_env, 1));
-  js_set(js, lib, "deprecate", js_mkfun_arity(util_deprecate, 3));
-  js_set(js, lib, "parseArgs", js_mkfun(util_parse_args));
-  js_set(js, lib, "styleText", js_mkfun_arity(util_style_text, 3));
-  js_set(js, lib, "callbackify", js_mkfun_arity(util_callbackify, 1));
+  js_set(js, lib, "format", Ant_Function_Create(util_format));
+  js_set(js, lib, "inspect", Ant_Function_CreateWithArity(util_inspect, 2));
+  js_set(js, lib, "aborted", Ant_Function_Create(util_aborted));
+  js_set(js, lib, "debuglog", Ant_Function_CreateWithArity(util_debuglog, 2));
+  js_set(js, lib, "inherits", Ant_Function_CreateWithArity(util_inherits, 2));
+  js_set(js, lib, "parseEnv", Ant_Function_CreateWithArity(util_parse_env, 1));
+  js_set(js, lib, "deprecate", Ant_Function_CreateWithArity(util_deprecate, 3));
+  js_set(js, lib, "parseArgs", Ant_Function_Create(util_parse_args));
+  js_set(js, lib, "styleText", Ant_Function_CreateWithArity(util_style_text, 3));
+  js_set(js, lib, "callbackify", Ant_Function_CreateWithArity(util_callbackify, 1));
   
-  js_set(js, lib, "formatWithOptions", js_mkfun_arity(util_format_with_options, 1));
-  js_set(js, lib, "isDeepStrictEqual", js_mkfun_arity(util_is_deep_strict_equal, 3));
-  js_set(js, lib, "stripVTControlCharacters", js_mkfun_arity(util_strip_vt_control_characters, 1));
+  js_set(js, lib, "formatWithOptions", Ant_Function_CreateWithArity(util_format_with_options, 1));
+  js_set(js, lib, "isDeepStrictEqual", Ant_Function_CreateWithArity(util_is_deep_strict_equal, 3));
+  js_set(js, lib, "stripVTControlCharacters", Ant_Function_CreateWithArity(util_strip_vt_control_characters, 1));
   
   js_set(js, lib, "TextDecoder", js_get(js, js->global, "TextDecoder"));
   js_set(js, lib, "TextEncoder", js_get(js, js->global, "TextEncoder"));

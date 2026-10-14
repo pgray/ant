@@ -1055,13 +1055,13 @@ int has_pending_microtasks(ant_t *js) {
 }
 
 static void timers_define_common(ant_t *js, ant_value_t obj) {
-  js_set(js, obj, "setTimeout", js_mkfun_arity_flags(js_set_timeout, 2, CFUNC_HAS_PROTOTYPE));
-  js_set(js, obj, "clearTimeout", js_mkfun_arity_flags(js_clear_timeout, 1, CFUNC_HAS_PROTOTYPE));
-  js_set(js, obj, "setInterval", js_mkfun_arity_flags(js_set_interval, 2, CFUNC_HAS_PROTOTYPE));
-  js_set(js, obj, "clearInterval", js_mkfun_arity_flags(js_clear_timeout, 1, CFUNC_HAS_PROTOTYPE));
-  js_set(js, obj, "setImmediate", js_mkfun_arity_flags(js_set_immediate, 1, CFUNC_HAS_PROTOTYPE));
-  js_set(js, obj, "clearImmediate", js_mkfun_arity_flags(js_clear_immediate, 1, CFUNC_HAS_PROTOTYPE));
-  js_set(js, obj, "queueMicrotask", js_mkfun_arity(js_queue_microtask, 1));
+  js_set(js, obj, "setTimeout", Ant_Function_CreateEx(js_set_timeout, 2, CFUNC_HAS_PROTOTYPE));
+  js_set(js, obj, "clearTimeout", Ant_Function_CreateEx(js_clear_timeout, 1, CFUNC_HAS_PROTOTYPE));
+  js_set(js, obj, "setInterval", Ant_Function_CreateEx(js_set_interval, 2, CFUNC_HAS_PROTOTYPE));
+  js_set(js, obj, "clearInterval", Ant_Function_CreateEx(js_clear_timeout, 1, CFUNC_HAS_PROTOTYPE));
+  js_set(js, obj, "setImmediate", Ant_Function_CreateEx(js_set_immediate, 1, CFUNC_HAS_PROTOTYPE));
+  js_set(js, obj, "clearImmediate", Ant_Function_CreateEx(js_clear_immediate, 1, CFUNC_HAS_PROTOTYPE));
+  js_set(js, obj, "queueMicrotask", Ant_Function_CreateWithArity(js_queue_microtask, 1));
 }
 
 static ant_value_t timer_make_template(ant_t *js, ant_value_t proto, ant_value_t repeat) {
@@ -1084,23 +1084,23 @@ void init_timer_module(ant_t *js) {
   gc_register_root(&js->builtins.interval_proto);
 
   js_set_proto_init(js->builtins.timeout_proto, js->sym.object_proto);
-  js_set(js, js->builtins.timeout_proto, "ref", js_mkfun(js_timer_ref));
-  js_set(js, js->builtins.timeout_proto, "unref", js_mkfun(js_timer_unref));
-  js_set(js, js->builtins.timeout_proto, "hasRef", js_mkfun(js_timer_has_ref));
-  js_set(js, js->builtins.timeout_proto, "refresh", js_mkfun(js_timer_refresh));
+  js_set(js, js->builtins.timeout_proto, "ref", Ant_Function_Create(js_timer_ref));
+  js_set(js, js->builtins.timeout_proto, "unref", Ant_Function_Create(js_timer_unref));
+  js_set(js, js->builtins.timeout_proto, "hasRef", Ant_Function_Create(js_timer_has_ref));
+  js_set(js, js->builtins.timeout_proto, "refresh", Ant_Function_Create(js_timer_refresh));
   js_set_tostringtag(js, js->builtins.timeout_proto, js_mkstr(js, "Timeout", 7));
-  js_set_sym(js, js->builtins.timeout_proto, js->sym.inspect_sym, js_mkfun(timer_inspect));
-  js_set_sym(js, js->builtins.timeout_proto, js->sym.toPrimitive_sym, js_mkfun(timer_to_primitive));
+  js_set_sym(js, js->builtins.timeout_proto, js->sym.inspect_sym, Ant_Function_Create(timer_inspect));
+  js_set_sym(js, js->builtins.timeout_proto, js->sym.toPrimitive_sym, Ant_Function_Create(timer_to_primitive));
 
   js->builtins.immediate_proto = js_mkobj(js);
   gc_register_root(&js->builtins.immediate_proto);
   js_set_proto_init(js->builtins.immediate_proto, js->sym.object_proto);
-  js_set(js, js->builtins.immediate_proto, "ref", js_mkfun(js_immediate_ref));
-  js_set(js, js->builtins.immediate_proto, "unref", js_mkfun(js_immediate_unref));
-  js_set(js, js->builtins.immediate_proto, "hasRef", js_mkfun(js_immediate_has_ref));
-  js_set_sym(js, js->builtins.immediate_proto, js->sym.dispose_sym, js_mkfun(js_immediate_dispose));
+  js_set(js, js->builtins.immediate_proto, "ref", Ant_Function_Create(js_immediate_ref));
+  js_set(js, js->builtins.immediate_proto, "unref", Ant_Function_Create(js_immediate_unref));
+  js_set(js, js->builtins.immediate_proto, "hasRef", Ant_Function_Create(js_immediate_has_ref));
+  js_set_sym(js, js->builtins.immediate_proto, js->sym.dispose_sym, Ant_Function_Create(js_immediate_dispose));
   js_set_tostringtag(js, js->builtins.immediate_proto, js_mkstr(js, "Immediate", 9));
-  js_set_sym(js, js->builtins.immediate_proto, js->sym.inspect_sym, js_mkfun(timer_inspect));
+  js_set_sym(js, js->builtins.immediate_proto, js->sym.inspect_sym, Ant_Function_Create(timer_inspect));
 
   js->builtins.immediate_template = js_mkobj(js);
   gc_register_root(&js->builtins.immediate_template);
@@ -1109,13 +1109,13 @@ void init_timer_module(ant_t *js) {
   js_set_descriptor(js, js->builtins.immediate_template, "callback", 8, JS_DESC_W | JS_DESC_C);
 
   js_set_proto_init(js->builtins.interval_proto, js->sym.object_proto);
-  js_set(js, js->builtins.interval_proto, "ref", js_mkfun(js_timer_ref));
-  js_set(js, js->builtins.interval_proto, "unref", js_mkfun(js_timer_unref));
-  js_set(js, js->builtins.interval_proto, "hasRef", js_mkfun(js_timer_has_ref));
-  js_set(js, js->builtins.interval_proto, "refresh", js_mkfun(js_timer_refresh));
+  js_set(js, js->builtins.interval_proto, "ref", Ant_Function_Create(js_timer_ref));
+  js_set(js, js->builtins.interval_proto, "unref", Ant_Function_Create(js_timer_unref));
+  js_set(js, js->builtins.interval_proto, "hasRef", Ant_Function_Create(js_timer_has_ref));
+  js_set(js, js->builtins.interval_proto, "refresh", Ant_Function_Create(js_timer_refresh));
   js_set_tostringtag(js, js->builtins.interval_proto, js_mkstr(js, "Interval", 8));
-  js_set_sym(js, js->builtins.interval_proto, js->sym.inspect_sym, js_mkfun(timer_inspect));
-  js_set_sym(js, js->builtins.interval_proto, js->sym.toPrimitive_sym, js_mkfun(timer_to_primitive));
+  js_set_sym(js, js->builtins.interval_proto, js->sym.inspect_sym, Ant_Function_Create(timer_inspect));
+  js_set_sym(js, js->builtins.interval_proto, js->sym.toPrimitive_sym, Ant_Function_Create(timer_to_primitive));
   
   js->builtins.timeout_template = timer_make_template(js, js->builtins.timeout_proto, js_mknull());
   js->builtins.interval_template = timer_make_template(js, js->builtins.interval_proto, js_mknum(0));
@@ -1140,11 +1140,11 @@ ant_value_t timers_promises_library(ant_t *js) {
   ant_value_t scheduler = js_mkobj(js);
 
   js_set(js, lib, "scheduler", scheduler);
-  js_set(js, lib, "setTimeout", js_mkfun_arity(js_timers_promises_setTimeout, 2));
-  js_set(js, lib, "setImmediate", js_mkfun_arity(js_timers_promises_setImmediate, 1));
-  js_set(js, lib, "setInterval", js_mkfun_arity(js_timers_promises_setInterval, 2));
-  js_set(js, scheduler, "wait", js_mkfun(js_timers_promises_scheduler_wait));
-  js_set(js, scheduler, "yield", js_mkfun(js_timers_promises_scheduler_yield));
+  js_set(js, lib, "setTimeout", Ant_Function_CreateWithArity(js_timers_promises_setTimeout, 2));
+  js_set(js, lib, "setImmediate", Ant_Function_CreateWithArity(js_timers_promises_setImmediate, 1));
+  js_set(js, lib, "setInterval", Ant_Function_CreateWithArity(js_timers_promises_setInterval, 2));
+  js_set(js, scheduler, "wait", Ant_Function_Create(js_timers_promises_scheduler_wait));
+  js_set(js, scheduler, "yield", Ant_Function_Create(js_timers_promises_scheduler_yield));
   js_set_tostringtag(js, lib, js_mkstr(js, "timers/promises", 16));
 
   return lib;

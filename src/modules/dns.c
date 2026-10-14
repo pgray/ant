@@ -247,8 +247,8 @@ ant_value_t dns_library(ant_t *js) {
   ant_value_t lib = js_mkobj(js);
   ant_value_t promises = js_mkobj(js);
 
-  js_set(js, promises, "lookup", js_mkfun(dns_promises_lookup));
-  js_set(js, promises, "resolve", js_mkfun(dns_promises_resolve));
+  js_set(js, promises, "lookup", Ant_Function_Create(dns_promises_lookup));
+  js_set(js, promises, "resolve", Ant_Function_Create(dns_promises_resolve));
   js_set(js, lib, "promises", promises);
 
   return lib;

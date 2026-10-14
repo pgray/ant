@@ -468,7 +468,7 @@ static ant_value_t intl_collator_constructor(ant_params_t) {
   js_set(js, obj, "locale", locale);
 
   if (nargs > 1 && vtype(args[1]) == kTypeObject && js_truthy(js, js_get(js, args[1], "numeric"))) {
-    js_set(js, obj, "compare", js_mkfun(intl_collator_compare_numeric));
+    js_set(js, obj, "compare", Ant_Function_Create(intl_collator_compare_numeric));
     js_set(js, obj, "numeric", js_true);
   }
   
@@ -528,32 +528,32 @@ void init_intl_module(ant_t *js) {
   js_set_tostringtag(js, intl, js_mkstr(js, "Intl", 4));
 
   js->builtins.intl_collator_proto = js_mkobj(js);
-  js_set(js, js->builtins.intl_collator_proto, "compare", js_mkfun(intl_collator_compare));
-  js_set(js, js->builtins.intl_collator_proto, "resolvedOptions", js_mkfun(intl_collator_resolved_options));
+  js_set(js, js->builtins.intl_collator_proto, "compare", Ant_Function_Create(intl_collator_compare));
+  js_set(js, js->builtins.intl_collator_proto, "resolvedOptions", Ant_Function_Create(intl_collator_resolved_options));
   js_set_tostringtag(js, js->builtins.intl_collator_proto, js_mkstr(js, "Intl.Collator", 13));
-  ant_value_t collator_ctor = js_make_intrinsic_ctor(js, intl_collator_constructor, js->builtins.intl_collator_proto, "Collator", 0);
+  ant_value_t collator_ctor = Ant_Function_CreateIntrinsicConstructor(js, intl_collator_constructor, js->builtins.intl_collator_proto, "Collator", 0);
   js_set(js, intl, "Collator", collator_ctor);
 
   js->builtins.intl_numberformat_proto = js_mkobj(js);
-  js_set(js, js->builtins.intl_numberformat_proto, "format", js_mkfun(intl_numberformat_format));
-  js_set(js, js->builtins.intl_numberformat_proto, "resolvedOptions", js_mkfun(intl_numberformat_resolved_options));
+  js_set(js, js->builtins.intl_numberformat_proto, "format", Ant_Function_Create(intl_numberformat_format));
+  js_set(js, js->builtins.intl_numberformat_proto, "resolvedOptions", Ant_Function_Create(intl_numberformat_resolved_options));
   js_set_tostringtag(js, js->builtins.intl_numberformat_proto, js_mkstr(js, "Intl.NumberFormat", 17));
-  ant_value_t numberformat_ctor = js_make_intrinsic_ctor(js, intl_numberformat_constructor, js->builtins.intl_numberformat_proto, "NumberFormat", 0);
+  ant_value_t numberformat_ctor = Ant_Function_CreateIntrinsicConstructor(js, intl_numberformat_constructor, js->builtins.intl_numberformat_proto, "NumberFormat", 0);
   js_set(js, intl, "NumberFormat", numberformat_ctor);
 
   js->builtins.intl_datetimeformat_proto = js_mkobj(js);
-  js_set(js, js->builtins.intl_datetimeformat_proto, "format", js_mkfun(intl_dtf_format));
-  js_set(js, js->builtins.intl_datetimeformat_proto, "resolvedOptions", js_mkfun(intl_dtf_resolved_options));
-  js_set(js, js->builtins.intl_datetimeformat_proto, "formatToParts", js_mkfun_arity(intl_dtf_format_to_parts, 1));
+  js_set(js, js->builtins.intl_datetimeformat_proto, "format", Ant_Function_Create(intl_dtf_format));
+  js_set(js, js->builtins.intl_datetimeformat_proto, "resolvedOptions", Ant_Function_Create(intl_dtf_resolved_options));
+  js_set(js, js->builtins.intl_datetimeformat_proto, "formatToParts", Ant_Function_CreateWithArity(intl_dtf_format_to_parts, 1));
   js_set_tostringtag(js, js->builtins.intl_datetimeformat_proto, js_mkstr(js, "Intl.DateTimeFormat", 19));
-  ant_value_t dtf_ctor = js_make_intrinsic_ctor(js, intl_dtf_constructor, js->builtins.intl_datetimeformat_proto, "DateTimeFormat", 0);
+  ant_value_t dtf_ctor = Ant_Function_CreateIntrinsicConstructor(js, intl_dtf_constructor, js->builtins.intl_datetimeformat_proto, "DateTimeFormat", 0);
   js_set(js, intl, "DateTimeFormat", dtf_ctor);
 
   js->builtins.intl_segmenter_proto = js_mkobj(js);
-  js_set(js, js->builtins.intl_segmenter_proto, "segment", js_mkfun_arity(intl_segmenter_segment, 1));
-  js_set(js, js->builtins.intl_segmenter_proto, "resolvedOptions", js_mkfun(intl_segmenter_resolved_options));
+  js_set(js, js->builtins.intl_segmenter_proto, "segment", Ant_Function_CreateWithArity(intl_segmenter_segment, 1));
+  js_set(js, js->builtins.intl_segmenter_proto, "resolvedOptions", Ant_Function_Create(intl_segmenter_resolved_options));
   js_set_tostringtag(js, js->builtins.intl_segmenter_proto, js_mkstr(js, "Intl.Segmenter", 14));
-  ant_value_t segmenter_ctor = js_make_intrinsic_ctor(js, intl_segmenter_constructor, js->builtins.intl_segmenter_proto, "Segmenter", 0);
+  ant_value_t segmenter_ctor = Ant_Function_CreateIntrinsicConstructor(js, intl_segmenter_constructor, js->builtins.intl_segmenter_proto, "Segmenter", 0);
   js_set(js, intl, "Segmenter", segmenter_ctor);
 
   js_set(js, global, "Intl", intl);

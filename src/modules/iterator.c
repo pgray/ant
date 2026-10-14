@@ -58,9 +58,7 @@ static ant_value_t get_iterator_prototype(ant_t *js) {
   js->sym.iterator_proto = js_mkobj(js);
   js_set_proto_init(js->sym.iterator_proto, js->sym.object_proto);
   
-  mkprop(
-    js, js->sym.iterator_proto, js->sym.iterator_sym,
-    js_mkfun(sym_this_cb), ANT_PROP_ATTR_WRITABLE | ANT_PROP_ATTR_CONFIGURABLE);
+  defmethod_sym(js, js->sym.iterator_proto, js->sym.iterator_sym, Ant_Function_Create(sym_this_cb));
 
   return js->sym.iterator_proto;
 }
@@ -166,7 +164,7 @@ static ant_value_t get_array_iterator_prototype(ant_t *js) {
   js->sym.array_iterator_proto = js_mkobj(js);
   
   bool iteration_patched = js->array_iteration_protector_invalid;
-  js->sym.array_iterator_next = defmethod(js, js->sym.array_iterator_proto, "next", 4, js_mkfun(arr_iter_next));
+  js->sym.array_iterator_next = defmethod(js, js->sym.array_iterator_proto, "next", 4, Ant_Function_Create(arr_iter_next));
   js->array_iteration_protector_invalid = iteration_patched;
   
   mkprop(js, js->sym.array_iterator_proto, js->sym.toStringTag_sym, ANT_STRING("Array Iterator"), ANT_PROP_ATTR_CONFIGURABLE);
@@ -195,7 +193,7 @@ static ant_value_t get_string_iterator_prototype(ant_t *js) {
   ant_value_t iterator_proto = get_iterator_prototype(js);
   js->sym.string_iterator_proto = js_mkobj(js);
   
-  defmethod(js, js->sym.string_iterator_proto, "next", 4, js_mkfun(str_iter_next));
+  defmethod(js, js->sym.string_iterator_proto, "next", 4, Ant_Function_Create(str_iter_next));
   mkprop(js, js->sym.string_iterator_proto, js->sym.toStringTag_sym, ANT_STRING("String Iterator"), ANT_PROP_ATTR_CONFIGURABLE);
   js_set_proto_init(js->sym.string_iterator_proto, iterator_proto);
 
@@ -1735,7 +1733,7 @@ static ant_value_t async_iter_async_dispose(ant_params_t) {
     ant_value_t arg = js_mkundef();
     ant_value_t result = sv_vm_call(js->vm, js, return_fn, self, &arg, 1, NULL, js_mkundef());
     if (!is_err(result)) result = js_promise_assimilate_awaitable(js, result);
-    out = is_err(result) ? rejected_promise(js, result) : js_promise_then(js, result, js_mkfun(async_iter_dispose_done), js_mkundef());
+    out = is_err(result) ? rejected_promise(js, result) : js_promise_then(js, result, Ant_Function_Create(async_iter_dispose_done), js_mkundef());
   }
   
   GC_ROOT_RESTORE(js, root_mark);
@@ -1779,39 +1777,37 @@ void init_iterator_module(ant_t *js) {
   js_iter_register_advance(js, get_array_iterator_prototype(js), advance_array);
   js_iter_register_advance(js, get_string_iterator_prototype(js), advance_string);
   
-  mkprop(
-    js, js->sym.string_proto, js->sym.iterator_sym, 
-    js_mkfun(string_iterator), ANT_PROP_ATTR_WRITABLE | ANT_PROP_ATTR_CONFIGURABLE);
+  defmethod_sym(js, js->sym.string_proto, js->sym.iterator_sym, Ant_Function_Create(string_iterator));
   
   js->builtins.wrap_iter_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.wrap_iter_proto, iter_proto);
-  js_set(js, js->builtins.wrap_iter_proto, "next", js_mkfun(wrap_iter_next));
+  js_set(js, js->builtins.wrap_iter_proto, "next", Ant_Function_Create(wrap_iter_next));
 
-  js_set(js, iter_proto, "map",     js_mkfun_arity(iter_map, 1));
-  js_set(js, iter_proto, "filter",  js_mkfun_arity(iter_filter, 1));
-  js_set(js, iter_proto, "take",    js_mkfun_arity(iter_take, 1));
-  js_set(js, iter_proto, "drop",    js_mkfun_arity(iter_drop, 1));
-  js_set(js, iter_proto, "flatMap", js_mkfun_arity(iter_flatMap, 1));
-  js_set(js, iter_proto, "every",   js_mkfun_arity(iter_every, 1));
-  js_set(js, iter_proto, "some",    js_mkfun_arity(iter_some, 1));
-  js_set(js, iter_proto, "find",    js_mkfun_arity(iter_find, 1));
-  js_set(js, iter_proto, "forEach", js_mkfun_arity(iter_forEach, 1));
-  js_set(js, iter_proto, "reduce",  js_mkfun_arity(iter_reduce, 1));
-  js_set(js, iter_proto, "toArray", js_mkfun(iter_toArray));
+  js_set(js, iter_proto, "map",     Ant_Function_CreateWithArity(iter_map, 1));
+  js_set(js, iter_proto, "filter",  Ant_Function_CreateWithArity(iter_filter, 1));
+  js_set(js, iter_proto, "take",    Ant_Function_CreateWithArity(iter_take, 1));
+  js_set(js, iter_proto, "drop",    Ant_Function_CreateWithArity(iter_drop, 1));
+  js_set(js, iter_proto, "flatMap", Ant_Function_CreateWithArity(iter_flatMap, 1));
+  js_set(js, iter_proto, "every",   Ant_Function_CreateWithArity(iter_every, 1));
+  js_set(js, iter_proto, "some",    Ant_Function_CreateWithArity(iter_some, 1));
+  js_set(js, iter_proto, "find",    Ant_Function_CreateWithArity(iter_find, 1));
+  js_set(js, iter_proto, "forEach", Ant_Function_CreateWithArity(iter_forEach, 1));
+  js_set(js, iter_proto, "reduce",  Ant_Function_CreateWithArity(iter_reduce, 1));
+  js_set(js, iter_proto, "toArray", Ant_Function_Create(iter_toArray));
   
-  js_set_sym_getter_desc(js, iter_proto, js->sym.toStringTag_sym, js_mkfun(iterator_tag_get), JS_DESC_C);
+  js_set_sym_getter_desc(js, iter_proto, js->sym.toStringTag_sym, Ant_Function_Create(iterator_tag_get), JS_DESC_C);
   static const ant_cfunc_meta_t dispose_meta = { iter_dispose, "[Symbol.dispose]", 0, 0 };
   
-  mkprop(js, iter_proto, js->sym.dispose_sym, js_mkfun_meta(&dispose_meta), ANT_PROP_ATTR_WRITABLE | ANT_PROP_ATTR_CONFIGURABLE);
-  js_set_sym_setter_desc(js, iter_proto, js->sym.toStringTag_sym, js_mkfun(iterator_tag_set), JS_DESC_C);
+  defmethod_sym(js, iter_proto, js->sym.dispose_sym, js_mkfun_meta(&dispose_meta));
+  js_set_sym_setter_desc(js, iter_proto, js->sym.toStringTag_sym, Ant_Function_Create(iterator_tag_set), JS_DESC_C);
 
   ant_value_t ctor_obj = js_mkobj(js);
-  js_set_slot(ctor_obj, SLOT_CFUNC, js_mkfun(iter_ctor));
+  js_set_slot(ctor_obj, SLOT_CFUNC, Ant_Function_Create(iter_ctor));
   js_mkprop_fast(js, ctor_obj, "prototype", 9, iter_proto);
   js_set_function_name(js, ctor_obj, "Iterator", sizeof("Iterator") - 1);
   
   ant_value_t ctor = js_obj_to_func(js, ctor_obj);
-  js_set(js, ctor, "from", js_mkfun_arity(iter_from, 1));
+  js_set(js, ctor, "from", Ant_Function_CreateWithArity(iter_from, 1));
   js_set(js, iter_proto, "constructor", ctor);
   js_set_global_builtin(js, "Iterator", ctor);
 
@@ -1821,16 +1817,16 @@ void init_iterator_module(ant_t *js) {
   
   mkprop(
     js, async_iter_proto, js->sym.asyncIterator_sym, 
-    js_mkfun(sym_this_cb), ANT_PROP_ATTR_WRITABLE | ANT_PROP_ATTR_CONFIGURABLE);
+    Ant_Function_Create(sym_this_cb), ANT_PROP_ATTR_WRITABLE | ANT_PROP_ATTR_CONFIGURABLE);
   
-  js_set_sym_getter_desc(js, async_iter_proto, js->sym.toStringTag_sym, js_mkfun(async_iterator_tag_get), JS_DESC_C);
+  js_set_sym_getter_desc(js, async_iter_proto, js->sym.toStringTag_sym, Ant_Function_Create(async_iterator_tag_get), JS_DESC_C);
   static const ant_cfunc_meta_t async_dispose_meta = { async_iter_async_dispose, "[Symbol.asyncDispose]", 0, 0 };
   
-  mkprop(js, async_iter_proto, js->sym.asyncDispose_sym, js_mkfun_meta(&async_dispose_meta), ANT_PROP_ATTR_WRITABLE | ANT_PROP_ATTR_CONFIGURABLE);
-  js_set_sym_setter_desc(js, async_iter_proto, js->sym.toStringTag_sym, js_mkfun(iterator_tag_set), JS_DESC_C);
+  defmethod_sym(js, async_iter_proto, js->sym.asyncDispose_sym, js_mkfun_meta(&async_dispose_meta));
+  js_set_sym_setter_desc(js, async_iter_proto, js->sym.toStringTag_sym, Ant_Function_Create(iterator_tag_set), JS_DESC_C);
 
   ant_value_t async_ctor_obj = js_mkobj(js);
-  js_set_slot(async_ctor_obj, SLOT_CFUNC, js_mkfun(async_iter_ctor));
+  js_set_slot(async_ctor_obj, SLOT_CFUNC, Ant_Function_Create(async_iter_ctor));
   js_mkprop_fast(js, async_ctor_obj, "prototype", 9, async_iter_proto);
   js_set_function_name(js, async_ctor_obj, "AsyncIterator", sizeof("AsyncIterator") - 1);
   
@@ -1840,20 +1836,20 @@ void init_iterator_module(ant_t *js) {
 
   js->builtins.async_wrap_iter_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.async_wrap_iter_proto, async_iter_proto);
-  js_set(js, js->builtins.async_wrap_iter_proto, "next", js_mkfun(async_wrap_next));
-  js_set(js, js->builtins.async_wrap_iter_proto, "return", js_mkfun(async_wrap_return));
-  js_set(js, js->builtins.async_wrap_iter_proto, "throw", js_mkfun(async_wrap_throw));
+  js_set(js, js->builtins.async_wrap_iter_proto, "next", Ant_Function_Create(async_wrap_next));
+  js_set(js, js->builtins.async_wrap_iter_proto, "return", Ant_Function_Create(async_wrap_return));
+  js_set(js, js->builtins.async_wrap_iter_proto, "throw", Ant_Function_Create(async_wrap_throw));
 
-  js_set(js, async_ctor, "from", js_mkfun(async_iter_from));
-  js_set(js, async_iter_proto, "map", js_mkfun(async_iter_map));
-  js_set(js, async_iter_proto, "filter", js_mkfun(async_iter_filter));
-  js_set(js, async_iter_proto, "take", js_mkfun(async_iter_take));
-  js_set(js, async_iter_proto, "drop", js_mkfun(async_iter_drop));
-  js_set(js, async_iter_proto, "flatMap", js_mkfun(async_iter_flatMap));
-  js_set(js, async_iter_proto, "every", js_mkfun(async_iter_every));
-  js_set(js, async_iter_proto, "some", js_mkfun(async_iter_some));
-  js_set(js, async_iter_proto, "find", js_mkfun(async_iter_find));
-  js_set(js, async_iter_proto, "forEach", js_mkfun(async_iter_forEach));
-  js_set(js, async_iter_proto, "reduce", js_mkfun(async_iter_reduce));
-  js_set(js, async_iter_proto, "toArray", js_mkfun(async_iter_toArray));
+  js_set(js, async_ctor, "from", Ant_Function_Create(async_iter_from));
+  js_set(js, async_iter_proto, "map", Ant_Function_Create(async_iter_map));
+  js_set(js, async_iter_proto, "filter", Ant_Function_Create(async_iter_filter));
+  js_set(js, async_iter_proto, "take", Ant_Function_Create(async_iter_take));
+  js_set(js, async_iter_proto, "drop", Ant_Function_Create(async_iter_drop));
+  js_set(js, async_iter_proto, "flatMap", Ant_Function_Create(async_iter_flatMap));
+  js_set(js, async_iter_proto, "every", Ant_Function_Create(async_iter_every));
+  js_set(js, async_iter_proto, "some", Ant_Function_Create(async_iter_some));
+  js_set(js, async_iter_proto, "find", Ant_Function_Create(async_iter_find));
+  js_set(js, async_iter_proto, "forEach", Ant_Function_Create(async_iter_forEach));
+  js_set(js, async_iter_proto, "reduce", Ant_Function_Create(async_iter_reduce));
+  js_set(js, async_iter_proto, "toArray", Ant_Function_Create(async_iter_toArray));
 }

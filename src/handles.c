@@ -1,6 +1,5 @@
 #include "handles.h"
 #include "cage.h"
-#include "hash.h"
 #include "value.h"
 
 #include <stdatomic.h>
@@ -19,7 +18,8 @@ enum {
   EXTERNAL_CHUNK_BITS = 10,
   EXTERNAL_CHUNK_SIZE = 1 << EXTERNAL_CHUNK_BITS,
   EXTERNAL_CHUNK_COUNT = 4096,
-  REGISTRY_BUCKET_COUNT = 2048,
+  REGISTRY_BUCKET_BITS = 11,
+  REGISTRY_BUCKET_COUNT = 1 << REGISTRY_BUCKET_BITS,
 };
 
 typedef struct ant_cfunc_entry {
@@ -46,9 +46,9 @@ typedef _Atomic(void *) ant_external_slot_t;
 static ant_cfunc_slab_t *cfunc_slabs = NULL;
 
 static _Atomic(ant_external_slot_t *) external_chunks[EXTERNAL_CHUNK_COUNT];
-static ant_cfunc_entry_t *cfunc_source_buckets[REGISTRY_BUCKET_COUNT];
-static ant_cfunc_entry_t *cfunc_entrypoint_buckets[REGISTRY_BUCKET_COUNT];
-static ant_external_entry_t *external_buckets[REGISTRY_BUCKET_COUNT];
+static _Atomic(ant_cfunc_entry_t *) cfunc_source_buckets[REGISTRY_BUCKET_COUNT];
+static _Atomic(ant_cfunc_entry_t *) cfunc_entrypoint_buckets[REGISTRY_BUCKET_COUNT];
+static _Atomic(ant_external_entry_t *) external_buckets[REGISTRY_BUCKET_COUNT];
 
 #ifdef _WIN32
 static SRWLOCK handles_lock = SRWLOCK_INIT;
@@ -60,15 +60,26 @@ static void handles_lock_acquire(void) { pthread_mutex_lock(&handles_lock); }
 static void handles_lock_release(void) { pthread_mutex_unlock(&handles_lock); }
 #endif
 
-static size_t pointer_hash(const void *ptr) {
-  uintptr_t value = (uintptr_t)ptr;
-  return (size_t)hash_key((const char *)&value, sizeof(value))
-    & (REGISTRY_BUCKET_COUNT - 1u);
+static inline size_t registry_bucket(uintptr_t key) {
+  return (size_t)(((uint64_t)key * 0x9E3779B97F4A7C15ull) >> (64 - REGISTRY_BUCKET_BITS));
 }
 
-static size_t entrypoint_hash(ant_cfunc_t fn) {
-  return (size_t)hash_key((const char *)&fn, sizeof(fn))
-    & (REGISTRY_BUCKET_COUNT - 1u);
+static ant_cfunc_entry_t *cfunc_find_source(size_t bucket, const ant_cfunc_meta_t *meta) {
+  ant_cfunc_entry_t *entry = atomic_load_explicit(&cfunc_source_buckets[bucket], memory_order_acquire);
+  while (entry && entry->source != meta) entry = entry->source_next;
+  return entry;
+}
+
+static ant_cfunc_entry_t *cfunc_find_entrypoint(size_t bucket, ant_cfunc_t fn) {
+  ant_cfunc_entry_t *entry = atomic_load_explicit(&cfunc_entrypoint_buckets[bucket], memory_order_acquire);
+  while (entry && entry->meta.fn != fn) entry = entry->entrypoint_next;
+  return entry;
+}
+
+static ant_external_entry_t *external_find(size_t bucket, void *ptr) {
+  ant_external_entry_t *entry = atomic_load_explicit(&external_buckets[bucket], memory_order_acquire);
+  while (entry && entry->ptr != ptr) entry = entry->next;
+  return entry;
 }
 
 static ant_cfunc_entry_t *cfunc_alloc_locked(void) {
@@ -129,31 +140,20 @@ static ant_cfunc_entry_t *cfunc_create_locked(const ant_cfunc_meta_t *meta) {
 
 const ant_cfunc_meta_t *ant_cfunc_meta_intern(const ant_cfunc_meta_t *meta) {
   if (!meta) return NULL;
-  size_t bucket = pointer_hash(meta);
+  size_t bucket = registry_bucket((uintptr_t)meta);
+  ant_cfunc_entry_t *entry = cfunc_find_source(bucket, meta);
+  if (entry) return &entry->meta;
+  
   handles_lock_acquire();
-  
-  for (
-    ant_cfunc_entry_t *entry = cfunc_source_buckets[bucket];
-    entry;
-    entry = entry->source_next
-  ) if (entry->source == meta) {
-    const ant_cfunc_meta_t *stored = &entry->meta;
-    handles_lock_release();
-    return stored;
+  entry = cfunc_find_source(bucket, meta);
+  if (!entry && (entry = cfunc_create_locked(meta))) {
+    entry->source = meta;
+    entry->source_next = atomic_load_explicit(&cfunc_source_buckets[bucket], memory_order_relaxed);
+    atomic_store_explicit(&cfunc_source_buckets[bucket], entry, memory_order_release);
   }
-
-  ant_cfunc_entry_t *entry = cfunc_create_locked(meta);
-  if (!entry) {
-    handles_lock_release();
-    return NULL;
-  }
-  
-  entry->source = meta;
-  entry->source_next = cfunc_source_buckets[bucket];
-  cfunc_source_buckets[bucket] = entry;
   handles_lock_release();
   
-  return &entry->meta;
+  return entry ? &entry->meta : NULL;
 }
 
 const ant_cfunc_meta_t *ant_cfunc_meta_source(const ant_cfunc_meta_t *stored) {
@@ -170,66 +170,49 @@ const ant_cfunc_meta_t *ant_cfunc_meta_create(const ant_cfunc_meta_t *meta) {
 
 const ant_cfunc_meta_t *ant_cfunc_meta_for_entrypoint(ant_cfunc_t fn) {
   if (!fn) return NULL;
-  size_t bucket = entrypoint_hash(fn);
+  size_t bucket = registry_bucket((uintptr_t)fn);
+  ant_cfunc_entry_t *entry = cfunc_find_entrypoint(bucket, fn);
+  if (entry) return &entry->meta;
+  
   handles_lock_acquire();
-  
-  for (
-    ant_cfunc_entry_t *entry = cfunc_entrypoint_buckets[bucket];
-    entry;
-    entry = entry->entrypoint_next
-  ) if (entry->meta.fn == fn) {
-    const ant_cfunc_meta_t *stored = &entry->meta;
-    handles_lock_release();
-    return stored;
+  entry = cfunc_find_entrypoint(bucket, fn);
+  if (!entry && (entry = cfunc_create_locked(&(ant_cfunc_meta_t){ .fn = fn }))) {
+    entry->entrypoint_next = atomic_load_explicit(&cfunc_entrypoint_buckets[bucket], memory_order_relaxed);
+    atomic_store_explicit(&cfunc_entrypoint_buckets[bucket], entry, memory_order_release);
   }
-
-  ant_cfunc_meta_t meta = {.fn = fn};
-  ant_cfunc_entry_t *entry = cfunc_create_locked(&meta);
-  
-  if (!entry) {
-    handles_lock_release();
-    return NULL;
-  }
-  
-  entry->entrypoint_next = cfunc_entrypoint_buckets[bucket];
-  cfunc_entrypoint_buckets[bucket] = entry;
   handles_lock_release();
   
-  return &entry->meta;
+  return entry ? &entry->meta : NULL;
 }
 
 uint64_t ant_external_handle_intern(void *ptr) {
   if (!ptr) return 0;
-  size_t bucket = pointer_hash(ptr);
+  size_t bucket = registry_bucket((uintptr_t)ptr);
+  ant_external_entry_t *entry = external_find(bucket, ptr);
+  if (entry) return entry->handle;
 
   handles_lock_acquire();
-  for (
-    ant_external_entry_t *entry = external_buckets[bucket]; 
-    entry; entry = entry->next
-  ) if (entry->ptr == ptr) {
-    uint64_t handle = entry->handle;
+  entry = external_find(bucket, ptr);
+  if (entry) {
     handles_lock_release();
-    return handle;
+    return entry->handle;
   }
 
-  ant_external_entry_t *entry = malloc(sizeof(*entry));
-  if (!entry || external_count == NANBOX_DATA_MASK) {
-    free(entry);
-    handles_lock_release();
-    return 0;
+  entry = external_count < NANBOX_DATA_MASK ? malloc(sizeof(*entry)) : NULL;
+  if (entry) {
+    entry->ptr = ptr;
+    entry->handle = external_count + 1;
   }
-
-  entry->ptr = ptr;
-  entry->handle = external_count + 1;
-  if (!external_publish(entry->handle, ptr)) {
+  
+  if (!entry || !external_publish(entry->handle, ptr)) {
     free(entry);
     handles_lock_release();
     return 0;
   }
 
   external_count = entry->handle;
-  entry->next = external_buckets[bucket];
-  external_buckets[bucket] = entry;
+  entry->next = atomic_load_explicit(&external_buckets[bucket], memory_order_relaxed);
+  atomic_store_explicit(&external_buckets[bucket], entry, memory_order_release);
   handles_lock_release();
   
   return entry->handle;

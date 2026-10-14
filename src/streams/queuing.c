@@ -83,21 +83,21 @@ void init_queuing_strategies_module(ant_t *js) {
 
   js->builtins.count_qs_proto = js_mkobj(js);
   js_set_slot(js->builtins.count_qs_proto, SLOT_DATA, make_size_fn(js, js_count_size, 0));
-  js_set_getter_desc(js, js->builtins.count_qs_proto, "highWaterMark", 13, js_mkfun(js_qs_get_highwatermark), JS_DESC_C);
-  js_set_getter_desc(js, js->builtins.count_qs_proto, "size", 4, js_mkfun(js_qs_get_size), JS_DESC_C);
+  js_set_getter_desc(js, js->builtins.count_qs_proto, "highWaterMark", 13, Ant_Function_Create(js_qs_get_highwatermark), JS_DESC_C);
+  js_set_getter_desc(js, js->builtins.count_qs_proto, "size", 4, Ant_Function_Create(js_qs_get_size), JS_DESC_C);
   js_set_tostringtag(js, js->builtins.count_qs_proto, js_mkstr(js, "CountQueuingStrategy", 20));
 
-  ant_value_t cqs_ctor = js_make_intrinsic_ctor(js, js_count_qs_ctor, js->builtins.count_qs_proto, "CountQueuingStrategy", 1);
+  ant_value_t cqs_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_count_qs_ctor, js->builtins.count_qs_proto, "CountQueuingStrategy", 1);
   js_set(js, g, "CountQueuingStrategy", cqs_ctor);
   js_set_descriptor(js, g, "CountQueuingStrategy", 20, JS_DESC_W | JS_DESC_C);
 
   js->builtins.bytelength_qs_proto = js_mkobj(js);
   js_set_slot(js->builtins.bytelength_qs_proto, SLOT_DATA, make_size_fn(js, js_bytelength_size, 1));
-  js_set_getter_desc(js, js->builtins.bytelength_qs_proto, "highWaterMark", 13, js_mkfun(js_qs_get_highwatermark), JS_DESC_C);
-  js_set_getter_desc(js, js->builtins.bytelength_qs_proto, "size", 4, js_mkfun(js_qs_get_size), JS_DESC_C);
+  js_set_getter_desc(js, js->builtins.bytelength_qs_proto, "highWaterMark", 13, Ant_Function_Create(js_qs_get_highwatermark), JS_DESC_C);
+  js_set_getter_desc(js, js->builtins.bytelength_qs_proto, "size", 4, Ant_Function_Create(js_qs_get_size), JS_DESC_C);
   js_set_tostringtag(js, js->builtins.bytelength_qs_proto, js_mkstr(js, "ByteLengthQueuingStrategy", 25));
 
-  ant_value_t blqs_ctor = js_make_intrinsic_ctor(js, js_bytelength_qs_ctor, js->builtins.bytelength_qs_proto, "ByteLengthQueuingStrategy", 1);
+  ant_value_t blqs_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_bytelength_qs_ctor, js->builtins.bytelength_qs_proto, "ByteLengthQueuingStrategy", 1);
   js_set(js, g, "ByteLengthQueuingStrategy", blqs_ctor);
   js_set_descriptor(js, g, "ByteLengthQueuingStrategy", 25, JS_DESC_W | JS_DESC_C);
 }
