@@ -270,7 +270,7 @@ static ant_value_t abort_signal_static_timeout(ant_params_t) {
   entry->closed = 0;
   
   Ant_List_Insert(&js->abort_timeouts, entry);
-  uv_timer_init(uv_default_loop(), &entry->handle);
+  uv_timer_init(js->loop, &entry->handle);
   
   entry->handle.data = entry;
   uv_timer_start(&entry->handle, abort_timeout_fire_cb, (uint64_t)(ms > 0 ? ms : 0), 0);

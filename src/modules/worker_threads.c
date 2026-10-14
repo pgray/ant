@@ -517,7 +517,7 @@ static int wt_spawn_worker(
 ) {
   if (!wt || !wt->js || !script_path || !wt->js->runtime.argv || wt->js->runtime.argc <= 0) return UV_EINVAL;
 
-  uv_loop_t *loop = uv_default_loop();
+  uv_loop_t *loop = wt->js->loop;
   uv_pipe_init(loop, &wt->stdout_pipe, 0);
 
   uv_stdio_container_t stdio[3];

@@ -1925,7 +1925,7 @@ static ant_value_t esm_load_module(ant_t *js, esm_module_t *mod, ant_value_t req
       size = mod->url_content_len;
     } else {
       char *error = NULL;
-      content = esm_fetch_url(mod->resolved_path, &size, &error);
+      content = esm_fetch_url(js, mod->resolved_path, &size, &error);
       if (!content) {
         mod->is_loading = false;
         ant_value_t err = js_mkerr(js, "Cannot fetch module %s: %s", mod->resolved_path, error ? error : "unknown error");

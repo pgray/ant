@@ -589,7 +589,7 @@ static ant_value_t js_websocket_ctor(ant_params_t) {
   ws->inspector_request_id = ant_inspector_websocket_created(url);
   ant_inspector_websocket_request(ws->inspector_request_id, NULL);
 
-  if (tlsuv_websocket_init(uv_default_loop(), &ws->client) != 0) {
+  if (tlsuv_websocket_init(js->loop, &ws->client) != 0) {
     ws->ready_state = WS_CLOSED;
     ant_inspector_websocket_error(ws->inspector_request_id, "WebSocket initialization failed");
     websocket_sync_state(ws);

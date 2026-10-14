@@ -18,12 +18,12 @@
 #include "gc/modules.h"
 
 #include "modules/abort.h"
+#include "loop.h"
 #include "modules/timer.h"
 #include "modules/process.h"
 
 typedef struct timer_entry {
   uv_timer_t handle;
-  ant_t *js;
   ant_value_t obj;
   ant_value_t callback;
   ant_value_t *args;
@@ -71,7 +71,6 @@ typedef struct immediate_entry {
 } immediate_entry_t;
 
 static void add_timer_entry(ant_t *js, timer_entry_t *entry) {
-  entry->js = js;
   entry->next = js->timers.timers;
   entry->prev = NULL;
   if (js->timers.timers) js->timers.timers->prev = entry;
@@ -284,9 +283,8 @@ static void timer_close_cb(uv_handle_t *h) {
   if (entry->detached) free(entry);
 }
 
-static void timer_close_entry(timer_entry_t *entry) {
+static void timer_close_entry(ant_t *js, timer_entry_t *entry) {
   if (!entry || entry->closed) return;
-  ant_t *js = entry->js;
   
   if (entry->active) {
     entry->active = 0;
@@ -309,7 +307,7 @@ static void timer_object_finalize(ant_t *js, ant_object_t *obj) {
   if (!entry) return;
   
   entry->detached = true;
-  if (!entry->closed) timer_close_entry(entry);
+  if (!entry->closed) timer_close_entry(js, entry);
   else if (entry->handle_closed) free(entry);
 }
 
@@ -321,7 +319,7 @@ static ant_value_t timer_make_object(ant_t *js, timer_entry_t *entry, double del
   
   if (is_err(obj)) {
     entry->detached = true;
-    timer_close_entry(entry);
+    timer_close_entry(js, entry);
     return obj;
   }
 
@@ -346,7 +344,7 @@ static void timer_callback(uv_timer_t *handle) {
   timer_entry_t *entry = (timer_entry_t *)handle->data;
   if (!entry || entry->closed || !entry->active) return;
   
-  ant_t *js = entry->js;
+  ant_t *js = Ant_Loop_Isolate(handle->loop);
   ant_value_t callback = entry->callback;
   
   if (!entry->is_interval) {
@@ -416,7 +414,7 @@ static ant_value_t js_set_timeout(ant_params_t) {
     return js_mkerr(js, "failed to allocate timer args");
   }
   
-  uv_timer_init(uv_default_loop(), &entry->handle);
+  uv_timer_init(js->loop, &entry->handle);
   entry->handle.data = entry;
   entry->callback = callback;
   entry->timer_id = js->timers.next_timer_id++;
@@ -452,7 +450,7 @@ static ant_value_t js_set_interval(ant_params_t) {
     return js_mkerr(js, "failed to allocate timer args");
   }
   
-  uv_timer_init(uv_default_loop(), &entry->handle);
+  uv_timer_init(js->loop, &entry->handle);
   entry->handle.data = entry;
   entry->callback = callback;
   entry->timer_id = js->timers.next_timer_id++;
@@ -475,7 +473,7 @@ static ant_value_t js_clear_timeout(ant_params_t) {
   
   timer_entry_t *entry = timer_open_entry_of(args[0]);
   if (!entry && vtype(args[0]) == kTypeNumber) entry = find_timer_entry_by_id(js, (int)js_getnum(args[0]));
-  if (entry) timer_close_entry(entry);
+  if (entry) timer_close_entry(js, entry);
   
   return js_mkundef();
 }
@@ -1172,7 +1170,7 @@ void cleanup_timer_module(ant_t *js) {
     "cannot destroy an isolate while it runs a job batch"
   );
 
-  while (t->timers) timer_close_entry(t->timers);
+  while (t->timers) timer_close_entry(js, t->timers);
   discard_jobs(js, t->microtasks);
   discard_jobs(js, t->next_ticks);
   

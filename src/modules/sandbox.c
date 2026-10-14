@@ -293,7 +293,7 @@ static ant_value_t sandbox_guest_parent_port(ant_t *js) {
 
 #ifndef _WIN32
   int fd = ant_sandbox_transport_fd();
-  if (fd >= 0 && uv_poll_init(uv_default_loop(), &g_guest_port.poll, fd) == 0) {
+  if (fd >= 0 && uv_poll_init(js->loop, &g_guest_port.poll, fd) == 0) {
     g_guest_port.poll.data = &g_guest_port;
     g_guest_port.poll_initialized = true;
     if (uv_poll_start(&g_guest_port.poll, UV_READABLE, sandbox_guest_poll_cb) != 0)
@@ -1159,7 +1159,7 @@ static ant_value_t sandbox_run(ant_params_t) {
   state->has_run_promise = true;
   state->running = true;
 
-  if (uv_async_init(uv_default_loop(), &state->async, sandbox_async_cb) != 0) {
+  if (uv_async_init(js->loop, &state->async, sandbox_async_cb) != 0) {
     state->running = false;
     state->has_run_promise = false;
     free(state->run_request);

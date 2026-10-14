@@ -329,7 +329,7 @@ static void inspector_connection_cb(uv_stream_t *server, int status) {
   client->js = g_inspector.js;
   client->id = ++g_inspector.next_client_id;
   if (client->id == 0) client->id = ++g_inspector.next_client_id;
-  uv_tcp_init(uv_default_loop(), &client->handle);
+  uv_tcp_init(server->loop, &client->handle);
   client->handle.data = client;
   if (uv_accept(server, (uv_stream_t *)&client->handle) != 0) {
     uv_close((uv_handle_t *)&client->handle, inspector_client_closed);
@@ -357,7 +357,7 @@ bool ant_inspector_start(ant_t *js, const ant_inspector_options_t *options) {
 
   struct sockaddr_in addr;
   if (!inspector_parse_sockaddr(g_inspector.host, g_inspector.port, &addr)) return false;
-  if (uv_tcp_init(uv_default_loop(), &g_inspector.server) != 0) return false;
+  if (uv_tcp_init(js->loop, &g_inspector.server) != 0) return false;
   if (uv_tcp_bind(&g_inspector.server, (const struct sockaddr *)&addr, 0) != 0) return false;
   if (uv_listen((uv_stream_t *)&g_inspector.server, 16, inspector_connection_cb) != 0) return false;
   if (!options->wait_for_session) uv_unref((uv_handle_t *)&g_inspector.server);
@@ -398,7 +398,7 @@ void ant_inspector_stop(void) {
 
 void ant_inspector_wait_for_session(void) {
   while (g_inspector.started && (!g_inspector.attached || g_inspector.waiting_for_debugger)) {
-    ant_uv_run(uv_default_loop(), UV_RUN_ONCE);
+    ant_uv_run(g_inspector.js->loop, UV_RUN_ONCE);
     js_poll_events(g_inspector.js);
   }
   if (g_inspector.started) uv_unref((uv_handle_t *)&g_inspector.server);

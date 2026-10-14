@@ -838,7 +838,7 @@ static ant_value_t rpc_server_listen(ant_params_t) {
   free(host);
 
   if (!server->async_initialized) {
-    if (uv_async_init(uv_default_loop(), &server->async, rpc_server_async_cb) != 0) {
+    if (uv_async_init(js->loop, &server->async, rpc_server_async_cb) != 0) {
       js_reject_promise(js, promise, js_mkerr(js, "failed to initialize rpc async handle"));
       return promise;
     }
@@ -1266,7 +1266,7 @@ static ant_value_t rpc_client_ctor(ant_params_t) {
 
   pthread_mutex_init(&client->mutex, NULL);
   pthread_cond_init(&client->cond, NULL);
-  if (uv_async_init(uv_default_loop(), &client->async, rpc_client_async_cb) != 0) {
+  if (uv_async_init(js->loop, &client->async, rpc_client_async_cb) != 0) {
     pthread_mutex_destroy(&client->mutex);
     pthread_cond_destroy(&client->cond);
     free(client->host);

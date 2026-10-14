@@ -1792,7 +1792,7 @@ ant_value_t server_start_from_export(ant_t *js, ant_value_t default_export) {
     .idle_timeout_ms = 30000,
     .websocket_idle_timeout_ms = 120000,
     .websocket_max_payload_len = 16u * 1024u * 1024u,
-    .loop = uv_default_loop(),
+    .loop = js->loop,
   };
 
   if (!server->hostname) {

@@ -34,6 +34,7 @@
 #include "gc/modules.h"
 #include "silver/call.h"
 
+#include "loop.h"
 #include "modules/fs.h"
 #include "modules/date.h"
 #include "modules/buffer.h"
@@ -87,7 +88,6 @@ typedef enum {
 
 typedef struct fs_request_s {
   uv_fs_t uv_req;
-  ant_t *js;
   ant_value_t promise;
   ant_value_t target_buffer;
   ant_value_t callback_fn;
@@ -156,7 +156,6 @@ typedef union {
 } fs_watcher_handle_t;
 
 typedef struct fs_watcher_s {
-  ant_t *js;
   ant_value_t obj;
   ant_value_t callback;
   fs_watcher_handle_t handle;
@@ -175,6 +174,14 @@ typedef struct fs_watcher_s {
   
   fs_watch_mode_t mode;
 } fs_watcher_t;
+
+static inline ant_t *fs_req_isolate(fs_request_t *req) {
+  return Ant_Loop_Isolate(req->uv_req.loop);
+}
+
+static inline ant_t *fs_watcher_isolate(fs_watcher_t *watcher) {
+  return Ant_Loop_Isolate(((uv_handle_t *)&watcher->handle)->loop);
+}
 
 typedef struct {
   bool persistent;
@@ -334,7 +341,7 @@ static int fs_stream_close_fd_sync(ant_t *js, ant_value_t stream_obj) {
     return 0;
   }
 
-  result = uv_fs_close(uv_default_loop(), &req, (uv_file)js_getnum(fd_val), NULL);
+  result = uv_fs_close(js->loop, &req, (uv_file)js_getnum(fd_val), NULL);
   uv_fs_req_cleanup(&req);
 
   js_set(js, stream_obj, "fd", js_mknull());
@@ -371,7 +378,7 @@ static int fs_stream_open_fd_sync(ant_t *js, ant_value_t stream_obj) {
   flags = (vtype(flags_val) == kTypeNumber) ? (int)js_getnum(flags_val) : O_RDONLY;
   if (vtype(mode_val) == kTypeNumber) mode = (int)js_getnum(mode_val);
 
-  result = uv_fs_open(uv_default_loop(), &req, path_copy, flags, mode, NULL);
+  result = uv_fs_open(js->loop, &req, path_copy, flags, mode, NULL);
   uv_fs_req_cleanup(&req);
   free(path_copy);
 
@@ -466,7 +473,7 @@ static ant_value_t fs_readstream__read(ant_params_t) {
 
   uv_fs_t req;
   uv_buf_t buf = uv_buf_init((char *)ab->data, (unsigned int)want);
-  int result = uv_fs_read(uv_default_loop(), &req, fd, &buf, 1, pos, NULL);
+  int result = uv_fs_read(js->loop, &req, fd, &buf, 1, pos, NULL);
   uv_fs_req_cleanup(&req);
 
   if (result < 0) {
@@ -533,7 +540,7 @@ static ant_value_t fs_writestream__write(ant_params_t) {
   while (offset < len) {
     uv_fs_t req;
     uv_buf_t buf = uv_buf_init((char *)(bytes + offset), (unsigned int)(len - offset));
-    int result = uv_fs_write(uv_default_loop(), &req, fd, &buf, 1, pos, NULL);
+    int result = uv_fs_write(js->loop, &req, fd, &buf, 1, pos, NULL);
     uv_fs_req_cleanup(&req);
 
     if (result < 0) {
@@ -1030,9 +1037,9 @@ static void fs_watcher_emit_error(fs_watcher_t *watcher, int status) {
   ant_value_t args[1];
 
   if (!watcher || vtype(watcher->obj) != kTypeObject) return;
-  args[0] = fs_watch_error(watcher->js, status, watcher->path);
-  args[0] = js_take_thrown(watcher->js, args[0]);
-  eventemitter_emit_args(watcher->js, watcher->obj, "error", args, 1);
+  args[0] = fs_watch_error(fs_watcher_isolate(watcher), status, watcher->path);
+  args[0] = js_take_thrown(fs_watcher_isolate(watcher), args[0]);
+  eventemitter_emit_args(fs_watcher_isolate(watcher), watcher->obj, "error", args, 1);
 }
 
 static void fs_watcher_emit_change(fs_watcher_t *watcher, const char *filename, int events) {
@@ -1044,14 +1051,14 @@ static void fs_watcher_emit_change(fs_watcher_t *watcher, const char *filename, 
   if ((events & UV_RENAME) != 0) event_name = "rename";
   if (!name || !*name) name = fs_watch_basename(watcher->path);
 
-  args[0] = js_mkstr(watcher->js, event_name, strlen(event_name));
-  args[1] = name ? fs_path_result(watcher->js, name, strlen(name), watcher->buffer_encoding) : js_mkundef();
+  args[0] = js_mkstr(fs_watcher_isolate(watcher), event_name, strlen(event_name));
+  args[1] = name ? fs_path_result(fs_watcher_isolate(watcher), name, strlen(name), watcher->buffer_encoding) : js_mkundef();
   if (is_err(args[1])) {
-    ant_value_t error = js_take_thrown(watcher->js, args[1]);
-    eventemitter_emit_args(watcher->js, watcher->obj, "error", &error, 1);
+    ant_value_t error = js_take_thrown(fs_watcher_isolate(watcher), args[1]);
+    eventemitter_emit_args(fs_watcher_isolate(watcher), watcher->obj, "error", &error, 1);
     return;
   }
-  eventemitter_emit_args(watcher->js, watcher->obj, "change", args, 2);
+  eventemitter_emit_args(fs_watcher_isolate(watcher), watcher->obj, "change", args, 2);
 }
 
 static void fs_watcher_invoke_watchfile_stats(
@@ -1073,9 +1080,9 @@ static void fs_watcher_invoke_watchfile_stats(
   watcher->last_stat = curr_stat;
   watcher->last_stat_valid = curr != NULL;
 
-  args[0] = fs_stats_object_from_uv(watcher->js, &curr_stat);
-  args[1] = fs_stats_object_from_uv(watcher->js, &prev_stat);
-  fs_call_callback(watcher->js, watcher->callback, args, 2);
+  args[0] = fs_stats_object_from_uv(fs_watcher_isolate(watcher), &curr_stat);
+  args[1] = fs_stats_object_from_uv(fs_watcher_isolate(watcher), &prev_stat);
+  fs_call_callback(fs_watcher_isolate(watcher), watcher->callback, args, 2);
 }
 
 static void fs_watcher_on_event(
@@ -1252,7 +1259,6 @@ static fs_watcher_t *fs_watcher_new(ant_t *js, fs_watch_mode_t mode) {
   fs_watcher_t *watcher = calloc(1, sizeof(*watcher));
 
   if (!watcher) return NULL;
-  watcher->js = js;
   watcher->obj = js_mkundef();
   watcher->callback = js_mkundef();
   watcher->persistent = true;
@@ -1261,7 +1267,7 @@ static fs_watcher_t *fs_watcher_new(ant_t *js, fs_watch_mode_t mode) {
   return watcher;
 }
 
-static int fs_watcher_start_event(fs_watcher_t *watcher, const char *path, bool persistent, bool recursive) {
+static int fs_watcher_start_event(ant_t *js, fs_watcher_t *watcher, const char *path, bool persistent, bool recursive) {
   unsigned int flags = 0;
 
   if (!watcher || !path) return UV_EINVAL;
@@ -1273,14 +1279,14 @@ static int fs_watcher_start_event(fs_watcher_t *watcher, const char *path, bool 
 
   watcher->persistent = persistent;
   return ant_watch_start(
-    uv_default_loop(),
+    js->loop,
     &watcher->handle.event,
     path, fs_watcher_on_event,
     watcher, flags, &watcher->path
   );
 }
 
-static int fs_watcher_start_poll(fs_watcher_t *watcher, const char *path, bool persistent, unsigned int interval_ms) {
+static int fs_watcher_start_poll(ant_t *js, fs_watcher_t *watcher, const char *path, bool persistent, unsigned int interval_ms) {
   int rc = 0;
 
   if (!watcher || !path) return UV_EINVAL;
@@ -1288,7 +1294,7 @@ static int fs_watcher_start_poll(fs_watcher_t *watcher, const char *path, bool p
   watcher->path = ant_watch_resolve_path(path);
   if (!watcher->path) return UV_ENOMEM;
 
-  rc = uv_fs_poll_init(uv_default_loop(), &watcher->handle.poll);
+  rc = uv_fs_poll_init(js->loop, &watcher->handle.poll);
   if (rc != 0) goto fail;
 
   watcher->handle.poll.data = watcher;
@@ -1697,7 +1703,7 @@ static ant_value_t builtin_fs_filehandle_close(ant_params_t) {
     return fs_resolved_promise(js, js_mkundef());
     
   uv_fs_t req;
-  int result = uv_fs_close(uv_default_loop(), &req, (uv_file)(int)js_getnum(fd_val), NULL);
+  int result = uv_fs_close(js->loop, &req, (uv_file)(int)js_getnum(fd_val), NULL);
   uv_fs_req_cleanup(&req);
   if (result < 0) return fs_rejected_promise(js, fs_mk_uv_error(js, result, "close", NULL, NULL));
 
@@ -1733,7 +1739,7 @@ static ant_value_t builtin_fs_filehandle_sync(ant_params_t) {
   if (is_err(fd_val)) return fs_rejected_promise(js, fd_val);
 
   uv_fs_t req;
-  int result = uv_fs_fsync(uv_default_loop(), &req, (uv_file)(int)js_getnum(fd_val), NULL);
+  int result = uv_fs_fsync(js->loop, &req, (uv_file)(int)js_getnum(fd_val), NULL);
   uv_fs_req_cleanup(&req);
   if (result < 0) return fs_rejected_promise(js, fs_mk_uv_error(js, result, "fsync", NULL, NULL));
 
@@ -1768,7 +1774,7 @@ static ant_value_t builtin_fs_filehandle_read(ant_params_t) {
   uv_buf_t buf = uv_buf_init((char *)(buf_data + offset), (unsigned int)length);
   
   uv_fs_t req;
-  int result = uv_fs_read(uv_default_loop(), &req, (uv_file)(int)js_getnum(fd_val), &buf, 1, position, NULL);
+  int result = uv_fs_read(js->loop, &req, (uv_file)(int)js_getnum(fd_val), &buf, 1, position, NULL);
   uv_fs_req_cleanup(&req);
   if (result < 0) return fs_rejected_promise(js, fs_mk_uv_error(js, result, "read", NULL, NULL));
 
@@ -1828,7 +1834,7 @@ static ant_value_t builtin_fs_filehandle_write(ant_params_t) {
 
   uv_buf_t buf = uv_buf_init((char *)write_data, (unsigned int)write_len);
   uv_fs_t req;
-  int result = uv_fs_write(uv_default_loop(), &req, (uv_file)(int)js_getnum(fd_val), &buf, 1, position, NULL);
+  int result = uv_fs_write(js->loop, &req, (uv_file)(int)js_getnum(fd_val), &buf, 1, position, NULL);
   uv_fs_req_cleanup(&req);
   if (result < 0) return fs_rejected_promise(js, fs_mk_uv_error(js, result, "write", NULL, NULL));
 
@@ -1864,7 +1870,7 @@ static ant_value_t builtin_fs_filehandle_writeFile(ant_params_t) {
   while (written < len) {
     uv_buf_t buf = uv_buf_init((char *)(data + written), (unsigned int)(len - written));
     uv_fs_t req;
-    int result = uv_fs_write(uv_default_loop(), &req, (uv_file)(int)js_getnum(fd_val), &buf, 1, -1, NULL);
+    int result = uv_fs_write(js->loop, &req, (uv_file)(int)js_getnum(fd_val), &buf, 1, -1, NULL);
     uv_fs_req_cleanup(&req);
     if (result < 0) return fs_rejected_promise(js, fs_mk_uv_error(js, result, "write", NULL, NULL));
     if (result == 0) return fs_rejected_promise(js, js_mkerr(js, "short write"));
@@ -1942,38 +1948,38 @@ static void complete_request(fs_request_t *req) {
     ant_value_t reject_value;
 
     if (req->error_code && req->syscall) reject_value = fs_mk_uv_error(
-      req->js, req->error_code, req->syscall, req->path, req->path2
+      fs_req_isolate(req), req->error_code, req->syscall, req->path, req->path2
     );
     
     else if (req->error_code) {
-      ant_value_t props = js_mkobj(req->js);
+      ant_value_t props = js_mkobj(fs_req_isolate(req));
       const char *code = uv_err_name(req->error_code);
-      js_set(req->js, props, "code", js_mkstr(req->js, code, strlen(code)));
-      js_set(req->js, props, "errno", js_mknum((double)req->error_code));
-      if (req->path) js_set(req->js, props, "path", js_mkstr(req->js, req->path, strlen(req->path)));
-      if (req->path2) js_set(req->js, props, "dest", js_mkstr(req->js, req->path2, strlen(req->path2)));
-      reject_value = js_mkerr_props(req->js, JS_ERR_TYPE, props, "%s", err_msg);
+      js_set(fs_req_isolate(req), props, "code", js_mkstr(fs_req_isolate(req), code, strlen(code)));
+      js_set(fs_req_isolate(req), props, "errno", js_mknum((double)req->error_code));
+      if (req->path) js_set(fs_req_isolate(req), props, "path", js_mkstr(fs_req_isolate(req), req->path, strlen(req->path)));
+      if (req->path2) js_set(fs_req_isolate(req), props, "dest", js_mkstr(fs_req_isolate(req), req->path2, strlen(req->path2)));
+      reject_value = js_mkerr_props(fs_req_isolate(req), JS_ERR_TYPE, props, "%s", err_msg);
     } 
     
-    else reject_value = js_mkerr(req->js, "%s", err_msg);
+    else reject_value = js_mkerr(fs_req_isolate(req), "%s", err_msg);
 
     if (is_err(reject_value)) {
-      reject_value = js_take_thrown(req->js, js_mkundef());
-      if (is_undefined(reject_value)) reject_value = js_mkstr(req->js, err_msg, strlen(err_msg));
+      reject_value = js_take_thrown(fs_req_isolate(req), js_mkundef());
+      if (is_undefined(reject_value)) reject_value = js_mkstr(fs_req_isolate(req), err_msg, strlen(err_msg));
     }
-    js_reject_promise(req->js, req->promise, reject_value);
+    js_reject_promise(fs_req_isolate(req), req->promise, reject_value);
   } else {
     ant_value_t result = js_mkundef();
     if (req->op_type == FS_OP_READ && req->data) {
       if (req->encoding != FS_ENC_NONE)
-        result = encode_data(req->js, req->data, req->data_len, req->encoding);
-      else result = fs_read_to_uint8array(req->js, req->data, req->data_len);
+        result = encode_data(fs_req_isolate(req), req->data, req->data_len, req->encoding);
+      else result = fs_read_to_uint8array(fs_req_isolate(req), req->data, req->data_len);
     } else if (req->op_type == FS_OP_READ_BYTES && req->data)
-      result = js_mkstr(req->js, req->data, req->data_len);
+      result = js_mkstr(fs_req_isolate(req), req->data, req->data_len);
     else if ((req->op_type == FS_OP_REALPATH || req->op_type == FS_OP_MKDTEMP) && req->data)
-      result = fs_path_result(req->js, req->data, req->data_len, req->buffer_encoding);
-    if (is_err(result)) js_reject_promise(req->js, req->promise, result);
-    else js_resolve_promise(req->js, req->promise, result);
+      result = fs_path_result(fs_req_isolate(req), req->data, req->data_len, req->buffer_encoding);
+    if (is_err(result)) js_reject_promise(fs_req_isolate(req), req->promise, result);
+    else js_resolve_promise(fs_req_isolate(req), req->promise, result);
   }
   
   remove_pending_request(req);
@@ -1994,7 +2000,7 @@ static void on_read_complete(uv_fs_t *uv_req) {
   req->data_len = uv_req->result;
   uv_fs_t close_req;
   
-  uv_fs_close(uv_default_loop(), &close_req, req->fd, NULL);
+  uv_fs_close(uv_req->loop, &close_req, req->fd, NULL);
   uv_fs_req_cleanup(&close_req);
   
   req->completed = 1;
@@ -2015,13 +2021,13 @@ static void on_open_for_read(uv_fs_t *uv_req) {
   uv_fs_req_cleanup(uv_req);
   
   uv_fs_t stat_req;
-  int stat_result = uv_fs_fstat(uv_default_loop(), &stat_req, req->fd, NULL);
+  int stat_result = uv_fs_fstat(uv_req->loop, &stat_req, req->fd, NULL);
   
   if (stat_result < 0) {
     fs_request_fail(req, stat_result);
     req->completed = 1;
     uv_fs_t close_req;
-    uv_fs_close(uv_default_loop(), &close_req, req->fd, NULL);
+    uv_fs_close(uv_req->loop, &close_req, req->fd, NULL);
     uv_fs_req_cleanup(&close_req);
     complete_request(req);
     return;
@@ -2037,20 +2043,20 @@ static void on_open_for_read(uv_fs_t *uv_req) {
     req->error_msg = strdup("Out of memory");
     req->completed = 1;
     uv_fs_t close_req;
-    uv_fs_close(uv_default_loop(), &close_req, req->fd, NULL);
+    uv_fs_close(uv_req->loop, &close_req, req->fd, NULL);
     uv_fs_req_cleanup(&close_req);
     complete_request(req);
     return;
   }
   
   uv_buf_t buf = uv_buf_init(req->data, (unsigned int)file_size);
-  int read_result = uv_fs_read(uv_default_loop(), uv_req, req->fd, &buf, 1, 0, on_read_complete);
+  int read_result = uv_fs_read(uv_req->loop, uv_req, req->fd, &buf, 1, 0, on_read_complete);
   
   if (read_result < 0) {
     fs_request_fail(req, read_result);
     req->completed = 1;
     uv_fs_t close_req;
-    uv_fs_close(uv_default_loop(), &close_req, req->fd, NULL);
+    uv_fs_close(uv_req->loop, &close_req, req->fd, NULL);
     uv_fs_req_cleanup(&close_req);
     complete_request(req);
     return;
@@ -2066,7 +2072,7 @@ static void on_write_complete(uv_fs_t *uv_req) {
   }
   
   uv_fs_t close_req;
-  uv_fs_close(uv_default_loop(), &close_req, req->fd, NULL);
+  uv_fs_close(uv_req->loop, &close_req, req->fd, NULL);
   uv_fs_req_cleanup(&close_req);
   
   req->completed = 1;
@@ -2087,13 +2093,13 @@ static void on_open_for_write(uv_fs_t *uv_req) {
   uv_fs_req_cleanup(uv_req);
   
   uv_buf_t buf = uv_buf_init(req->data, (unsigned int)req->data_len);
-  int write_result = uv_fs_write(uv_default_loop(), uv_req, req->fd, &buf, 1, 0, on_write_complete);
+  int write_result = uv_fs_write(uv_req->loop, uv_req, req->fd, &buf, 1, 0, on_write_complete);
   
   if (write_result < 0) {
     fs_request_fail(req, write_result);
     req->completed = 1;
     uv_fs_t close_req;
-    uv_fs_close(uv_default_loop(), &close_req, req->fd, NULL);
+    uv_fs_close(uv_req->loop, &close_req, req->fd, NULL);
     uv_fs_req_cleanup(&close_req);
     complete_request(req);
     return;
@@ -2267,10 +2273,10 @@ static void on_stat_complete(uv_fs_t *uv_req) {
     return;
   }
   
-  ant_value_t stat_obj = fs_stats_object_from_uv(req->js, &uv_req->statbuf);
+  ant_value_t stat_obj = fs_stats_object_from_uv(fs_req_isolate(req), &uv_req->statbuf);
   
   req->completed = 1;
-  js_resolve_promise(req->js, req->promise, stat_obj);
+  js_resolve_promise(fs_req_isolate(req), req->promise, stat_obj);
   remove_pending_request(req);
   free_fs_request(req);
 }
@@ -2381,7 +2387,7 @@ static void on_exists_complete(uv_fs_t *uv_req) {
   ant_value_t result = js_bool(uv_req->result >= 0);
   
   req->completed = 1;
-  js_resolve_promise(req->js, req->promise, result);
+  js_resolve_promise(fs_req_isolate(req), req->promise, result);
   remove_pending_request(req);
   free_fs_request(req);
 }
@@ -2398,7 +2404,7 @@ static void on_access_complete(uv_fs_t *uv_req) {
   }
   
   req->completed = 1;
-  js_resolve_promise(req->js, req->promise, js_mkundef());
+  js_resolve_promise(fs_req_isolate(req), req->promise, js_mkundef());
   remove_pending_request(req);
   free_fs_request(req);
 }
@@ -2415,7 +2421,7 @@ static void on_chmod_complete(uv_fs_t *uv_req) {
   }
 
   req->completed = 1;
-  js_resolve_promise(req->js, req->promise, js_mkundef());
+  js_resolve_promise(fs_req_isolate(req), req->promise, js_mkundef());
   remove_pending_request(req);
   free_fs_request(req);
 }
@@ -2431,7 +2437,7 @@ static void on_readdir_complete(uv_fs_t *uv_req) {
     return;
   }
   
-  ant_t *js = req->js;
+  ant_t *js = fs_req_isolate(req);
   GC_ROOT_SAVE(root_mark, js);
   
   ant_value_t parent = is_object_type(req->owner)
@@ -2460,7 +2466,7 @@ static void on_readdir_complete(uv_fs_t *uv_req) {
   
   GC_ROOT_RESTORE(js, root_mark);
   req->completed = 1;
-  js_resolve_promise(req->js, req->promise, arr);
+  js_resolve_promise(fs_req_isolate(req), req->promise, arr);
   remove_pending_request(req);
   free_fs_request(req);
 }
@@ -2536,7 +2542,7 @@ static ant_value_t builtin_fs_readFile(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
   
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_READ;
   req->encoding = (nargs > 1) ? parse_encoding(js, args[1]) : FS_ENC_NONE;
   req->promise = js_mkpromise(js);
@@ -2544,7 +2550,7 @@ static ant_value_t builtin_fs_readFile(ant_params_t) {
   req->uv_req.data = req;
   
   utarray_push_back(pending_requests, &req);
-  int result = uv_fs_open(uv_default_loop(), &req->uv_req, req->path, O_RDONLY, 0, on_open_for_read);
+  int result = uv_fs_open(js->loop, &req->uv_req, req->path, O_RDONLY, 0, on_open_for_read);
   
   if (result < 0) {
     fs_request_fail(req, result);
@@ -2568,14 +2574,14 @@ static ant_value_t builtin_fs_stream(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
   
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_READ_BYTES;
   req->promise = js_mkpromise(js);
   req->path = strndup(path, path_len);
   req->uv_req.data = req;
   
   utarray_push_back(pending_requests, &req);
-  int result = uv_fs_open(uv_default_loop(), &req->uv_req, req->path, O_RDONLY, 0, on_open_for_read);
+  int result = uv_fs_open(js->loop, &req->uv_req, req->path, O_RDONLY, 0, on_open_for_read);
   
   if (result < 0) {
     fs_request_fail(req, result);
@@ -3076,7 +3082,7 @@ static ant_value_t builtin_fs_rename(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
 
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_RENAME;
   req->promise = js_mkpromise(js);
   req->path = strndup(old_path, old_len);
@@ -3089,7 +3095,7 @@ static ant_value_t builtin_fs_rename(ant_params_t) {
   }
 
   utarray_push_back(pending_requests, &req);
-  int result = uv_fs_rename(uv_default_loop(), &req->uv_req, req->path, req->path2, on_rename_complete);
+  int result = uv_fs_rename(js->loop, &req->uv_req, req->path, req->path2, on_rename_complete);
 
   if (result < 0) {
     fs_request_fail(req, result);
@@ -3228,7 +3234,7 @@ static ant_value_t builtin_fs_fsyncSync(ant_params_t) {
 
   int fd = (int)js_getnum(args[0]);
   uv_fs_t req;
-  int rc = uv_fs_fsync(uv_default_loop(), &req, fd, NULL);
+  int rc = uv_fs_fsync(js->loop, &req, fd, NULL);
   uv_fs_req_cleanup(&req);
 
   if (rc < 0) return fs_mk_uv_error(js, rc, "fsync", NULL, NULL);
@@ -3264,7 +3270,7 @@ static ant_value_t builtin_fs_writeFile(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
   
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_WRITE;
   req->promise = js_mkpromise(js);
   req->path = strndup(path, path_len);
@@ -3280,7 +3286,7 @@ static ant_value_t builtin_fs_writeFile(ant_params_t) {
   req->uv_req.data = req;
   
   utarray_push_back(pending_requests, &req);
-  int result = uv_fs_open(uv_default_loop(), &req->uv_req, req->path, O_WRONLY | O_CREAT | O_TRUNC, 0644, on_open_for_write);
+  int result = uv_fs_open(js->loop, &req->uv_req, req->path, O_WRONLY | O_CREAT | O_TRUNC, 0644, on_open_for_write);
   
   if (result < 0) {
     fs_request_fail(req, result);
@@ -3331,14 +3337,14 @@ static ant_value_t builtin_fs_unlink(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
   
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_UNLINK;
   req->promise = js_mkpromise(js);
   req->path = strndup(path, path_len);
   req->uv_req.data = req;
   
   utarray_push_back(pending_requests, &req);
-  int result = uv_fs_unlink(uv_default_loop(), &req->uv_req, req->path, on_unlink_complete);
+  int result = uv_fs_unlink(js->loop, &req->uv_req, req->path, on_unlink_complete);
   
   if (result < 0) {
     fs_request_fail(req, result);
@@ -3456,7 +3462,7 @@ static ant_value_t builtin_fs_mkdir(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
 
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_MKDIR;
   req->promise = js_mkpromise(js);
   req->path = strndup(path, path_len);
@@ -3464,7 +3470,7 @@ static ant_value_t builtin_fs_mkdir(ant_params_t) {
   req->uv_req.data = req;
   
   utarray_push_back(pending_requests, &req);
-  int result = uv_fs_mkdir(uv_default_loop(), &req->uv_req, req->path, mode, on_mkdir_complete);
+  int result = uv_fs_mkdir(js->loop, &req->uv_req, req->path, mode, on_mkdir_complete);
   
   if (result < 0) {
     fs_request_fail(req, result);
@@ -3529,7 +3535,7 @@ static ant_value_t builtin_fs_mkdtemp(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) { free(tpl); return js_mkerr(js, "Out of memory"); }
 
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_MKDTEMP;
   req->buffer_encoding = nargs > 1 && fs_buffer_encoding(js, args[1]);
   req->promise = js_mkpromise(js);
@@ -3537,7 +3543,7 @@ static ant_value_t builtin_fs_mkdtemp(ant_params_t) {
   req->uv_req.data = req;
 
   utarray_push_back(pending_requests, &req);
-  int result = uv_fs_mkdtemp(uv_default_loop(), &req->uv_req, req->path, on_mkdtemp_complete);
+  int result = uv_fs_mkdtemp(js->loop, &req->uv_req, req->path, on_mkdtemp_complete);
 
   if (result < 0) {
     fs_request_fail(req, result);
@@ -3592,14 +3598,14 @@ static ant_value_t builtin_fs_rmdir(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
   
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_RMDIR;
   req->promise = js_mkpromise(js);
   req->path = strndup(path, path_len);
   req->uv_req.data = req;
   
   utarray_push_back(pending_requests, &req);
-  int result = uv_fs_rmdir(uv_default_loop(), &req->uv_req, req->path, on_rmdir_complete);
+  int result = uv_fs_rmdir(js->loop, &req->uv_req, req->path, on_rmdir_complete);
   
   if (result < 0) {
     fs_request_fail(req, result);
@@ -3832,14 +3838,14 @@ static ant_value_t builtin_fs_stat(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
   
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_STAT;
   req->promise = js_mkpromise(js);
   req->path = strndup(path, path_len);
   req->uv_req.data = req;
   
   utarray_push_back(pending_requests, &req);
-  int result = uv_fs_stat(uv_default_loop(), &req->uv_req, req->path, on_stat_complete);
+  int result = uv_fs_stat(js->loop, &req->uv_req, req->path, on_stat_complete);
   
   if (result < 0) {
     fs_request_fail(req, result);
@@ -3904,14 +3910,14 @@ static ant_value_t builtin_fs_lstat(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
   
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_STAT;
   req->promise = js_mkpromise(js);
   req->path = strndup(path, path_len);
   req->uv_req.data = req;
   
   utarray_push_back(pending_requests, &req);
-  int result = uv_fs_lstat(uv_default_loop(), &req->uv_req, req->path, on_stat_complete);
+  int result = uv_fs_lstat(js->loop, &req->uv_req, req->path, on_stat_complete);
   
   if (result < 0) {
     fs_request_fail(req, result);
@@ -3948,14 +3954,14 @@ static ant_value_t builtin_fs_fstat(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
 
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_STAT;
   req->promise = js_mkpromise(js);
   req->fd = (uv_file)(int)js_getnum(args[0]);
   req->uv_req.data = req;
 
   utarray_push_back(pending_requests, &req);
-  int result = uv_fs_fstat(uv_default_loop(), &req->uv_req, req->fd, on_stat_complete);
+  int result = uv_fs_fstat(js->loop, &req->uv_req, req->fd, on_stat_complete);
 
   if (result < 0) {
     fs_request_fail(req, result);
@@ -4000,18 +4006,18 @@ static ant_value_t builtin_fs_exists(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
   
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_EXISTS;
   req->promise = js_mkpromise(js);
   req->path = strndup(path, path_len);
   req->uv_req.data = req;
   
   utarray_push_back(pending_requests, &req);
-  int result = uv_fs_stat(uv_default_loop(), &req->uv_req, req->path, on_exists_complete);
+  int result = uv_fs_stat(js->loop, &req->uv_req, req->path, on_exists_complete);
   
   if (result < 0) {
     req->completed = 1;
-    js_resolve_promise(req->js, req->promise, js_false);
+    js_resolve_promise(js, req->promise, js_false);
     remove_pending_request(req);
     free_fs_request(req);
   }
@@ -4068,7 +4074,7 @@ static ant_value_t builtin_fs_chmodSync(ant_params_t) {
   if (!path_cstr) return js_mkerr(js, "Out of memory");
 
   uv_fs_t req;
-  int result = uv_fs_chmod(uv_default_loop(), &req, path_cstr, mode, NULL);
+  int result = uv_fs_chmod(js->loop, &req, path_cstr, mode, NULL);
 
   if (result < 0) {
     ant_value_t err = fs_mk_uv_error(js, result, "chmod", path_cstr, NULL);
@@ -4102,7 +4108,7 @@ static ant_value_t builtin_fs_chmod(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
 
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_CHMOD;
   req->promise = js_mkpromise(js);
   req->path = strndup(path, path_len);
@@ -4114,7 +4120,7 @@ static ant_value_t builtin_fs_chmod(ant_params_t) {
   }
 
   utarray_push_back(pending_requests, &req);
-  int result = uv_fs_chmod(uv_default_loop(), &req->uv_req, req->path, mode, on_chmod_complete);
+  int result = uv_fs_chmod(js->loop, &req->uv_req, req->path, mode, on_chmod_complete);
 
   if (result < 0) {
     fs_request_fail(req, result);
@@ -4144,14 +4150,14 @@ static ant_value_t builtin_fs_access(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
   
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_ACCESS;
   req->promise = js_mkpromise(js);
   req->path = strndup(path, path_len);
   req->uv_req.data = req;
   
   utarray_push_back(pending_requests, &req);
-  int result = uv_fs_access(uv_default_loop(), &req->uv_req, req->path, mode, on_access_complete);
+  int result = uv_fs_access(js->loop, &req->uv_req, req->path, mode, on_access_complete);
   
   if (result < 0) {
     fs_request_fail(req, result);
@@ -4195,7 +4201,7 @@ static ant_value_t builtin_fs_realpath(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
 
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_REALPATH;
   req->buffer_encoding = nargs > 1 && fs_buffer_encoding(js, args[1]);
   req->promise = js_mkpromise(js);
@@ -4208,7 +4214,7 @@ static ant_value_t builtin_fs_realpath(ant_params_t) {
   }
 
   utarray_push_back(pending_requests, &req);
-  int result = uv_fs_realpath(uv_default_loop(), &req->uv_req, req->path, on_realpath_complete);
+  int result = uv_fs_realpath(js->loop, &req->uv_req, req->path, on_realpath_complete);
 
   if (result < 0) {
     fs_request_fail(req, result);
@@ -4366,7 +4372,7 @@ static ant_value_t builtin_fs_symlink(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
 
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_SYMLINK;
   req->promise = js_mkpromise(js);
   
@@ -4382,7 +4388,7 @@ static ant_value_t builtin_fs_symlink(ant_params_t) {
 
   utarray_push_back(pending_requests, &req);
   int result = uv_fs_symlink(
-    uv_default_loop(), &req->uv_req,
+    js->loop, &req->uv_req,
     req->path, req->path2,
     flags, on_symlink_complete
   );
@@ -4460,7 +4466,7 @@ static ant_value_t builtin_fs_link(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
 
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_LINK;
   req->promise = js_mkpromise(js);
   
@@ -4475,7 +4481,7 @@ static ant_value_t builtin_fs_link(ant_params_t) {
   }
 
   utarray_push_back(pending_requests, &req);
-  int result = uv_fs_link(uv_default_loop(), &req->uv_req, req->path, req->path2, on_link_complete);
+  int result = uv_fs_link(js->loop, &req->uv_req, req->path, req->path2, on_link_complete);
 
   if (result < 0) {
     fs_request_fail(req, result);
@@ -4500,7 +4506,7 @@ static ant_value_t builtin_fs_readlink(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
 
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_REALPATH;
   req->buffer_encoding = nargs > 1 && fs_buffer_encoding(js, args[1]);
   req->promise = js_mkpromise(js);
@@ -4513,7 +4519,7 @@ static ant_value_t builtin_fs_readlink(ant_params_t) {
   }
 
   utarray_push_back(pending_requests, &req);
-  int result = uv_fs_readlink(uv_default_loop(), &req->uv_req, req->path, on_realpath_complete);
+  int result = uv_fs_readlink(js->loop, &req->uv_req, req->path, on_realpath_complete);
 
   if (result < 0) {
     fs_request_fail(req, result);
@@ -4777,7 +4783,7 @@ static void fs_walk_after_work(uv_work_t *work, int status) {
   GC_UV_CALLBACK();
   fs_walk_job_t *job = (fs_walk_job_t *)work->data;
   fs_request_t *req = job->req;
-  ant_t *js = req->js;
+  ant_t *js = fs_req_isolate(req);
 
   GC_ROOT_SAVE(root_mark, js);
   ant_value_t root_value = is_object_type(req->owner)
@@ -4898,7 +4904,7 @@ static ant_value_t builtin_fs_readdir(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
   
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_READDIR;
   req->buffer_encoding = nargs > 1 && fs_buffer_encoding(js, args[1]);
   req->with_file_types = with_file_types;
@@ -4926,7 +4932,7 @@ static ant_value_t builtin_fs_readdir(ant_params_t) {
     ant_value_t promise = req->promise;
     utarray_push_back(pending_requests, &req);
     
-    int rc = uv_queue_work(uv_default_loop(), &job->work, fs_walk_work, fs_walk_after_work);
+    int rc = uv_queue_work(js->loop, &job->work, fs_walk_work, fs_walk_after_work);
     if (rc < 0) {
       free(job);
       fs_request_fail(req, rc);
@@ -4937,7 +4943,7 @@ static ant_value_t builtin_fs_readdir(ant_params_t) {
   }
   
   utarray_push_back(pending_requests, &req);
-  int result = uv_fs_scandir(uv_default_loop(), &req->uv_req, req->path, 0, on_readdir_complete);
+  int result = uv_fs_scandir(js->loop, &req->uv_req, req->path, 0, on_readdir_complete);
   
   if (result < 0) {
     fs_request_fail(req, result);
@@ -4953,12 +4959,12 @@ static void on_fsync_complete(uv_fs_t *uv_req) {
   fs_request_t *req = (fs_request_t *)uv_req->data;
 
   if (uv_req->result < 0) {
-    ant_value_t err = fs_mk_uv_error(req->js, (int)uv_req->result, "fsync", NULL, NULL);
+    ant_value_t err = fs_mk_uv_error(fs_req_isolate(req), (int)uv_req->result, "fsync", NULL, NULL);
     ant_value_t cb_args[1] = { err };
-    fs_call_callback(req->js, req->callback_fn, cb_args, 1);
+    fs_call_callback(fs_req_isolate(req), req->callback_fn, cb_args, 1);
   } else {
     ant_value_t cb_args[1] = { js_mknull() };
-    fs_call_callback(req->js, req->callback_fn, cb_args, 1);
+    fs_call_callback(fs_req_isolate(req), req->callback_fn, cb_args, 1);
   }
 
   remove_pending_request(req);
@@ -4974,7 +4980,7 @@ static ant_value_t builtin_fs_fsync(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
 
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_FSYNC;
   req->promise = js_mkundef();
   req->target_buffer = js_mkundef();
@@ -4983,7 +4989,7 @@ static ant_value_t builtin_fs_fsync(ant_params_t) {
   req->uv_req.data = req;
 
   utarray_push_back(pending_requests, &req);
-  int result = uv_fs_fsync(uv_default_loop(), &req->uv_req, req->fd, on_fsync_complete);
+  int result = uv_fs_fsync(js->loop, &req->uv_req, req->fd, on_fsync_complete);
 
   if (result < 0) {
     ant_value_t err = fs_mk_uv_error(js, result, "fsync", NULL, NULL);
@@ -5009,7 +5015,7 @@ static void on_write_fd_complete(uv_fs_t *uv_req) {
   }
   
   req->completed = 1;
-  js_resolve_promise(req->js, req->promise, js_mknum((double)uv_req->result));
+  js_resolve_promise(fs_req_isolate(req), req->promise, js_mknum((double)uv_req->result));
   remove_pending_request(req);
   free_fs_request(req);
 }
@@ -5020,9 +5026,9 @@ static void on_read_fd_complete(uv_fs_t *uv_req) {
 
   if (uv_req->result < 0) {
     if (is_callable(req->callback_fn)) {
-      ant_value_t err = fs_mk_uv_error(req->js, (int)uv_req->result, "read", NULL, NULL);
+      ant_value_t err = fs_mk_uv_error(fs_req_isolate(req), (int)uv_req->result, "read", NULL, NULL);
       ant_value_t cb_args[1] = { err };
-      fs_call_callback(req->js, req->callback_fn, cb_args, 1);
+      fs_call_callback(fs_req_isolate(req), req->callback_fn, cb_args, 1);
       remove_pending_request(req);
       free_fs_request(req);
       return;
@@ -5045,14 +5051,14 @@ static void on_read_fd_complete(uv_fs_t *uv_req) {
 
   if (is_callable(req->callback_fn)) {
     ant_value_t cb_args[3] = { js_mknull(), js_mknum((double)bytes_read), req->target_buffer };
-    fs_call_callback(req->js, req->callback_fn, cb_args, 3);
+    fs_call_callback(fs_req_isolate(req), req->callback_fn, cb_args, 3);
     remove_pending_request(req);
     free_fs_request(req);
     return;
   }
 
   req->completed = 1;
-  js_resolve_promise(req->js, req->promise, js_mknum((double)bytes_read));
+  js_resolve_promise(fs_req_isolate(req), req->promise, js_mknum((double)bytes_read));
   remove_pending_request(req);
   free_fs_request(req);
 }
@@ -5090,7 +5096,7 @@ static ant_value_t builtin_fs_read_fd(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
 
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_READ_FD;
   req->promise = js_mkpromise(js);
   req->fd = fd;
@@ -5108,7 +5114,7 @@ static ant_value_t builtin_fs_read_fd(ant_params_t) {
   utarray_push_back(pending_requests, &req);
 
   uv_buf_t buf = uv_buf_init(req->data, (unsigned int)length);
-  int result = uv_fs_read(uv_default_loop(), &req->uv_req, req->fd, &buf, 1, position, on_read_fd_complete);
+  int result = uv_fs_read(js->loop, &req->uv_req, req->fd, &buf, 1, position, on_read_fd_complete);
 
   if (result < 0) {
     fs_request_fail(req, result);
@@ -5156,7 +5162,7 @@ static ant_value_t builtin_fs_readSync(ant_params_t) {
   
   uv_fs_t req;
   uv_buf_t buf = uv_buf_init((char *)(buf_data + offset), (unsigned int)length);
-  int result = uv_fs_read(uv_default_loop(), &req, fd, &buf, 1, position, NULL);
+  int result = uv_fs_read(js->loop, &req, fd, &buf, 1, position, NULL);
   uv_fs_req_cleanup(&req);
   
   if (result < 0) return js_mkerr(js, "readSync failed: %s", uv_strerror(result));
@@ -5180,7 +5186,7 @@ static ant_value_t builtin_fs_writeSync(ant_params_t) {
     
     uv_fs_t req;
     uv_buf_t buf = uv_buf_init((char *)str, (unsigned int)str_len);
-    int result = uv_fs_write(uv_default_loop(), &req, fd, &buf, 1, position, NULL);
+    int result = uv_fs_write(js->loop, &req, fd, &buf, 1, position, NULL);
     uv_fs_req_cleanup(&req);
     
     if (result < 0) return js_mkerr(js, "writeSync failed: %s", uv_strerror(result));
@@ -5219,7 +5225,7 @@ static ant_value_t builtin_fs_writeSync(ant_params_t) {
   
   uv_fs_t req;
   uv_buf_t buf = uv_buf_init((char *)(buf_data + offset), (unsigned int)length);
-  int result = uv_fs_write(uv_default_loop(), &req, fd, &buf, 1, position, NULL);
+  int result = uv_fs_write(js->loop, &req, fd, &buf, 1, position, NULL);
   uv_fs_req_cleanup(&req);
   
   if (result < 0) return js_mkerr(js, "writeSync failed: %s", uv_strerror(result));
@@ -5281,7 +5287,7 @@ static ant_value_t builtin_fs_write_fd(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
   
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_WRITE_FD;
   req->promise = js_mkpromise(js);
   req->fd = fd;
@@ -5297,7 +5303,7 @@ static ant_value_t builtin_fs_write_fd(ant_params_t) {
   utarray_push_back(pending_requests, &req);
   
   uv_buf_t buf = uv_buf_init(req->data, (unsigned int)req->data_len);
-  int result = uv_fs_write(uv_default_loop(), &req->uv_req, req->fd, &buf, 1, position, on_write_fd_complete);
+  int result = uv_fs_write(js->loop, &req->uv_req, req->fd, &buf, 1, position, on_write_fd_complete);
   
   if (result < 0) {
     fs_request_fail(req, result);
@@ -5334,7 +5340,7 @@ static ant_value_t builtin_fs_writevSync(ant_params_t) {
   }
   
   uv_fs_t req;
-  int result = uv_fs_write(uv_default_loop(), &req, fd, bufs, (unsigned int)arr_len, position, NULL);
+  int result = uv_fs_write(js->loop, &req, fd, bufs, (unsigned int)arr_len, position, NULL);
   uv_fs_req_cleanup(&req);
   free(bufs);
   
@@ -5385,7 +5391,7 @@ static ant_value_t builtin_fs_writev_fd(ant_params_t) {
     off += ta->byte_length;
   }
   
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_WRITE_FD;
   req->promise = js_mkpromise(js);
   req->fd = fd;
@@ -5395,7 +5401,7 @@ static ant_value_t builtin_fs_writev_fd(ant_params_t) {
   utarray_push_back(pending_requests, &req);
   
   uv_buf_t buf = uv_buf_init(req->data, (unsigned int)total_len);
-  int result = uv_fs_write(uv_default_loop(), &req->uv_req, req->fd, &buf, 1, position, on_write_fd_complete);
+  int result = uv_fs_write(js->loop, &req->uv_req, req->fd, &buf, 1, position, on_write_fd_complete);
   
   if (result < 0) {
     fs_request_fail(req, result);
@@ -5445,7 +5451,7 @@ static ant_value_t builtin_fs_openSync(ant_params_t) {
   if (!path_cstr) return js_mkerr(js, "Out of memory");
   
   uv_fs_t req;
-  int result = uv_fs_open(uv_default_loop(), &req, path_cstr, flags, mode, NULL);
+  int result = uv_fs_open(js->loop, &req, path_cstr, flags, mode, NULL);
   
   if (result < 0) {
     ant_value_t err = fs_mk_uv_error(js, result, "open", path_cstr, NULL);
@@ -5467,7 +5473,7 @@ static ant_value_t builtin_fs_closeSync(ant_params_t) {
   int fd = (int)js_getnum(args[0]);
   
   uv_fs_t req;
-  int result = uv_fs_close(uv_default_loop(), &req, fd, NULL);
+  int result = uv_fs_close(js->loop, &req, fd, NULL);
   uv_fs_req_cleanup(&req);
   
   if (result < 0) return js_mkerr(js, "closeSync failed: %s", uv_strerror(result));
@@ -5486,7 +5492,7 @@ static void on_open_fd_complete(uv_fs_t *uv_req) {
   }
   
   req->completed = 1;
-  js_resolve_promise(req->js, req->promise, js_mknum((double)uv_req->result));
+  js_resolve_promise(fs_req_isolate(req), req->promise, js_mknum((double)uv_req->result));
   remove_pending_request(req);
   free_fs_request(req);
 }
@@ -5504,8 +5510,8 @@ static void on_open_filehandle_complete(uv_fs_t *uv_req) {
 
   req->completed = 1;
   js_resolve_promise(
-    req->js, req->promise, 
-    fs_make_filehandle(req->js, (int)uv_req->result)
+    fs_req_isolate(req), req->promise, 
+    fs_make_filehandle(fs_req_isolate(req), (int)uv_req->result)
   );
   
   remove_pending_request(req);
@@ -5528,14 +5534,14 @@ static ant_value_t builtin_fs_open_fd(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
   
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_OPEN;
   req->promise = js_mkpromise(js);
   req->path = strndup(path, path_len);
   req->uv_req.data = req;
   
   utarray_push_back(pending_requests, &req);
-  int result = uv_fs_open(uv_default_loop(), &req->uv_req, req->path, flags, mode, on_open_fd_complete);
+  int result = uv_fs_open(js->loop, &req->uv_req, req->path, flags, mode, on_open_fd_complete);
   
   if (result < 0) {
     fs_request_fail(req, result);
@@ -5562,7 +5568,7 @@ static ant_value_t builtin_fs_open_filehandle(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
 
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_OPEN;
   req->promise = js_mkpromise(js);
   req->path = strndup(path, path_len);
@@ -5570,7 +5576,7 @@ static ant_value_t builtin_fs_open_filehandle(ant_params_t) {
 
   utarray_push_back(pending_requests, &req);
   int result = uv_fs_open(
-    uv_default_loop(), &req->uv_req, req->path, 
+    js->loop, &req->uv_req, req->path, 
     flags, mode, on_open_filehandle_complete
   );
 
@@ -5595,7 +5601,7 @@ static void on_close_fd_complete(uv_fs_t *uv_req) {
   }
   
   req->completed = 1;
-  js_resolve_promise(req->js, req->promise, js_mkundef());
+  js_resolve_promise(fs_req_isolate(req), req->promise, js_mkundef());
   remove_pending_request(req);
   free_fs_request(req);
 }
@@ -5609,14 +5615,14 @@ static ant_value_t builtin_fs_close_fd(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
   
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_CLOSE;
   req->promise = js_mkpromise(js);
   req->fd = fd;
   req->uv_req.data = req;
   
   utarray_push_back(pending_requests, &req);
-  int result = uv_fs_close(uv_default_loop(), &req->uv_req, req->fd, on_close_fd_complete);
+  int result = uv_fs_close(js->loop, &req->uv_req, req->fd, on_close_fd_complete);
   
   if (result < 0) {
     fs_request_fail(req, result);
@@ -5659,7 +5665,7 @@ static ant_value_t builtin_fs_watch(ant_params_t) {
   }
 
   watcher->buffer_encoding = opts.buffer_encoding;
-  rc = fs_watcher_start_event(watcher, path, opts.persistent, opts.recursive);
+  rc = fs_watcher_start_event(js, watcher, path, opts.persistent, opts.recursive);
   if (rc != 0) {
     js_clear_native(watcher_obj, FS_WATCHER_NATIVE_TAG);
     fs_watcher_free(watcher);
@@ -5705,7 +5711,7 @@ static ant_value_t builtin_fs_watchFile(ant_params_t) {
   watcher->callback = opts.listener;
   watcher->last_stat_valid = fs_stat_path_sync(path, &watcher->last_stat);
 
-  rc = fs_watcher_start_poll(watcher, path, opts.persistent, opts.interval_ms);
+  rc = fs_watcher_start_poll(js, watcher, path, opts.persistent, opts.interval_ms);
   if (rc != 0) {
     fs_watcher_free(watcher);
     return fs_watch_error(js, rc, path);
@@ -6186,7 +6192,7 @@ static ant_value_t fs_dir_read_sync(ant_t *js, ant_value_t dir_obj, fs_dir_t *d)
 static void fs_dir_run_ops(fs_dir_t *d);
 
 static void fs_dir_complete_op(fs_request_t *req, fs_dir_t *d, ant_value_t value, bool reject) {
-  ant_t *js = req->js;
+  ant_t *js = fs_req_isolate(req);
   if (reject) js_reject_promise(js, req->promise, value);
   else js_resolve_promise(js, req->promise, value);
 
@@ -6199,7 +6205,7 @@ static void fs_dir_complete_op(fs_request_t *req, fs_dir_t *d, ant_value_t value
 }
 
 static void fs_dir_finish_op(fs_request_t *req, fs_dir_t *d, ant_value_t result) {
-  if (is_err(result)) fs_dir_complete_op(req, d, js_take_thrown(req->js, result), true);
+  if (is_err(result)) fs_dir_complete_op(req, d, js_take_thrown(fs_req_isolate(req), result), true);
   else fs_dir_complete_op(req, d, result, false);
 }
 
@@ -6213,13 +6219,13 @@ static void fs_dir_iter_finish(fs_request_t *req, fs_dir_t *d, ant_value_t outco
     return;
   }
   req->failed = is_err(outcome);
-  req->target_buffer = req->failed ? js_take_thrown(req->js, outcome) : outcome;
+  req->target_buffer = req->failed ? js_take_thrown(fs_req_isolate(req), outcome) : outcome;
   req->op_type = FS_OP_DIR_ITER_CLOSE;
   fs_dir_run_ops(d);
 }
 
 static void fs_dir_settle_read(fs_request_t *req, fs_dir_t *d, ant_value_t value) {
-  ant_t *js = req->js;
+  ant_t *js = fs_req_isolate(req);
   if (req->op_type != FS_OP_DIR_ITER_NEXT) {
     fs_dir_finish_op(req, d, value);
     return;
@@ -6250,7 +6256,7 @@ static void on_dir_op_opened(uv_fs_t *uv_req) {
   uv_fs_req_cleanup(uv_req);
 
   if (rc < 0) {
-    fs_dir_settle_read(req, d, fs_mk_uv_error(req->js, rc, "opendir", req->path, NULL));
+    fs_dir_settle_read(req, d, fs_mk_uv_error(fs_req_isolate(req), rc, "opendir", req->path, NULL));
     return;
   }
 
@@ -6269,7 +6275,7 @@ static void on_dir_op_read(uv_fs_t *uv_req) {
 
   if (rc < 0) {
     uv_fs_req_cleanup(uv_req);
-    fs_dir_settle_read(req, d, fs_mk_uv_error(req->js, rc, "readdir", fs_dir_current_path(d), NULL));
+    fs_dir_settle_read(req, d, fs_mk_uv_error(fs_req_isolate(req), rc, "readdir", fs_dir_current_path(d), NULL));
     return;
   }
 
@@ -6283,7 +6289,7 @@ static void on_dir_op_read(uv_fs_t *uv_req) {
 
   uv_dir_t *handle = d->dir;
   d->dir = NULL;
-  int close_rc = uv_fs_closedir(uv_default_loop(), &req->uv_req, handle, on_dir_op_closed);
+  int close_rc = uv_fs_closedir(uv_req->loop, &req->uv_req, handle, on_dir_op_closed);
   if (close_rc < 0) fs_dir_after_close(req, d, close_rc);
 }
 
@@ -6299,7 +6305,7 @@ static void fs_dir_after_close(fs_request_t *req, fs_dir_t *d, int rc) {
   }
 
   fs_dir_finish_op(req, d, rc < 0
-    ? fs_mk_uv_error(req->js, rc, "closedir", d->path, NULL)
+    ? fs_mk_uv_error(fs_req_isolate(req), rc, "closedir", d->path, NULL)
     : js_mkundef()
   );
 }
@@ -6315,7 +6321,7 @@ static void on_dir_op_closed(uv_fs_t *uv_req) {
 static void fs_dir_run_ops(fs_dir_t *d) {
   fs_request_t *req = d->ops_head;
   if (!req) return;
-  ant_t *js = req->js;
+  ant_t *js = fs_req_isolate(req);
 
   bool closing =
     req->op_type == FS_OP_DIR_CLOSE ||
@@ -6333,7 +6339,7 @@ static void fs_dir_run_ops(fs_dir_t *d) {
     d->dir = NULL;
     fs_dir_release(d);
 
-    int rc = handle ? uv_fs_closedir(uv_default_loop(), &req->uv_req, handle, on_dir_op_closed) : 0;
+    int rc = handle ? uv_fs_closedir(js->loop, &req->uv_req, handle, on_dir_op_closed) : 0;
     if (!handle || rc < 0) fs_dir_after_close(req, d, rc);
     return;
   }
@@ -6357,14 +6363,14 @@ static void fs_dir_run_ops(fs_dir_t *d) {
     }
     free(req->path);
     req->path = next;
-    rc = uv_fs_opendir(uv_default_loop(), &req->uv_req, req->path, on_dir_op_opened);
+    rc = uv_fs_opendir(js->loop, &req->uv_req, req->path, on_dir_op_opened);
     if (rc < 0) fs_dir_settle_read(req, d, fs_mk_uv_error(js, rc, "opendir", req->path, NULL));
     return;
   }
 
   d->dir->dirents = d->dirents;
   d->dir->nentries = d->nentries;
-  rc = uv_fs_readdir(uv_default_loop(), &req->uv_req, d->dir, on_dir_op_read);
+  rc = uv_fs_readdir(js->loop, &req->uv_req, d->dir, on_dir_op_read);
   if (rc < 0) fs_dir_settle_read(req, d, fs_mk_uv_error(js, rc, "readdir", fs_dir_current_path(d), NULL));
 }
 
@@ -6375,7 +6381,7 @@ static ant_value_t fs_dir_enqueue(
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
 
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = op_type;
   req->promise = js_mkpromise(js);
   req->owner = dir_obj;
@@ -6628,7 +6634,7 @@ static ant_value_t builtin_fs_opendirSync(ant_params_t) {
 static void on_opendir_complete(uv_fs_t *uv_req) {
   GC_UV_CALLBACK();
   fs_request_t *req = (fs_request_t *)uv_req->data;
-  ant_t *js = req->js;
+  ant_t *js = fs_req_isolate(req);
   int rc = (int)uv_req->result;
   uv_dir_t *handle = rc < 0 ? NULL : (uv_dir_t *)uv_req->ptr;
   uv_fs_req_cleanup(uv_req);
@@ -6636,7 +6642,7 @@ static void on_opendir_complete(uv_fs_t *uv_req) {
   if ((rc == UV_EMFILE || rc == UV_ENFILE) && !req->retried) {
     req->retried = true;
     gc_run(js);
-    if (uv_fs_opendir(uv_default_loop(), &req->uv_req, req->path, on_opendir_complete) == 0) return;
+    if (uv_fs_opendir(js->loop, &req->uv_req, req->path, on_opendir_complete) == 0) return;
   }
 
   ant_value_t result;
@@ -6678,7 +6684,7 @@ static ant_value_t builtin_fs_opendir(ant_params_t) {
     return js_mkerr(js, "Out of memory");
   }
 
-  req->js = js;
+  req->uv_req.loop = js->loop;
   req->op_type = FS_OP_OPENDIR;
   req->promise = js_mkpromise(js);
   req->path = opts.path;
@@ -6691,7 +6697,7 @@ static ant_value_t builtin_fs_opendir(ant_params_t) {
   ant_value_t promise = req->promise;
   utarray_push_back(pending_requests, &req);
 
-  int rc = uv_fs_opendir(uv_default_loop(), &req->uv_req, req->path, on_opendir_complete);
+  int rc = uv_fs_opendir(js->loop, &req->uv_req, req->path, on_opendir_complete);
   if (rc < 0) {
     fs_request_fail(req, rc);
     req->completed = 1;

@@ -16,6 +16,7 @@
 #include "builder.h"
 #include "stringify.h"
 #include "runtime.h"
+#include "loop.h"
 #include "internal.h"
 #include "errors.h"
 #include "handles.h"
@@ -21473,6 +21474,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   gc_state_init(js);
   
   if (!isolate_arenas_init(js)) return NULL;
+  if (!Ant_Loop_Init(js)) return NULL;
 
   js->young_closure_trigger = GC_CLOSURE_NURSERY_THRESHOLD;
   js->c_root_cap = 64;
@@ -22073,6 +22075,7 @@ void js_destroy(ant_t *js) {
   cleanup_atomics_module(js);
   cleanup_events_module(js);
   cleanup_regex_module(js);
+  Ant_Loop_Destroy(js);
   gc_array_storage_cache_destroy(js);
   isolate_arenas_destroy(js);
   

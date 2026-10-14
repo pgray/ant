@@ -271,7 +271,7 @@ echo_oom:
     }
 
     uv_fs_t request;
-    int rc = uv_fs_realpath(uv_default_loop(), &request, path.data, NULL);
+    int rc = uv_fs_realpath(js->loop, &request, path.data, NULL);
     free(path.data);
     if (rc < 0) {
       const char *reason = uv_strerror(rc);
@@ -288,7 +288,7 @@ echo_oom:
     }
     const char *resolved = request.ptr;
     uv_fs_t stat_request;
-    int stat_rc = uv_fs_stat(uv_default_loop(), &stat_request, resolved, NULL);
+    int stat_rc = uv_fs_stat(js->loop, &stat_request, resolved, NULL);
     bool is_directory = stat_rc >= 0 && S_ISDIR(stat_request.statbuf.st_mode);
     uv_fs_req_cleanup(&stat_request);
     if (!is_directory) {

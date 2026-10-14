@@ -353,7 +353,7 @@ static int process_capture_start(
 ) {
   capture->run = run;
   capture->stdout_stream = stdout_stream;
-  int rc = uv_pipe_init(uv_default_loop(), &capture->handle, 0);
+  int rc = uv_pipe_init(run->js->loop, &capture->handle, 0);
   if (rc != 0) return rc;
   capture->initialized = true;
   capture->handle.data = capture;
@@ -447,7 +447,7 @@ static void process_native_stage_advance(ant_process_native_stage_t *native) {
       );
       native->write_request.data = native;
       int rc = uv_fs_write(
-        uv_default_loop(), &native->write_request,
+        native->stage->run->js->loop, &native->write_request,
         *fd, &buffer, 1, -1, process_native_write_done
       );
       if (rc >= 0) return;
@@ -631,6 +631,7 @@ static void process_spawn(ant_process_run_t *run) {
     if (stderr_fd >= 0) ant_process_stdio_inherit_fd(&stdio[2], stderr_fd);
     else ant_process_stdio_ignore(&stdio[2]);
     ant_process_spawn_spec_t spec = {
+      .loop = run->js->loop,
       .file = command->as.external.argv[0],
       .args = command->as.external.argv,
       .cwd = run->plan.cwd,
@@ -711,7 +712,7 @@ static void process_prepare_next_redirect(ant_process_run_t *run) {
     }
     run->redirect_open.data = run;
     int rc = uv_fs_open(
-      uv_default_loop(), &run->redirect_open, redirect->path,
+      run->js->loop, &run->redirect_open, redirect->path,
       flags, 0666, process_redirect_open_done
     );
     if (rc >= 0) return;

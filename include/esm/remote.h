@@ -9,7 +9,7 @@ bool esm_is_url(const char *spec);
 bool esm_is_data_url(const char *spec);
 char *esm_parse_data_url(const char *url, size_t *out_len);
 
-char *esm_fetch_url(const char *url, size_t *out_len, char **out_error);
+char *esm_fetch_url(ant_t *js, const char *url, size_t *out_len, char **out_error);
 char *esm_resolve_url(const char *specifier, const char *base_url);
 
 #define FILE_RESOLVER *(*file_resolver)(ant_t *, const char *, const char *)

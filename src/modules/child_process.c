@@ -1226,7 +1226,7 @@ static ant_value_t builtin_spawn(ant_params_t) {
   for (int i = CHILD_STREAM_STDIN; i <= CHILD_STREAM_STDERR; i++) {
   if (stdio_modes[i] == STDIO_PIPE) {
     uv_pipe_t *p = child_pipe(cp, i);
-    uv_pipe_init(uv_default_loop(), p, 0);
+    uv_pipe_init(js->loop, p, 0);
     p->data = cp;
   }}
   
@@ -1281,6 +1281,7 @@ static ant_value_t builtin_spawn(ant_params_t) {
   }
   
   ant_process_spawn_spec_t spec = {
+    .loop = js->loop,
     .file = final_args[0],
     .args = final_args,
     .env = env,
@@ -1388,8 +1389,8 @@ static ant_value_t builtin_exec(ant_params_t) {
   cp->stdio_modes[CHILD_STREAM_STDOUT] = STDIO_PIPE;
   cp->stdio_modes[CHILD_STREAM_STDERR] = STDIO_PIPE;
   
-  uv_pipe_init(uv_default_loop(), &cp->stdout_pipe, 0);
-  uv_pipe_init(uv_default_loop(), &cp->stderr_pipe, 0);
+  uv_pipe_init(js->loop, &cp->stdout_pipe, 0);
+  uv_pipe_init(js->loop, &cp->stderr_pipe, 0);
   
   cp->stdout_pipe.data = cp;
   cp->stderr_pipe.data = cp;
@@ -1414,6 +1415,7 @@ static ant_value_t builtin_exec(ant_params_t) {
   shell_args[3] = NULL;
   
   ant_process_spawn_spec_t spec = {
+    .loop = js->loop,
     .file = "/bin/sh",
     .args = shell_args,
     .cwd = cwd,

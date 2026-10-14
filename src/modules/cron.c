@@ -1092,7 +1092,7 @@ static ant_value_t cron_create_job(
   job->js = js;
   job->handler = handler;
   job->expression = expression;
-  int rc = uv_timer_init(uv_default_loop(), &job->timer);
+  int rc = uv_timer_init(js->loop, &job->timer);
   if (rc != 0) {
     free(job->source);
     free(job->time_zone);
@@ -2385,7 +2385,7 @@ static void cron_start_next_request(void) {
     if (!request) return;
     cron_state.active_request = request;
     int rc = uv_queue_work(
-      uv_default_loop(), &request->work, cron_request_work, cron_request_after
+      request->js->loop, &request->work, cron_request_work, cron_request_after
     );
     if (rc == 0) return;
 

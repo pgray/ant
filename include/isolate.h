@@ -60,6 +60,8 @@ typedef struct {
 struct ant_isolate_t {
   sv_vm_t *vm;
   void *jit_ctx;
+  
+  struct uv_loop_s *loop;
   gc_vm_seg_t *vm_segs;
 
   ant_object_t *objects;
@@ -457,6 +459,7 @@ struct ant_isolate_t {
   } runtime;
 
   bool owns_mem;
+  bool owns_loop;
   bool fatal_error;
   bool uncaught_nonfatal;
 

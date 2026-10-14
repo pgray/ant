@@ -55,7 +55,7 @@ int ant_process_stage_spawn(
 
   stage->handle.data = stage;
   int result = uv_spawn(
-    spec->loop ? spec->loop : uv_default_loop(),
+    spec->loop,
     &stage->handle,
     &options
   );

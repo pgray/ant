@@ -426,7 +426,7 @@ int ant_conn_connect_tcp(
   hints.ai_socktype = SOCK_STREAM;
   conn->resolving = true;
   req->resolver_req.data = req;
-  rc = uv_getaddrinfo(conn->listener ? conn->listener->loop : uv_default_loop(), &req->resolver_req, ant_conn_resolved_cb, hostname, NULL, &hints);
+  rc = uv_getaddrinfo(conn->handle.tcp.loop, &req->resolver_req, ant_conn_resolved_cb, hostname, NULL, &hints);
   if (rc != 0) {
     conn->resolving = false;
     free(req);

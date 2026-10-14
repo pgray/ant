@@ -136,7 +136,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_queue_async_work(
   if (!env || !w) return napi_set_last((napi_env)env, napi_invalid_arg, "invalid argument");
   if (w->queued) return napi_set_last((napi_env)env, napi_invalid_arg, "already queued");
 
-  int rc = uv_queue_work(uv_default_loop(), &w->req, napi_async_work_execute_cb, napi_async_work_after_cb);
+  int rc = uv_queue_work(((ant_napi_env_t *)env)->js->loop, &w->req, napi_async_work_execute_cb, napi_async_work_after_cb);
   if (rc != 0) return napi_set_last((napi_env)env, napi_generic_failure, "uv_queue_work failed");
   w->queued = true;
   return napi_set_last((napi_env)env, napi_ok, NULL);
@@ -185,7 +185,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_create_threadsafe_function(
   tsfn->func_val = func ? (ant_value_t)func : js_mkundef();
 
   uv_mutex_init(&tsfn->mutex);
-  int rc = uv_async_init(uv_default_loop(), &tsfn->async, napi_tsfn_async_cb);
+  int rc = uv_async_init(((ant_napi_env_t *)env)->js->loop, &tsfn->async, napi_tsfn_async_cb);
   if (rc != 0) {
     uv_mutex_destroy(&tsfn->mutex);
     free(tsfn);
@@ -370,6 +370,6 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_get_uv_event_loop(
   struct uv_loop_s **loop
 ) {
   if (!env || !loop) return napi_set_last((napi_env)env, napi_invalid_arg, "invalid argument");
-  *loop = uv_default_loop();
+  *loop = ((ant_napi_env_t *)env)->js->loop;
   return napi_set_last((napi_env)env, napi_ok, NULL);
 }

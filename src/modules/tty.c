@@ -195,7 +195,7 @@ static ant_value_t tty_readstream__read(ant_params_t) {
   if (state->closing || js_truthy(js, js_get(js, stream_obj, "destroyed"))) return js_mkundef();
 
   if (!state->initialized) {
-    rc = uv_tty_init(uv_default_loop(), &state->tty, state->fd, 0);
+    rc = uv_tty_init(js->loop, &state->tty, state->fd, 0);
     if (rc != 0) {
       tty_read_stream_emit_error(state, "open", rc);
       return js_mkundef();

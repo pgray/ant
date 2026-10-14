@@ -284,7 +284,7 @@ static void start_signal_watch(ant_t *js, int signum) {
 
   sh = malloc(sizeof(SignalHandle));
   sh->signum = signum;
-  uv_signal_init(uv_default_loop(), &sh->handle);
+  uv_signal_init(js->loop, &sh->handle);
   sh->handle.data = js;
   uv_signal_start(&sh->handle, uv_signal_handler, signum);
   uv_unref((uv_handle_t *)&sh->handle);
@@ -805,7 +805,7 @@ static void stdin_start_reading(ant_t *js) {
   if (!ps) return;
   if (ps->stdin_state.reading) return;
   if (!ps->stdin_state.tty_initialized) {
-    uv_loop_t *loop = uv_default_loop();
+    uv_loop_t *loop = js->loop;
     if (uv_tty_init(loop, &ps->stdin_state.tty, STDIN_FILENO, 1) != 0) return;
     ps->stdin_state.tty.data = js;
     ps->stdin_state.tty_initialized = true;
@@ -881,7 +881,7 @@ static void start_sigwinch_handler(ant_t *js) {
   ps->sigwinch_requested = true;
   if (ps->sigwinch_initialized || ps->sigwinch_closing) return;
 
-  uv_loop_t *loop = uv_default_loop();
+  uv_loop_t *loop = js->loop;
   if (uv_signal_init(loop, &ps->sigwinch_handle) != 0) return;
   ps->sigwinch_initialized = true;
   ps->sigwinch_handle.data = js;

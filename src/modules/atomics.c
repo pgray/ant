@@ -980,7 +980,7 @@ static ant_value_t js_atomics_waitAsync(ant_params_t) {
   atomic_store(&entry->settle_state, ASYNC_WAIT_SETTLE_NONE);
   atomic_store(&entry->settle_drain_microtasks, false);
 
-  if (uv_async_init(uv_default_loop(), &entry->async, async_waiter_async_cb) != 0) {
+  if (uv_async_init(js->loop, &entry->async, async_waiter_async_cb) != 0) {
     async_waiter_close_handles(entry);
     return js_mkerr(js, "Failed to initialize Atomics.waitAsync notifier");
   }
@@ -991,7 +991,7 @@ static ant_value_t js_atomics_waitAsync(ant_params_t) {
 
   if (isfinite(timeout_ms)) {
     uint64_t delay = timeout_ms > (double)UINT64_MAX ? UINT64_MAX : (uint64_t)timeout_ms;
-    if (uv_timer_init(uv_default_loop(), &entry->timer) != 0) {
+    if (uv_timer_init(js->loop, &entry->timer) != 0) {
       async_waiter_close_handles(entry);
       return js_mkerr(js, "Failed to initialize Atomics.waitAsync timer");
     }

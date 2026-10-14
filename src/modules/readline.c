@@ -606,7 +606,7 @@ static void start_reading(rl_interface_t *iface) {
   if (is_tty && iface->should_echo) {
     enter_raw_mode(iface);
     if (!iface->sigint_watcher_initialized) {
-      uv_signal_init(uv_default_loop(), &iface->sigint_watcher);
+      uv_signal_init(iface->js->loop, &iface->sigint_watcher);
       iface->sigint_watcher.data = iface;
       iface->sigint_watcher_initialized = true;
     }

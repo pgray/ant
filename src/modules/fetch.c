@@ -922,7 +922,7 @@ static void fetch_start_http(fetch_request_t *req) {
     ant_inspector_network_set_request_body(req->network_request_id, request->body_data, request->body_size);
 
   rc = ant_http_request_start(
-    uv_default_loop(), &options,
+    req->js->loop, &options,
     fetch_http_on_response, fetch_http_on_body, fetch_http_on_complete,
     req, &req->http_req
   );

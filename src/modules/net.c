@@ -903,7 +903,7 @@ static ant_value_t net_socket_connect_parsed(ant_t *js, net_socket_t *socket, co
     return js_mkerr_typed(js, JS_ERR_TYPE, "Socket is already connected or connecting");
 
   memset(&socket->client_listener, 0, sizeof(socket->client_listener));
-  socket->client_listener.loop = uv_default_loop();
+  socket->client_listener.loop = js->loop;
   socket->client_listener.user_data = socket;
   socket->client_listener.callbacks.on_read = net_socket_on_read;
   socket->client_listener.callbacks.on_end = net_socket_on_end;
@@ -973,7 +973,7 @@ static ant_value_t net_server_bind_listener(
   const net_listen_args_t *parsed,
   const ant_listener_callbacks_t *callbacks
 ) {
-  uv_loop_t *loop = uv_default_loop();
+  uv_loop_t *loop = js->loop;
   int rc = 0;
 
   if (parsed->path) {

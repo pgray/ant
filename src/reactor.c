@@ -25,7 +25,7 @@ static inline work_flags_t get_pending_work(ant_t *js) {
 
 static inline bool event_loop_alive(ant_t *js) {
   if (get_pending_work(js) & WORK_PENDING) return true;
-  return uv_loop_alive(uv_default_loop());
+  return uv_loop_alive(js->loop);
 }
 
 void js_poll_events(ant_t *js) {
@@ -53,10 +53,10 @@ static bool reactor_idle_gc(ant_t *js) {
   if (!gc_idle_wanted(js)) return false;
   
   size_t marker = gc_alloc_marker(js);
-  ant_uv_run(uv_default_loop(), UV_RUN_NOWAIT);
+  ant_uv_run(js->loop, UV_RUN_NOWAIT);
   
   if (gc_alloc_marker(js) != marker || (get_pending_work(js) & WORK_BLOCKING)) return true;
-  gc_idle(js, uv_backend_timeout(uv_default_loop()));
+  gc_idle(js, uv_backend_timeout(js->loop));
   
   return false;
 }
@@ -69,9 +69,9 @@ drain:
     work_flags_t work = get_pending_work(js);
   
     if ((work & WORK_BLOCKING) || has_active_immediates(js))
-      ant_uv_run(uv_default_loop(), UV_RUN_NOWAIT);
-    else if ((work & WORK_ASYNC) || uv_loop_alive(uv_default_loop())) {
-      if (!reactor_idle_gc(js)) ant_uv_run(uv_default_loop(), UV_RUN_ONCE);
+      ant_uv_run(js->loop, UV_RUN_NOWAIT);
+    else if ((work & WORK_ASYNC) || uv_loop_alive(js->loop)) {
+      if (!reactor_idle_gc(js)) ant_uv_run(js->loop, UV_RUN_ONCE);
     } else break;
   
     process_report_uncaught_exception_if_pending(js);
@@ -88,7 +88,7 @@ drain:
 
 void js_reactor_pump_repl_nowait(ant_t *js) {
   js_poll_events(js);
-  ant_uv_run(uv_default_loop(), UV_RUN_NOWAIT);
+  ant_uv_run(js->loop, UV_RUN_NOWAIT);
   js_poll_events(js);
 }
 
@@ -133,7 +133,7 @@ js_reactor_await_status_t js_reactor_blocking_await_promise(
   GC_ROOT_PIN(js, settled);
   js_mark_promise_rejection_handled_chain(js, promise);
 
-  uv_loop_t *loop = uv_default_loop();
+  uv_loop_t *loop = js->loop;
   uv_poll_t signal_poll;
   
   int signal_fd = ant_readline_interrupt_fd();

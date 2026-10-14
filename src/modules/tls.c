@@ -1212,7 +1212,7 @@ static ant_value_t js_tls_connect_options(ant_t *js, ant_value_t options, ant_va
   tls_define_default_socket_state(js, obj);
   
   if (is_callable(callback)) eventemitter_add_listener(js, obj, "secureConnect", callback, true);
-  tlsuv_stream_init(uv_default_loop(), &socket->stream, socket->ctx);
+  tlsuv_stream_init(js->loop, &socket->stream, socket->ctx);
   socket->stream.data = socket;
   socket->connect_req.data = socket;
   

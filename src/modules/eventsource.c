@@ -172,7 +172,7 @@ static void eventsource_schedule_reconnect(eventsource_state_t *es) {
     return;
   }
   timer->source = es;
-  uv_timer_init(uv_default_loop(), &timer->handle);
+  uv_timer_init(es->js->loop, &timer->handle);
   es->timer = timer;
   es->ready_state = ES_CONNECTING;
   eventsource_sync_state(es);
@@ -324,7 +324,7 @@ static void eventsource_start_request(eventsource_state_t *es) {
   options.headers = &accept;
 
   rc = ant_http_request_start(
-    uv_default_loop(), &options,
+    es->js->loop, &options,
     eventsource_http_on_response,
     eventsource_http_on_body,
     eventsource_http_on_complete,

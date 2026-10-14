@@ -3,6 +3,7 @@
 #include "escape.h"
 #include "esm/remote.h"
 #include "reactor.h"
+#include "internal.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -240,14 +241,14 @@ static void esm_write_cache(const char *cache_path, const char *url, const char 
   free(dir);
 }
 
-char *esm_fetch_url(const char *url, size_t *out_len, char **out_error) {
+char *esm_fetch_url(ant_t *js, const char *url, size_t *out_len, char **out_error) {
   char *cache_path = esm_get_cache_path(url);
   if (cache_path) {
     char *cached = esm_read_cache(cache_path, out_len);
     if (cached) { free(cache_path); return cached; }
   }
 
-  uv_loop_t *loop = uv_default_loop();
+  uv_loop_t *loop = js->loop;
   esm_url_fetch_t ctx = {0};
   
   ctx.capacity = 16384;
