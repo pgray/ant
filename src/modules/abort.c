@@ -4,6 +4,7 @@
 #include <uv.h>
 
 #include "ant.h"
+#include "list.h"
 #include "common.h"
 #include "ptr.h"
 #include "errors.h"
@@ -31,7 +32,8 @@ struct abort_timeout_entry {
   ant_t *js;
   ant_value_t signal;
   int closed;
-  struct abort_timeout_entry *next;
+  abort_timeout_entry_t *next;
+  abort_timeout_entry_t **pprev;
 };
 
 static const UT_icd abort_value_icd = { 
@@ -233,15 +235,7 @@ static void abort_timeout_close_cb(uv_handle_t *h) {
   abort_timeout_entry_t *entry = (abort_timeout_entry_t *)h->data;
   if (!entry) return;
 
-  abort_timeout_entry_t **it = &entry->js->abort_timeouts;
-  while (*it) {
-    if (*it == entry) {
-      *it = entry->next;
-      break;
-    }
-    it = &(*it)->next;
-  }
-
+  Ant_List_Remove(entry);
   entry->closed = 1;
   free(entry);
 }
@@ -274,10 +268,10 @@ static ant_value_t abort_signal_static_timeout(ant_params_t) {
   entry->js = js;
   entry->signal = signal;
   entry->closed = 0;
-  entry->next = js->abort_timeouts;
-  js->abort_timeouts = entry;
-
+  
+  Ant_List_Insert(&js->abort_timeouts, entry);
   uv_timer_init(uv_default_loop(), &entry->handle);
+  
   entry->handle.data = entry;
   uv_timer_start(&entry->handle, abort_timeout_fire_cb, (uint64_t)(ms > 0 ? ms : 0), 0);
 

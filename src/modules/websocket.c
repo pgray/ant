@@ -11,6 +11,7 @@
 #include <zlib.h>
 
 #include "ant.h"
+#include "list.h"
 #include "common.h"
 #include "errors.h"
 #include "inspector.h"
@@ -26,7 +27,7 @@
 #include "modules/websocket.h"
 #include "net/listener.h"
 
-typedef struct websocket_state_s {
+struct websocket_state_s {
   ant_t *js;
   ant_value_t obj;
   ant_value_t request_obj;
@@ -34,7 +35,8 @@ typedef struct websocket_state_s {
   uv_connect_t connect_req;
   ant_conn_t *server_conn;
   uint64_t inspector_request_id;
-  struct websocket_state_s *next;
+  websocket_state_t *next;
+  websocket_state_t **pprev;
   uint8_t *fragment_buf;
   size_t fragment_len;
   size_t fragment_cap;
@@ -46,7 +48,6 @@ typedef struct websocket_state_s {
   uint8_t ready_state;
   bool is_client: 1;
   bool close_emitted: 1;
-  bool active: 1;
   bool client_close_started: 1;
   bool client_close_was_clean: 1;
   bool fragmenting: 1;
@@ -56,7 +57,7 @@ typedef struct websocket_state_s {
   bool inflate_ready: 1;
   bool binary_type_blob: 1;
   ant_value_t handler_listeners[4];
-} websocket_state_t;
+};
 
 enum { WS_HANDLER_OPEN, WS_HANDLER_MESSAGE, WS_HANDLER_CLOSE, WS_HANDLER_ERROR, WS_HANDLER_COUNT };
 static const char *const ws_handler_types[WS_HANDLER_COUNT] = { "open", "message", "close", "error" };
@@ -68,8 +69,6 @@ enum {
   WS_CLOSED = 3,
 };
 
-static websocket_state_t *g_active_websockets = NULL;
-
 static constexpr uint32_t WS_NATIVE_TAG = 0x57534f42u; // WSOB
 static constexpr uint32_t WS_DEFAULT_MAX_PAYLOAD_LEN = 16u * 1024u * 1024u;
 
@@ -79,28 +78,6 @@ static websocket_state_t *websocket_data(ant_value_t value) {
 
 static websocket_state_t *websocket_from_client(tlsuv_websocket_t *client) {
   return client ? (websocket_state_t *)((char *)client - offsetof(websocket_state_t, client)) : NULL;
-}
-
-static void websocket_add_active(websocket_state_t *ws) {
-  if (!ws || ws->active) return;
-  ws->next = g_active_websockets;
-  g_active_websockets = ws;
-  ws->active = true;
-}
-
-static void websocket_remove_active(websocket_state_t *ws) {
-  websocket_state_t **it = &g_active_websockets;
-  if (!ws || !ws->active) return;
-  while (*it) {
-    if (*it == ws) {
-      *it = ws->next;
-      ws->next = NULL;
-      ws->active = false;
-      return;
-    }
-    it = &(*it)->next;
-  }
-  ws->active = false;
 }
 
 static void websocket_fragment_reset(websocket_state_t *ws) {
@@ -141,7 +118,7 @@ static bool websocket_fragment_append(websocket_state_t *ws, const uint8_t *data
 
 static void websocket_free_state(websocket_state_t *ws) {
   if (!ws) return;
-  websocket_remove_active(ws);
+  Ant_List_Remove(ws);
   websocket_fragment_clear(ws);
   if (ws->deflate_ready) deflateEnd(&ws->deflate_strm);
   if (ws->inflate_ready) inflateEnd(&ws->inflate_strm);
@@ -465,7 +442,7 @@ static void websocket_emit_close(websocket_state_t *ws, uint16_t code, const cha
 static void websocket_client_close_cb(uv_handle_t *handle) {
   websocket_state_t *ws = websocket_from_client((tlsuv_websocket_t *)handle);
   websocket_emit_close(ws, ws->client_close_code, "", ws->client_close_was_clean);
-  websocket_remove_active(ws);
+  Ant_List_Remove(ws);
 }
 
 static void websocket_close_client(websocket_state_t *ws, uint16_t code, bool was_clean) {
@@ -575,7 +552,7 @@ static websocket_state_t *websocket_state_new(ant_t *js, ant_value_t obj) {
   ws->obj = obj;
   ws->ready_state = WS_CONNECTING;
   ws->max_payload_len = WS_DEFAULT_MAX_PAYLOAD_LEN;
-  websocket_add_active(ws);
+  Ant_List_Insert(&ws->js->active_websockets, ws);
   return ws;
 }
 
@@ -616,7 +593,7 @@ static ant_value_t js_websocket_ctor(ant_params_t) {
     ws->ready_state = WS_CLOSED;
     ant_inspector_websocket_error(ws->inspector_request_id, "WebSocket initialization failed");
     websocket_sync_state(ws);
-    websocket_remove_active(ws);
+    Ant_List_Remove(ws);
     return obj;
   }
 
@@ -969,7 +946,7 @@ void ant_websocket_server_on_close(ant_t *js, ant_value_t socket_obj) {
   if (!ws) return;
   ws->server_conn = NULL;
   websocket_emit_close(ws, 1000, "", true);
-  websocket_remove_active(ws);
+  Ant_List_Remove(ws);
 }
 
 void init_websocket_module(ant_t *js) {
@@ -1030,7 +1007,7 @@ void init_websocket_module(ant_t *js) {
 }
 
 void gc_mark_websocket(ant_t *js, gc_mark_fn mark) {
-  for (websocket_state_t *ws = g_active_websockets; ws; ws = ws->next) {
+  for (websocket_state_t *ws = js->active_websockets; ws; ws = ws->next) {
     mark(js, ws->obj);
     if (is_object_type(ws->request_obj)) mark(js, ws->request_obj);
   }

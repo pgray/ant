@@ -74,6 +74,7 @@ struct ant_isolate_t {
   server_runtime_t *server_runtimes;
   abort_timeout_entry_t *abort_timeouts;
   eventsource_state_t *active_eventsources;
+  websocket_state_t *active_websockets;
 
   ant_fixed_arena_t obj_arena;
   ant_fixed_arena_t closure_arena;

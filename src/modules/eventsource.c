@@ -9,6 +9,7 @@
 #include <uv.h>
 
 #include "ant.h"
+#include "list.h"
 #include "ptr.h"
 #include "common.h"
 #include "errors.h"
@@ -37,11 +38,11 @@ struct eventsource_state_s {
   ant_sse_parser_t parser;
   char *url;
   char *last_event_id;
-  struct eventsource_state_s *next;
+  eventsource_state_t *next;
+  eventsource_state_t **pprev;
   uint32_t retry_ms;
   uint8_t ready_state;
   bool with_credentials : 1;
-  bool active : 1;
   bool closed : 1;
   bool opened_request : 1;
   bool error_emitted_for_request : 1;
@@ -54,34 +55,10 @@ static eventsource_state_t *eventsource_data(ant_value_t value) {
   return (eventsource_state_t *)js_get_native(value, ES_NATIVE_TAG);
 }
 
-static void eventsource_add_active(eventsource_state_t *es) {
-  if (!es || es->active) return;
-  es->next = es->js->active_eventsources;
-  es->js->active_eventsources = es;
-  es->active = true;
-}
-
-static void eventsource_remove_active(eventsource_state_t *es) {
-  if (!es || !es->active) return;
-  eventsource_state_t **it = &es->js->active_eventsources;
-  
-  while (*it) {
-    if (*it == es) {
-      *it = es->next;
-      es->next = NULL;
-      es->active = false;
-      return;
-    }
-    it = &(*it)->next;
-  }
-  
-  es->active = false;
-}
-
 static void eventsource_maybe_unroot(eventsource_state_t *es) {
   if (!es || !es->closed) return;
   if (es->request || es->timer) return;
-  eventsource_remove_active(es);
+  Ant_List_Remove(es);
 }
 
 static ant_value_t eventsource_call(ant_t *js, ant_value_t fn, ant_value_t this_val, ant_value_t *args, int nargs) {
@@ -383,7 +360,7 @@ static void eventsource_finalize(ant_t *js, ant_object_t *obj) {
   if (es->request) ant_http_request_cancel(es->request);
   
   eventsource_cancel_timer(es);
-  eventsource_remove_active(es);
+  Ant_List_Remove(es);
   ant_sse_parser_free(&es->parser);
   
   free(es->url);
@@ -441,7 +418,7 @@ static ant_value_t js_eventsource_ctor(ant_params_t) {
   js_set(js, obj, "withCredentials", js_bool(es->with_credentials));
   
   eventsource_sync_state(es);
-  eventsource_add_active(es);
+  Ant_List_Insert(&es->js->active_eventsources, es);
   eventsource_start_request(es);
   
   return obj;
