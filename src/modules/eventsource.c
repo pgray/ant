@@ -10,6 +10,7 @@
 
 #include "ant.h"
 #include "list.h"
+#include "loop.h"
 #include "ptr.h"
 #include "common.h"
 #include "errors.h"
@@ -29,7 +30,6 @@ typedef struct eventsource_timer_s {
 } eventsource_timer_t;
 
 struct eventsource_state_s {
-  ant_t *js;
   ant_value_t obj;
   ant_http_request_t *request;
   eventsource_timer_t *timer;
@@ -72,17 +72,16 @@ static ant_value_t eventsource_call(ant_t *js, ant_value_t fn, ant_value_t this_
   return result;
 }
 
-static void eventsource_sync_state(eventsource_state_t *es) {
+static void eventsource_sync_state(ant_t *js, eventsource_state_t *es) {
   if (!es || !is_object_type(es->obj)) return;
-  js_set(es->js, es->obj, "readyState", js_mknum(es->ready_state));
+  js_set(js, es->obj, "readyState", js_mknum(es->ready_state));
 }
 
 static ant_value_t eventsource_make_event(ant_t *js, const char *type, ant_value_t proto, ant_event_kind_t kind) {
   return Ant_Event_Create(js, proto, kind, js_mkstr(js, type, strlen(type)), false, false);
 }
 
-static void eventsource_emit(eventsource_state_t *es, const char *type, ant_value_t event) {
-  ant_t *js = es->js;
+static void eventsource_emit(ant_t *js, eventsource_state_t *es, const char *type, ant_value_t event) {
   ant_value_t dispatch = js_get(js, es->obj, "dispatchEvent");
   ant_value_t args[1] = { event };
   char handler_name[32];
@@ -102,16 +101,15 @@ static void eventsource_emit(eventsource_state_t *es, const char *type, ant_valu
   process_microtasks(js);
 }
 
-static void eventsource_emit_simple(eventsource_state_t *es, const char *type) {
-  ant_value_t proto = es->js->builtins.event_proto;
-  ant_value_t event = eventsource_make_event(es->js, type, proto, ANT_EVENT_BASE);
-  if (!is_err(event)) eventsource_emit(es, type, event);
+static void eventsource_emit_simple(ant_t *js, eventsource_state_t *es, const char *type) {
+  ant_value_t event = eventsource_make_event(js, type, js->builtins.event_proto, ANT_EVENT_BASE);
+  if (!is_err(event)) eventsource_emit(js, es, type, event);
 }
 
-static void eventsource_emit_error_once(eventsource_state_t *es) {
+static void eventsource_emit_error_once(ant_t *js, eventsource_state_t *es) {
   if (!es || es->closed || es->error_emitted_for_request) return;
   es->error_emitted_for_request = true;
-  eventsource_emit_simple(es, "error");
+  eventsource_emit_simple(js, es, "error");
 }
 
 static bool eventsource_content_type_ok(const char *value) {
@@ -133,7 +131,7 @@ static const char *eventsource_find_header(const ant_http_header_t *headers, con
   return NULL;
 }
 
-static void eventsource_start_request(eventsource_state_t *es);
+static void eventsource_start_request(ant_t *js, eventsource_state_t *es);
 
 static void eventsource_timer_close_cb(uv_handle_t *handle) {
   free(handle);
@@ -150,7 +148,7 @@ static void eventsource_reconnect_cb(uv_timer_t *handle) {
     eventsource_maybe_unroot(es);
     return;
   }
-  eventsource_start_request(es);
+  eventsource_start_request(Ant_Loop_Isolate(handle->loop), es);
 }
 
 static void eventsource_cancel_timer(eventsource_state_t *es) {
@@ -161,27 +159,33 @@ static void eventsource_cancel_timer(eventsource_state_t *es) {
   uv_close((uv_handle_t *)&timer->handle, eventsource_timer_close_cb);
 }
 
-static void eventsource_schedule_reconnect(eventsource_state_t *es) {
+static void eventsource_schedule_reconnect(ant_t *js, eventsource_state_t *es) {
   if (!es || es->closed || es->timer) return;
   eventsource_timer_t *timer = calloc(1, sizeof(*timer));
   if (!timer) {
     es->closed = true;
     es->ready_state = ES_CLOSED;
-    eventsource_sync_state(es);
+    eventsource_sync_state(js, es);
     eventsource_maybe_unroot(es);
     return;
   }
   timer->source = es;
-  uv_timer_init(es->js->loop, &timer->handle);
+  uv_timer_init(js->loop, &timer->handle);
   es->timer = timer;
   es->ready_state = ES_CONNECTING;
-  eventsource_sync_state(es);
+  eventsource_sync_state(js, es);
   uv_timer_start(&timer->handle, eventsource_reconnect_cb, es->retry_ms, 0);
 }
 
+typedef struct {
+  ant_t *js;
+  eventsource_state_t *es;
+} eventsource_feed_t;
+
 static bool eventsource_on_message(const ant_sse_message_t *message, void *user_data) {
-  eventsource_state_t *es = (eventsource_state_t *)user_data;
-  ant_t *js = es->js;
+  eventsource_feed_t *feed = (eventsource_feed_t *)user_data;
+  eventsource_state_t *es = feed->es;
+  ant_t *js = feed->js;
   
   const char *type = (message->event && message->event[0]) ? message->event : "message";
   ant_value_t proto = js->builtins.message_event_proto;
@@ -210,13 +214,14 @@ static bool eventsource_on_message(const ant_sse_message_t *message, void *user_
   );
   
   Ant_Event_SetField(js, event, ANT_EVENT_FIELD_MESSAGE_origin, js_mkstr(js, "", 0));
-  eventsource_emit(es, type, event);
+  eventsource_emit(js, es, type, event);
   
   return !es->closed;
 }
 
 static void eventsource_http_on_response(ant_http_request_t *req, const ant_http_response_t *resp, void *user_data) {
   eventsource_state_t *es = (eventsource_state_t *)user_data;
+  ant_t *js = Ant_Loop_Isolate(Ant_Http_RequestLoop(req));
   const char *content_type = eventsource_find_header(resp->headers, "content-type");
 
   if (!es || es->closed) return;
@@ -229,15 +234,15 @@ static void eventsource_http_on_response(ant_http_request_t *req, const ant_http
   );
   
   if (resp->status != 200 || !eventsource_content_type_ok(content_type)) {
-    eventsource_emit_error_once(es);
+    eventsource_emit_error_once(js, es);
     ant_http_request_cancel(req);
     return;
   }
 
   es->opened_request = true;
   es->ready_state = ES_OPEN;
-  eventsource_sync_state(es);
-  eventsource_emit_simple(es, "open");
+  eventsource_sync_state(js, es);
+  eventsource_emit_simple(js, es, "open");
 }
 
 static void eventsource_http_on_body(ant_http_request_t *req, const uint8_t *chunk, size_t len, void *user_data) {
@@ -247,8 +252,9 @@ static void eventsource_http_on_body(ant_http_request_t *req, const uint8_t *chu
   es->network_encoded_length += len;
   ant_inspector_network_append_response_body(es->network_request_id, chunk, len);
   
-  if (!ant_sse_parser_feed(&es->parser, (const char *)chunk, len, eventsource_on_message, es)) {
-    eventsource_emit_error_once(es);
+  eventsource_feed_t feed = { Ant_Loop_Isolate(Ant_Http_RequestLoop(req)), es };
+  if (!ant_sse_parser_feed(&es->parser, (const char *)chunk, len, eventsource_on_message, &feed)) {
+    eventsource_emit_error_once(feed.js, es);
     ant_http_request_cancel(req);
     return;
   }
@@ -264,9 +270,7 @@ static void eventsource_http_on_complete(
   void *user_data
 ) {
   eventsource_state_t *es = (eventsource_state_t *)user_data;
-  (void)req;
-  (void)error_code;
-  (void)error_message;
+  ant_t *js = Ant_Loop_Isolate(Ant_Http_RequestLoop(req));
 
   if (!es) return;
   es->request = NULL;
@@ -286,16 +290,16 @@ static void eventsource_http_on_complete(
   }
 
   if (!es->closed) {
-    if (result != ANT_HTTP_RESULT_ABORTED) eventsource_emit_error_once(es);
+    if (result != ANT_HTTP_RESULT_ABORTED) eventsource_emit_error_once(js, es);
     es->error_emitted_for_request = false;
     ant_sse_parser_free(&es->parser);
     ant_sse_parser_init(&es->parser);
-    eventsource_schedule_reconnect(es);
+    eventsource_schedule_reconnect(js, es);
   }
   eventsource_maybe_unroot(es);
 }
 
-static void eventsource_start_request(eventsource_state_t *es) {
+static void eventsource_start_request(ant_t *js, eventsource_state_t *es) {
   ant_http_header_t last_id = {0};
   ant_http_header_t accept = { "Accept", "text/event-stream", NULL };
   ant_http_request_options_t options = {0};
@@ -304,7 +308,7 @@ static void eventsource_start_request(eventsource_state_t *es) {
   if (!es || es->closed || es->request) return;
   es->ready_state = ES_CONNECTING;
   es->error_emitted_for_request = false;
-  eventsource_sync_state(es);
+  eventsource_sync_state(js, es);
 
   if (es->last_event_id && es->last_event_id[0]) {
     last_id.name = "Last-Event-ID";
@@ -324,7 +328,7 @@ static void eventsource_start_request(eventsource_state_t *es) {
   options.headers = &accept;
 
   rc = ant_http_request_start(
-    es->js->loop, &options,
+    js->loop, &options,
     eventsource_http_on_response,
     eventsource_http_on_body,
     eventsource_http_on_complete,
@@ -335,17 +339,17 @@ static void eventsource_start_request(eventsource_state_t *es) {
     ant_inspector_network_fail(es->network_request_id, uv_strerror(rc), false, "EventSource");
     es->network_request_id = 0;
     es->request = NULL;
-    eventsource_emit_error_once(es);
+    eventsource_emit_error_once(js, es);
     es->error_emitted_for_request = false;
-    eventsource_schedule_reconnect(es);
+    eventsource_schedule_reconnect(js, es);
   }
 }
 
-static void eventsource_close(eventsource_state_t *es) {
+static void eventsource_close(ant_t *js, eventsource_state_t *es) {
   if (!es || es->closed) return;
   es->closed = true;
   es->ready_state = ES_CLOSED;
-  eventsource_sync_state(es);
+  eventsource_sync_state(js, es);
   eventsource_cancel_timer(es);
   if (es->request) ant_http_request_cancel(es->request);
   eventsource_maybe_unroot(es);
@@ -393,7 +397,6 @@ static ant_value_t js_eventsource_ctor(ant_params_t) {
   ant_value_t obj = eventsource_create_object(js);
   eventsource_state_t *es = calloc(1, sizeof(*es));
   if (!es) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
-  es->js = js;
   es->obj = obj;
   es->url = strdup(url);
   es->last_event_id = strdup("");
@@ -417,9 +420,9 @@ static ant_value_t js_eventsource_ctor(ant_params_t) {
   js_set(js, obj, "url", url_val);
   js_set(js, obj, "withCredentials", js_bool(es->with_credentials));
   
-  eventsource_sync_state(es);
-  Ant_List_Insert(&es->js->active_eventsources, es);
-  eventsource_start_request(es);
+  eventsource_sync_state(js, es);
+  Ant_List_Insert(&js->active_eventsources, es);
+  eventsource_start_request(js, es);
   
   return obj;
 }
@@ -427,7 +430,7 @@ static ant_value_t js_eventsource_ctor(ant_params_t) {
 static ant_value_t js_eventsource_close(ant_params_t) {
   eventsource_state_t *es = eventsource_data(js_getthis(js));
   if (!es) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid EventSource");
-  eventsource_close(es);
+  eventsource_close(js, es);
   return js_mkundef();
 }
 

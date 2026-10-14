@@ -46,9 +46,14 @@ their isolate with `Ant_Loop_Isolate(handle->loop)` instead of a stored
   `req->uv_req.loop` at creation, so `fs_req_isolate()` works before and after
   submission (queued directory ops, `uv_work_t` walks, synchronous failures);
   watchers read the loop of their initialized event or poll handle.
-- WebSocket and EventSource keep `js`: a WebSocket owns either a tlsuv client
-  or a server connection, and an EventSource recreates its HTTP request on
-  every reconnect, so neither has one handle that lives as long as the state.
+- WebSocket and EventSource states no longer store `js` either. Their
+  helpers take `js` as a parameter; entry points get it from the caller (JS
+  methods, server hooks), the libuv handle of a client callback, or
+  `Ant_Http_RequestLoop(req)` for HTTP callbacks. The SSE parser callback gets
+  `js` through a stack `eventsource_feed_t`.
+- Other states still store `js` (fetch requests, abort timeouts, process
+  runs, readline, workers, napi, server, net, tls). Convert them the same way
+  when touched.
 
 ## Follow-ups
 

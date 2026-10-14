@@ -67,6 +67,7 @@ int ant_http_request_start(
   ant_http_request_t **out_req
 );
 
+uv_loop_t *Ant_Http_RequestLoop(const ant_http_request_t *req);
 int ant_http_request_cancel(ant_http_request_t *req);
 int ant_http_request_write(ant_http_request_t *req, const uint8_t *chunk, size_t len);
 

@@ -9,6 +9,7 @@
 
 struct ant_http_request_s {
   tlsuv_http_t client;
+  uv_loop_t *loop;
   ant_http_response_t response;
   tlsuv_http_req_t *req;
   
@@ -232,6 +233,10 @@ static void ant_http_resp_cb(tlsuv_http_resp_t *resp, void *data) {
   if (req->on_response) req->on_response(req, &req->response, req->user_data);
 }
 
+uv_loop_t *Ant_Http_RequestLoop(const ant_http_request_t *req) {
+  return req ? req->loop : NULL;
+}
+
 int ant_http_request_cancel(ant_http_request_t *req) {
   if (!req || !req->req || req->completed) return 0;
   req->canceled = true;
@@ -286,6 +291,7 @@ int ant_http_request_start(
   req->on_body = on_body;
   req->on_complete = on_complete;
   req->user_data = user_data;
+  req->loop = loop;
 
   host_url = ant_http_build_host_url(&parsed);
   request_path = ant_http_build_path(&parsed);
