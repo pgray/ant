@@ -2,6 +2,7 @@
 .nova
 .maid
 .cache
+.direnv
 .superset
 
 .claude

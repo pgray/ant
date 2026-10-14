@@ -40,10 +40,6 @@ script = [
   'meson setup build --wipe --buildtype=debug -Doptimization=0 -Db_lto=false -Dstrip=false -Db_lundef=false -Dunity=off'
 ]
 
-[tasks.shell]
-exec = true
-script = "nix develop --command zsh"
-
 [tasks.install]
 script = ['''
 #!/usr/bin/env bash

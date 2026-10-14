@@ -2,6 +2,8 @@
 
 let
   lib = pkgs.lib;
+  isDarwin = pkgs.stdenv.hostPlatform.isDarwin;
+  darwinClang = pkgs.llvmPackages_21.clang;
   nativeTuneFlag =
     if pkgs.stdenv.hostPlatform.isx86
     then "-march=native"
@@ -22,27 +24,26 @@ in
 pkgs.mkShellNoCC ({
   packages = [
     pkgs.nodejs_22
+  ] ++ (if isDarwin then [
+    darwinClang
+  ] else [
     toolchain.bintools
     toolchain.clang
     toolchain.compilerRt
+  ]) ++ [
     toolchain.llvm
   ];
 
   CFLAGS = optArgs;
   CXXFLAGS = optArgs;
-  NIX_CFLAGS_COMPILE = optArgs;
   NIX_ENFORCE_NO_NATIVE = "0";
+} // (if isDarwin then {
+  CC = "${darwinClang}/bin/clang";
+  CXX = "${darwinClang}/bin/clang++";
+} else {
+  NIX_CFLAGS_COMPILE = optArgs;
   LDFLAGS = "-resource-dir=${toolchain.compilerRt}";
 
   CC = "${toolchain.clang}/bin/clang";
   CXX = "${toolchain.clang}/bin/clang++";
-} // lib.optionalAttrs pkgs.stdenv.hostPlatform.isDarwin {
-  LD = "${toolchain.bintools}/bin/ld";
-  AR = "${toolchain.bintools}/bin/ar";
-  RANLIB = "${toolchain.bintools}/bin/ranlib";
-  STRIP = "${toolchain.bintools}/bin/strip";
-
-  shellHook = ''
-    export SDKROOT="/Library/Developer/CommandLineTools/SDKs/MacOSX15.sdk"
-  '';
-})
+}))
