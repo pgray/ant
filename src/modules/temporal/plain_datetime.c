@@ -565,8 +565,7 @@ void temporal_init_plain_datetime(ant_t *js, ant_value_t temporal) {
   TEMPORAL_METHOD(js, proto, "withCalendar", temporal_plain_datetime_with_calendar, 1);
   TEMPORAL_METHOD(js, proto, "withPlainTime", temporal_plain_datetime_with_plain_time, 0);
   temporal_set_to_string_tag(js, proto, "Temporal.PlainDateTime");
-  ant_value_t ctor = js_make_ctor(js, temporal_plain_datetime_ctor, proto, "PlainDateTime", 13, 3);
-  temporal_lock_prototype(js, ctor);
+  ant_value_t ctor = js_make_intrinsic_ctor(js, temporal_plain_datetime_ctor, proto, "PlainDateTime", 3);
   TEMPORAL_METHOD(js, ctor, "compare", temporal_plain_datetime_compare, 2);
   TEMPORAL_METHOD(js, ctor, "from", temporal_plain_datetime_from, 1);
   temporal_set_namespace_property(js, temporal, "PlainDateTime", ctor);

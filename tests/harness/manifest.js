@@ -53,6 +53,7 @@ export function targets() {
     'test_intrinsic_protos.cjs',
     'test_dataview_fast_path.cjs',
     'test_jit_primitive_field_ic.cjs',
+    'test_reflect_builtin_targets.cjs',
     'test_builtin_receiver_ic.cjs',
     'test_caught_exception_stack.cjs',
     'test_child_process_exec_sync_options.cjs',

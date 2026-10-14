@@ -1224,7 +1224,7 @@ static void net_init_constructors(ant_t *js) {
   js_set(js, js->builtins.net_socket_proto, "ref", js_mkfun(js_net_socket_ref));
   js_set(js, js->builtins.net_socket_proto, "unref", js_mkfun(js_net_socket_unref));
   js_set_tostringtag(js, js->builtins.net_socket_proto, js_mkstr(js, "Socket", 6));
-  js->builtins.net_socket_ctor = js_make_ctor(js, js_net_socket_ctor, js->builtins.net_socket_proto, "Socket", 6, 1);
+  js->builtins.net_socket_ctor = js_make_ctor(js, js_net_socket_ctor, js->builtins.net_socket_proto, "Socket", 1);
 
   js->builtins.net_server_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.net_server_proto, ee_proto);
@@ -1235,7 +1235,7 @@ static void net_init_constructors(ant_t *js) {
   js_set(js, js->builtins.net_server_proto, "ref", js_mkfun(js_net_server_ref));
   js_set(js, js->builtins.net_server_proto, "unref", js_mkfun(js_net_server_unref));
   js_set_tostringtag(js, js->builtins.net_server_proto, js_mkstr(js, "Server", 6));
-  js->builtins.net_server_ctor = js_make_ctor(js, js_net_server_ctor, js->builtins.net_server_proto, "Server", 6, 2);
+  js->builtins.net_server_ctor = js_make_ctor(js, js_net_server_ctor, js->builtins.net_server_proto, "Server", 2);
 }
 
 ant_value_t net_library(ant_t *js) {

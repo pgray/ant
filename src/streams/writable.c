@@ -1153,7 +1153,7 @@ void init_writable_stream_module(ant_t *js) {
   js_set_descriptor(js, js->builtins.ws_controller_proto, "error", 5, JS_DESC_W | JS_DESC_C);
   js_set_tostringtag(js, js->builtins.ws_controller_proto, js_mkstr(js, "WritableStreamDefaultController", 31));
 
-  ant_value_t ctrl_ctor = js_make_ctor(js, js_ws_controller_ctor, js->builtins.ws_controller_proto, "WritableStreamDefaultController", 31, 0);
+  ant_value_t ctrl_ctor = js_make_intrinsic_ctor(js, js_ws_controller_ctor, js->builtins.ws_controller_proto, "WritableStreamDefaultController", 0);
   js_set(js, g, "WritableStreamDefaultController", ctrl_ctor);
   js_set_descriptor(js, g, "WritableStreamDefaultController", 31, JS_DESC_W | JS_DESC_C);
 
@@ -1171,7 +1171,7 @@ void init_writable_stream_module(ant_t *js) {
   js_set_descriptor(js, js->builtins.ws_writer_proto, "write", 5, JS_DESC_W | JS_DESC_C);
   js_set_tostringtag(js, js->builtins.ws_writer_proto, js_mkstr(js, "WritableStreamDefaultWriter", 27));
 
-  ant_value_t writer_ctor = js_make_ctor(js, js_ws_writer_ctor, js->builtins.ws_writer_proto, "WritableStreamDefaultWriter", 27, 1);
+  ant_value_t writer_ctor = js_make_intrinsic_ctor(js, js_ws_writer_ctor, js->builtins.ws_writer_proto, "WritableStreamDefaultWriter", 1);
   js_set(js, g, "WritableStreamDefaultWriter", writer_ctor);
   js_set_descriptor(js, g, "WritableStreamDefaultWriter", 27, JS_DESC_W | JS_DESC_C);
 
@@ -1185,7 +1185,7 @@ void init_writable_stream_module(ant_t *js) {
   js_set_descriptor(js, js->builtins.ws_proto, "getWriter", 9, JS_DESC_W | JS_DESC_C);
   js_set_tostringtag(js, js->builtins.ws_proto, js_mkstr(js, "WritableStream", 14));
 
-  ant_value_t ws_ctor = js_make_ctor(js, js_ws_ctor, js->builtins.ws_proto, "WritableStream", 14, 0);
+  ant_value_t ws_ctor = js_make_intrinsic_ctor(js, js_ws_ctor, js->builtins.ws_proto, "WritableStream", 0);
   js_set(js, g, "WritableStream", ws_ctor);
   js_set_descriptor(js, g, "WritableStream", 14, JS_DESC_W | JS_DESC_C);
 }

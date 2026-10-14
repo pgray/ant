@@ -1527,7 +1527,7 @@ void jit_emit_inline_body(
         bool gf_fast = r_ic_epoch != 0 &&
                        mir_emit_get_field_ic_fastpath(
                            ctx, jit_func, js, callee, -(id * 100000 + inl_bc_off + 1), gf_ic_idx,
-                           atom, obj, dst, gf_slowl, r_ic_epoch, NULL);
+                           atom, obj, dst, gf_slowl, r_ic_epoch, NULL, false);
         if (gf_fast) {
           MIR_append_insn(ctx, jit_func,
                           MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, gf_done)));
@@ -1574,7 +1574,7 @@ void jit_emit_inline_body(
         bool gf_fast = r_ic_epoch != 0 &&
                        mir_emit_get_field_ic_fastpath(
                            ctx, jit_func, js, callee, -(id * 100000 + inl_bc_off + 1), gf_ic_idx,
-                           atom, obj, dst, gf_slow, r_ic_epoch, NULL);
+                           atom, obj, dst, gf_slow, r_ic_epoch, NULL, false);
         if (gf_fast) {
           MIR_append_insn(ctx, jit_func,
                           MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, no_err)));
@@ -1616,7 +1616,7 @@ void jit_emit_inline_body(
         bool gf_fast = r_ic_epoch != 0 &&
                        mir_emit_get_field_ic_fastpath(
                            ctx, jit_func, js, callee, -(id * 100000 + inl_bc_off + 1), gf_ic_idx,
-                           atom, obj, dst, gf_slow, r_ic_epoch, NULL);
+                           atom, obj, dst, gf_slow, r_ic_epoch, NULL, false);
         if (gf_fast) {
           MIR_append_insn(ctx, jit_func,
                           MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, value_ok)));

@@ -557,7 +557,8 @@ bool mir_emit_get_field_ic_fastpath(
     MIR_reg_t dst,
     MIR_label_t slow,
     MIR_reg_t r_global_epoch,
-    jit_stale_exit_t *stale_exit);
+    jit_stale_exit_t *stale_exit,
+    bool length_receiver);
 bool mir_emit_get_global_ic_fastpath(
     MIR_context_t ctx, MIR_item_t fn,
     ant_t *js, sv_func_t *func, int bc_off,

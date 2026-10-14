@@ -437,7 +437,7 @@ void init_blob_module(ant_t *js) {
   js_set(js, js->builtins.blob_proto, "stream",      js_mkfun(js_blob_stream));
 
   js_set_tostringtag(js, js->builtins.blob_proto, js_mkstr(js, "Blob", 4));
-  ant_value_t blob_ctor = js_make_ctor(js, js_blob_ctor, js->builtins.blob_proto, "Blob", 4, 0);
+  ant_value_t blob_ctor = js_make_intrinsic_ctor(js, js_blob_ctor, js->builtins.blob_proto, "Blob", 0);
   
   js_set(js, g, "Blob", blob_ctor);
   js_set_descriptor(js, g, "Blob", 4, JS_DESC_W | JS_DESC_C);
@@ -449,7 +449,7 @@ void init_blob_module(ant_t *js) {
   js_set_getter_desc(js, js->builtins.file_proto, "lastModified", 12, js_mkfun(file_get_last_modified),  JS_DESC_C);
 
   js_set_tostringtag(js, js->builtins.file_proto, js_mkstr(js, "File", 4));
-  ant_value_t file_ctor = js_make_ctor(js, js_file_ctor, js->builtins.file_proto, "File", 4, 2);
+  ant_value_t file_ctor = js_make_intrinsic_ctor(js, js_file_ctor, js->builtins.file_proto, "File", 2);
   
   js_set(js, g, "File", file_ctor);
   js_set_descriptor(js, g, "File", 4, JS_DESC_W | JS_DESC_C);

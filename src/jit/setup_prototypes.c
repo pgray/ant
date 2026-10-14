@@ -272,6 +272,12 @@ void jit_setup_prototypes(jit_compile_t *c, MIR_type_t ret_type) {
                                       1, &gl_ret, 2,
                                       MIR_T_I64, "js",
                                       MIR_JSVAL, "v");
+  c->get_length_at_proto = MIR_new_proto(c->ctx, "get_length_at_proto",
+                                         1, &gl_ret, 4,
+                                         MIR_T_I64, "js",
+                                         MIR_JSVAL, "v",
+                                         MIR_T_P, "func",
+                                         MIR_T_I32, "bc_off");
 
   MIR_type_t gei_ret = MIR_JSVAL;
   c->get_elem_inline_proto = MIR_new_proto(c->ctx, "get_elem_inline_proto",

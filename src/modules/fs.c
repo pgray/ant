@@ -694,14 +694,14 @@ static void fs_init_stream_constructors(ant_t *js) {
   js_set_proto_init(js->builtins.readstream_proto, stream_readable_prototype(js));
   js_set(js, js->builtins.readstream_proto, "close", js_mkfun(fs_stream_close));
   js_set_tostringtag(js, js->builtins.readstream_proto, js_mkstr(js, "ReadStream", 10));
-  js->builtins.readstream_ctor = js_make_ctor(js, js_readstream_ctor, js->builtins.readstream_proto, "ReadStream", 10, 2);
+  js->builtins.readstream_ctor = js_make_ctor(js, js_readstream_ctor, js->builtins.readstream_proto, "ReadStream", 2);
   js_set_proto_init(js->builtins.readstream_ctor, stream_readable_constructor(js));
 
   js->builtins.writestream_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.writestream_proto, stream_writable_prototype(js));
   js_set(js, js->builtins.writestream_proto, "close", js_mkfun(fs_stream_close));
   js_set_tostringtag(js, js->builtins.writestream_proto, js_mkstr(js, "WriteStream", 11));
-  js->builtins.writestream_ctor = js_make_ctor(js, js_writestream_ctor, js->builtins.writestream_proto, "WriteStream", 11, 2);
+  js->builtins.writestream_ctor = js_make_ctor(js, js_writestream_ctor, js->builtins.writestream_proto, "WriteStream", 2);
   js_set_proto_init(js->builtins.writestream_ctor, stream_writable_constructor(js));
 }
 
@@ -1182,7 +1182,7 @@ static void fs_init_watch_constructors(ant_t *js) {
   js_set(js, js->builtins.fswatcher_proto, "unref", js_mkfun(js_fswatcher_unref));
   
   js_set_tostringtag(js, js->builtins.fswatcher_proto, js_mkstr(js, "FSWatcher", 9));
-  js->builtins.fswatcher_ctor = js_make_ctor(js, js_fswatcher_ctor, js->builtins.fswatcher_proto, "FSWatcher", 9, 0);
+  js->builtins.fswatcher_ctor = js_make_ctor(js, js_fswatcher_ctor, js->builtins.fswatcher_proto, "FSWatcher", 0);
 }
 
 static bool fs_parse_watch_options(ant_native_params_t, fs_watch_options_t *out) {
@@ -6079,14 +6079,8 @@ static void fs_dir_finalize(ant_t *js, ant_object_t *obj) {
   free(d);
 }
 
-static ant_value_t fs_dir_coded_error(ant_t *js, const char *code, const char *message) {
-  ant_value_t props = js_mkobj(js);
-  js_set(js, props, "code", js_mkstr(js, code, strlen(code)));
-  return js_mkerr_props(js, JS_ERR_GENERIC, props, "%s", message);
-}
-
 static ant_value_t fs_dir_closed_error(ant_t *js) {
-  return fs_dir_coded_error(js, "ERR_DIR_CLOSED", "Directory handle was closed");
+  return js_mkerr_code(js, JS_ERR_GENERIC, "ERR_DIR_CLOSED", "Directory handle was closed");
 }
 
 static fs_dir_t *fs_dir_data(ant_t *js, ant_value_t obj, ant_value_t *err) {
@@ -6103,8 +6097,7 @@ static fs_dir_t *fs_dir_sync_data(ant_t *js, ant_value_t obj, ant_value_t *err) 
     return NULL;
   }
   if (d->ops_head) {
-    *err = fs_dir_coded_error(
-      js, "ERR_DIR_CONCURRENT_OPERATION",
+    *err = js_mkerr_code(js, JS_ERR_GENERIC, "ERR_DIR_CONCURRENT_OPERATION",
       "Cannot do synchronous work on directory handle with concurrent asynchronous operations"
     );
     return NULL;
@@ -6750,14 +6743,14 @@ static const fs_wrapped_method_t fs_wrapped_methods[] = {
 };
 
 static void fs_set_promise_methods(ant_t *js, ant_value_t lib) {
-  for (size_t i = 0; i < sizeof(fs_wrapped_methods) / sizeof(fs_wrapped_methods[0]); i++) {
+  for (size_t i = 0; i < countof(fs_wrapped_methods); i++) {
     const fs_wrapped_method_t *m = &fs_wrapped_methods[i];
     js_set(js, lib, m->name, fs_make_promise_wrapper(js, js_mkfun_dyn(m->promise_fn), m->name, m->promise_length));
   }
 }
 
 static void fs_set_callback_compatible_methods(ant_t *js, ant_value_t lib) {
-  for (size_t i = 0; i < sizeof(fs_wrapped_methods) / sizeof(fs_wrapped_methods[0]); i++) {
+  for (size_t i = 0; i < countof(fs_wrapped_methods); i++) {
     const fs_wrapped_method_t *m = &fs_wrapped_methods[i];
     js_set(js, lib, m->name, fs_make_callback_wrapper(js, js_mkfun_dyn(m->callback_fn), m->exists_style, m->name, m->callback_length));
   }

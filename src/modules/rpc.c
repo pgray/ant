@@ -1307,7 +1307,7 @@ static void rpc_init_constructors(ant_t *js) {
   js_set(js, js->builtins.rpc_server_proto, "close", js_mkfun(rpc_server_close));
   js_set_getter_desc(js, js->builtins.rpc_server_proto, "port", 4, js_mkfun(rpc_server_port_getter), JS_DESC_C);
   js_set_tostringtag(js, js->builtins.rpc_server_proto, js_mkstr(js, "RpcServer", 9));
-  js->builtins.rpc_server_ctor = js_make_ctor(js, rpc_server_ctor, js->builtins.rpc_server_proto, "RpcServer", 9, 0);
+  js->builtins.rpc_server_ctor = js_make_ctor(js, rpc_server_ctor, js->builtins.rpc_server_proto, "RpcServer", 0);
 
   js->builtins.rpc_client_proto = js_mkobj(js);
   if (is_object_type(object_proto)) js_set_proto_init(js->builtins.rpc_client_proto, object_proto);
@@ -1316,7 +1316,7 @@ static void rpc_init_constructors(ant_t *js) {
   js_set(js, js->builtins.rpc_client_proto, "ping", js_mkfun(rpc_client_ping));
   js_set(js, js->builtins.rpc_client_proto, "close", js_mkfun(rpc_client_close));
   js_set_tostringtag(js, js->builtins.rpc_client_proto, js_mkstr(js, "RpcClient", 9));
-  js->builtins.rpc_client_ctor = js_make_ctor(js, rpc_client_ctor, js->builtins.rpc_client_proto, "RpcClient", 9, 0);
+  js->builtins.rpc_client_ctor = js_make_ctor(js, rpc_client_ctor, js->builtins.rpc_client_proto, "RpcClient", 0);
 }
 
 ant_value_t rpc_library(ant_t *js) {

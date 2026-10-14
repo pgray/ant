@@ -1386,6 +1386,7 @@ static ant_value_t wasm_make_external_arraybuffer(ant_t *js, uint8_t *data, size
   buffer->length = len;
   buffer->capacity = len;
   buffer->ref_count = 0;
+  buffer->storage = ARRAY_BUFFER_STORAGE_EXTERNAL;
   ant_value_t result = create_arraybuffer_obj(js, buffer);
   if (is_object_type(owner) && is_object_type(result)) js_set_slot_wb(js, result, SLOT_ENTRIES, owner);
   return result;
@@ -1966,17 +1967,17 @@ void init_wasm_module(ant_t *js) {
   js_set(js, js->builtins.wasm_table_proto, "set", js_mkfun_arity(js_wasm_table_set, 1));
   js_set(js, js->builtins.wasm_table_proto, "grow", js_mkfun_arity(js_wasm_table_grow, 1));
 
-  ant_value_t module_ctor = js_make_ctor(js, js_wasm_module_ctor, js->builtins.wasm_module_proto, "Module", 6, 1);
-  ant_value_t instance_ctor = js_make_ctor(js, js_wasm_instance_ctor, js->builtins.wasm_instance_proto, "Instance", 8, 1);
-  ant_value_t global_ctor = js_make_ctor(js, js_wasm_global_ctor, js->builtins.wasm_global_proto, "Global", 6, 1);
-  ant_value_t memory_ctor = js_make_ctor(js, js_wasm_memory_ctor, js->builtins.wasm_memory_proto, "Memory", 6, 1);
-  ant_value_t table_ctor = js_make_ctor(js, js_wasm_table_ctor, js->builtins.wasm_table_proto, "Table", 5, 1);
-  ant_value_t tag_ctor = js_make_ctor(js, js_wasm_tag_ctor, js->builtins.wasm_tag_proto, "Tag", 3, 1);
-  ant_value_t exception_ctor = js_make_ctor(js, js_wasm_exception_ctor, js->builtins.wasm_exception_proto, "Exception", 9, 2);
+  ant_value_t module_ctor = js_make_intrinsic_ctor(js, js_wasm_module_ctor, js->builtins.wasm_module_proto, "Module", 1);
+  ant_value_t instance_ctor = js_make_intrinsic_ctor(js, js_wasm_instance_ctor, js->builtins.wasm_instance_proto, "Instance", 1);
+  ant_value_t global_ctor = js_make_intrinsic_ctor(js, js_wasm_global_ctor, js->builtins.wasm_global_proto, "Global", 1);
+  ant_value_t memory_ctor = js_make_intrinsic_ctor(js, js_wasm_memory_ctor, js->builtins.wasm_memory_proto, "Memory", 1);
+  ant_value_t table_ctor = js_make_intrinsic_ctor(js, js_wasm_table_ctor, js->builtins.wasm_table_proto, "Table", 1);
+  ant_value_t tag_ctor = js_make_intrinsic_ctor(js, js_wasm_tag_ctor, js->builtins.wasm_tag_proto, "Tag", 1);
+  ant_value_t exception_ctor = js_make_intrinsic_ctor(js, js_wasm_exception_ctor, js->builtins.wasm_exception_proto, "Exception", 2);
 
-  ant_value_t compile_error_ctor = js_make_ctor(js, js_wasm_compile_error_ctor, js->builtins.wasm_compileerror_proto, "CompileError", 12, 1);
-  ant_value_t link_error_ctor = js_make_ctor(js, js_wasm_link_error_ctor, js->builtins.wasm_linkerror_proto, "LinkError", 9, 1);
-  ant_value_t runtime_error_ctor = js_make_ctor(js, js_wasm_runtime_error_ctor, js->builtins.wasm_runtimeerror_proto, "RuntimeError", 12, 1);
+  ant_value_t compile_error_ctor = js_make_intrinsic_ctor(js, js_wasm_compile_error_ctor, js->builtins.wasm_compileerror_proto, "CompileError", 1);
+  ant_value_t link_error_ctor = js_make_intrinsic_ctor(js, js_wasm_link_error_ctor, js->builtins.wasm_linkerror_proto, "LinkError", 1);
+  ant_value_t runtime_error_ctor = js_make_intrinsic_ctor(js, js_wasm_runtime_error_ctor, js->builtins.wasm_runtimeerror_proto, "RuntimeError", 1);
 
   js_set(js, module_ctor, "imports", js_mkfun(js_wasm_module_imports));
   js_set(js, module_ctor, "exports", js_mkfun(js_wasm_module_exports));

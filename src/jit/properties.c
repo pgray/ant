@@ -1074,13 +1074,14 @@ bool mir_emit_get_field_ic_fastpath(
     MIR_reg_t dst,
     MIR_label_t slow,
     MIR_reg_t r_global_epoch,
-    jit_stale_exit_t *stale_exit) {
+    jit_stale_exit_t *stale_exit,
+    bool length_receiver) {
   if (!func || !func->ic_slots || !atom) return false;
   if (ic_idx == UINT16_MAX || ic_idx >= func->ic_count) return false;
   
   sv_ic_entry_t *ic = &func->ic_slots[ic_idx];
   if (mir_emit_get_field_native_getter(ctx, fn, js, ic, bc_off, ic_idx, obj, dst, slow, r_global_epoch)) return true;
-  if (is_length_key(atom->str, atom->len)) return false;
+  if (!length_receiver && is_length_key(atom->str, atom->len)) return false;
 
   if (sv_gf_kind_is_symbol_description(ic->get_kind)) return false;
   if (!sv_gf_ic_active(ic->cached_aux) && func->code_len > 1024) return false;

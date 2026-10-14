@@ -1992,7 +1992,7 @@ void init_events_module(ant_t *js) {
   js_set(js, js->builtins.event_proto, "AT_TARGET",        js_mknum(2));
   js_set(js, js->builtins.event_proto, "BUBBLING_PHASE",   js_mknum(3));
 
-  ant_value_t event_fn = js_make_ctor(js, js_event_ctor, js->builtins.event_proto, "Event", 5, 1);
+  ant_value_t event_fn = js_make_intrinsic_ctor(js, js_event_ctor, js->builtins.event_proto, "Event", 1);
   js_set(js, event_fn, "NONE",            js_mknum(0));
   js_set(js, event_fn, "CAPTURING_PHASE", js_mknum(1));
   js_set(js, event_fn, "AT_TARGET",       js_mknum(2));
@@ -2003,21 +2003,21 @@ void init_events_module(ant_t *js) {
   js_set_proto_init(js->builtins.customevent_proto, js->builtins.event_proto);
   js_set_tostringtag(js, js->builtins.customevent_proto, js_mkstr(js, "CustomEvent", 11));
 
-  ant_value_t customevent_fn = js_make_ctor(js, js_customevent_ctor, js->builtins.customevent_proto, "CustomEvent", 11, 1);
+  ant_value_t customevent_fn = js_make_intrinsic_ctor(js, js_customevent_ctor, js->builtins.customevent_proto, "CustomEvent", 1);
   js_set_global_builtin(js, "CustomEvent", customevent_fn);
 
   js->builtins.errorevent_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.errorevent_proto, js->builtins.event_proto);
   js_set_tostringtag(js, js->builtins.errorevent_proto, js_mkstr(js, "ErrorEvent", 10));
 
-  ant_value_t errorevent_fn = js_make_ctor(js, js_errorevent_ctor, js->builtins.errorevent_proto, "ErrorEvent", 10, 2);
+  ant_value_t errorevent_fn = js_make_intrinsic_ctor(js, js_errorevent_ctor, js->builtins.errorevent_proto, "ErrorEvent", 2);
   js_set_global_builtin(js, "ErrorEvent", errorevent_fn);
 
   js->builtins.promiserejectionevent_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.promiserejectionevent_proto, js->builtins.event_proto);
   js_set_tostringtag(js, js->builtins.promiserejectionevent_proto, js_mkstr(js, "PromiseRejectionEvent", 21));
 
-  ant_value_t pre_fn = js_make_ctor(js, js_promiserejectionevent_ctor, js->builtins.promiserejectionevent_proto, "PromiseRejectionEvent", 21, 2);
+  ant_value_t pre_fn = js_make_intrinsic_ctor(js, js_promiserejectionevent_ctor, js->builtins.promiserejectionevent_proto, "PromiseRejectionEvent", 2);
   js_set_global_builtin(js, "PromiseRejectionEvent", pre_fn);
 
   ant_value_t object_proto = js->sym.object_proto;

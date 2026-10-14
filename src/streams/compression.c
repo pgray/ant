@@ -368,7 +368,7 @@ void init_compression_stream_module(ant_t *js) {
   js_set_getter_desc(js, js->builtins.cs_proto, "writable", 8, js_mkfun(js_cs_get_writable), JS_DESC_C);
   js_set_tostringtag(js, js->builtins.cs_proto, js_mkstr(js, "CompressionStream", 17));
 
-  ant_value_t cs_ctor = js_make_ctor(js, js_cs_ctor, js->builtins.cs_proto, "CompressionStream", 17, 1);
+  ant_value_t cs_ctor = js_make_intrinsic_ctor(js, js_cs_ctor, js->builtins.cs_proto, "CompressionStream", 1);
   js_set(js, g, "CompressionStream", cs_ctor);
   js_set_descriptor(js, g, "CompressionStream", 17, JS_DESC_W | JS_DESC_C);
 
@@ -377,7 +377,7 @@ void init_compression_stream_module(ant_t *js) {
   js_set_getter_desc(js, js->builtins.ds_proto, "writable", 8, js_mkfun(js_ds_get_writable), JS_DESC_C);
   js_set_tostringtag(js, js->builtins.ds_proto, js_mkstr(js, "DecompressionStream", 19));
 
-  ant_value_t ds_ctor = js_make_ctor(js, js_ds_ctor, js->builtins.ds_proto, "DecompressionStream", 19, 1);
+  ant_value_t ds_ctor = js_make_intrinsic_ctor(js, js_ds_ctor, js->builtins.ds_proto, "DecompressionStream", 1);
   js_set(js, g, "DecompressionStream", ds_ctor);
   js_set_descriptor(js, g, "DecompressionStream", 19, JS_DESC_W | JS_DESC_C);
 }

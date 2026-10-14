@@ -447,9 +447,7 @@ void temporal_init_duration(ant_t *js, ant_value_t temporal) {
   TEMPORAL_METHOD(js, proto, "with", temporal_duration_with, 1);
   temporal_set_to_string_tag(js, proto, "Temporal.Duration");
 
-  ant_value_t ctor = js_make_ctor(
-    js, temporal_duration_ctor, proto, "Duration", sizeof("Duration") - 1, 0);
-  temporal_lock_prototype(js, ctor);
+  ant_value_t ctor = js_make_intrinsic_ctor(js, temporal_duration_ctor, proto, "Duration", 0);
   TEMPORAL_METHOD(js, ctor, "compare", temporal_duration_compare, 2);
   TEMPORAL_METHOD(js, ctor, "from", temporal_duration_from, 1);
   temporal_set_namespace_property(js, temporal, "Duration", ctor);

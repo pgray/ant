@@ -223,6 +223,14 @@ static ant_value_t ta_entries(ant_params_t) {
   return iter;
 }
 
+static inline size_t array_buffer_owned_bytes(const ArrayBufferData *data) {
+  return data->storage == ARRAY_BUFFER_STORAGE_INLINE ? data->capacity : 0;
+}
+
+static inline ArrayBufferData *array_buffer_storage_owner(ArrayBufferData *data) {
+  return data->storage == ARRAY_BUFFER_STORAGE_BORROWED ? (ArrayBufferData *)data->data - 1 : NULL;
+}
+
 static void register_buffer(ant_t *js, ArrayBufferData *data) {
   if (js->buffers.count >= UINT32_MAX) return;
   
@@ -238,10 +246,10 @@ static void register_buffer(ant_t *js, ArrayBufferData *data) {
   }
   
   js->buffers.entries[js->buffers.count++] = data;
-  js->buffers.bytes += data->capacity;
+  js->buffers.bytes += array_buffer_owned_bytes(data);
   data->registry_slot = js->buffers.count;
   
-  gc_note_offheap_alloc(js, data->capacity);
+  gc_note_offheap_alloc(js, array_buffer_owned_bytes(data));
 }
 
 static void unregister_buffer(ant_t *js, ArrayBufferData *data) {
@@ -254,7 +262,7 @@ static void unregister_buffer(ant_t *js, ArrayBufferData *data) {
   js->buffers.entries[idx] = last;
   last->registry_slot = (uint32_t)idx + 1;
   data->registry_slot = 0;
-  js->buffers.bytes -= data->capacity;
+  js->buffers.bytes -= array_buffer_owned_bytes(data);
 }
 
 static inline ssize_t normalize_index(ssize_t idx, ssize_t len) {
@@ -311,8 +319,33 @@ static ArrayBufferData *create_shared_array_buffer_data(size_t length) {
 
 void free_array_buffer_data(ant_t *js, ArrayBufferData *data) {
   if (!data || --data->ref_count > 0) return;
+  ArrayBufferData *owner = array_buffer_storage_owner(data);
   if (!data->is_shared) unregister_buffer(js, data);
   free(data);
+  free_array_buffer_data(js, owner);
+}
+
+bool buffer_can_transfer(const ArrayBufferData *data) {
+  return data && !data->is_shared && !data->is_detached && data->storage != ARRAY_BUFFER_STORAGE_EXTERNAL;
+}
+
+void buffer_transfer_storage(ArrayBufferData *from, ArrayBufferData *to) {
+  ArrayBufferData *owner = array_buffer_storage_owner(from);
+  if (!owner) from->ref_count++;
+  
+  to->data = from->data;
+  to->length = from->length;
+  to->capacity = from->capacity;
+  to->storage = ARRAY_BUFFER_STORAGE_BORROWED;
+  
+  if (owner) {
+    from->storage = ARRAY_BUFFER_STORAGE_INLINE;
+    from->capacity = 0;
+  }
+  
+  from->data = NULL;
+  from->length = 0;
+  from->is_detached = 1;
 }
 
 static size_t get_element_size(TypedArrayType type) {
@@ -477,23 +510,22 @@ static ant_value_t js_arraybuffer_transfer(ant_params_t) {
   
   if (data->is_detached)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot transfer a detached ArrayBuffer");
+  if (!buffer_can_transfer(data))
+    return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot transfer this ArrayBuffer");
 
-  ArrayBufferData *new_data = create_array_buffer_data(js, new_length);
+  bool same_length = new_length == data->length;
+  ArrayBufferData *new_data = create_array_buffer_data(js, same_length ? 0 : new_length);
   if (!new_data) return js_mkerr(js, "Failed to allocate new ArrayBuffer");
   
-  size_t copy_length = data->length < new_length ? data->length : new_length;
-  memcpy(new_data->data, data->data, copy_length);
-  
-  data->is_detached = 1;
-  data->length = 0;
+  if (same_length) buffer_transfer_storage(data, new_data);
+  else {
+    memcpy(new_data->data, data->data, data->length < new_length ? data->length : new_length);
+    data->is_detached = 1;
+    data->length = 0;
+  }
 
-  ant_value_t new_obj = js_mkobj(js);
-  ant_value_t proto = js->builtins.arraybuffer_proto;
-
-  if (is_special_object(proto)) js_set_proto_init(new_obj, proto);
-  js_set_native(new_obj, new_data, BUFFER_ARRAYBUFFER_NATIVE_TAG);
-  js_set_finalizer(new_obj, arraybuffer_finalize);
-  
+  ant_value_t new_obj = create_arraybuffer_obj(js, new_data);
+  free_array_buffer_data(js, new_data);
   return new_obj;
 }
 
@@ -2243,12 +2275,6 @@ static BufferEncoding parse_encoding(const char *enc, size_t len) {
   return ENC_UNKNOWN;
 }
 
-static ant_value_t buffer_coded_error(ant_t *js, js_err_type_t type, const char *code, const char *message) {
-  ant_value_t props = js_mkobj(js);
-  js_set(js, props, "code", js_mkstr(js, code, strlen(code)));
-  return js_mkerr_props(js, type, props, "%s", message);
-}
-
 static ant_value_t buffer_unknown_encoding_error(ant_t *js, ant_value_t encoding) {
   ant_value_t str = js_tostring_val(js, encoding);
   if (is_err(str)) return str;
@@ -3202,7 +3228,7 @@ static ant_value_t buffer_fill_range(
     const uint8_t *source = NULL;
     size_t source_len = 0;
     buffer_source_get_bytes(js, value, &source, &source_len);
-    if (source_len == 0) return buffer_coded_error(
+    if (source_len == 0) return js_mkerr_code(
       js, JS_ERR_TYPE, "ERR_INVALID_ARG_VALUE",
       "The argument 'value' is invalid. Received an empty buffer"
     );
@@ -3411,12 +3437,6 @@ static inline void buffer_store_bytes(uint8_t *ptr, size_t width, bool little_en
   memcpy(ptr, &bits, width);
 }
 
-static ant_value_t buffer_code_error(ant_t *js, js_err_type_t type, const char *code, const char *message) {
-  ant_value_t props = js_mkobj(js);
-  js_set(js, props, "code", js_mkstr(js, code, strlen(code)));
-  return js_mkerr_props(js, type, props, "%s", message);
-}
-
 static void buffer_group_digits(const char *digits, char *out, size_t len) {
   size_t n = strlen(digits), start = digits[0] == '-' ? 1 : 0, head = n;
   while (head >= start + 4) head -= 3;
@@ -3452,48 +3472,24 @@ static void buffer_describe_value(ant_t *js, ant_value_t value, char *out, size_
   else snprintf(out, len, "%s", raw);
 }
 
-static void buffer_describe_type(ant_t *js, ant_value_t value, char *out, size_t len) {
-  uint8_t t = vtype(value);
-  if (t == kTypeUndefined || t == kTypeNull) { snprintf(out, len, "%s", t == kTypeNull ? "null" : "undefined"); return; }
-  if (t == kTypeFunction || t == kTypeBuiltin) { snprintf(out, len, "function"); return; }
-  if (t == kTypeArray) { snprintf(out, len, "an instance of Array"); return; }
-  if (is_object_type(value)) { snprintf(out, len, "an instance of Object"); return; }
-  
-  if (t == kTypeString) {
-    ant_offset_t slen = 0;
-    const char *str = (const char *)(uintptr_t)vstr(js, value, &slen);
-    bool cut = slen > 25;
-    snprintf(out, len, "type string ('%.*s%s')", (int)(cut ? 25 : slen), str, cut ? "..." : "");
-    return;
-  }
-  
-  char shown[96];
-  if (t == kTypeBool) snprintf(shown, sizeof(shown), "%s", js_truthy(js, value) ? "true" : "false");
-  else if (t == kTypeSymbol) snprintf(shown, sizeof(shown), "Symbol()");
-  else buffer_describe_value(js, value, shown, sizeof(shown));
-  
-  const char *type = t == kTypeBool ? "boolean" : t == kTypeSymbol ? "symbol" : t == kTypeBigInt ? "bigint" : "number";
-  snprintf(out, len, "type %s (%s)", type, shown);
-}
-
-static ant_value_t buffer_out_of_range(ant_t *js, const char *name, const char *range, ant_value_t received) {
+static __attribute__((noinline, cold)) ant_value_t buffer_out_of_range(ant_t *js, const char *name, const char *range, ant_value_t received) {
   char got[128], message[384];
   buffer_describe_value(js, received, got, sizeof(got));
   snprintf(message, sizeof(message), "The value of \"%s\" is out of range. It must be %s. Received %s", name, range, got);
-  return buffer_code_error(js, JS_ERR_RANGE, "ERR_OUT_OF_RANGE", message);
+  return js_mkerr_code(js, JS_ERR_RANGE, "ERR_OUT_OF_RANGE", message);
 }
 
-static ant_value_t buffer_arg_type_error(ant_t *js, const char *name, ant_value_t received) {
-  char got[128], message[256];
-  buffer_describe_type(js, received, got, sizeof(got));
-  snprintf(message, sizeof(message), "The \"%s\" argument must be of type number. Received %s", name, got);
-  return buffer_code_error(js, JS_ERR_TYPE, "ERR_INVALID_ARG_TYPE", message);
+static __attribute__((noinline, cold)) ant_value_t buffer_arg_type_error(ant_t *js, const char *name, ant_value_t received) {
+  char got[160], message[256];
+  js_describe_received(js, received, got, sizeof(got));
+  snprintf(message, sizeof(message), "The \"%s\" argument must be of type number. %s", name, got);
+  return js_mkerr_code(js, JS_ERR_TYPE, "ERR_INVALID_ARG_TYPE", message);
 }
 
-static ant_value_t buffer_bounds_error(ant_t *js, ant_value_t offset, double max) {
+static __attribute__((noinline, cold)) ant_value_t buffer_bounds_error(ant_t *js, ant_value_t offset, double max) {
   double n = js_getnum(offset);
   if (floor(n) != n) return buffer_out_of_range(js, "offset", "an integer", offset);
-  if (max < 0) return buffer_code_error(js, JS_ERR_RANGE, "ERR_BUFFER_OUT_OF_BOUNDS", "Attempt to access memory outside buffer bounds");
+  if (max < 0) return js_mkerr_code(js, JS_ERR_RANGE, "ERR_BUFFER_OUT_OF_BOUNDS", "Attempt to access memory outside buffer bounds");
   
   char range[64];
   snprintf(range, sizeof(range), ">= 0 and <= %.0f", max);
@@ -4171,10 +4167,7 @@ void init_buffer_module(ant_t *js) {
   js_set_proto_init(dataview_proto, object_proto);
   js->builtins.dataview_proto = dataview_proto;
   
-  for (size_t i = 0; i < sizeof(dataview_methods) / sizeof(dataview_methods[0]); i++) {
-    const ant_cfunc_meta_t *m = &dataview_methods[i];
-    defmethod(js, dataview_proto, m->name, strlen(m->name), js_mkfun_meta(m));
-  }
+  js_define_methods(js, dataview_proto, dataview_methods, countof(dataview_methods), ANT_PROP_ATTR_METHOD);
   
   js_set_getter_desc(js, dataview_proto, "buffer", 6, js_mkfun_meta(&dataview_buffer_getter.meta), JS_DESC_C);
   js_set_getter_desc(js, dataview_proto, "byteLength", 10, js_mkfun_meta(&dataview_byte_length_getter.meta), JS_DESC_C);
@@ -4232,8 +4225,7 @@ void init_buffer_module(ant_t *js) {
     { js_buffer_copy,          "copy",        4, 0 },
   };
   
-  for (size_t i = 0; i < sizeof(buffer_proto_methods) / sizeof(buffer_proto_methods[0]); i++)
-    js_set(js, buffer_proto, buffer_proto_methods[i].name, js_mkfun_meta(&buffer_proto_methods[i]));
+  js_define_methods(js, buffer_proto, buffer_proto_methods, countof(buffer_proto_methods), ANT_PROP_ATTR_DEFAULT);
   
   for (size_t i = 0; i < sizeof(buffer_num_methods) / sizeof(buffer_num_methods[0]); i++) {
     const buffer_num_method_t *m = &buffer_num_methods[i];

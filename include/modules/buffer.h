@@ -5,6 +5,12 @@
 #include <stddef.h>
 #include "types.h"
 
+typedef enum {
+  ARRAY_BUFFER_STORAGE_INLINE,
+  ARRAY_BUFFER_STORAGE_BORROWED,
+  ARRAY_BUFFER_STORAGE_EXTERNAL,
+} array_buffer_storage_t;
+
 typedef struct {
   uint8_t *data;
   size_t length;
@@ -13,6 +19,7 @@ typedef struct {
   uint32_t registry_slot;
   uint8_t is_shared;
   uint8_t is_detached;
+  uint8_t storage;
 } ArrayBufferData;
 
 #if UINTPTR_MAX == UINT64_MAX
@@ -65,6 +72,8 @@ void init_buffer_module(ant_t *js);
 void cleanup_buffer_module(ant_t *js);
 size_t buffer_get_external_memory(ant_t *js);
 void free_array_buffer_data(ant_t *js, ArrayBufferData *data);
+bool buffer_can_transfer(const ArrayBufferData *data);
+void buffer_transfer_storage(ArrayBufferData *from, ArrayBufferData *to);
 
 ant_value_t create_arraybuffer_obj(ant_t *js, ArrayBufferData *buffer);
 ant_value_t create_arraybuffer_copy(ant_t *js, const void *bytes, size_t length);

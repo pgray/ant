@@ -428,7 +428,7 @@ void init_textcodec_module(ant_t *js) {
   js_set(js, js->builtins.textencoder_proto, "encodeInto", js_mkfun_arity(js_textencoder_encode_into, 2));
   js_set_tostringtag(js, js->builtins.textencoder_proto, js_mkstr(js, "TextEncoder", 11));
   
-  ant_value_t te_ctor = js_make_ctor(js, js_textencoder_ctor, js->builtins.textencoder_proto, "TextEncoder", 11, 0);
+  ant_value_t te_ctor = js_make_intrinsic_ctor(js, js_textencoder_ctor, js->builtins.textencoder_proto, "TextEncoder", 0);
   js_set(js, g, "TextEncoder", te_ctor);
   js_set_descriptor(js, g, "TextEncoder", 11, JS_DESC_W | JS_DESC_C);
 
@@ -439,7 +439,7 @@ void init_textcodec_module(ant_t *js) {
   js_set(js, js->builtins.textdecoder_proto, "decode", js_mkfun(js_textdecoder_decode));
   js_set_tostringtag(js, js->builtins.textdecoder_proto, js_mkstr(js, "TextDecoder", 11));
   
-  ant_value_t td_ctor = js_make_ctor(js, js_textdecoder_ctor, js->builtins.textdecoder_proto, "TextDecoder", 11, 0);
+  ant_value_t td_ctor = js_make_intrinsic_ctor(js, js_textdecoder_ctor, js->builtins.textdecoder_proto, "TextDecoder", 0);
   js_set(js, g, "TextDecoder", td_ctor);
   js_set_descriptor(js, g, "TextDecoder", 11, JS_DESC_W | JS_DESC_C);
 }

@@ -35,10 +35,19 @@ static ant_value_t sc_lookup(sc_entry_t **table, ant_value_t key) {
   return e ? e->value : js_mkundef();
 }
 
-static bool sc_has(sc_entry_t **table, ant_value_t key) {
+static sc_entry_t *sc_find(sc_entry_t **table, ant_value_t key) {
   sc_entry_t *e;
   HASH_FIND(hh, *table, &key, sizeof(ant_value_t), e);
-  return e != NULL;
+  return e;
+}
+
+static ant_value_t sc_transfer_target(ant_t *js, sc_entry_t *entry) {
+  ArrayBufferData *placeholder = create_array_buffer_data(js, 0);
+  if (!placeholder) return js_mkerr(js, "out of memory");
+  
+  entry->value = create_arraybuffer_obj(js, placeholder);
+  free_array_buffer_data(js, placeholder);
+  return entry->value;
 }
 
 static void sc_free(sc_entry_t **table) {
@@ -118,7 +127,10 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
   if (abd && abd->is_detached) return sc_detached_error(js);
   
   if (abd) {
-    ant_value_t clone = create_arraybuffer_copy(js, abd->data, abd->length);
+    sc_entry_t *transferred = sc_find(transfer, val);
+    ant_value_t clone = transferred
+      ? sc_transfer_target(js, transferred)
+      : create_arraybuffer_copy(js, abd->data, abd->length);
     if (is_err(clone)) return clone;
     
     sc_add(seen, val, clone);
@@ -321,22 +333,26 @@ static ant_value_t sc_collect_transfer(ant_t *js, ant_value_t options, sc_entry_
     ArrayBufferData *data = is_object_type(item) ? buffer_get_arraybuffer_data(item) : NULL;
     
     if (!data || data->is_shared) return sc_clone_error(js, "Found invalid value in transferList.");
-    if (sc_has(transfer, item)) return sc_clone_error(js, "Transfer list contains duplicate ArrayBuffer");
-    if (data->is_detached) return sc_clone_error(js, "Cannot transfer object of unsupported type.");
+    if (sc_find(transfer, item)) return sc_clone_error(js, "Transfer list contains duplicate ArrayBuffer");
+    if (!buffer_can_transfer(data)) return sc_clone_error(js, "Cannot transfer object of unsupported type.");
     
-    sc_add(transfer, item, js_true);
+    sc_add(transfer, item, js_mkundef());
   }
   
   return js_mkundef();
 }
 
-static void sc_detach_transferred(sc_entry_t **transfer) {
+static void sc_commit_transfer(sc_entry_t **transfer) {
   sc_entry_t *e, *tmp;
   HASH_ITER(hh, *transfer, e, tmp) {
-    ArrayBufferData *data = buffer_get_arraybuffer_data(e->key);
-    if (!data) continue;
-    data->length = 0;
-    data->is_detached = 1;
+    ArrayBufferData *from = buffer_get_arraybuffer_data(e->key);
+    ArrayBufferData *to = buffer_get_arraybuffer_data(e->value);
+    if (!from) continue;
+    if (to) buffer_transfer_storage(from, to);
+    else {
+      from->length = 0;
+      from->is_detached = 1;
+    }
   }
 }
 
@@ -348,7 +364,7 @@ ant_value_t js_structured_clone(ant_params_t) {
   
   ant_value_t result = sc_collect_transfer(js, nargs > 1 ? args[1] : js_mkundef(), &transfer);
   if (!is_err(result)) result = sc_clone_rec(js, args[0], &seen, &transfer);
-  if (!is_err(result)) sc_detach_transferred(&transfer);
+  if (!is_err(result)) sc_commit_transfer(&transfer);
   
   sc_free(&seen);
   sc_free(&transfer);

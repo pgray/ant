@@ -1317,7 +1317,7 @@ void init_response_module(ant_t *js) {
 
   js_set_sym(js, js->builtins.response_proto, js->sym.inspect_sym, js_mkfun(response_inspect));
   js_set_tostringtag(js, js->builtins.response_proto, js_mkstr(js, "Response", 8));
-  ctor = js_make_ctor(js, js_response_ctor, js->builtins.response_proto, "Response", 8, 0);
+  ctor = js_make_intrinsic_ctor(js, js_response_ctor, js->builtins.response_proto, "Response", 0);
   js_set(js, ctor, "error", js_mkfun(js_response_error));
   js_set(js, ctor, "redirect", js_mkfun_arity(js_response_redirect, 1));
   js_set(js, ctor, "json", js_mkfun_arity(js_response_json_static, 1));

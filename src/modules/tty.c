@@ -849,7 +849,7 @@ static void tty_init_stream_constructors(ant_t *js) {
   js_set_proto_init(js->builtins.tty_readstream_proto, stream_readable_prototype(js));
   setup_readstream_proto(js, js->builtins.tty_readstream_proto);
   
-  js->builtins.tty_readstream_ctor = js_make_ctor(js, tty_read_stream_constructor, js->builtins.tty_readstream_proto, "ReadStream", 10, 2);
+  js->builtins.tty_readstream_ctor = js_make_ctor(js, tty_read_stream_constructor, js->builtins.tty_readstream_proto, "ReadStream", 2);
   js_set_proto_init(js->builtins.tty_readstream_ctor, stream_readable_constructor(js));
   
   gc_register_root(&js->builtins.tty_readstream_proto);
@@ -859,7 +859,7 @@ static void tty_init_stream_constructors(ant_t *js) {
   js_set_proto_init(js->builtins.tty_writestream_proto, stream_writable_prototype(js));
   setup_writestream_proto(js, js->builtins.tty_writestream_proto);
   
-  js->builtins.tty_writestream_ctor = js_make_ctor(js, tty_write_stream_constructor, js->builtins.tty_writestream_proto, "WriteStream", 11, 1);
+  js->builtins.tty_writestream_ctor = js_make_ctor(js, tty_write_stream_constructor, js->builtins.tty_writestream_proto, "WriteStream", 1);
   js_set_proto_init(js->builtins.tty_writestream_ctor, stream_writable_constructor(js));
   
   gc_register_root(&js->builtins.tty_writestream_proto);

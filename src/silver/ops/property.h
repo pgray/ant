@@ -153,11 +153,13 @@ static inline bool sv_proto_guard_hit_cycle(sv_proto_guard_t *g, ant_value_t cur
   return sv_same_obj_identity(cur, g->fast);
 }
 
-static inline sv_ic_entry_t *sv_ic_slot_for_ip(sv_func_t *func, uint8_t *ip) {
-  if (!func || !func->ic_slots || !ip) return NULL;
-  uint16_t ic_idx = sv_get_u16(ip + 5);
-  if (ic_idx == UINT16_MAX || ic_idx >= func->ic_count) return NULL;
+static inline sv_ic_entry_t *sv_ic_slot_at(sv_func_t *func, uint16_t ic_idx) {
+  if (!func || !func->ic_slots || ic_idx == UINT16_MAX || ic_idx >= func->ic_count) return NULL;
   return &func->ic_slots[ic_idx];
+}
+
+static inline sv_ic_entry_t *sv_ic_slot_for_ip(sv_func_t *func, uint8_t *ip) {
+  return ip ? sv_ic_slot_at(func, sv_get_u16(ip + 5)) : NULL;
 }
 
 static inline void sv_ic_set_shape_ref(
@@ -1008,8 +1010,9 @@ static inline __attribute__((always_inline)) bool sv_try_prop_get_ic_lookup(
 ) {
   ant_object_t *ptr = is_object_type(obj) ? js_obj_ptr(js_as_obj(obj)) : NULL;
 
-  bool track_ic = ic && (!is_length_key(a->str, a->len) ||
-    (ptr && vtype(obj) == kTypeObject && ptr->type_tag == kTypeObject && sv_ic_numeric_exotic(ptr)));
+  bool length_key = is_length_key(a->str, a->len);
+  bool own_length_only = length_key && !(ptr && vtype(obj) == kTypeObject && ptr->type_tag == kTypeObject && sv_ic_numeric_exotic(ptr));
+  bool track_ic = ic && (!own_length_only || (ptr && vtype(obj) != kTypeArray));
   bool track_obj = track_ic && ptr && (!ptr->flags.is_exotic || sv_ic_exotic_admits(ptr, a));
 
   ant_value_t hit = js_mkundef();
@@ -1019,6 +1022,7 @@ static inline __attribute__((always_inline)) bool sv_try_prop_get_ic_lookup(
     return true;
   }
 
+  poly = poly && !own_length_only;
   bool mega = poly && track_obj && (ic->shape_ref_mask & SV_IC_POLY_MEGA);
   if (mega && sv_gf_mega_find(js, ptr, a->str, &hit, getter_out)) {
     sv_gf_ic_note_success(ic);
@@ -1037,14 +1041,14 @@ static inline __attribute__((always_inline)) bool sv_try_prop_get_ic_lookup(
   }
 
   if (track_obj) {
-    bool cache_miss = 
+    bool cache_miss = !own_length_only &&
       ptr->shape && vtype(obj) == kTypeObject && !ptr->flags.is_exotic &&
       ptr->type_tag == kTypeObject && sv_field_can_cache_absence(a->str);
     
     unsigned flags = SV_PROBE_ADMIT_RECEIVER | (cache_miss ? SV_PROBE_CACHE_MISS : 0) | (getter_out ? SV_PROBE_ACCESSORS : 0);
     sv_probe_hit_t probe;
     
-    if (sv_ic_probe_get_chain(obj, a->str, flags, &probe)) {
+    if (sv_ic_probe_get_chain(obj, a->str, flags, &probe) && (!own_length_only || probe.holder == ptr)) {
       ant_object_t *holder = probe.holder;
       uint32_t prop_idx = probe.index;
       ant_value_t found = probe.value;
@@ -1153,15 +1157,10 @@ static inline bool sv_try_symbol_description_ic(
   return true;
 }
 
-static inline ant_value_t sv_prop_get_field_ic(
-  ant_t *js,
-  ant_value_t obj,
-  sv_atom_t *a,
-  sv_func_t *func,
-  uint8_t *ip
+static inline ant_value_t sv_prop_get_field_ic_entry(
+  ant_t *js, ant_value_t obj, sv_atom_t *a, sv_ic_entry_t *ic, sv_func_t *func, uint8_t *ip
 ) {
   ant_value_t out = js_mkundef();
-  sv_ic_entry_t *ic = sv_ic_slot_for_ip(func, ip);
   if (ic && sv_gf_kind_is_symbol_description(ic->get_kind) && sv_try_symbol_description_ic(js, obj, a, ic, &out)) return out;
   
   ant_value_t getter = js_mkundef();
@@ -1170,6 +1169,12 @@ static inline ant_value_t sv_prop_get_field_ic(
   if (sv_try_symbol_description_ic(js, obj, a, ic, &out)) return out;
   
   return sv_prop_get_at(js, obj, a->str, a->len, func, ip);
+}
+
+static inline ant_value_t sv_prop_get_field_ic(
+  ant_t *js, ant_value_t obj, sv_atom_t *a, sv_func_t *func, uint8_t *ip
+) {
+  return sv_prop_get_field_ic_entry(js, obj, a, sv_ic_slot_for_ip(func, ip), func, ip);
 }
 
 static inline ant_value_t sv_op_get_field(
@@ -1808,17 +1813,23 @@ static inline ant_value_t sv_get_length_value(ant_t *js, ant_value_t obj) {
   return js_getprop_fallback(js, obj, "length");
 }
 
-static inline ant_value_t sv_get_length_at(ant_t *js, ant_value_t obj, sv_atom_t *atom, sv_func_t *func, uint8_t *ip) {
-  ant_object_t *ptr = vtype(obj) == kTypeObject ? js_obj_ptr(obj) : NULL;
+static inline ant_value_t sv_get_length_at(ant_t *js, ant_value_t obj, sv_func_t *func, uint8_t *ip) {
+  switch (vtype(obj)) {
+    case kTypeArray:
+      if (!js_obj_ptr(obj)->flags.arguments_object) return tov((double)(uint32_t)js_arr_len(js, obj));
+      break;
+    case kTypeString: return tov((double)str_utf16_len(js, obj));
+    case kTypeObject: case kTypeFunction: case kTypeNull: case kTypeUndefined: break;
+    default: return sv_get_length_value(js, obj);
+  }
   
-  return ptr && ptr->shape && ptr->type_tag == kTypeObject && sv_ic_numeric_exotic(ptr)
-    ? sv_prop_get_field_ic(js, obj, atom, func, ip)
-    : sv_get_length_value(js, obj);
+  sv_atom_t length = sv_length_atom(js);
+  sv_ic_entry_t *ic = sv_ic_slot_at(func, sv_get_u16(ip + 1));
+  return sv_prop_get_field_ic_entry(js, obj, &length, ic, func, ip);
 }
 
 static inline ant_value_t sv_op_get_length(sv_vm_t *vm, ant_t *js, sv_func_t *func, uint8_t *ip) {
-  sv_atom_t *atom = &func->atoms[sv_get_u32(ip + 1)];
-  ant_value_t res = sv_get_length_at(js, vm->stack[vm->sp - 1], atom, func, ip);
+  ant_value_t res = sv_get_length_at(js, vm->stack[vm->sp - 1], func, ip);
   
   if (is_err(res)) return res;
   vm->stack[vm->sp - 1] = res;

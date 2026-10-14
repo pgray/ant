@@ -493,7 +493,7 @@ static void jit_emit_get_field_fast(
   jit_stale_exit_t *stale_exit = jit_stale_exit_for(c, &stale);
   bool fast = mir_emit_get_field_ic_fastpath(
       c->ctx, c->jit_func, c->js, c->func, c->bc_off, ic_idx, atom, obj, dst, slow,
-      c->r_ic_epoch_val, stale_exit);
+      c->r_ic_epoch_val, stale_exit, c->op == OP_GET_LENGTH);
   jit_note_stale_exit(c, stale_exit, pre_op_sp);
   if (!fast) return;
   MIR_append_insn(c->ctx, c->jit_func, MIR_new_insn(c->ctx, MIR_JMP, MIR_new_label_op(c->ctx, done)));
@@ -755,11 +755,6 @@ void jit_emit_properties(jit_compile_t *c) {
     }
 
     case OP_GET_LENGTH: {
-      uint32_t idx = sv_get_u32(c->ip + 1);
-      if (idx >= (uint32_t)c->func->atom_count) {
-        c->ok = false;
-        break;
-      }
       bool builder_length = false;
       int raw_slot_size = sv_op_size[OP_GET_SLOT_RAW];
       if (c->builder_target_slots && c->bc_off >= raw_slot_size) {
@@ -785,15 +780,15 @@ void jit_emit_properties(jit_compile_t *c) {
           -1, c->bc_off,
           object_path, done);
       MIR_append_insn(c->ctx, c->jit_func, object_path);
-      jit_emit_get_field_fast(c, sv_get_u16(c->ip + 5), &c->func->atoms[idx], obj, dst, MIR_new_label(c->ctx), done, pre_op_sp);
+      sv_atom_t length = sv_length_atom(c->js);
+      jit_emit_get_field_fast(c, sv_get_u16(c->ip + 1), &length, obj, dst, MIR_new_label(c->ctx), done, pre_op_sp);
       MIR_append_insn(c->ctx, c->jit_func,
-                      MIR_new_call_insn(c->ctx, 8,
-                                        MIR_new_ref_op(c->ctx, c->gf_proto),
+                      MIR_new_call_insn(c->ctx, 7,
+                                        MIR_new_ref_op(c->ctx, c->get_length_at_proto),
                                         MIR_new_ref_op(c->ctx, c->imp_get_length_at),
                                         MIR_new_reg_op(c->ctx, dst),
                                         MIR_new_reg_op(c->ctx, c->r_js),
                                         MIR_new_reg_op(c->ctx, obj),
-                                        MIR_new_uint_op(c->ctx, (uint64_t)(uintptr_t)&c->func->atoms[idx]),
                                         MIR_new_uint_op(c->ctx, (uint64_t)(uintptr_t)c->func),
                                         MIR_new_int_op(c->ctx, (int64_t)c->bc_off)));
       jit_emit_throw_if_error(c, dst);

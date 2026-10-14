@@ -933,7 +933,7 @@ void tls_init_socket_proto(ant_t *js) {
   }
 
   if (!js->builtins.tls_socket_ctor)
-    js->builtins.tls_socket_ctor = js_make_ctor(js, js_tls_socket_ctor, js->builtins.tls_socket_proto, "TLSSocket", 9, 2);
+    js->builtins.tls_socket_ctor = js_make_ctor(js, js_tls_socket_ctor, js->builtins.tls_socket_proto, "TLSSocket", 2);
 }
 
 static ant_value_t js_tls_create_context(ant_params_t) {
@@ -1274,9 +1274,7 @@ static ant_value_t tls_build_library(ant_t *js) {
   tls_init_context_proto(js);
   tls_init_socket_proto(js);
   
-  if (!js->builtins.tls_context_ctor) js->builtins.tls_context_ctor = js_make_ctor(
-    js, js_tls_secure_context_ctor,
-    js->builtins.tls_context_proto, "SecureContext", 13, 4);
+  if (!js->builtins.tls_context_ctor) js->builtins.tls_context_ctor = js_make_ctor(js, js_tls_secure_context_ctor, js->builtins.tls_context_proto, "SecureContext", 4);
   
   js_set(js, lib, "version", version);
   js_set(js, lib, "TLSSocket", js->builtins.tls_socket_ctor);

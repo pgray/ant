@@ -92,15 +92,19 @@ static const bool sv_op_ic_slots[OP__COUNT] = {
 #include "silver/opcode.h"
 };
 
-static inline bool sv_op_has_ic_slot(sv_op_t op) {
-  return (unsigned)op < OP__COUNT && sv_op_ic_slots[op];
-}
-
 typedef struct {
   const char *str;
   uint32_t len;
   bool maybe_numeric;
 } sv_atom_t;
+
+static inline bool sv_op_has_ic_slot(sv_op_t op) {
+  return (unsigned)op < OP__COUNT && sv_op_ic_slots[op];
+}
+
+static inline sv_atom_t sv_length_atom(ant_t *js) {
+  return (sv_atom_t){ js->intern.length, 6, false };
+}
 
 typedef enum {
   SV_MAP_TEMPLATE_GET = 0,

@@ -612,7 +612,7 @@ static const tzabbr_t js_tzabbr[] = {
 };
 
 static bool string_get_tzabbr(const uint8_t *sp, int *pp, int *offset) {
-  for (size_t i = 0; i < sizeof(js_tzabbr) / sizeof(*js_tzabbr); i++) if (string_match(sp, pp, js_tzabbr[i].name)) {
+  for (size_t i = 0; i < countof(js_tzabbr); i++) if (string_match(sp, pp, js_tzabbr[i].name)) {
     *offset = js_tzabbr[i].offset;
     return true;
   }
@@ -1269,11 +1269,6 @@ static ant_value_t date_toPrimitive(ant_params_t) {
   return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert object to primitive value");
 }
 
-static void date_define_methods(ant_t *js, ant_value_t target, const ant_cfunc_meta_t *methods, size_t count) {
-  for (size_t i = 0; i < count; i++)
-    defmethod(js, target, methods[i].name, strlen(methods[i].name), js_mkfun_meta(&methods[i]));
-}
-
 void init_date_module(ant_t *js) {
   ant_value_t object_proto = js->sym.object_proto;  
   ant_value_t function_proto = js->sym.function_proto;
@@ -1331,10 +1326,7 @@ void init_date_module(ant_t *js) {
     { builtin_Date_toJSON,             "toJSON",             1, 0 },
   };
   
-  date_define_methods(
-    js, date_proto, date_proto_methods, 
-    sizeof(date_proto_methods) / sizeof(*date_proto_methods)
-  );
+  js_define_methods(js, date_proto, date_proto_methods, countof(date_proto_methods), ANT_PROP_ATTR_METHOD);
 
   ant_value_t to_primitive_sym = js->sym.toPrimitive_sym;
   if (vtype(to_primitive_sym) == kTypeSymbol) js_set_sym(js, date_proto, to_primitive_sym, js_mkfun(date_toPrimitive));
@@ -1349,7 +1341,7 @@ void init_date_module(ant_t *js) {
     { builtin_Date_UTC,   "UTC",   7, 0 },
   };
   
-  date_define_methods(js, date_ctor_obj, date_ctor_methods, sizeof(date_ctor_methods) / sizeof(*date_ctor_methods));
+  js_define_methods(js, date_ctor_obj, date_ctor_methods, countof(date_ctor_methods), ANT_PROP_ATTR_METHOD);
   js_setprop_nonconfigurable(js, date_ctor_obj, "prototype", 9, date_proto);
   js_set_function_name(js, date_ctor_obj, "Date", sizeof("Date") - 1);
 

@@ -151,7 +151,7 @@ ant_value_t module_library(ant_t *js) {
   GC_ROOT_PIN(js, proto);
   
   js_set_proto_init(proto, js->sym.object_proto);
-  ant_value_t lib = js_make_ctor(js, builtin_module_constructor, proto, "Module", 6, 0);
+  ant_value_t lib = js_make_ctor(js, builtin_module_constructor, proto, "Module", 0);
   js->modules.cjs.constructor = lib;
   GC_ROOT_RESTORE(js, root_mark);
   

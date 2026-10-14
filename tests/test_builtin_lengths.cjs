@@ -134,6 +134,31 @@ for (const fn of [Error, Map, require('node:fs').readFile, URL]) {
 assert.throws(() => { 'use strict'; require('node:fs').readFile.name = 'x'; }, TypeError);
 
 assert.deepStrictEqual(Object.keys(Date), []);
+
+const protoAttrs = fn => {
+  const d = Object.getOwnPropertyDescriptor(fn, 'prototype');
+  return [d.writable, d.enumerable, d.configurable];
+};
+for (const ctor of [Map, Set, WeakMap, WeakSet, WeakRef, FinalizationRegistry, ReadableStream, URL, Event, TextEncoder, Temporal.Instant, Intl.Collator, WebAssembly.Module]) {
+  assert.deepStrictEqual(protoAttrs(ctor), [false, false, false], ctor.name);
+  assert.strictEqual(ctor.prototype.constructor, ctor, `${ctor.name}.prototype.constructor`);
+}
+for (const ctor of [require('node:stream').Readable, require('node:zlib').Gzip, require('node:net').Socket]) {
+  assert.deepStrictEqual(protoAttrs(ctor), [true, false, false], ctor.name);
+  assert.strictEqual(ctor.prototype.constructor, ctor, `${ctor.name}.prototype.constructor`);
+}
+assert.deepStrictEqual(Object.keys(Map), []);
+assert.strictEqual(AggregateError.prototype.constructor, AggregateError);
+
+const zlib = require('node:zlib');
+assert.deepStrictEqual([zlib.Gzip.name, zlib.Gzip.length, zlib.createGzip.length, zlib.gzipSync.length, zlib.gzip.length], ['Gzip', 1, 1, 2, 3]);
+assert.strictEqual(zlib.gunzipSync(zlib.gzipSync('round trip')).toString(), 'round trip');
+
+const received = value => { try { Buffer.alloc(8).writeUInt32LE(1, value); } catch (e) { return e.message.slice(e.message.indexOf('Received')); } };
+assert.deepStrictEqual(
+  [received([1]), received(new Map()), received('x'), received(() => 1), received(5n)],
+  ['Received an instance of Array', 'Received an instance of Map', "Received type string ('x')", 'Received function ', 'Received type bigint (5n)']
+);
 assert.deepStrictEqual(Object.keys(Date.prototype), []);
 
 const RealRegExp = RegExp;

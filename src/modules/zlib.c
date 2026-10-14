@@ -1110,14 +1110,62 @@ static void zlib_init_proto(ant_t *js) {
   js_mkfun(js_zlib_get_bytes_written), JS_DESC_C);
 }
 
-static ant_value_t zlib_mkctor(ant_t *js, zlib_kind_t kind, ant_cfunc_t fn, const char *name) {
+typedef struct {
+  ant_cfunc_meta_t async;
+  ant_cfunc_meta_t sync;
+  ant_cfunc_meta_t create;
+  ant_cfunc_meta_t ctor;
+} zlib_kind_entry_t;
+
+static const zlib_kind_entry_t zlib_kinds[ZLIB_KIND_COUNT] = {
+  [ZLIB_KIND_GZIP] = {
+    { js_gzip, "gzip", 3, 0 }, { js_gzipSync, "gzipSync", 2, 0 },
+    { js_create_gzip, "createGzip", 1, 0 }, { js_create_gzip, "Gzip", 1, 0 },
+  },
+  [ZLIB_KIND_GUNZIP] = {
+    { js_gunzip, "gunzip", 3, 0 }, { js_gunzipSync, "gunzipSync", 2, 0 },
+    { js_create_gunzip, "createGunzip", 1, 0 }, { js_create_gunzip, "Gunzip", 1, 0 },
+  },
+  [ZLIB_KIND_DEFLATE] = {
+    { js_deflate, "deflate", 3, 0 }, { js_deflateSync, "deflateSync", 2, 0 },
+    { js_create_deflate, "createDeflate", 1, 0 }, { js_create_deflate, "Deflate", 1, 0 },
+  },
+  [ZLIB_KIND_INFLATE] = {
+    { js_inflate, "inflate", 3, 0 }, { js_inflateSync, "inflateSync", 2, 0 },
+    { js_create_inflate, "createInflate", 1, 0 }, { js_create_inflate, "Inflate", 1, 0 },
+  },
+  [ZLIB_KIND_DEFLATE_RAW] = {
+    { js_deflateRaw, "deflateRaw", 3, 0 }, { js_deflateRawSync, "deflateRawSync", 2, 0 },
+    { js_create_deflate_raw, "createDeflateRaw", 1, 0 }, { js_create_deflate_raw, "DeflateRaw", 1, 0 },
+  },
+  [ZLIB_KIND_INFLATE_RAW] = {
+    { js_inflateRaw, "inflateRaw", 3, 0 }, { js_inflateRawSync, "inflateRawSync", 2, 0 },
+    { js_create_inflate_raw, "createInflateRaw", 1, 0 }, { js_create_inflate_raw, "InflateRaw", 1, 0 },
+  },
+  [ZLIB_KIND_UNZIP] = {
+    { js_unzip, "unzip", 3, 0 }, { js_unzipSync, "unzipSync", 2, 0 },
+    { js_create_unzip, "createUnzip", 1, 0 }, { js_create_unzip, "Unzip", 1, 0 },
+  },
+  [ZLIB_KIND_BROTLI_COMPRESS] = {
+    { js_brotliCompress, "brotliCompress", 3, 0 }, { js_brotliCompressSync, "brotliCompressSync", 2, 0 },
+    { js_create_brotli_compress, "createBrotliCompress", 1, 0 }, { js_create_brotli_compress, "BrotliCompress", 1, 0 },
+  },
+  [ZLIB_KIND_BROTLI_DECOMPRESS] = {
+    { js_brotliDecompress, "brotliDecompress", 3, 0 }, { js_brotliDecompressSync, "brotliDecompressSync", 2, 0 },
+    { js_create_brotli_decompress, "createBrotliDecompress", 1, 0 }, { js_create_brotli_decompress, "BrotliDecompress", 1, 0 },
+  },
+};
+
+static void zlib_define_kind(ant_t *js, ant_value_t lib, zlib_kind_t kind) {
+  const zlib_kind_entry_t *entry = &zlib_kinds[kind];
   ant_value_t proto = js_mkobj(js);
   if (is_object_type(js->builtins.zlib_transform_proto)) js_set_proto_init(proto, js->builtins.zlib_transform_proto);
   js->builtins.zlib_protos[kind] = proto;
 
-  ant_value_t ctor = js_make_ctor(js, fn, proto, name, strlen(name), 1);
-  js_mark_constructor(ctor, true);
-  return ctor;
+  js_set(js, lib, entry->async.name, js_mkfun_meta(&entry->async));
+  js_set(js, lib, entry->sync.name, js_mkfun_meta(&entry->sync));
+  js_set(js, lib, entry->ctor.name, js_make_ctor_meta(js, &entry->ctor, proto, ANT_PROP_ATTR_WRITABLE));
+  js_set(js, lib, entry->create.name, js_mkfun_meta(&entry->create));
 }
 
 ant_value_t zlib_library(ant_t *js) {
@@ -1127,50 +1175,7 @@ ant_value_t zlib_library(ant_t *js) {
   ant_value_t consts = make_constants(js);
   ant_value_t codes = make_codes(js);
 
-  js_set(js, lib, "gzip", js_mkfun_arity(js_gzip, 3));
-  js_set(js, lib, "gzipSync", js_mkfun_arity(js_gzipSync, 2));
-  js_set(js, lib, "Gzip", zlib_mkctor(js, ZLIB_KIND_GZIP, js_create_gzip, "Gzip"));
-  js_set(js, lib, "createGzip", js_mkfun_arity(js_create_gzip, 1));
-
-  js_set(js, lib, "gunzip", js_mkfun_arity(js_gunzip, 3));
-  js_set(js, lib, "gunzipSync", js_mkfun_arity(js_gunzipSync, 2));
-  js_set(js, lib, "Gunzip", zlib_mkctor(js, ZLIB_KIND_GUNZIP, js_create_gunzip, "Gunzip"));
-  js_set(js, lib, "createGunzip", js_mkfun_arity(js_create_gunzip, 1));
-
-  js_set(js, lib, "deflate", js_mkfun_arity(js_deflate, 3));
-  js_set(js, lib, "deflateSync", js_mkfun_arity(js_deflateSync, 2));
-  js_set(js, lib, "Deflate", zlib_mkctor(js, ZLIB_KIND_DEFLATE, js_create_deflate, "Deflate"));
-  js_set(js, lib, "createDeflate", js_mkfun_arity(js_create_deflate, 1));
-
-  js_set(js, lib, "inflate", js_mkfun_arity(js_inflate, 3));
-  js_set(js, lib, "inflateSync", js_mkfun_arity(js_inflateSync, 2));
-  js_set(js, lib, "Inflate", zlib_mkctor(js, ZLIB_KIND_INFLATE, js_create_inflate, "Inflate"));
-  js_set(js, lib, "createInflate", js_mkfun_arity(js_create_inflate, 1));
-
-  js_set(js, lib, "deflateRaw", js_mkfun_arity(js_deflateRaw, 3));
-  js_set(js, lib, "deflateRawSync", js_mkfun_arity(js_deflateRawSync, 2));
-  js_set(js, lib, "DeflateRaw", zlib_mkctor(js, ZLIB_KIND_DEFLATE_RAW, js_create_deflate_raw, "DeflateRaw"));
-  js_set(js, lib, "createDeflateRaw", js_mkfun_arity(js_create_deflate_raw, 1));
-
-  js_set(js, lib, "inflateRaw", js_mkfun_arity(js_inflateRaw, 3));
-  js_set(js, lib, "inflateRawSync", js_mkfun_arity(js_inflateRawSync, 2));
-  js_set(js, lib, "InflateRaw", zlib_mkctor(js, ZLIB_KIND_INFLATE_RAW, js_create_inflate_raw, "InflateRaw"));
-  js_set(js, lib, "createInflateRaw", js_mkfun_arity(js_create_inflate_raw, 1));
-
-  js_set(js, lib, "unzip", js_mkfun_arity(js_unzip, 3));
-  js_set(js, lib, "unzipSync", js_mkfun_arity(js_unzipSync, 2));
-  js_set(js, lib, "Unzip", zlib_mkctor(js, ZLIB_KIND_UNZIP, js_create_unzip, "Unzip"));
-  js_set(js, lib, "createUnzip", js_mkfun_arity(js_create_unzip, 1));
-
-  js_set(js, lib, "brotliCompress", js_mkfun_arity(js_brotliCompress, 3));
-  js_set(js, lib, "brotliCompressSync", js_mkfun_arity(js_brotliCompressSync, 2));
-  js_set(js, lib, "BrotliCompress", zlib_mkctor(js, ZLIB_KIND_BROTLI_COMPRESS, js_create_brotli_compress, "BrotliCompress"));
-  js_set(js, lib, "createBrotliCompress", js_mkfun_arity(js_create_brotli_compress, 1));
-
-  js_set(js, lib, "brotliDecompress", js_mkfun_arity(js_brotliDecompress, 3));
-  js_set(js, lib, "brotliDecompressSync", js_mkfun_arity(js_brotliDecompressSync, 2));
-  js_set(js, lib, "BrotliDecompress", zlib_mkctor(js, ZLIB_KIND_BROTLI_DECOMPRESS, js_create_brotli_decompress, "BrotliDecompress"));
-  js_set(js, lib, "createBrotliDecompress", js_mkfun_arity(js_create_brotli_decompress, 1));
+  for (int kind = 0; kind < ZLIB_KIND_COUNT; kind++) zlib_define_kind(js, lib, (zlib_kind_t)kind);
   
   js_set(js, lib, "default", lib);
   js_set(js, lib, "constants", consts);

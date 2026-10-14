@@ -381,7 +381,7 @@ void init_codec_stream_module(ant_t *js) {
   js_set_getter_desc(js, js->builtins.tes_proto, "writable", 8, js_mkfun(js_tes_get_writable), JS_DESC_C);
   js_set_tostringtag(js, js->builtins.tes_proto, js_mkstr(js, "TextEncoderStream", 17));
 
-  ant_value_t tes_ctor = js_make_ctor(js, js_tes_ctor, js->builtins.tes_proto, "TextEncoderStream", 17, 0);
+  ant_value_t tes_ctor = js_make_intrinsic_ctor(js, js_tes_ctor, js->builtins.tes_proto, "TextEncoderStream", 0);
   js_set(js, g, "TextEncoderStream", tes_ctor);
   js_set_descriptor(js, g, "TextEncoderStream", 17, JS_DESC_W | JS_DESC_C);
 
@@ -393,7 +393,7 @@ void init_codec_stream_module(ant_t *js) {
   js_set_getter_desc(js, js->builtins.tds_proto, "writable",  8, js_mkfun(js_tds_get_writable),  JS_DESC_C);
   js_set_tostringtag(js, js->builtins.tds_proto, js_mkstr(js, "TextDecoderStream", 17));
 
-  ant_value_t tds_ctor = js_make_ctor(js, js_tds_ctor, js->builtins.tds_proto, "TextDecoderStream", 17, 0);
+  ant_value_t tds_ctor = js_make_intrinsic_ctor(js, js_tds_ctor, js->builtins.tds_proto, "TextDecoderStream", 0);
   js_set(js, g, "TextDecoderStream", tds_ctor);
   js_set_descriptor(js, g, "TextDecoderStream", 17, JS_DESC_W | JS_DESC_C);
 }

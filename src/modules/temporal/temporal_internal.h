@@ -282,7 +282,6 @@ bool temporal_partial_zdt(
 );
 
 void temporal_set_to_string_tag(ant_t *js, ant_value_t obj, const char *tag);
-void temporal_lock_prototype(ant_t *js, ant_value_t fn);
 void temporal_relative_to_destroy(temporal_relative_to_t *relative);
 void temporal_init_duration(ant_t *js, ant_value_t temporal);
 void temporal_init_instant(ant_t *js, ant_value_t temporal);

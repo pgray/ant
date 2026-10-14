@@ -2,7 +2,7 @@
 const assert = require('node:assert');
 
 const MB = 1048576;
-const ROUNDS = 64;
+const ROUNDS = 32;
 const live = () => Ant.stats().external.buffers / MB;
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 
@@ -24,7 +24,7 @@ async function measure(name, make) {
     churn(500000);
   }
   const grown = live() - start;
-  assert.ok(grown < ROUNDS * 3 / 4, `${name} kept ${Math.round(grown)} MB after ${ROUNDS} x 1 MB`);
+  assert.ok(grown < ROUNDS / 2, `${name} kept ${Math.round(grown)} MB after ${ROUNDS} x 1 MB`);
 }
 
 (async () => {

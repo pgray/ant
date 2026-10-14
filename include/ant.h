@@ -6,6 +6,7 @@
 
 #include "types.h"
 #include "common.h"
+#include "cfunc.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -134,38 +135,7 @@ ant_value_t js_mkbigint_permanent(ant_t *, const char *digits, size_t len, bool 
 
 ant_value_t js_mksym(ant_t *, const char *desc);
 ant_value_t js_mksym_well_known(ant_t *, const char *desc);
-ant_value_t js_mkfun_meta(const ant_cfunc_meta_t *meta);
-ant_value_t js_mkfun_dyn(ant_cfunc_t fn);
-
-ant_value_t js_heavy_mkfun(ant_t *js, ant_value_t (*fn)(ant_params_t), ant_value_t data);
-ant_value_t js_heavy_mkfun_meta(ant_t *js, const ant_cfunc_meta_t *meta, ant_value_t data);
-ant_value_t js_heavy_mkfun_native(ant_t *js, ant_value_t (*fn)(ant_params_t), void *ptr, uint32_t tag);
 ant_value_t js_mkprop_fast(ant_t *js, ant_value_t obj, const char *key, size_t len, ant_value_t v);
-
-#define js_mkfun(fn) ({                                                 \
-  static const ant_cfunc_meta_t _ant_cfunc_meta = { (fn), NULL, 0, 0 }; \
-  js_mkfun_meta(&_ant_cfunc_meta);                                      \
-})
-
-#define js_mkfun_arity(fn, arity) ({                                          \
-  static const ant_cfunc_meta_t _ant_cfunc_meta = { (fn), NULL, (arity), 0 }; \
-  js_mkfun_meta(&_ant_cfunc_meta);                                            \
-})
-
-#define js_heavy_mkfun_named(js, fn, name, arity, data) ({                      \
-  static const ant_cfunc_meta_t _ant_cfunc_meta = { (fn), (name), (arity), 0 }; \
-  js_heavy_mkfun_meta((js), &_ant_cfunc_meta, (data));                          \
-})
-
-#define js_mkfun_flags(fn, flags) ({                                          \
-  static const ant_cfunc_meta_t _ant_cfunc_meta = { (fn), NULL, 0, (flags) }; \
-  js_mkfun_meta(&_ant_cfunc_meta);                                            \
-})
-
-#define js_mkfun_arity_flags(fn, arity, flags) ({                                   \
-  static const ant_cfunc_meta_t _ant_cfunc_meta = { (fn), NULL, (arity), (flags) }; \
-  js_mkfun_meta(&_ant_cfunc_meta);                                                  \
-})
 
 void js_set(ant_t *, ant_value_t, const char *, ant_value_t);
 void js_set_exact(ant_t *, ant_value_t, const char *, ant_value_t);

@@ -1546,7 +1546,7 @@ static void console_ensure_constructor(ant_t *js) {
   console_apply_methods(js, js->builtins.console_proto);
   
   js_set_tostringtag(js, js->builtins.console_proto, js_mkstr(js, "console", 7));
-  js->builtins.console_ctor = js_make_ctor(js, js_console_constructor, js->builtins.console_proto, "Console", 7, 1);
+  js->builtins.console_ctor = js_make_ctor(js, js_console_constructor, js->builtins.console_proto, "Console", 1);
 }
 
 static ant_value_t console_create_default(ant_t *js) {

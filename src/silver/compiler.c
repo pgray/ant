@@ -701,6 +701,11 @@ static void emit_atom_idx_op(sv_compiler_t *c, sv_op_t op, uint32_t atom_idx) {
     emit_u16(c, alloc_ic_idx(c));
 }
 
+static void emit_get_length(sv_compiler_t *c) {
+  emit_op(c, OP_GET_LENGTH);
+  emit_u16(c, alloc_ic_idx(c));
+}
+
 static void emit_atom_op(sv_compiler_t *c, sv_op_t op, const char *str, uint32_t len) {
   int idx = add_atom(c, str, len);
   emit_atom_idx_op(c, op, (uint32_t)idx);
@@ -4988,7 +4993,7 @@ void compile_member(sv_compiler_t *c, sv_ast_t *node) {
     emit_private_token(c, node->right);
     emit_op(c, OP_GET_PRIVATE);
   } else {
-    if (direct_length) emit_atom_op(c, OP_GET_LENGTH, "length", 6);
+    if (direct_length) emit_get_length(c);
     else {
       emit_srcpos(c, node->right);
       emit_atom_op(c, OP_GET_FIELD, node->right->str, node->right->len);
@@ -6642,7 +6647,7 @@ static void compile_for_each(sv_compiler_t *c, sv_ast_t *node, bool is_for_of) {
   } else {
     emit_get_local(c, idx_local);
     emit_get_local(c, iter_local);
-    emit_atom_op(c, OP_GET_LENGTH, "length", 6);
+    emit_get_length(c);
     emit_op(c, OP_LT);
     exit_jump = emit_jump(c, OP_JMP_FALSE);
 

@@ -1988,13 +1988,10 @@ void init_collections_module(ant_t *js) {
   js_set_sym(js, map_proto, iter_sym, js_get(js, map_proto, "entries"));
   js_set_tostringtag(js, map_proto, js_mkstr(js, "Map", 3));
   
-  ant_value_t map_ctor = js_mkobj(js);
-  js_set_slot(map_ctor, SLOT_CFUNC, js_mkfun(builtin_Map));
-  js_mkprop_fast(js, map_ctor, "prototype", 9, map_proto);
-  js_set_function_name(js, map_ctor, "Map", sizeof("Map") - 1);
-  js_set(js, map_ctor, "groupBy", js_mkfun_arity(map_groupBy, 2));
+  ant_value_t map_ctor = js_make_intrinsic_ctor(js, builtin_Map, map_proto, "Map", 0);
+  defmethod(js, map_ctor, "groupBy", 7, js_mkfun_arity(map_groupBy, 2));
   js_define_species_getter(js, map_ctor);
-  js_set_global_builtin(js, "Map", js_obj_to_func(js, map_ctor));
+  js_set_global_builtin(js, "Map", map_ctor);
   
   ant_value_t set_proto = js_mkobj(js);
   js_set_proto_init(set_proto, object_proto);
@@ -2018,12 +2015,9 @@ void init_collections_module(ant_t *js) {
   js_set_sym(js, set_proto, iter_sym, js_get(js, set_proto, "values"));
   js_set_tostringtag(js, set_proto, js_mkstr(js, "Set", 3));
   
-  ant_value_t set_ctor = js_mkobj(js);
-  js_set_slot(set_ctor, SLOT_CFUNC, js_mkfun(builtin_Set));
-  js_mkprop_fast(js, set_ctor, "prototype", 9, set_proto);
-  js_set_function_name(js, set_ctor, "Set", sizeof("Set") - 1);
+  ant_value_t set_ctor = js_make_intrinsic_ctor(js, builtin_Set, set_proto, "Set", 0);
   js_define_species_getter(js, set_ctor);
-  js_set_global_builtin(js, "Set", js_obj_to_func(js, set_ctor));
+  js_set_global_builtin(js, "Set", set_ctor);
   
   ant_value_t weakmap_proto = js_mkobj(js);
   js_set_proto_init(weakmap_proto, object_proto);
@@ -2035,11 +2029,8 @@ void init_collections_module(ant_t *js) {
   js_set(js, weakmap_proto, "delete", js_mkfun_arity(weakmap_delete, 1));
   js_set_tostringtag(js, weakmap_proto, js_mkstr(js, "WeakMap", 7));
   
-  ant_value_t weakmap_ctor = js_mkobj(js);
-  js_set_slot(weakmap_ctor, SLOT_CFUNC, js_mkfun(builtin_WeakMap));
-  js_mkprop_fast(js, weakmap_ctor, "prototype", 9, weakmap_proto);
-  js_set_function_name(js, weakmap_ctor, "WeakMap", sizeof("WeakMap") - 1);
-  js_set_global_builtin(js, "WeakMap", js_obj_to_func(js, weakmap_ctor));
+  ant_value_t weakmap_ctor = js_make_intrinsic_ctor(js, builtin_WeakMap, weakmap_proto, "WeakMap", 0);
+  js_set_global_builtin(js, "WeakMap", weakmap_ctor);
   
   ant_value_t weakset_proto = js_mkobj(js);
   js_set_proto_init(weakset_proto, object_proto);
@@ -2049,11 +2040,8 @@ void init_collections_module(ant_t *js) {
   js_set(js, weakset_proto, "delete", js_mkfun_arity(weakset_delete, 1));
   js_set_tostringtag(js, weakset_proto, js_mkstr(js, "WeakSet", 7));
   
-  ant_value_t weakset_ctor = js_mkobj(js);
-  js_set_slot(weakset_ctor, SLOT_CFUNC, js_mkfun(builtin_WeakSet));
-  js_mkprop_fast(js, weakset_ctor, "prototype", 9, weakset_proto);
-  js_set_function_name(js, weakset_ctor, "WeakSet", sizeof("WeakSet") - 1);
-  js_set_global_builtin(js, "WeakSet", js_obj_to_func(js, weakset_ctor));
+  ant_value_t weakset_ctor = js_make_intrinsic_ctor(js, builtin_WeakSet, weakset_proto, "WeakSet", 0);
+  js_set_global_builtin(js, "WeakSet", weakset_ctor);
   
   ant_value_t weakref_proto = js_mkobj(js);
   js_set_proto_init(weakref_proto, object_proto);
@@ -2061,11 +2049,8 @@ void init_collections_module(ant_t *js) {
   js_set(js, weakref_proto, "deref", js_mkfun(weakref_deref));
   js_set_tostringtag(js, weakref_proto, js_mkstr(js, "WeakRef", 7));
   
-  ant_value_t weakref_ctor = js_mkobj(js);
-  js_set_slot(weakref_ctor, SLOT_CFUNC, js_mkfun_arity(builtin_WeakRef, 1));
-  js_mkprop_fast(js, weakref_ctor, "prototype", 9, weakref_proto);
-  js_set_function_name(js, weakref_ctor, "WeakRef", sizeof("WeakRef") - 1);
-  js_set_global_builtin(js, "WeakRef", js_obj_to_func(js, weakref_ctor));
+  ant_value_t weakref_ctor = js_make_intrinsic_ctor(js, builtin_WeakRef, weakref_proto, "WeakRef", 1);
+  js_set_global_builtin(js, "WeakRef", weakref_ctor);
   
   ant_value_t finreg_proto = js_mkobj(js);
   js_set_proto_init(finreg_proto, object_proto);
@@ -2074,9 +2059,6 @@ void init_collections_module(ant_t *js) {
   js_set(js, finreg_proto, "unregister", js_mkfun_arity(finreg_unregister, 1));
   js_set_tostringtag(js, finreg_proto, js_mkstr(js, "FinalizationRegistry", 20));
   
-  ant_value_t finreg_ctor = js_mkobj(js);
-  js_set_slot(finreg_ctor, SLOT_CFUNC, js_mkfun_arity(builtin_FinalizationRegistry, 1));
-  js_mkprop_fast(js, finreg_ctor, "prototype", 9, finreg_proto);
-  js_set_function_name(js, finreg_ctor, "FinalizationRegistry", sizeof("FinalizationRegistry") - 1);
-  js_set_global_builtin(js, "FinalizationRegistry", js_obj_to_func(js, finreg_ctor));
+  ant_value_t finreg_ctor = js_make_intrinsic_ctor(js, builtin_FinalizationRegistry, finreg_proto, "FinalizationRegistry", 1);
+  js_set_global_builtin(js, "FinalizationRegistry", finreg_ctor);
 }

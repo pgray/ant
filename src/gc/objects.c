@@ -1474,6 +1474,7 @@ void gc_object_free(ant_t *js, ant_object_t *obj) {
     free(sidecar->proxy_state);
     free(sidecar->private_table.entries);
     free(sidecar->gc_cards);
+    free(sidecar->owned_exotic_ops);
     free(sidecar);
     obj->extra_slots = NULL;
   } 
@@ -1488,8 +1489,6 @@ void gc_object_free(ant_t *js, ant_object_t *obj) {
   
   free(obj->overflow_prop);
   obj->overflow_prop = NULL;
-  
-  if (obj->exotic_ops && obj->exotic_ops->heap) free((void *)obj->exotic_ops);
   obj->exotic_ops = NULL;
   
   GC_VERIFY_POISON_OBJECT(obj);

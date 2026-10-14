@@ -355,3 +355,47 @@ ant_value_t js_throw(ant_t *js, ant_value_t value) {
   GC_ROOT_RESTORE(js, mark);
   return result;
 }
+
+__attribute__((noinline, cold)) ant_value_t js_mkerr_code(ant_t *js, js_err_type_t type, const char *code, const char *message) {
+  ant_value_t props = js_mkobj(js);
+  js_set(js, props, "code", js_mkstr(js, code, strlen(code)));
+  return js_mkerr_props(js, type, props, "%s", message);
+}
+
+void js_describe_received(ant_t *js, ant_value_t value, char *out, size_t out_len) {
+  ant_value_type_t type = vtype(value);
+
+  if (type == kTypeUndefined || type == kTypeNull) {
+    snprintf(out, out_len, "Received %s", type == kTypeNull ? "null" : "undefined");
+    return;
+  }
+
+  if (is_object_type(value)) {
+    bool callable = is_callable(value);
+    
+    ant_value_t named = callable ? value : js_getprop_fallback(js, value, "constructor");
+    ant_value_t name = is_err(named) || !is_object_type(named) ? js_mkundef() : js_getprop_fallback(js, named, "name");
+    if (is_err(named) || is_err(name)) Ant_Exception_Clear(js);
+
+    size_t name_len = 0;
+    const char *name_str = vtype(name) == kTypeString ? js_getstr(js, name, &name_len) : NULL;
+    
+    if (callable) snprintf(out, out_len, "Received function %.*s", (int)name_len, name_str ? name_str : "");
+    else if (name_len) snprintf(out, out_len, "Received an instance of %.*s", (int)name_len, name_str);
+    else snprintf(out, out_len, "Received type object");
+    
+    return;
+  }
+
+  char buf[64];
+  js_cstr_t received = js_to_cstr(js, value, buf, sizeof(buf));
+  const char *quote = type == kTypeString ? "'" : "";
+  
+  snprintf(
+    out, out_len, "Received type %s (%s%.25s%s%s%s)",
+    typestr(type), quote, received.ptr, received.len > 28 ? "..." : "", quote, type == kTypeBigInt ? "n" : ""
+  );
+  
+  if (received.needs_free) free((void *)received.ptr);
+}
+

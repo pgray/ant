@@ -54,4 +54,37 @@ assert.deepStrictEqual([transferredView.byteOffset, [...transferredView], transf
 
 assert.strictEqual(source.subarray(1).buffer, source.buffer);
 
+const shared = new ArrayBuffer(8);
+const sharedView = new Uint8Array(shared);
+sharedView[1] = 9;
+const graph = structuredClone({ buffer: shared, view: sharedView }, { transfer: [shared] });
+assert.deepStrictEqual([shared.detached, sharedView.length, graph.view.buffer === graph.buffer, graph.view[1]], [true, 0, true, 9]);
+graph.view[1] = 11;
+const graphAgain = structuredClone(graph.buffer, { transfer: [graph.buffer] });
+assert.deepStrictEqual([graph.buffer.detached, graph.view.length, new Uint8Array(graphAgain)[1]], [true, 0, 11]);
+
+const kept = new ArrayBuffer(4);
+assert.throws(() => structuredClone({ kept, fn() {} }, { transfer: [kept] }), isDataCloneError);
+assert.deepStrictEqual([kept.detached, kept.byteLength], [false, 4]);
+
+const original = new ArrayBuffer(16);
+new Uint8Array(original)[3] = 5;
+const sameLength = original.transfer();
+const shorter = sameLength.transfer(4);
+const longer = shorter.transfer(32);
+assert.deepStrictEqual([original.detached, sameLength.detached, shorter.detached], [true, true, true]);
+assert.deepStrictEqual([longer.byteLength, new Uint8Array(longer)[3], new Uint8Array(longer)[20]], [32, 5, 0]);
+
+const memory = new WebAssembly.Memory({ initial: 1 });
+assert.throws(() => structuredClone(memory.buffer, { transfer: [memory.buffer] }), isDataCloneError);
+assert.strictEqual(memory.buffer.byteLength, 65536);
+
+const big = [];
+const before = Ant.stats().external.buffers;
+for (let i = 0; i < 8; i++) {
+  const buffer = new ArrayBuffer(32 << 20);
+  big.push(structuredClone(buffer, { transfer: [buffer] }));
+}
+assert.ok(Ant.stats().external.buffers - before < 9 * (32 << 20), 'transfer must not copy');
+
 console.log('structured clone detached OK');

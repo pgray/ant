@@ -23,7 +23,6 @@ typedef struct {
   bool (*deleter)(ant_t *, ant_value_t, const char *, size_t);
   ant_value_t (*definer)(ant_t *, ant_value_t, const char *, size_t, ant_value_t value, bool has_value, bool plain_data);
   ant_exotic_keys_t keys;
-  bool heap;
 } ant_exotic_ops_t;
 
 typedef struct {
@@ -109,6 +108,7 @@ typedef struct {
   ant_proxy_state_t *proxy_state;
   sv_eval_env_state_t *eval_env_state;
   gc_card_table_t *gc_cards;
+  ant_exotic_ops_t *owned_exotic_ops;
   
   uint8_t native_count;
   uint8_t native_cap;
@@ -377,6 +377,11 @@ static inline ant_object_sidecar_t *ant_object_ensure_sidecar(ant_object_t *obj)
   obj->extra_cap = 0;
   
   return sidecar;
+}
+
+static inline ant_exotic_ops_t *ant_object_owned_exotic_ops(const ant_object_t *obj) {
+  ant_object_sidecar_t *sidecar = ant_object_sidecar(obj);
+  return sidecar && sidecar->owned_exotic_ops == obj->exotic_ops ? sidecar->owned_exotic_ops : NULL;
 }
 
 static inline ant_proxy_state_t *ant_object_proxy_state(const ant_object_t *obj) {

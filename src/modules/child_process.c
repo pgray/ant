@@ -749,9 +749,7 @@ static void child_process_init_constructor(ant_t *js) {
   js_set(js, js->builtins.child_process_proto, "ref", js_mkfun(child_ref));
   js_set(js, js->builtins.child_process_proto, "unref", js_mkfun(child_unref));
 
-  js->builtins.child_process_ctor = js_make_ctor(
-    js, child_process_ctor,
-    js->builtins.child_process_proto, "ChildProcess", 12, 0);
+  js->builtins.child_process_ctor = js_make_ctor(js, child_process_ctor, js->builtins.child_process_proto, "ChildProcess", 0);
 }
 
 static uv_handle_t *child_stream_handle(child_process_t *cp, child_stream_kind_t kind) {

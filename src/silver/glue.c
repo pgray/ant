@@ -1444,12 +1444,9 @@ ant_value_t jit_helper_get_length(ant_t *js, ant_value_t obj) {
   return sv_get_length_value(js, obj);
 }
 
-ant_value_t jit_helper_get_length_at(
-  ant_t *js, ant_value_t obj, sv_atom_t *atom, sv_func_t *func, int32_t bc_off
-) {
-  ant_object_t *ptr = vtype(obj) == kTypeObject ? js_obj_ptr(obj) : NULL;
-  if (!ptr || !sv_ic_numeric_exotic(ptr) || !func || bc_off < 0 || bc_off >= func->code_len) return sv_get_length_value(js, obj);
-  return sv_get_length_at(js, obj, atom, func, func->code + bc_off);
+ant_value_t jit_helper_get_length_at(ant_t *js, ant_value_t obj, sv_func_t *func, int32_t bc_off) {
+  if (!func || bc_off < 0 || bc_off >= func->code_len) return sv_get_length_value(js, obj);
+  return sv_get_length_at(js, obj, func, func->code + bc_off);
 }
 
 ant_value_t jit_helper_get_length_inline(ant_t *js, ant_value_t obj) {

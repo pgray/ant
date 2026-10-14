@@ -5,6 +5,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifndef countof
+#define countof(array) (sizeof(array) / sizeof((array)[0]))
+#endif
+
 #define ANT_INTERNAL_SLOT_LIST(X) \
   X(SLOT_NONE)                    \
   X(SLOT_ASYNC)                   \

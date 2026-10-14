@@ -431,6 +431,7 @@ ant_value_t builtin_function_apply(ant_params_t);
 ant_value_t builtin_object_isPrototypeOf(ant_params_t);
 ant_value_t builtin_object_freeze(ant_params_t);
 ant_value_t builtin_string_charCodeAt(ant_params_t);
+ant_value_t builtin_object_getOwnPropertyDescriptor(ant_params_t);
 ant_value_t builtin_array_includes(ant_params_t);
 ant_value_t js_builtin_eval(ant_t *js);
 
@@ -566,11 +567,7 @@ static inline bool lookup_string_prop_meta(ant_t *js, ant_value_t cur_obj, const
 static inline ant_value_t defmethod(ant_t *js, ant_value_t obj, const char *name, size_t len, ant_value_t fn) {
   const char *interned = intern_string(name, len);
   if (!interned) return js_mkerr(js, "oom");
-
-  return mkprop_interned(
-    js, obj, interned, fn,
-    ANT_PROP_ATTR_WRITABLE | ANT_PROP_ATTR_CONFIGURABLE
-  );
+  return mkprop_interned(js, obj, interned, fn, ANT_PROP_ATTR_METHOD);
 }
 
 static inline ant_value_t defhidden(ant_t *js, ant_value_t obj, const char *name, size_t len, ant_value_t value) {
@@ -610,21 +607,6 @@ static inline ant_value_t js_cfunc_lookup_promoted(ant_t *js, ant_value_t cfunc)
     js->cfunc_promote_cache.cfunc_ptr[i] == ptr
   ) return js->cfunc_promote_cache.promoted[i];
   return cfunc;
-}
-
-static inline ant_value_t js_make_ctor(ant_t *js, ant_cfunc_t fn, ant_value_t proto, const char *name, size_t nlen, int length) {
-  ant_value_t obj = js_mkobj(js);
-  js_set_slot(obj, SLOT_CFUNC, js_mkfun_dyn(fn));
-  
-  js_define_function_length(js, obj, length);
-  js_set_function_name(js, obj, name, nlen);
-  js_mkprop_fast(js, obj, "prototype", 9, proto);
-
-  ant_value_t fn_val = js_obj_to_func(js, obj);
-  js_set(js, proto, "constructor", fn_val);
-  js_set_descriptor(js, proto, "constructor", 11, JS_DESC_W | JS_DESC_C);
-
-  return fn_val;
 }
 
 #endif

@@ -8,15 +8,20 @@
 
 #include "modules/reflect.h"
 
+static ant_value_t reflect_target(ant_t *js, ant_value_t *args, int nargs, const char *method) {
+  ant_value_t target = nargs > 0 ? args[0] : js_mkundef();
+  if (vtype(target) == kTypeBuiltin) target = js_cfunc_promote(js, target);
+  if (is_err(target) || is_object_type(target)) return target;
+  return js_mkerr_typed(js, JS_ERR_TYPE, "Reflect.%s called on non-object", method);
+}
+
 static ant_value_t reflect_get(ant_params_t) {
-  if (nargs < 2) return js_mkundef();
+  ant_value_t target = reflect_target(js, args, nargs, "get");
+  if (is_err(target)) return target;
   
-  ant_value_t target = args[0];
-  ant_value_t key = args[1];
-  
+  ant_value_t key = nargs > 1 ? args[1] : js_mkundef();
   bool has_receiver = nargs > 2;
   ant_value_t receiver = has_receiver ? args[2] : target;
-  if (!is_object_type(target)) return js_mkundef();
 
   ant_value_t prop_key = key;
   if (is_object_type(prop_key)) {
@@ -42,21 +47,11 @@ static ant_value_t reflect_get(ant_params_t) {
 }
 
 static ant_value_t reflect_set(ant_params_t) {
-  if (nargs < 3) return js_false;
+  ant_value_t target = reflect_target(js, args, nargs, "set");
+  if (is_err(target)) return target;
   
-  ant_value_t target = args[0];
-  ant_value_t key = args[1];
-  ant_value_t value = args[2];
-  
-  int t = vtype(target);
-  if (t == kTypeBuiltin) {
-    target = js_cfunc_promote(js, target);
-    if (is_err(target)) return target;
-    t = kTypeFunction;
-  }
-  
-  if (t != kTypeObject && t != kTypeArray && t != kTypeFunction)
-    return js_mkerr_typed(js, JS_ERR_TYPE, "Reflect.set called on non-object");
+  ant_value_t key = nargs > 1 ? args[1] : js_mkundef();
+  ant_value_t value = nargs > 2 ? args[2] : js_mkundef();
   
   if (is_object_type(key)) {
     key = js_to_primitive(js, key, 1);
@@ -79,26 +74,16 @@ static ant_value_t reflect_set(ant_params_t) {
 }
 
 static ant_value_t reflect_has(ant_params_t) {
-  ant_value_t target = nargs >= 1 ? args[0] : js_mkundef();
-  if (!is_object_type(target) && vtype(target) != kTypeBuiltin)
-    return js_mkerr_typed(js, JS_ERR_TYPE, "Reflect.has called on non-object");
+  ant_value_t target = reflect_target(js, args, nargs, "has");
+  if (is_err(target)) return target;
   return do_in(js, nargs >= 2 ? args[1] : js_mkundef(), target);
 }
 
 static ant_value_t reflect_delete_property(ant_params_t) {
-  if (nargs < 2) return js_false;
+  ant_value_t target = reflect_target(js, args, nargs, "deleteProperty");
+  if (is_err(target)) return target;
   
-  ant_value_t target = args[0];
-  ant_value_t key = args[1];
-  
-  int t = vtype(target);
-  if (t == kTypeBuiltin) {
-    target = js_cfunc_promote(js, target);
-    if (is_err(target)) return target;
-    t = kTypeFunction;
-  }
-  if (t != kTypeObject && t != kTypeFunction) return js_false;
-  
+  ant_value_t key = nargs > 1 ? args[1] : js_mkundef();
   if (vtype(key) != kTypeString) return js_false;
   
   char *key_str = js_getstr(js, key, NULL);
@@ -109,14 +94,8 @@ static ant_value_t reflect_delete_property(ant_params_t) {
 }
 
 static ant_value_t reflect_own_keys(ant_params_t) {
-  if (nargs < 1) return js_mkarr(js);
-  ant_value_t target = args[0];
-  
-  int t = vtype(target);
-  if (t != kTypeObject && t != kTypeArray && t != kTypeFunction) {
-    return js_mkerr(js, "Reflect.ownKeys called on non-object");
-  }
-  
+  ant_value_t target = reflect_target(js, args, nargs, "ownKeys");
+  if (is_err(target)) return target;
   return js_own_property_keys(js, target, true, false);
 }
 
@@ -204,58 +183,36 @@ static ant_value_t reflect_apply(ant_params_t) {
 }
 
 static ant_value_t reflect_get_own_property_descriptor(ant_params_t) {
-  if (nargs < 2) return js_mkundef();
+  ant_value_t target = reflect_target(js, args, nargs, "getOwnPropertyDescriptor");
+  if (is_err(target)) return target;
   
-  ant_value_t target = args[0];
-  if (!is_object_type(target))
-    return js_mkerr_typed(js, JS_ERR_TYPE, "Reflect.getOwnPropertyDescriptor called on non-object");
-
-  ant_value_t object_ctor = js_get(js, js->global, "Object");
-  ant_value_t get_desc = js_get(js, object_ctor, "getOwnPropertyDescriptor");
-  if (!is_callable(get_desc)) return js_mkundef();
-
-  return sv_vm_call(js->vm, js, get_desc, object_ctor, args, 2, NULL, js_mkundef());
+  ant_value_t call_args[2] = { target, nargs > 1 ? args[1] : js_mkundef() };
+  return builtin_object_getOwnPropertyDescriptor(js, call_args, 2, js_mkundef());
 }
 
 static ant_value_t reflect_define_property(ant_params_t) {
-  if (nargs < 3) return js_false;
-  return js_define_property(js, args[0], args[1], args[2], true);
+  ant_value_t target = reflect_target(js, args, nargs, "defineProperty");
+  if (is_err(target)) return target;
+  return js_define_property(js, target, nargs > 1 ? args[1] : js_mkundef(), nargs > 2 ? args[2] : js_mkundef(), true);
 }
 
 static ant_value_t reflect_get_prototype_of(ant_params_t) {
-  if (nargs < 1) {
-    return js_mkerr(js, "Reflect.getPrototypeOf requires an argument");
-  }
-  
-  ant_value_t target = args[0];
-  
-  if (vtype(target) == kTypeBuiltin) {
-    target = js_cfunc_promote(js, target);
-    if (is_err(target)) return target;
-  }
-  if (!is_object_type(target)) {
-    return js_mkerr(js, "Reflect.getPrototypeOf: argument must be an object");
-  }
-  
+  ant_value_t target = reflect_target(js, args, nargs, "getPrototypeOf");
+  if (is_err(target)) return target;
   return js_get_proto(js, target);
 }
 
 static ant_value_t reflect_set_prototype_of(ant_params_t) {
-  if (nargs < 2) return js_false;
+  ant_value_t target = reflect_target(js, args, nargs, "setPrototypeOf");
+  if (is_err(target)) return target;
   
-  ant_value_t target = args[0];
-  ant_value_t proto = args[1];
-  
-  if (vtype(target) == kTypeBuiltin) {
-    target = js_cfunc_promote(js, target);
-    if (is_err(target)) return target;
-  }
+  ant_value_t proto = nargs > 1 ? args[1] : js_mkundef();
   if (vtype(proto) == kTypeBuiltin) {
     proto = js_cfunc_promote(js, proto);
     if (is_err(proto)) return proto;
   }
-  if (!is_object_type(target)) return js_false;
-  if (!is_object_type(proto) && vtype(proto) != kTypeNull) return js_false;
+  if (!is_object_type(proto) && vtype(proto) != kTypeNull)
+    return js_mkerr_typed(js, JS_ERR_TYPE, "Object prototype may only be an Object or null");
   if (vtype(proto) != kTypeNull && proto_chain_contains(js, proto, target)) return js_false;
   
   js_set_proto_wb(js, target, proto);
@@ -264,11 +221,8 @@ static ant_value_t reflect_set_prototype_of(ant_params_t) {
 }
 
 static ant_value_t reflect_is_extensible(ant_params_t) {
-  if (nargs < 1) return js_false;
-  
-  ant_value_t target = args[0];
-  int t = vtype(target);
-  if (t != kTypeObject && t != kTypeFunction) return js_false;
+  ant_value_t target = reflect_target(js, args, nargs, "isExtensible");
+  if (is_err(target)) return target;
 
   ant_object_t *obj = js_obj_ptr(js_as_obj(target));
   if (!obj) return js_false;
@@ -278,12 +232,8 @@ static ant_value_t reflect_is_extensible(ant_params_t) {
 }
 
 static ant_value_t reflect_prevent_extensions(ant_params_t) {
-  if (nargs < 1) return js_false;
-  
-  ant_value_t target = args[0];
-  int t = vtype(target);
-  
-  if (t != kTypeObject && t != kTypeFunction) return js_false;
+  ant_value_t target = reflect_target(js, args, nargs, "preventExtensions");
+  if (is_err(target)) return target;
   if (is_proxy(js_as_obj(target))) return js_proxy_prevent_extensions(js, js_as_obj(target));
 
   ant_object_t *obj = js_obj_ptr(js_as_obj(target));
