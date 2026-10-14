@@ -24,4 +24,21 @@ assert.strictEqual(String(5n), '5');
 assert.strictEqual(`${5n}`, '5');
 assert.strictEqual([1n, 2n].join(), '1,2');
 
+const flat = value => inspect(value).replace(/\s+/g, ' ');
+const self = { a: 1 };
+self.self = self;
+assert.strictEqual(flat(self), '<ref *1> { a: 1, self: [Circular *1] }');
+assert.strictEqual(flat([self, self]), '[ <ref *1> { a: 1, self: [Circular *1] }, <ref *1> { a: 1, self: [Circular *1] } ]');
+const parent = { c: {} };
+parent.c.parent = parent;
+assert.strictEqual(flat(parent), '<ref *1> { c: { parent: [Circular *1] } }');
+const list = [1];
+list.push(list);
+assert.strictEqual(flat(list), '<ref *1> [ 1, [Circular *1] ]');
+const loop = new Map();
+loop.set('m', loop);
+assert.strictEqual(flat(loop), "<ref *1> Map(1) { 'm' => [Circular *1] }");
+const shared = { x: 1 };
+assert.strictEqual(flat([shared, shared]), '[ { x: 1 }, { x: 1 } ]');
+
 console.log('inspect collections OK');

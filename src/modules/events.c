@@ -2020,6 +2020,7 @@ void init_events_module(ant_t *js) {
   js_set_tostringtag(js, eventtarget_proto, js_mkstr(js, "EventTarget", 11));
 
   ant_value_t eventtarget_fn = Ant_Function_CreateIntrinsicConstructor(js, js_eventtarget_ctor, eventtarget_proto, "EventTarget", 0);
+  js->builtins.eventtarget_ctor = eventtarget_fn;
 
   js_set(js, global, "addEventListener",    Ant_Function_Create(js_add_event_listener));
   js_set(js, global, "removeEventListener", Ant_Function_Create(js_remove_event_listener));

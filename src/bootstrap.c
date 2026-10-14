@@ -97,7 +97,6 @@ void ant_bootstrap_modules(ant_t *js) {
   init_builtin_module(js);
   init_buffer_module(js);
   init_structured_clone_module(js);
-  init_abort_module(js);
   init_headers_module(js);
   init_blob_module(js);
   init_formdata_module(js);
@@ -127,6 +126,7 @@ void ant_bootstrap_modules(ant_t *js) {
   init_process_module(js);
   init_tty_module(js);
   init_events_module(js);
+  init_abort_module(js);
   init_websocket_module(js);
   init_performance_module(js);
   init_uri_module(js);

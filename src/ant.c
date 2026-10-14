@@ -822,16 +822,11 @@ static bool is_on_stack(ant_t *js, ant_value_t obj) {
 }
 
 static void mark_multiref(ant_t *js, ant_value_t obj) {
-  for (int i = 0; i < js->stringify.multiref_count; i++) {
-    if (js->stringify.multiref_objs[i] == obj) {
-      if (js->stringify.multiref_ids[i] == 0)
-        js->stringify.multiref_ids[i] = ++js->stringify.multiref_next_id;
-      return;
-    }
-  }
+  if (find_multiref(js, obj)) return;
+  
   if (js->stringify.multiref_count < MAX_MULTIREF_OBJS) {
     js->stringify.multiref_objs[js->stringify.multiref_count] = obj;
-    js->stringify.multiref_ids[js->stringify.multiref_count] = 0;
+    js->stringify.multiref_ids[js->stringify.multiref_count] = ++js->stringify.multiref_next_id;
     js->stringify.multiref_count++;
   }
 }
@@ -853,6 +848,18 @@ static void scan_obj_refs(ant_t *js, ant_value_t obj) {
     }
   }
 
+  map_entry_t **map = get_map_from_obj(obj);
+  if (map) {
+    map_entry_t *entry, *tmp;
+    HASH_ITER(hh, *map, entry, tmp) { scan_refs(js, entry->key_val); scan_refs(js, entry->value); }
+  }
+
+  set_entry_t **set = get_set_from_obj(obj);
+  if (set) {
+    set_entry_t *entry, *tmp;
+    HASH_ITER(hh, *set, entry, tmp) scan_refs(js, entry->value);
+  }
+
   ant_value_t proto_val = get_proto(js, obj);
   if (vtype(proto_val) == kTypeObject) scan_refs(js, proto_val);
   
@@ -867,6 +874,9 @@ static void scan_arr_refs(ant_t *js, ant_value_t obj) {
   
   if (js->stringify.depth >= MAX_STRINGIFY_DEPTH) return;
   js->stringify.stack[js->stringify.depth++] = obj;
+  
+  ant_offset_t length = get_array_length(js, obj);
+  for (ant_offset_t i = 0; i < length; i++) scan_refs(js, arr_get(js, obj, i));
   
   ant_object_t *ptr = js_obj_ptr(obj);
   if (ptr && ptr->shape) {
@@ -1212,6 +1222,8 @@ static size_t strarr(ant_t *js, ant_value_t obj, char *buf, size_t len) {
   push_stringify(js, obj);
   ant_object_t *ptr = js_obj_ptr(js_as_obj(obj));
   ant_offset_t length = get_array_length(js, obj);
+  
+  int self_ref = get_self_ref(js, obj);
   ant_offset_t d_len = dense_iterable_length(js, obj);
   ant_offset_t iter_len = (d_len >= length) ? length : d_len;
   
@@ -1221,7 +1233,7 @@ static size_t strarr(ant_t *js, ant_value_t obj, char *buf, size_t len) {
   
   int elem_count = 0;
   bool inline_mode = is_small_array(js, obj, &elem_count);
-  size_t n = 0;
+  size_t n = self_ref ? (size_t)snprintf(buf, len, "<ref *%d> ", self_ref) : 0;
   
   if (arguments) n += cpy(buf + n, REMAIN(n, len), "[Arguments] ", 12);
   if (class_name) {
@@ -4924,11 +4936,7 @@ ant_value_t setprop_interned(ant_t *js, ant_value_t obj, const char *key, size_t
 ant_value_t js_setprop_readonly_nonconfigurable(ant_t *js, ant_value_t obj, const char *key, size_t keylen, ant_value_t v) {
   ant_value_t k = js_mkstr(js, key, keylen);
   if (is_err(k)) return k;
-  ant_value_t result = js_setprop(js, obj, k, v);
-  if (is_err(result)) return result;
-
-  js_set_descriptor(js, js_as_obj(obj), key, keylen, 0);
-  return result;
+  return mkprop_exact_attrs(js, obj, k, v, 0);
 }
 
 enum {
@@ -21655,7 +21663,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
     js->builtins.error_protos[err_type] = proto; \
     mkprop_bytes(js, proto, "name", 4, ANT_STRING(name_str), JS_DESC_W | JS_DESC_C); \
     ant_value_t ctor = mkobj(js, 0); \
-    set_proto(js, ctor, function_proto); \
+    set_proto(js, ctor, err_ctor_func); \
     set_slot(ctor, SLOT_CFUNC, Ant_Function_CreateWithArity(builtin_Error, 1)); \
     js_setprop_readonly_nonconfigurable(js, ctor, "prototype", 9, proto); \
     js_set_function_name(js, ctor, name_str, sizeof(name_str) - 1); \
@@ -21680,7 +21688,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   js->builtins.error_protos[JS_ERR_AGGREGATE] = aggregate_proto;
   
   ant_value_t aggregate_ctor = mkobj(js, 0);
-  set_proto(js, aggregate_ctor, function_proto);
+  set_proto(js, aggregate_ctor, err_ctor_func);
   set_slot(aggregate_ctor, SLOT_CFUNC, Ant_Function_CreateWithArity(builtin_AggregateError, 2));
   js_setprop_readonly_nonconfigurable(js, aggregate_ctor, "prototype", 9, aggregate_proto);
   js_set_function_name(js, aggregate_ctor, "AggregateError", sizeof("AggregateError") - 1);
@@ -21695,7 +21703,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   js->builtins.suppressed_error_proto = suppressed_proto;
   
   ant_value_t suppressed_ctor = mkobj(js, 0);
-  set_proto(js, suppressed_ctor, function_proto);
+  set_proto(js, suppressed_ctor, err_ctor_func);
   set_slot(suppressed_ctor, SLOT_CFUNC, Ant_Function_CreateWithArity(builtin_SuppressedError, 3));
   js_setprop_readonly_nonconfigurable(js, suppressed_ctor, "prototype", 9, suppressed_proto);
   js_set_function_name(js, suppressed_ctor, "SuppressedError", sizeof("SuppressedError") - 1);

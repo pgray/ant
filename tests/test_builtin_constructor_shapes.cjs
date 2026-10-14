@@ -45,4 +45,27 @@ assert.ok(sub instanceof AbortController && sub.signal instanceof AbortSignal);
 assert.strictEqual(new (class extends Date {})(0).getTime(), 0);
 assert.strictEqual(new (class extends Headers {})({ a: '1' }).get('a'), '1');
 
+for (const E of [EvalError, RangeError, ReferenceError, SyntaxError, TypeError, URIError, AggregateError, SuppressedError]) {
+  assert.strictEqual(Object.getPrototypeOf(E), Error, E.name);
+  assert.strictEqual(Object.getPrototypeOf(E.prototype), Error.prototype, E.name);
+  assert.strictEqual(attrs(E, 'prototype'), '---', E.name);
+}
+assert.strictEqual(Object.getPrototypeOf(Error), Function.prototype);
+
+assert.strictEqual(Object.getPrototypeOf(AbortSignal), EventTarget);
+assert.strictEqual(Object.getPrototypeOf(AbortSignal.prototype), EventTarget.prototype);
+const controller = new AbortController();
+assert.ok(controller.signal instanceof EventTarget);
+assert.strictEqual(controller.signal, controller.signal);
+assert.deepStrictEqual(Object.keys(controller), []);
+assert.strictEqual(Object.getOwnPropertyDescriptor(controller, 'signal'), undefined);
+const signalDesc = Object.getOwnPropertyDescriptor(AbortController.prototype, 'signal');
+assert.strictEqual(typeof signalDesc.get, 'function');
+assert.strictEqual(signalDesc.enumerable && signalDesc.configurable, true);
+assert.throws(() => AbortController.prototype.signal, TypeError);
+assert.throws(() => AbortController.prototype.abort.call({}), TypeError);
+controller.abort('why');
+assert.strictEqual(controller.signal.aborted, true);
+assert.strictEqual(controller.signal.reason, 'why');
+
 console.log('builtin constructor shapes OK');

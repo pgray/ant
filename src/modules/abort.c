@@ -423,16 +423,26 @@ static ant_value_t abort_controller_ctor(ant_params_t) {
   ant_value_t signal = make_new_signal(js);
   if (is_err(signal)) return signal;
 
-  js_mkprop_fast(js, this_obj, "signal", 6, signal);
-  js_set_descriptor(js, this_obj, "signal", 6, 0);
-  js_set_tostringtag(js, this_obj, js_mkstr(js, "AbortController", 15));
-
+  js_set_slot(this_obj, SLOT_BRAND, js_mknum(BRAND_ABORT_CONTROLLER));
+  js_set_slot_wb(js, this_obj, SLOT_DATA, signal);
   return js_mkundef();
+}
+
+static __attribute__((cold, noinline)) ant_value_t abort_controller_this_error(ant_t *js) {
+  return js_mkerr_typed(js, JS_ERR_TYPE, "Value of \"this\" must be of type AbortController");
+}
+
+static ant_value_t abort_controller_get_signal(ant_params_t) {
+  ant_value_t this_obj = js_getthis(js);
+  if (!js_check_brand(this_obj, BRAND_ABORT_CONTROLLER)) return abort_controller_this_error(js);
+  return js_get_slot(this_obj, SLOT_DATA);
 }
 
 // controller.abort(reason?)
 static ant_value_t abort_controller_abort(ant_params_t) {
-  ant_value_t signal = js_get(js, js_getthis(js), "signal");
+  ant_value_t this_obj = js_getthis(js);
+  if (!js_check_brand(this_obj, BRAND_ABORT_CONTROLLER)) return abort_controller_this_error(js);
+  ant_value_t signal = js_get_slot(this_obj, SLOT_DATA);
 
   abort_signal_data_t *data = get_signal_data(signal);
   if (!data || data->aborted) return js_mkundef();
@@ -448,6 +458,7 @@ static ant_value_t abort_controller_abort(ant_params_t) {
 void init_abort_module(ant_t *js) {
   ant_value_t signal_proto = js_mkobj(js);
   js->builtins.signal_proto = signal_proto;
+  js_set_proto_init(signal_proto, js->builtins.eventtarget_proto);
   g_initialized = true;
 
   js_set(js, signal_proto, "addEventListener",    Ant_Function_Create(abort_signal_add_event_listener));
@@ -463,8 +474,10 @@ void init_abort_module(ant_t *js) {
     { abort_signal_static_any,     "any",     1, 0 },
   };
   js_define_methods(js, signal_fn, signal_statics, countof(signal_statics), ANT_PROP_ATTR_METHOD);
+  js_set_proto(js, signal_fn, js->builtins.eventtarget_ctor);
 
   ant_value_t ctrl_proto = js_mkobj(js);
+  js_set_getter_desc(js, ctrl_proto, "signal", 6, Ant_Function_Create(abort_controller_get_signal), JS_DESC_E | JS_DESC_C);
   js_set(js, ctrl_proto, "abort", Ant_Function_Create(abort_controller_abort));
   js_set_tostringtag(js, ctrl_proto, js_mkstr(js, "AbortController", 15));
 
