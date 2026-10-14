@@ -3557,15 +3557,6 @@ static ant_value_t buffer_write_bigint64(ant_native_params_t, bool little_endian
   return js_mknum((double)(offset + 8));
 }
 
-static ant_value_t buffer_read_bigint64(ant_native_params_t, bool little_endian, bool is_signed) {
-  size_t offset; uint8_t *ptr;
-  ant_value_t error = buffer_access_ptr(js, nargs > 0 ? args[0] : js_mkundef(), 8, &ptr, &offset);
-  
-  if (is_err(error)) return error;
-  uint64_t bits = buffer_load_bytes(ptr, 8, little_endian);
-  return is_signed ? bigint_from_int64(js, (int64_t)bits) : bigint_from_uint64(js, bits);
-}
-
 typedef enum {
   BUFFER_NUM_UINT,
   BUFFER_NUM_INT,
@@ -3588,12 +3579,52 @@ static ant_value_t buffer_num_width(ant_t *js, ant_value_t value, size_t *width)
   return js_mkundef();
 }
 
+static inline __attribute__((always_inline)) ant_value_t buffer_num_decode(
+  ant_t *js, uint64_t bits, buffer_num_kind_t kind, size_t width
+) {
+  unsigned shift = 64 - 8 * (unsigned)width;
+  switch (kind) {
+    case BUFFER_NUM_UINT:    return js_mknum((double)bits);
+    case BUFFER_NUM_INT:     return js_mknum((double)((int64_t)(bits << shift) >> shift));
+    case BUFFER_NUM_BIGINT:  return bigint_from_int64(js, (int64_t)bits);
+    case BUFFER_NUM_BIGUINT: return bigint_from_uint64(js, bits);
+    case BUFFER_NUM_FLOAT: break;
+  }
+  
+  if (width == 2) return js_mknum(half_to_double((uint16_t)bits));
+  if (width == 4) {
+    float f; uint32_t narrow = (uint32_t)bits;
+    memcpy(&f, &narrow, sizeof(f));
+    return js_mknum((double)f);
+  }
+  
+  double d;
+  memcpy(&d, &bits, sizeof(d));
+  return js_mknum(d);
+}
+
+static inline __attribute__((always_inline)) uint64_t buffer_float_bits(double num, size_t width) {
+  uint64_t bits;
+  if (width == 2) return double_to_half(num);
+  if (width == 4) { float f = (float)num; uint32_t narrow; memcpy(&narrow, &f, sizeof(narrow)); return narrow; }
+  memcpy(&bits, &num, sizeof(bits));
+  return bits;
+}
+
+static __attribute__((cold, noinline)) ant_value_t buffer_num_range_error(
+  ant_t *js, buffer_num_kind_t kind, size_t width, double lo, double hi, double value
+) {
+  char range[96];
+  unsigned bits_width = 8 * (unsigned)width;
+  if (width <= 4) snprintf(range, sizeof(range), ">= %.0f and <= %.0f", lo, hi);
+  else if (kind == BUFFER_NUM_UINT) snprintf(range, sizeof(range), ">= 0 and < 2 ** %u", bits_width);
+  else snprintf(range, sizeof(range), ">= -(2 ** %u) and < 2 ** %u", bits_width - 1, bits_width - 1);
+  return buffer_out_of_range(js, "value", range, js_mknum(value));
+}
+
 static inline __attribute__((always_inline)) ant_value_t buffer_read_num(
   ant_native_params_t, buffer_num_kind_t kind, size_t width, buffer_num_endian_t endian
 ) {
-  if (kind == BUFFER_NUM_BIGINT || kind == BUFFER_NUM_BIGUINT)
-    return buffer_read_bigint64(js, args, nargs, endian == BUFFER_NUM_LE, kind == BUFFER_NUM_BIGINT);
-  
   if (!width) {
     ant_value_t r = buffer_num_width(js, nargs > 1 ? args[1] : js_mkundef(), &width);
     if (is_err(r)) return r;
@@ -3603,25 +3634,7 @@ static inline __attribute__((always_inline)) ant_value_t buffer_read_num(
   ant_value_t error = buffer_access_ptr(js, nargs > 0 ? args[0] : js_mkundef(), width, &ptr, &offset);
   if (is_err(error)) return error;
   
-  uint64_t bits = buffer_load_bytes(ptr, width, endian == BUFFER_NUM_LE);
-  
-  if (kind == BUFFER_NUM_UINT) return js_mknum((double)bits);
-  
-  if (kind == BUFFER_NUM_INT) {
-    unsigned shift = 64 - 8 * (unsigned)width;
-    return js_mknum((double)((int64_t)(bits << shift) >> shift));
-  }
-  
-  if (width == 4) {
-    float f; uint32_t narrow = (uint32_t)bits;
-    memcpy(&f, &narrow, sizeof(f));
-    return js_mknum((double)f);
-  }
-  
-  double d;
-  memcpy(&d, &bits, sizeof(d));
-  
-  return js_mknum(d);
+  return buffer_num_decode(js, buffer_load_bytes(ptr, width, endian == BUFFER_NUM_LE), kind, width);
 }
 
 static inline __attribute__((always_inline)) ant_value_t buffer_write_num(ant_native_params_t, buffer_num_kind_t kind, size_t width, buffer_num_endian_t endian) {
@@ -3637,22 +3650,11 @@ static inline __attribute__((always_inline)) ant_value_t buffer_write_num(ant_na
   }
   
   uint64_t bits;
-  if (kind == BUFFER_NUM_FLOAT && width == 4) {
-    float f = (float)value; uint32_t narrow;
-    memcpy(&narrow, &f, sizeof(narrow));
-    bits = narrow;
-  } else if (kind == BUFFER_NUM_FLOAT) memcpy(&bits, &value, sizeof(bits));
+  if (kind == BUFFER_NUM_FLOAT) bits = buffer_float_bits(value, width);
   else {
     double span = (double)(1ULL << (8 * width - (kind == BUFFER_NUM_INT)));
     double lo = kind == BUFFER_NUM_INT ? -span : 0;
-    if (value < lo || value > span - 1) {
-      char range[96];
-      unsigned bits_width = 8 * (unsigned)width;
-      if (width <= 4) snprintf(range, sizeof(range), ">= %.0f and <= %.0f", lo, span - 1);
-      else if (kind == BUFFER_NUM_UINT) snprintf(range, sizeof(range), ">= 0 and < 2 ** %u", bits_width);
-      else snprintf(range, sizeof(range), ">= -(2 ** %u) and < 2 ** %u", bits_width - 1, bits_width - 1);
-      return buffer_out_of_range(js, "value", range, js_mknum(value));
-    }
+    if (value < lo || value > span - 1) return buffer_num_range_error(js, kind, width, lo, span - 1, value);
     bits = isnan(value) ? 0 : (uint64_t)(int64_t)trunc(value);
   }
   
@@ -3729,27 +3731,7 @@ static inline __attribute__((always_inline)) bool dataview_fast_ptr(DataViewData
 static inline __attribute__((always_inline)) ant_value_t dataview_read_value(
   ant_t *js, const uint8_t *ptr, buffer_num_kind_t kind, size_t width, bool little_endian
 ) {
-  uint64_t bits = buffer_load_bytes(ptr, width, little_endian);
-  
-  unsigned shift = 64 - 8 * (unsigned)width;
-  switch (kind) {
-    case BUFFER_NUM_UINT:    return js_mknum((double)bits);
-    case BUFFER_NUM_INT:     return js_mknum((double)((int64_t)(bits << shift) >> shift));
-    case BUFFER_NUM_BIGINT:  return bigint_from_int64(js, (int64_t)bits);
-    case BUFFER_NUM_BIGUINT: return bigint_from_uint64(js, bits);
-    case BUFFER_NUM_FLOAT: break;
-  }
-  
-  if (width == 2) return js_mknum(half_to_double((uint16_t)bits));
-  if (width == 4) {
-    float f; uint32_t narrow = (uint32_t)bits;
-    memcpy(&f, &narrow, sizeof(f));
-    return js_mknum((double)f);
-  }
-  
-  double d;
-  memcpy(&d, &bits, sizeof(d));
-  return js_mknum(d);
+  return buffer_num_decode(js, buffer_load_bytes(ptr, width, little_endian), kind, width);
 }
 
 static __attribute__((noinline)) ant_value_t dataview_get_slow(
@@ -3778,12 +3760,7 @@ static inline __attribute__((always_inline)) ant_value_t dataview_get(
 }
 
 static inline __attribute__((always_inline)) uint64_t dataview_number_bits(double num, buffer_num_kind_t kind, size_t width) {
-  uint64_t bits = 0;
-  if (kind != BUFFER_NUM_FLOAT) bits = (uint64_t)js_to_uint32(num);
-  else if (width == 2) bits = double_to_half(num);
-  else if (width == 4) { float f = (float)num; uint32_t narrow; memcpy(&narrow, &f, sizeof(narrow)); bits = narrow; }
-  else memcpy(&bits, &num, sizeof(bits));
-  return bits;
+  return kind == BUFFER_NUM_FLOAT ? buffer_float_bits(num, width) : (uint64_t)js_to_uint32(num);
 }
 
 static __attribute__((noinline)) ant_value_t dataview_set_slow(

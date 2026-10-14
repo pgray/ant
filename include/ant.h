@@ -156,7 +156,7 @@ ant_value_t js_tostring_val(ant_t *js, ant_value_t value);
 ant_value_t js_prop_load(ant_prop_loc_t loc);
 ant_value_t js_setprop(ant_t *, ant_value_t obj, ant_value_t key, ant_value_t val);
 ant_value_t js_setprop_keyed(ant_t *, ant_value_t obj, ant_value_t key, ant_value_t val);
-ant_value_t js_setprop_nonconfigurable(ant_t *, ant_value_t obj, const char *key, size_t keylen, ant_value_t val);
+ant_value_t js_setprop_readonly_nonconfigurable(ant_t *, ant_value_t obj, const char *key, size_t keylen, ant_value_t val);
 
 ant_object_t *js_obj_ptr(ant_value_t val);
 ant_value_t js_obj_from_ptr(ant_object_t *obj);

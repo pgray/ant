@@ -4444,18 +4444,11 @@ void init_regex_module(ant_t *js) {
   js_set_getter_desc(js, regexp_proto, "flags", 5, Ant_Function_Create(builtin_regexp_flags_getter), JS_DESC_C);
   defmethod(js, regexp_proto, "compile", 7, Ant_Function_CreateWithArity(builtin_regexp_compile, 2));
 
-  ant_value_t regexp_ctor = js_mkobj(js);
-  js_set_slot(regexp_ctor, SLOT_CFUNC, Ant_Function_CreateWithArity(builtin_RegExp, 2));
-  js_mkprop_fast(js, regexp_ctor, "prototype", 9, regexp_proto);
-  js_set_function_name(js, regexp_ctor, "RegExp", sizeof("RegExp") - 1);
-  js_define_species_getter(js, regexp_ctor);
-
-  ant_value_t regexp_func = js_obj_to_func(js, regexp_ctor);
+  ant_value_t regexp_func = Ant_Function_CreateIntrinsicConstructor(js, builtin_RegExp, regexp_proto, "RegExp", 2);
+  ant_value_t regexp_ctor = js_as_obj(regexp_func);
+  js_define_species_getter(js, regexp_func);
   js->builtins.regexp_ctor_value = regexp_func;
-  js_setprop(js, regexp_proto, js_mkstr(js, "constructor", 11), regexp_func);
-  js_set_descriptor(js, regexp_proto, "constructor", 11, JS_DESC_W | JS_DESC_C);
-
-  js_set(js, regexp_ctor, "escape", Ant_Function_CreateWithArity(builtin_regexp_escape, 1));
+  defmethod(js, regexp_ctor, "escape", 6, Ant_Function_CreateWithArity(builtin_regexp_escape, 1));
 
   ant_value_t empty = js_mkstr_permanent(js, "", 0);
   js->builtins.regexp_empty_string = empty;

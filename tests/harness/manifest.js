@@ -49,6 +49,7 @@ export function targets() {
     'test_buffer_search_and_write_encodings.cjs',
     'test_buffer_statics.cjs',
     'test_buffer_wtf8_utf8.cjs',
+    'test_builtin_constructor_shapes.cjs',
     'test_builtin_lengths.cjs',
     'test_intrinsic_protos.cjs',
     'test_dataview_fast_path.cjs',

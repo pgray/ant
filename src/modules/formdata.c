@@ -461,7 +461,6 @@ static ant_value_t js_formdata_ctor(ant_params_t) {
 }
 
 void init_formdata_module(ant_t *js) {
-  ant_value_t g = js_glob(js);
   js->builtins.formdata_proto = js_mkobj(js);
 
   js_set(js, js->builtins.formdata_proto, "append",  Ant_Function_Create(js_formdata_append));
@@ -477,18 +476,7 @@ void init_formdata_module(ant_t *js) {
 
   js_set_sym(js, js->builtins.formdata_proto, js->sym.iterator_sym,    js_get(js, js->builtins.formdata_proto, "entries"));
   js_set_tostringtag(js, js->builtins.formdata_proto, js_mkstr(js, "FormData", 8));
-
-  ant_value_t ctor_obj = js_mkobj(js);
-  js_set_slot(ctor_obj, SLOT_CFUNC, Ant_Function_Create(js_formdata_ctor));
-  js_mkprop_fast(js, ctor_obj, "prototype", 9, js->builtins.formdata_proto);
-  js_set_function_name(js, ctor_obj, "FormData", sizeof("FormData") - 1);
-
-  ant_value_t ctor = js_obj_to_func(js, ctor_obj);
-  js_set(js, js->builtins.formdata_proto, "constructor", ctor);
-  js_set_descriptor(js, js->builtins.formdata_proto, "constructor", 11, JS_DESC_W | JS_DESC_C);
-
-  js_set(js, g, "FormData", ctor);
-  js_set_descriptor(js, g, "FormData", 8, JS_DESC_W | JS_DESC_C);
+  js_set_global_builtin(js, "FormData", Ant_Function_CreateIntrinsicConstructor(js, js_formdata_ctor, js->builtins.formdata_proto, "FormData", 0));
 
   js->builtins.formdata_iter_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.formdata_iter_proto, js->sym.iterator_proto);

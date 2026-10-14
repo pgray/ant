@@ -4896,17 +4896,7 @@ ant_value_t setprop_interned(ant_t *js, ant_value_t obj, const char *key, size_t
   return js_setprop(js, obj, k, v);
 }
 
-ant_value_t js_setprop_nonconfigurable(ant_t *js, ant_value_t obj, const char *key, size_t keylen, ant_value_t v) {
-  ant_value_t k = js_mkstr(js, key, keylen);
-  if (is_err(k)) return k;
-  ant_value_t result = js_setprop(js, obj, k, v);
-  if (is_err(result)) return result;
-  
-  js_set_descriptor(js, js_as_obj(obj), key, keylen, JS_DESC_W);
-  return result;
-}
-
-static ant_value_t js_setprop_readonly_nonconfigurable(ant_t *js, ant_value_t obj, const char *key, size_t keylen, ant_value_t v) {
+ant_value_t js_setprop_readonly_nonconfigurable(ant_t *js, ant_value_t obj, const char *key, size_t keylen, ant_value_t v) {
   ant_value_t k = js_mkstr(js, key, keylen);
   if (is_err(k)) return k;
   ant_value_t result = js_setprop(js, obj, k, v);
@@ -21623,7 +21613,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   ant_value_t err_ctor_obj = mkobj(js, 0);
   set_proto(js, err_ctor_obj, function_proto);
   set_slot(err_ctor_obj, SLOT_CFUNC, Ant_Function_CreateWithArity(builtin_Error, 1));
-  js_setprop_nonconfigurable(js, err_ctor_obj, "prototype", 9, error_proto);
+  js_setprop_readonly_nonconfigurable(js, err_ctor_obj, "prototype", 9, error_proto);
   js_set_function_name(js, err_ctor_obj, "Error", sizeof("Error") - 1);
   
   ant_value_t err_ctor_func = js_obj_to_func(js, err_ctor_obj);
@@ -21642,7 +21632,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
     ant_value_t ctor = mkobj(js, 0); \
     set_proto(js, ctor, function_proto); \
     set_slot(ctor, SLOT_CFUNC, Ant_Function_CreateWithArity(builtin_Error, 1)); \
-    js_setprop_nonconfigurable(js, ctor, "prototype", 9, proto); \
+    js_setprop_readonly_nonconfigurable(js, ctor, "prototype", 9, proto); \
     js_set_function_name(js, ctor, name_str, sizeof(name_str) - 1); \
     ant_value_t ctor_func = js_obj_to_func(js, ctor); \
     defhidden(js, proto, "constructor", 11, ctor_func); \
@@ -21667,7 +21657,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   ant_value_t aggregate_ctor = mkobj(js, 0);
   set_proto(js, aggregate_ctor, function_proto);
   set_slot(aggregate_ctor, SLOT_CFUNC, Ant_Function_CreateWithArity(builtin_AggregateError, 2));
-  js_setprop_nonconfigurable(js, aggregate_ctor, "prototype", 9, aggregate_proto);
+  js_setprop_readonly_nonconfigurable(js, aggregate_ctor, "prototype", 9, aggregate_proto);
   js_set_function_name(js, aggregate_ctor, "AggregateError", sizeof("AggregateError") - 1);
   
   ant_value_t aggregate_ctor_func = js_obj_to_func(js, aggregate_ctor);
@@ -21682,7 +21672,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   ant_value_t suppressed_ctor = mkobj(js, 0);
   set_proto(js, suppressed_ctor, function_proto);
   set_slot(suppressed_ctor, SLOT_CFUNC, Ant_Function_CreateWithArity(builtin_SuppressedError, 3));
-  js_setprop_nonconfigurable(js, suppressed_ctor, "prototype", 9, suppressed_proto);
+  js_setprop_readonly_nonconfigurable(js, suppressed_ctor, "prototype", 9, suppressed_proto);
   js_set_function_name(js, suppressed_ctor, "SuppressedError", sizeof("SuppressedError") - 1);
   
   ant_value_t suppressed_ctor_func = js_obj_to_func(js, suppressed_ctor);
@@ -21701,7 +21691,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   ant_value_t disposable_stack_ctor = mkobj(js, 0);
   set_proto(js, disposable_stack_ctor, function_proto);
   set_slot(disposable_stack_ctor, SLOT_CFUNC, Ant_Function_Create(builtin_DisposableStack));
-  js_setprop_nonconfigurable(js, disposable_stack_ctor, "prototype", 9, disposable_stack_proto);
+  js_setprop_readonly_nonconfigurable(js, disposable_stack_ctor, "prototype", 9, disposable_stack_proto);
   js_set_function_name(js, disposable_stack_ctor, "DisposableStack", sizeof("DisposableStack") - 1);
   
   ant_value_t disposable_stack_ctor_func = js_obj_to_func(js, disposable_stack_ctor);
@@ -21720,7 +21710,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   ant_value_t async_disposable_stack_ctor = mkobj(js, 0);
   set_proto(js, async_disposable_stack_ctor, function_proto);
   set_slot(async_disposable_stack_ctor, SLOT_CFUNC, Ant_Function_Create(builtin_AsyncDisposableStack));
-  js_setprop_nonconfigurable(js, async_disposable_stack_ctor, "prototype", 9, async_disposable_stack_proto);
+  js_setprop_readonly_nonconfigurable(js, async_disposable_stack_ctor, "prototype", 9, async_disposable_stack_proto);
   js_set_function_name(js, async_disposable_stack_ctor, "AsyncDisposableStack", sizeof("AsyncDisposableStack") - 1);
   
   ant_value_t async_disposable_stack_ctor_func = js_obj_to_func(js, async_disposable_stack_ctor);
@@ -21771,7 +21761,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   ant_value_t func_ctor_obj = mkobj(js, 0);
   set_proto(js, func_ctor_obj, function_proto);
   set_slot(func_ctor_obj, SLOT_CFUNC, Ant_Function_CreateWithArity(builtin_Function, 1));
-  js_setprop_nonconfigurable(js, func_ctor_obj, "prototype", 9, function_proto);
+  js_setprop_readonly_nonconfigurable(js, func_ctor_obj, "prototype", 9, function_proto);
   js_set_function_name(js, func_ctor_obj, "Function", sizeof("Function") - 1);
   ant_value_t func_ctor_func = js_obj_to_func(js, func_ctor_obj);
   js_set_global_builtin(js, "Function", func_ctor_func);
@@ -21786,7 +21776,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   ant_value_t str_ctor_obj = mkobj(js, 0);
   set_proto(js, str_ctor_obj, function_proto);
   set_slot(str_ctor_obj, SLOT_CFUNC, Ant_Function_CreateWithArity(builtin_String, 1));
-  js_setprop_nonconfigurable(js, str_ctor_obj, "prototype", 9, string_proto);
+  js_setprop_readonly_nonconfigurable(js, str_ctor_obj, "prototype", 9, string_proto);
   defmethod(js, str_ctor_obj, "fromCharCode", 12, Ant_Function_CreateWithArity(builtin_string_fromCharCode, 1));
   defmethod(js, str_ctor_obj, "fromCodePoint", 13, Ant_Function_CreateWithArity(builtin_string_fromCodePoint, 1));
   defmethod(js, str_ctor_obj, "raw", 3, Ant_Function_CreateWithArity(builtin_string_raw, 1));
@@ -21816,7 +21806,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   js_setprop(js, number_ctor_obj, js_mkstr(js, "NaN", 3), tov(JS_NAN));
   js_setprop(js, number_ctor_obj, js_mkstr(js, "EPSILON", 7), tov(2.220446049250313e-16));
   
-  js_setprop_nonconfigurable(js, number_ctor_obj, "prototype", 9, number_proto);
+  js_setprop_readonly_nonconfigurable(js, number_ctor_obj, "prototype", 9, number_proto);
   js_set_function_name(js, number_ctor_obj, "Number", sizeof("Number") - 1);
   ant_value_t number_ctor_func = js_obj_to_func(js, number_ctor_obj);
   js_set_global_builtin(js, "Number", number_ctor_func);
@@ -21824,7 +21814,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   ant_value_t bool_ctor_obj = mkobj(js, 0);
   set_proto(js, bool_ctor_obj, function_proto);
   set_slot(bool_ctor_obj, SLOT_CFUNC, Ant_Function_CreateWithArity(builtin_Boolean, 1));
-  js_setprop_nonconfigurable(js, bool_ctor_obj, "prototype", 9, boolean_proto);
+  js_setprop_readonly_nonconfigurable(js, bool_ctor_obj, "prototype", 9, boolean_proto);
   js_set_function_name(js, bool_ctor_obj, "Boolean", sizeof("Boolean") - 1);
   ant_value_t bool_ctor_func = js_obj_to_func(js, bool_ctor_obj);
   js_set_global_builtin(js, "Boolean", bool_ctor_func);
@@ -21865,7 +21855,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   defmethod(js, p_ctor_obj, "race", 4, Ant_Function_CreateWithArity(builtin_Promise_race, 1));
   defmethod(js, p_ctor_obj, "any", 3, Ant_Function_CreateWithArity(builtin_Promise_any, 1));
   
-  js_setprop_nonconfigurable(js, p_ctor_obj, "prototype", 9, promise_proto);
+  js_setprop_readonly_nonconfigurable(js, p_ctor_obj, "prototype", 9, promise_proto);
   ant_value_t p_ctor_func = js_obj_to_func(js, p_ctor_obj);
   defhidden(js, promise_proto, "constructor", 11, p_ctor_func);
   js_set_function_name(js, p_ctor_obj, "Promise", sizeof("Promise") - 1);

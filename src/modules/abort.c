@@ -4,6 +4,7 @@
 #include <uv.h>
 
 #include "ant.h"
+#include "common.h"
 #include "ptr.h"
 #include "errors.h"
 #include "internal.h"
@@ -409,8 +410,14 @@ static ant_value_t abort_signal_static_timeout(ant_params_t) {
   return signal;
 }
 
+static ant_value_t abort_signal_ctor(ant_params_t) {
+  return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal constructor");
+}
+
 // new AbortController()
 static ant_value_t abort_controller_ctor(ant_params_t) {
+  if (vtype(call_new_target) == kTypeUndefined)
+    return js_mkerr_typed(js, JS_ERR_TYPE, "AbortController constructor requires 'new'");
   ant_value_t this_obj = js_getthis(js);
 
   ant_value_t signal = make_new_signal(js);
@@ -449,31 +456,19 @@ void init_abort_module(ant_t *js) {
   js_set(js, signal_proto, "throwIfAborted",      Ant_Function_Create(abort_signal_throw_if_aborted));
   js_set_tostringtag(js, signal_proto, js_mkstr(js, "AbortSignal", 11));
 
-  ant_value_t signal_ctor = js_mkobj(js);
-  js_define_function_length(js, signal_ctor, 0);
-  js_mkprop_fast(js, signal_ctor, "prototype", 9, signal_proto);
-  js_set_function_name(js, signal_ctor, "AbortSignal", sizeof("AbortSignal") - 1);
-
-  ant_value_t signal_fn = js_obj_to_func_ex(js, signal_ctor, SV_CALL_IS_DEFAULT_CTOR);
-  js_set(js, signal_fn, "abort",   Ant_Function_Create(abort_signal_static_abort));
-  js_set(js, signal_fn, "timeout", Ant_Function_CreateWithArity(abort_signal_static_timeout, 1));
-  js_set(js, signal_fn, "any",     Ant_Function_CreateWithArity(abort_signal_static_any, 1));
-
-  js_set(js, signal_proto, "constructor", signal_fn);
-  js_set_descriptor(js, signal_proto, "constructor", 11, JS_DESC_W | JS_DESC_C);
+  ant_value_t signal_fn = Ant_Function_CreateIntrinsicConstructor(js, abort_signal_ctor, signal_proto, "AbortSignal", 0);
+  static const ant_cfunc_meta_t signal_statics[] = {
+    { abort_signal_static_abort,   "abort",   0, 0 },
+    { abort_signal_static_timeout, "timeout", 1, 0 },
+    { abort_signal_static_any,     "any",     1, 0 },
+  };
+  js_define_methods(js, signal_fn, signal_statics, countof(signal_statics), ANT_PROP_ATTR_METHOD);
 
   ant_value_t ctrl_proto = js_mkobj(js);
   js_set(js, ctrl_proto, "abort", Ant_Function_Create(abort_controller_abort));
   js_set_tostringtag(js, ctrl_proto, js_mkstr(js, "AbortController", 15));
 
-  ant_value_t ctrl_ctor = js_mkobj(js);
-  js_set_slot(ctrl_ctor, SLOT_CFUNC, Ant_Function_Create(abort_controller_ctor));
-  js_mkprop_fast(js, ctrl_ctor, "prototype", 9, ctrl_proto);
-  js_set_function_name(js, ctrl_ctor, "AbortController", sizeof("AbortController") - 1);
-
-  ant_value_t ctrl_fn = js_obj_to_func(js, ctrl_ctor);
-  js_set(js, ctrl_proto, "constructor", ctrl_fn);
-  js_set_descriptor(js, ctrl_proto, "constructor", 11, JS_DESC_W | JS_DESC_C);
+  ant_value_t ctrl_fn = Ant_Function_CreateIntrinsicConstructor(js, abort_controller_ctor, ctrl_proto, "AbortController", 0);
 
   js_set_global_builtin(js, "AbortController", ctrl_fn);
   js_set_global_builtin(js, "AbortSignal", signal_fn);

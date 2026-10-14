@@ -4,8 +4,6 @@
 #include "common.h"
 #include "errors.h"
 #include "internal.h"
-#include "descriptors.h"
-
 #include "modules/domexception.h"
 
 static bool g_initialized = false;
@@ -74,15 +72,16 @@ static int name_to_code(const char *name) {
 }
 
 static void set_constants(ant_t *js, ant_value_t obj) {
-for (size_t i = 0; i < DOMEX_CONSTANTS_LEN; i++) {
-  const char *prop = domex_constants[i].prop;
-  size_t len = strlen(prop);
-  js_set(js, obj, prop, js_mknum(domex_constants[i].code));
-  js_set_descriptor(js, obj, prop, len, JS_DESC_E);
-}}
+  for (size_t i = 0; i < DOMEX_CONSTANTS_LEN; i++) mkprop_exact_attrs(
+    js, obj, js_mkstr(js, domex_constants[i].prop, strlen(domex_constants[i].prop)),
+    js_mknum(domex_constants[i].code), ANT_PROP_ATTR_ENUMERABLE
+  );
+}
 
 // new DOMException(message?, name?)
 static ant_value_t domexception_ctor(ant_params_t) {
+  if (vtype(call_new_target) == kTypeUndefined)
+    return js_mkerr_typed(js, JS_ERR_TYPE, "DOMException constructor requires 'new'");
   ant_value_t self = js_getthis(js);
 
   const char *msg;
@@ -133,7 +132,6 @@ ant_value_t make_dom_exception(ant_t *js, const char *message, const char *name)
 }
 
 void init_domexception_module(ant_t *js) {
-  ant_value_t global = js_glob(js);
   ant_value_t proto = js_mkobj(js);
   
   js->builtins.domexception_proto = proto;
@@ -149,18 +147,7 @@ void init_domexception_module(ant_t *js) {
   js_set_tostringtag(js, proto, js_mkstr(js, "DOMException", 12));
   set_constants(js, proto);
 
-  ant_value_t ctor = js_mkobj(js);
-  js_set_slot(ctor, SLOT_CFUNC, Ant_Function_Create(domexception_ctor));
-  js_mkprop_fast(js, ctor, "prototype", 9, proto);
-  js_set_descriptor(js, ctor, "prototype", 9, 0);
-  
-  js_set_function_name(js, ctor, "DOMException", sizeof("DOMException") - 1);
-  set_constants(js, ctor);
-
-  ant_value_t fn = js_obj_to_func(js, ctor);
-  js_set(js, proto, "constructor", fn);
-  js_set_descriptor(js, proto, "constructor", 11, JS_DESC_W | JS_DESC_C);
-
-  js_set(js, global, "DOMException", fn);
-  js_set_descriptor(js, global, "DOMException", 12, JS_DESC_W | JS_DESC_C);
+  ant_value_t fn = Ant_Function_CreateIntrinsicConstructor(js, domexception_ctor, proto, "DOMException", 0);
+  set_constants(js, fn);
+  js_set_global_builtin(js, "DOMException", fn);
 }

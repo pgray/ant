@@ -1938,13 +1938,8 @@ ant_value_t eventemitter_prototype(ant_t *js) {
   if (js->builtins.eventemitter_proto) return js->builtins.eventemitter_proto;
 
   ant_value_t object_proto = js->sym.object_proto;
-  ant_value_t function_proto = js->sym.function_proto;
-
-  ant_value_t eventemitter_ctor = js_mkobj(js);
   ant_value_t eventemitter_proto = js_mkobj(js);
-  
   if (is_object_type(object_proto)) js_set_proto_init(eventemitter_proto, object_proto);
-  if (is_object_type(function_proto)) js_set_proto_init(eventemitter_ctor, function_proto);
 
   js_set(js, eventemitter_proto, "on",                 Ant_Function_CreateWithArity(js_eventemitter_on, 2));
   js_set_exact(js, eventemitter_proto, "addListener",  js_get(js, eventemitter_proto, "on"));
@@ -1963,14 +1958,8 @@ ant_value_t eventemitter_prototype(ant_t *js) {
   js_set(js, eventemitter_proto, "eventNames",         Ant_Function_Create(js_eventemitter_eventNames));
   js_set_tostringtag(js, eventemitter_proto, js_mkstr(js, "EventEmitter", 12));
 
-  js_set_slot(eventemitter_ctor, SLOT_CFUNC, Ant_Function_CreateWithArity(js_eventemitter_ctor, 1));
-  js_mkprop_fast(js, eventemitter_ctor, "prototype", 9, eventemitter_proto);
-  js_set_function_name(js, eventemitter_ctor, "EventEmitter", sizeof("EventEmitter") - 1);
-
   js->builtins.eventemitter_proto = eventemitter_proto;
-  js->builtins.eventemitter_ctor = js_obj_to_func(js, eventemitter_ctor);
-  js_set(js, eventemitter_proto, "constructor", js->builtins.eventemitter_ctor);
-  js_set_descriptor(js, eventemitter_proto, "constructor", 11, JS_DESC_W | JS_DESC_C);
+  js->builtins.eventemitter_ctor = Ant_Function_CreateConstructor(js, js_eventemitter_ctor, eventemitter_proto, "EventEmitter", 1);
   
   return js->builtins.eventemitter_proto;
 }
@@ -2021,7 +2010,6 @@ void init_events_module(ant_t *js) {
   js_set_global_builtin(js, "PromiseRejectionEvent", pre_fn);
 
   ant_value_t object_proto = js->sym.object_proto;
-  ant_value_t function_proto = js->sym.function_proto;
 
   ant_value_t eventtarget_proto = js_mkobj(js);
   js->builtins.eventtarget_proto = eventtarget_proto;
@@ -2031,14 +2019,7 @@ void init_events_module(ant_t *js) {
   js_set(js, eventtarget_proto, "dispatchEvent",       Ant_Function_CreateWithArity(js_dispatch_event_method, 1));
   js_set_tostringtag(js, eventtarget_proto, js_mkstr(js, "EventTarget", 11));
 
-  ant_value_t eventtarget_ctor = js_mkobj(js);
-  if (is_object_type(function_proto)) js_set_proto_init(eventtarget_ctor, function_proto);
-  js_set_slot(eventtarget_ctor, SLOT_CFUNC, Ant_Function_Create(js_eventtarget_ctor));
-  js_mkprop_fast(js, eventtarget_ctor, "prototype", 9, eventtarget_proto);
-  js_set_function_name(js, eventtarget_ctor, "EventTarget", sizeof("EventTarget") - 1);
-  ant_value_t eventtarget_fn = js_obj_to_func(js, eventtarget_ctor);
-  js_set(js, eventtarget_proto, "constructor", eventtarget_fn);
-  js_set_descriptor(js, eventtarget_proto, "constructor", 11, JS_DESC_W | JS_DESC_C);
+  ant_value_t eventtarget_fn = Ant_Function_CreateIntrinsicConstructor(js, js_eventtarget_ctor, eventtarget_proto, "EventTarget", 0);
 
   js_set(js, global, "addEventListener",    Ant_Function_Create(js_add_event_listener));
   js_set(js, global, "removeEventListener", Ant_Function_Create(js_remove_event_listener));

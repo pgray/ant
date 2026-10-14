@@ -1423,10 +1423,7 @@ bool mir_emit_get_global_ic_fastpath(
   MIR_reg_t r_idx = mir_new_ic_reg(ctx, fn, "gg", "idx", bc_off, -1);
   MIR_reg_t r_pc = mir_new_ic_reg(ctx, fn, "gg", "pc", bc_off, -1);
   MIR_reg_t r_il = mir_new_ic_reg(ctx, fn, "gg", "il", bc_off, -1);
-  MIR_reg_t r_ov = mir_new_ic_reg(ctx, fn, "gg", "ov", bc_off, -1);
-  MIR_reg_t r_oi = mir_new_ic_reg(ctx, fn, "gg", "oi", bc_off, -1);
 
-  MIR_label_t load_overflow = MIR_new_label(ctx);
   MIR_label_t fast_done = MIR_new_label(ctx);
 
   MIR_append_insn(ctx, fn,
@@ -1476,61 +1473,7 @@ bool mir_emit_get_global_ic_fastpath(
                                MIR_new_reg_op(ctx, r_sh),
                                MIR_new_reg_op(ctx, r_ics)));
 
-  MIR_append_insn(ctx, fn,
-                  MIR_new_insn(ctx, MIR_MOV,
-                               MIR_new_reg_op(ctx, r_idx),
-                               MIR_new_mem_op(ctx, MIR_T_U32,
-                                              (MIR_disp_t)offsetof(sv_ic_entry_t, cached_index), r_ic, 0, 1)));
-  MIR_append_insn(ctx, fn,
-                  MIR_new_insn(ctx, MIR_MOV,
-                               MIR_new_reg_op(ctx, r_pc),
-                               MIR_new_mem_op(ctx, MIR_T_U32,
-                                              (MIR_disp_t)offsetof(ant_object_t, prop_count), r_gp, 0, 1)));
-  MIR_append_insn(ctx, fn,
-                  MIR_new_insn(ctx, MIR_UBGE,
-                               MIR_new_label_op(ctx, slow),
-                               MIR_new_reg_op(ctx, r_idx),
-                               MIR_new_reg_op(ctx, r_pc)));
-
-  MIR_append_insn(ctx, fn,
-                  MIR_new_insn(ctx, MIR_MOV,
-                               MIR_new_reg_op(ctx, r_il),
-                               MIR_new_mem_op(ctx, MIR_T_U8,
-                                              (MIR_disp_t)offsetof(ant_object_t, inobj_limit), r_gp, 0, 1)));
-  MIR_append_insn(ctx, fn,
-                  MIR_new_insn(ctx, MIR_UBGE,
-                               MIR_new_label_op(ctx, load_overflow),
-                               MIR_new_reg_op(ctx, r_idx),
-                               MIR_new_reg_op(ctx, r_il)));
-  MIR_append_insn(ctx, fn,
-                  MIR_new_insn(ctx, MIR_MOV,
-                               MIR_new_reg_op(ctx, dst),
-                               MIR_new_mem_op(ctx, MIR_T_I64,
-                                              (MIR_disp_t)offsetof(ant_object_t, inobj), r_gp, r_idx, 8)));
-  MIR_append_insn(ctx, fn,
-                  MIR_new_insn(ctx, MIR_JMP,
-                               MIR_new_label_op(ctx, fast_done)));
-
-  MIR_append_insn(ctx, fn, load_overflow);
-  MIR_append_insn(ctx, fn,
-                  MIR_new_insn(ctx, MIR_MOV,
-                               MIR_new_reg_op(ctx, r_ov),
-                               MIR_new_mem_op(ctx, MIR_T_P,
-                                              (MIR_disp_t)offsetof(ant_object_t, overflow_prop), r_gp, 0, 1)));
-  MIR_append_insn(ctx, fn,
-                  MIR_new_insn(ctx, MIR_BEQ,
-                               MIR_new_label_op(ctx, slow),
-                               MIR_new_reg_op(ctx, r_ov),
-                               MIR_new_int_op(ctx, 0)));
-  MIR_append_insn(ctx, fn,
-                  MIR_new_insn(ctx, MIR_SUB,
-                               MIR_new_reg_op(ctx, r_oi),
-                               MIR_new_reg_op(ctx, r_idx),
-                               MIR_new_reg_op(ctx, r_il)));
-  MIR_append_insn(ctx, fn,
-                  MIR_new_insn(ctx, MIR_MOV,
-                               MIR_new_reg_op(ctx, dst),
-                               MIR_new_mem_op(ctx, MIR_T_I64, 0, r_ov, r_oi, 8)));
+  mir_emit_ic_slot_read(ctx, fn, r_ic, r_gp, r_idx, r_il, r_pc, dst, slow, fast_done);
   MIR_append_insn(ctx, fn, fast_done);
   if (snapshot_done) MIR_append_insn(ctx, fn, snapshot_done);
 
