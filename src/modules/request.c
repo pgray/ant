@@ -563,7 +563,7 @@ static uint8_t *concat_chunks(ant_t *js, ant_value_t chunks, size_t *out_size) {
   ant_value_t chunk = js_arr_get(js, chunks, i);
   if (vtype(chunk) == kTypeTypedArray) {
     TypedArrayData *ta = (TypedArrayData *)js_gettypedarray(chunk);
-    if (ta && ta->buffer && !ta->buffer->is_detached) total += ta->byte_length;
+    if (Ant_Buffer_ViewIsLive(ta)) total += ta->byte_length;
   }}
 
   uint8_t *buf = total > 0 ? malloc(total) : NULL;
@@ -575,7 +575,7 @@ static uint8_t *concat_chunks(ant_t *js, ant_value_t chunks, size_t *out_size) {
   
   if (vtype(chunk) == kTypeTypedArray) {
   TypedArrayData *ta = (TypedArrayData *)js_gettypedarray(chunk);
-  if (ta && ta->buffer && !ta->buffer->is_detached && ta->byte_length > 0) {
+  if (Ant_Buffer_ViewIsLive(ta) && ta->byte_length > 0) {
     memcpy(buf + pos, ta->buffer->data + ta->byte_offset, ta->byte_length);
     pos += ta->byte_length;
   }}}

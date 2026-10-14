@@ -13,6 +13,7 @@
 #endif
 
 #include "ant.h"
+#include "list.h"
 #include "ptr.h"
 #include "errors.h"
 #include "internal.h"
@@ -30,8 +31,6 @@
 #include "modules/stream.h"
 #include "modules/timer.h"
 
-typedef struct net_server_s net_server_t;
-typedef struct net_socket_s net_socket_t;
 
 typedef struct net_listen_args_s net_listen_args_t;
 typedef struct net_connect_args_s net_connect_args_t;
@@ -44,13 +43,13 @@ struct net_socket_s {
   ant_listener_t client_listener;
   net_server_t *server;
   ant_value_t encoding;
-  struct net_socket_s *next_active;
+  net_socket_t *next;
+  net_socket_t **pprev;
   struct net_socket_s *next_in_server;
   bool allow_half_open;
   bool destroyed;
   bool connecting;
   bool had_error;
-  bool active;
 };
 
 struct net_server_s {
@@ -58,7 +57,8 @@ struct net_server_s {
   ant_value_t obj;
   ant_listener_t listener;
   net_socket_t *sockets;
-  struct net_server_s *next_active;
+  net_server_t *next;
+  net_server_t **pprev;
   char *host;
   char *path;
   int port;
@@ -102,8 +102,6 @@ struct net_write_args_s {
   ant_value_t error;
 };
 
-static net_server_t *g_active_servers = NULL;
-static net_socket_t *g_active_sockets = NULL;
 
 static bool g_default_auto_select_family = true;
 static double g_default_auto_select_family_attempt_timeout = 250.0;
@@ -122,36 +120,19 @@ static net_socket_t *net_socket_data(ant_value_t value) {
 }
 
 static void net_add_active_server(net_server_t *server) {
-  server->next_active = g_active_servers;
-  g_active_servers = server;
+  Ant_List_Insert(&server->js->net_servers, server);
 }
 
 static void net_remove_active_server(net_server_t *server) {
-  net_server_t **it = NULL;
-  for (it = &g_active_servers; *it; it = &(*it)->next_active) {
-  if (*it == server) {
-    *it = server->next_active;
-    server->next_active = NULL;
-    return;
-  }}
+  Ant_List_Remove(server);
 }
 
 static void net_add_active_socket(net_socket_t *socket) {
-  if (!socket || socket->active) return;
-  socket->active = true;
-  socket->next_active = g_active_sockets;
-  g_active_sockets = socket;
+  if (socket) Ant_List_Insert(&socket->js->net_sockets, socket);
 }
 
 static void net_remove_active_socket(net_socket_t *socket) {
-  net_socket_t **it = NULL;
-  for (it = &g_active_sockets; *it; it = &(*it)->next_active) {
-  if (*it == socket) {
-    *it = socket->next_active;
-    socket->next_active = NULL;
-    socket->active = false;
-    return;
-  }}
+  Ant_List_Remove(socket);
 }
 
 static ant_value_t net_call_value(
@@ -1264,10 +1245,10 @@ void gc_mark_net(ant_t *js, gc_mark_fn mark) {
   net_server_t *server = NULL;
   net_socket_t *socket = NULL;
 
-  for (server = g_active_servers; server; server = server->next_active)
+  for (server = js->net_servers; server; server = server->next)
     mark(js, server->obj);
     
-  for (socket = g_active_sockets; socket; socket = socket->next_active) {
+  for (socket = js->net_sockets; socket; socket = socket->next) {
     mark(js, socket->obj);
     if (vtype(socket->encoding) != kTypeUndefined) mark(js, socket->encoding);
   }

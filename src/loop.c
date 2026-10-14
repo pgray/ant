@@ -1,8 +1,8 @@
 #include <stdatomic.h>
 #include <stdlib.h>
 
-#include "internal.h"
 #include "loop.h"
+#include "isolate.h"
 
 static atomic_flag default_loop_claimed = ATOMIC_FLAG_INIT;
 
@@ -20,6 +20,11 @@ bool Ant_Loop_Init(ant_t *js) {
   
   js->loop->data = js;
   return true;
+}
+
+void Ant_Loop_Drain(ant_t *js) {
+  uv_loop_t *loop = js->loop;
+  for (int pass = 0; loop && pass < 64 && uv_loop_alive(loop); pass++) uv_run(loop, UV_RUN_NOWAIT);
 }
 
 static void loop_close_handle(uv_handle_t *handle, void *arg) {

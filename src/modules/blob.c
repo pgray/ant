@@ -97,7 +97,7 @@ static ant_value_t process_blob_part(ant_t *js, byte_buf_t *buf, ant_value_t par
 
   if (t == kTypeObject) {
     TypedArrayData *ta = buffer_get_typedarray_data(part);
-    if (ta && ta->buffer && !ta->buffer->is_detached) {
+    if (Ant_Buffer_ViewIsLive(ta)) {
       if (!byte_buf_append(buf, ta->buffer->data + ta->byte_offset, ta->byte_length)) return js_mkerr(js, "out of memory");
       return js_mkundef();
     }

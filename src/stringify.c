@@ -1,13 +1,12 @@
 #include "ant.h"
 #include "internal.h"
 #include "stringify.h"
+#include "builder.h"
 
 #include <inttypes.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
-
-static constexpr size_t STRINGIFY_MAX_ARRAY_LENGTH = 100;
 
 static size_t stringify_hex_bytes(const uint8_t *data, size_t count, bool lead_space, char *buf, size_t len) {
   size_t n = 0;
@@ -44,7 +43,7 @@ static size_t stringify_node_buffer(const uint8_t *data, size_t byte_length, cha
 }
 
 size_t stringify_typedarray(ant_t *js, ant_value_t obj, const TypedArrayData *ta, char *buf, size_t len) {
-  bool detached = ta->buffer->is_detached;
+  bool detached = !Ant_Buffer_ViewIsLive(ta);
   size_t length = detached ? 0 : ta->length;
   const uint8_t *data = ta->buffer->data + ta->byte_offset;
   
@@ -55,7 +54,7 @@ size_t stringify_typedarray(ant_t *js, ant_value_t obj, const TypedArrayData *ta
   n += (size_t)snprintf(buf + n, REMAIN(n, len), "(%zu) [", length);
   if (length == 0) return n + cpy(buf + n, REMAIN(n, len), "]", 1);
   
-  size_t shown = length < STRINGIFY_MAX_ARRAY_LENGTH ? length : STRINGIFY_MAX_ARRAY_LENGTH;
+  size_t shown = length < ANT_INSPECT_MAX_ENTRIES ? length : ANT_INSPECT_MAX_ENTRIES;
   for (size_t i = 0; i < shown; i++) {
     n += cpy(buf + n, REMAIN(n, len), i ? ", " : " ", i ? 2 : 1);
     n += stringify_typed_element(js, ta, i, buf + n, REMAIN(n, len));
@@ -69,7 +68,7 @@ static size_t stringify_arraybuffer_body(const ArrayBufferData *ab, const char *
   const char *name = ab->is_shared ? "SharedArrayBuffer" : "ArrayBuffer";
   if (ab->is_detached) return (size_t)snprintf(buf, len, "%s { (detached), [byteLength]: 0 }", name);
   
-  size_t shown = ab->length < STRINGIFY_MAX_ARRAY_LENGTH ? ab->length : STRINGIFY_MAX_ARRAY_LENGTH;
+  size_t shown = ab->length < ANT_INSPECT_MAX_ENTRIES ? ab->length : ANT_INSPECT_MAX_ENTRIES;
   size_t n = (size_t)snprintf(buf, len, "%s {\n%s  [Uint8Contents]: <", name, indent);
   
   if (ab->data) n += stringify_hex_bytes(ab->data, shown, false, buf + n, REMAIN(n, len));
@@ -83,7 +82,7 @@ size_t stringify_arraybuffer(const ArrayBufferData *ab, char *buf, size_t len) {
 }
 
 size_t stringify_dataview(const DataViewData *dv, char *buf, size_t len) {
-  size_t n = dv->buffer->is_detached
+  size_t n = !Ant_Buffer_ViewIsLive(dv)
     ? (size_t)snprintf(buf, len, "DataView {\n  [byteLength]: 0,\n  [byteOffset]: undefined,\n  [buffer]: ")
     : (size_t)snprintf(
       buf, len, "DataView {\n  [byteLength]: %zu,\n  [byteOffset]: %zu,\n  [buffer]: ",

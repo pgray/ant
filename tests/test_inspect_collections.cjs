@@ -41,4 +41,16 @@ assert.strictEqual(flat(loop), "<ref *1> Map(1) { 'm' => [Circular *1] }");
 const shared = { x: 1 };
 assert.strictEqual(flat([shared, shared]), '[ { x: 1 }, { x: 1 } ]');
 
+const many = new Map();
+for (let i = 0; i < 105; i++) many.set(i, i);
+assert.ok(flat(many).endsWith('98 => 98, 99 => 99, ... 5 more items }'));
+const manySet = new Set();
+for (let i = 0; i < 101; i++) manySet.add(i);
+assert.ok(flat(manySet).endsWith('98, 99, ... 1 more item }'));
+assert.strictEqual(flat({ m: new Map([[1, new Map([[2, new Map([[3, 4]])]])]]) }), '{ m: Map(1) { 1 => Map(1) { 2 => [Map] } } }');
+assert.strictEqual(flat(new Set([new Set([new Set([new Set([1])])])])), 'Set(1) { Set(1) { Set(1) { [Set] } } }');
+const huge = new Map();
+for (let i = 0; i < 200000; i++) huge.set(i, i);
+assert.ok(inspect(huge).length < 4096);
+
 console.log('inspect collections OK');

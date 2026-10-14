@@ -16,9 +16,9 @@
 #include "errors.h"
 #include "internal.h"
 #include "inspector.h"
-#include "silver/call.h"
 
 #include "http/eventsource.h"
+#include "descriptors.h"
 #include "modules/events.h"
 #include "modules/eventsource.h"
 #include "modules/http.h"
@@ -61,17 +61,6 @@ static void eventsource_maybe_unroot(eventsource_state_t *es) {
   Ant_List_Remove(es);
 }
 
-static ant_value_t eventsource_call(ant_t *js, ant_value_t fn, ant_value_t this_val, ant_value_t *args, int nargs) {
-  if (!is_callable(fn)) return js_mkundef();
-  ant_value_t saved_this = js->this_val;
-  ant_value_t result = js_mkundef();
-  js->this_val = this_val;
-  if (vtype(fn) == kTypeBuiltin) result = sv_invoke_native(js, js_as_cfunc(fn), args, nargs, js_mkundef());
-  else result = sv_vm_call(js->vm, js, fn, this_val, args, nargs, NULL, js_mkundef());
-  js->this_val = saved_this;
-  return result;
-}
-
 static void eventsource_sync_state(ant_t *js, eventsource_state_t *es) {
   if (!es || !is_object_type(es->obj)) return;
   js_set(js, es->obj, "readyState", js_mknum(es->ready_state));
@@ -81,29 +70,14 @@ static ant_value_t eventsource_make_event(ant_t *js, const char *type, ant_value
   return Ant_Event_Create(js, proto, kind, js_mkstr(js, type, strlen(type)), false, false);
 }
 
-static void eventsource_emit(ant_t *js, eventsource_state_t *es, const char *type, ant_value_t event) {
-  ant_value_t dispatch = js_get(js, es->obj, "dispatchEvent");
-  ant_value_t args[1] = { event };
-  char handler_name[32];
-
-  if (!is_callable(dispatch)) {
-    ant_value_t eventtarget_proto = js->builtins.eventtarget_proto;
-    if (is_object_type(eventtarget_proto)) dispatch = js_get(js, eventtarget_proto, "dispatchEvent");
-  }
-  
-  eventsource_call(js, dispatch, es->obj, args, 1);
-  snprintf(handler_name, sizeof(handler_name), "on%s", type);
-  
-  ant_value_t handler = js_get(js, es->obj, handler_name);
-  Ant_Event_BeginDispatch(js, event, es->obj);
-  eventsource_call(js, handler, es->obj, args, 1);
-  Ant_Event_EndDispatch(js, event);
+static void eventsource_emit(ant_t *js, eventsource_state_t *es, ant_value_t event) {
+  Ant_EventTarget_Dispatch(js, es->obj, event);
   process_microtasks(js);
 }
 
 static void eventsource_emit_simple(ant_t *js, eventsource_state_t *es, const char *type) {
   ant_value_t event = eventsource_make_event(js, type, js->builtins.event_proto, ANT_EVENT_BASE);
-  if (!is_err(event)) eventsource_emit(js, es, type, event);
+  if (!is_err(event)) eventsource_emit(js, es, event);
 }
 
 static void eventsource_emit_error_once(ant_t *js, eventsource_state_t *es) {
@@ -214,7 +188,7 @@ static bool eventsource_on_message(const ant_sse_message_t *message, void *user_
   );
   
   Ant_Event_SetField(js, event, ANT_EVENT_FIELD_MESSAGE_origin, js_mkstr(js, "", 0));
-  eventsource_emit(js, es, type, event);
+  eventsource_emit(js, es, event);
   
   return !es->closed;
 }
@@ -376,9 +350,6 @@ static ant_value_t eventsource_create_object(ant_t *js) {
   ant_value_t obj = js_mkobj(js);
   if (is_object_type(js->builtins.eventsource_proto)) js_set_proto_init(obj, js->builtins.eventsource_proto);
   js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_EVENTTARGET));
-  js_set(js, obj, "onopen", js_mknull());
-  js_set(js, obj, "onmessage", js_mknull());
-  js_set(js, obj, "onerror", js_mknull());
   js_set_finalizer(obj, eventsource_finalize);
   return obj;
 }
@@ -434,12 +405,43 @@ static ant_value_t js_eventsource_close(ant_params_t) {
   return js_mkundef();
 }
 
+#define ES_HANDLER(name, type) \
+  static ant_value_t eventsource_get_##name(ant_params_t) { \
+    if (!eventsource_data(js_getthis(js))) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid EventSource"); \
+    return Ant_EventTarget_GetHandler(js, js_getthis(js), ANT_STRING(type)); \
+  } \
+  static ant_value_t eventsource_set_##name(ant_params_t) { \
+    if (!eventsource_data(js_getthis(js))) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid EventSource"); \
+    Ant_EventTarget_SetHandler(js, js_getthis(js), ANT_STRING(type), nargs > 0 ? args[0] : js_mknull()); \
+    return js_mkundef(); \
+  }
+
+ES_HANDLER(onopen, "open")
+ES_HANDLER(onmessage, "message")
+ES_HANDLER(onerror, "error")
+
 void init_eventsource_module(ant_t *js) {
   ant_value_t eventtarget_proto = js->builtins.eventtarget_proto;
   js->builtins.eventsource_proto = js_mkobj(js);
   
   if (is_object_type(eventtarget_proto)) js_set_proto_init(js->builtins.eventsource_proto, eventtarget_proto);
   js_set(js, js->builtins.eventsource_proto, "close", Ant_Function_Create(js_eventsource_close));
+  
+  js_set_accessor_desc(
+    js, js->builtins.eventsource_proto, "onopen", 6, Ant_Function_Create(eventsource_get_onopen), 
+    Ant_Function_CreateWithArity(eventsource_set_onopen, 1), JS_DESC_E | JS_DESC_C
+  );
+  
+  js_set_accessor_desc(
+    js, js->builtins.eventsource_proto, "onmessage", 9, Ant_Function_Create(eventsource_get_onmessage),
+    Ant_Function_CreateWithArity(eventsource_set_onmessage, 1), JS_DESC_E | JS_DESC_C
+  );
+  
+  js_set_accessor_desc(
+    js, js->builtins.eventsource_proto, "onerror", 7, Ant_Function_Create(eventsource_get_onerror), 
+    Ant_Function_CreateWithArity(eventsource_set_onerror, 1), JS_DESC_E | JS_DESC_C
+  );
+  
   js_set(js, js->builtins.eventsource_proto, "CONNECTING", js_mknum(ES_CONNECTING));
   js_set(js, js->builtins.eventsource_proto, "OPEN", js_mknum(ES_OPEN));
   js_set(js, js->builtins.eventsource_proto, "CLOSED", js_mknum(ES_CLOSED));
@@ -450,6 +452,13 @@ void init_eventsource_module(ant_t *js) {
   js_set(js, js->builtins.eventsource_ctor, "OPEN", js_mknum(ES_OPEN));
   js_set(js, js->builtins.eventsource_ctor, "CLOSED", js_mknum(ES_CLOSED));
   js_set_global_builtin(js, "EventSource", js->builtins.eventsource_ctor);
+}
+
+void cleanup_eventsource_module(ant_t *js) {
+  for (eventsource_state_t *es = js->active_eventsources, *next; es; es = next) {
+    next = es->next;
+    eventsource_close(js, es);
+  }
 }
 
 void gc_mark_eventsource(ant_t *js, gc_mark_fn mark) {

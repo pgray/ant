@@ -79,11 +79,14 @@ ant_value_t Ant_Event_Create(
   ant_value_t type, bool bubbles, bool cancelable
 );
 
+ant_value_t Ant_EventTarget_GetHandler(ant_t *js, ant_value_t target, ant_value_t type);
+
 void Ant_Event_BeginDispatch(ant_t *js, ant_value_t event, ant_value_t target);
 void Ant_Event_EndDispatch(ant_t *js, ant_value_t event);
 void Ant_Event_SetField(ant_t *js, ant_value_t event, unsigned int index, ant_value_t value);
 void Ant_Event_DefineFields(ant_t *js, ant_value_t proto, ant_event_kind_t kind);
-void Ant_EventTarget_Dispatch(ant_t *js, ant_value_t target, ant_value_t event, ant_value_t handler);
+void Ant_EventTarget_Dispatch(ant_t *js, ant_value_t target, ant_value_t event);
+void Ant_EventTarget_SetHandler(ant_t *js, ant_value_t target, ant_value_t type, ant_value_t handler);
 
 bool Ant_EventTarget_AddListener(ant_t *js, ant_value_t target, ant_value_t type, ant_value_t listener);
 bool Ant_EventTarget_RemoveListener(ant_t *js, ant_value_t target, ant_value_t type, ant_value_t listener);

@@ -23,20 +23,21 @@
 #include "modules/process.h"
 
 typedef struct timer_entry {
-  uv_timer_t handle;
+  struct timer_entry *next;
   ant_value_t obj;
   ant_value_t callback;
   ant_value_t *args;
   int nargs;
-  int timer_id;
   int active;
+  bool young;
+  struct timer_entry *prev;
+  int timer_id;
   int closed;
   int is_interval;
   bool handle_closed;
   bool detached;
   uint64_t timeout_ms;
-  struct timer_entry *next;
-  struct timer_entry *prev;
+  uv_timer_t handle;
 } timer_entry_t;
 
 enum {
@@ -71,6 +72,7 @@ typedef struct immediate_entry {
 } immediate_entry_t;
 
 static void add_timer_entry(ant_t *js, timer_entry_t *entry) {
+  entry->young = true;
   entry->next = js->timers.timers;
   entry->prev = NULL;
   if (js->timers.timers) js->timers.timers->prev = entry;
@@ -335,6 +337,7 @@ static ant_value_t timer_make_object(ant_t *js, timer_entry_t *entry, double del
   js_set_native(obj, entry, TIMER_NATIVE_TAG);
   js_set_finalizer(obj, timer_object_finalize);
   entry->obj = obj;
+  entry->young = true;
 
   return obj;
 }
@@ -354,11 +357,13 @@ static void timer_callback(uv_timer_t *handle) {
       js->timers.active_refed_timer_count--;
   }
 
+  ant_value_t self = entry->obj;
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, callback);
+  GC_ROOT_PIN(js, self);
   
   for (int i = 0; i < entry->nargs; i++) GC_ROOT_PIN(js, entry->args[i]);
-  sv_vm_call(js->vm, js, callback, js_mkundef(), entry->args, entry->nargs, NULL, js_mkundef());
+  sv_vm_call(js->vm, js, callback, self, entry->args, entry->nargs, NULL, js_mkundef());
   GC_ROOT_RESTORE(js, root_mark);
   
   if (!entry->is_interval && !entry->active) timer_release_callback_args(entry);
@@ -378,6 +383,8 @@ static ant_value_t js_timer_refresh(ant_params_t) {
       if (!is_callable(entry->callback)) return this_obj;
       if (timer_copy_args_from_object(js, entry, this_obj) != 0)
         return js_mkerr(js, "failed to allocate timer args");
+      remove_timer_entry(js, entry);
+      add_timer_entry(js, entry);
     }
     entry->active = 1;
     js->timers.active_timer_count++;
@@ -1012,13 +1019,15 @@ void process_immediates(ant_t *js) {
   while (t->immediates_processing) {
     immediate_entry_t *entry = t->immediates_processing;
     t->immediates_processing = entry->next;
+    ant_value_t self = entry->handle;
     immediate_detach_handle(entry);
     
     if (entry->active) {
       GC_ROOT_SAVE(root_mark, js);
       GC_ROOT_PIN(js, entry->callback);
+      GC_ROOT_PIN(js, self);
       for (int i = 0; i < entry->argc; i++) GC_ROOT_PIN(js, entry->argv[i]);
-      sv_vm_call(js->vm, js, entry->callback, js_mkundef(), entry->argv, entry->argc, NULL, js_mkundef());
+      sv_vm_call(js->vm, js, entry->callback, self, entry->argv, entry->argc, NULL, js_mkundef());
       GC_ROOT_RESTORE(js, root_mark);
       process_report_uncaught_exception_if_pending(js);
       process_microtasks(js);
@@ -1186,7 +1195,10 @@ void cleanup_timer_module(ant_t *js) {
 }
 
 void gc_mark_timers(ant_t *js, gc_mark_fn mark) {
+  bool minor = js->gc.minor;
   for (timer_entry_t *t = js->timers.timers; t; t = t->next) {
+    if (minor && !t->young) break;
+    if (minor) t->young = false;
     if (!t->active) continue;
     if (is_object_type(t->obj)) mark(js, t->obj);
     mark(js, t->callback);

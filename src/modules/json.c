@@ -705,10 +705,11 @@ static ant_value_t json_apply_tojson(
   ant_value_t val,
   json_cycle_ctx *ctx
 ) {
-  if (!is_special_object(val)) return val;
+  bool bigint = vtype(val) == kTypeBigInt;
+  if (!bigint && !is_special_object(val)) return val;
 
   ant_value_t toJSON = js_mkundef();
-  bool needs_generic = is_proxy(val);
+  bool needs_generic = bigint || is_proxy(val);
   ant_prop_loc_t found = ANT_PROP_LOC_NONE;
 
   if (!needs_generic) {
@@ -839,7 +840,7 @@ static json_write_t json_write_array(
       goto abort;
     }
 
-    if (has_replacer || is_special_object(elem)) uint_to_str(idxstr, sizeof(idxstr), (uint64_t)i);
+    if (has_replacer || is_special_object(elem) || vtype(elem) == kTypeBigInt) uint_to_str(idxstr, sizeof(idxstr), (uint64_t)i);
     else idxstr[0] = '\0';
 
     json_write_t w = json_write_with_key(ctx, out, idxstr, elem, 1, depth + 1);

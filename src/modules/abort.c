@@ -5,6 +5,7 @@
 
 #include "ant.h"
 #include "list.h"
+#include "loop.h"
 #include "common.h"
 #include "ptr.h"
 #include "errors.h"
@@ -23,13 +24,11 @@
 typedef struct {
   ant_value_t aborted;
   ant_value_t reason;
-  ant_value_t onabort;
   UT_array *followers;
 } abort_signal_data_t;
 
 struct abort_timeout_entry {
   uv_timer_t handle;
-  ant_t *js;
   ant_value_t signal;
   int closed;
   abort_timeout_entry_t *next;
@@ -74,7 +73,7 @@ static ant_value_t make_timeout_error(ant_t *js) {
 static ant_value_t make_new_signal(ant_t *js) {
   abort_signal_data_t *data = malloc(sizeof(*data));
   if (!data) return js_mkerr(js, "AbortSignal: out of memory");
-  *data = (abort_signal_data_t){ .aborted = js_false, .reason = js_mkundef(), .onabort = js_mknull() };
+  *data = (abort_signal_data_t){ .aborted = js_false, .reason = js_mkundef() };
 
   ant_value_t obj = js_mkobj(js);
   js_set_native(obj, data, ABORT_SIGNAL_NATIVE_TAG);
@@ -97,9 +96,9 @@ static void signal_add_follower(ant_t *js, ant_value_t source, abort_signal_data
 
 static void signal_fire(ant_t *js, ant_value_t signal, abort_signal_data_t *data) {
   ant_value_t type = ANT_STRING("abort");
-  if (!is_callable(data->onabort) && !Ant_EventTarget_HasListeners(js, signal, type)) return;
+  if (!Ant_EventTarget_HasListeners(js, signal, type)) return;
   ant_value_t event = Ant_Event_Create(js, js->builtins.event_proto, ANT_EVENT_BASE, type, false, false);
-  if (!is_err(event)) Ant_EventTarget_Dispatch(js, signal, event, data->onabort);
+  if (!is_err(event)) Ant_EventTarget_Dispatch(js, signal, event);
 }
 
 void signal_do_abort(ant_t *js, ant_value_t signal, ant_value_t reason) {
@@ -152,18 +151,15 @@ static ant_value_t abort_signal_get_reason_fn(ant_params_t) {
 }
 
 static ant_value_t abort_signal_get_onabort(ant_params_t) {
-  abort_signal_data_t *data = get_signal_data(js_getthis(js));
-  return data ? data->onabort : abort_this_error(js, "AbortSignal");
+  ant_value_t this_obj = js_getthis(js);
+  if (!get_signal_data(this_obj)) return abort_this_error(js, "AbortSignal");
+  return Ant_EventTarget_GetHandler(js, this_obj, ANT_STRING("abort"));
 }
 
 static ant_value_t abort_signal_set_onabort(ant_params_t) {
   ant_value_t this_obj = js_getthis(js);
-  abort_signal_data_t *data = get_signal_data(this_obj);
-  if (!data) return abort_this_error(js, "AbortSignal");
-  
-  ant_value_t handler = nargs > 0 ? args[0] : js_mkundef();
-  data->onabort = is_object_type(handler) ? handler : js_mknull();
-  gc_write_barrier(js, js_obj_ptr(this_obj), data->onabort);
+  if (!get_signal_data(this_obj)) return abort_this_error(js, "AbortSignal");
+  Ant_EventTarget_SetHandler(js, this_obj, ANT_STRING("abort"), nargs > 0 ? args[0] : js_mknull());
   return js_mkundef();
 }
 
@@ -244,7 +240,7 @@ static void abort_timeout_fire_cb(uv_timer_t *handle) {
   abort_timeout_entry_t *entry = (abort_timeout_entry_t *)handle->data;
   if (!entry || entry->closed) return;
 
-  ant_t *js = entry->js;
+  ant_t *js = Ant_Loop_Isolate(handle->loop);
   signal_do_abort(js, entry->signal, make_timeout_error(js));
   process_microtasks(js);
 
@@ -265,7 +261,6 @@ static ant_value_t abort_signal_static_timeout(ant_params_t) {
   abort_timeout_entry_t *entry = calloc(1, sizeof(abort_timeout_entry_t));
   if (!entry) return js_mkerr(js, "AbortSignal.timeout: out of memory");
 
-  entry->js = js;
   entry->signal = signal;
   entry->closed = 0;
   
@@ -274,6 +269,7 @@ static ant_value_t abort_signal_static_timeout(ant_params_t) {
   
   entry->handle.data = entry;
   uv_timer_start(&entry->handle, abort_timeout_fire_cb, (uint64_t)(ms > 0 ? ms : 0), 0);
+  uv_unref((uv_handle_t *)&entry->handle);
 
   return signal;
 }
@@ -373,6 +369,15 @@ void init_abort_module(ant_t *js) {
   js_set_global_builtin(js, "AbortSignal", signal_fn);
 }
 
+void cleanup_abort_module(ant_t *js) {
+  for (abort_timeout_entry_t *entry = js->abort_timeouts, *next; entry; entry = next) {
+    next = entry->next;
+    if (uv_is_closing((uv_handle_t *)&entry->handle)) continue;
+    uv_timer_stop(&entry->handle);
+    uv_close((uv_handle_t *)&entry->handle, abort_timeout_close_cb);
+  }
+}
+
 void gc_mark_abort(ant_t *js, gc_mark_fn mark) {
   for (abort_timeout_entry_t *e = js->abort_timeouts; e; e = e->next)
     if (!e->closed) mark(js, e->signal);
@@ -381,9 +386,7 @@ void gc_mark_abort(ant_t *js, gc_mark_fn mark) {
 void gc_mark_abort_signal_object(ant_t *js, ant_value_t signal, gc_mark_fn mark) {
   abort_signal_data_t *data = (abort_signal_data_t *)js_get_native(signal, ABORT_SIGNAL_NATIVE_TAG);
   if (!data) return;
-  
   mark(js, data->reason);
-  mark(js, data->onabort);
   
   unsigned int follower_count = data->followers ? utarray_len(data->followers) : 0;
   for (unsigned int i = 0; i < follower_count; i++)

@@ -435,7 +435,7 @@ static void resolve_body_promise(
 static bool response_chunk_is_uint8_array(ant_value_t chunk, TypedArrayData **out_ta) {
   if (!is_object_type(chunk)) return false;
   TypedArrayData *ta = buffer_get_typedarray_data(chunk);
-  if (!ta || !ta->buffer || ta->buffer->is_detached) return false;
+  if (!Ant_Buffer_ViewIsLive(ta)) return false;
   if (ta->type != TYPED_ARRAY_UINT8) return false;
   *out_ta = ta;
   return true;

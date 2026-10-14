@@ -9,6 +9,7 @@
 #include <tlsuv/tls_engine.h>
 
 #include "ant.h"
+#include "list.h"
 #include "internal.h"
 #include "ptr.h"
 #include "errors.h"
@@ -21,10 +22,6 @@
 #include "modules/stream.h"
 #include "modules/timer.h"
 #include "silver/call.h"
-
-typedef struct
-  ant_tls_socket_s 
-  ant_tls_socket_t;
 
 typedef struct ant_tls_context_wrap_s {
   ant_value_t obj;
@@ -51,7 +48,7 @@ typedef struct tls_write_req_s {
   size_t len;
 } tls_write_req_t;
 
-typedef struct ant_tls_socket_s {
+struct ant_tls_socket_s {
   ant_t *js;
   ant_value_t obj;
   ant_value_t encoding;
@@ -69,12 +66,12 @@ typedef struct ant_tls_socket_s {
   tls_read_chunk_t *read_tail;
   size_t read_len;
   tls_write_req_t *writes;
-  struct ant_tls_socket_s *next_active;
+  ant_tls_socket_t *next;
+  ant_tls_socket_t **pprev;
   uint64_t timeout_ms;
   uint64_t bytes_read;
   uint64_t bytes_written;
   bool owns_ctx;
-  bool active;
   bool connecting;
   bool destroyed;
   bool closing;
@@ -82,14 +79,13 @@ typedef struct ant_tls_socket_s {
   bool read_ended;
   bool write_ended;
   bool read_drain_scheduled;
-} ant_tls_socket_t;
+};
 
 enum {
   TLS_CONTEXT_NATIVE_TAG = 0x544c5343u, // TLSC
   TLS_SOCKET_NATIVE_TAG = 0x544c534bu,  // TLSK
 };
 
-static ant_tls_socket_t *g_active_tls_sockets = NULL;
 
 static void tls_context_dispose(ant_tls_context_wrap_t *wrap) {
   if (!wrap) return;
@@ -129,21 +125,11 @@ static ant_tls_socket_t *tls_socket_data(ant_value_t value) {
 }
 
 static void tls_add_active_socket(ant_tls_socket_t *socket) {
-  if (!socket || socket->active) return;
-  socket->active = true;
-  socket->next_active = g_active_tls_sockets;
-  g_active_tls_sockets = socket;
+  if (socket) Ant_List_Insert(&socket->js->tls_sockets, socket);
 }
 
 static void tls_remove_active_socket(ant_tls_socket_t *socket) {
-  ant_tls_socket_t **it = NULL;
-  for (it = &g_active_tls_sockets; *it; it = &(*it)->next_active) {
-  if (*it == socket) {
-    *it = socket->next_active;
-    socket->next_active = NULL;
-    socket->active = false;
-    return;
-  }}
+  Ant_List_Remove(socket);
 }
 
 static ant_value_t tls_call_value(
@@ -1307,7 +1293,7 @@ ant_value_t tls_library(ant_t *js) {
 void gc_mark_tls(ant_t *js, gc_mark_fn mark) {
   ant_tls_socket_t *socket = NULL;
 
-  for (socket = g_active_tls_sockets; socket; socket = socket->next_active) {
+  for (socket = js->tls_sockets; socket; socket = socket->next) {
     mark(js, socket->obj);
     if (vtype(socket->encoding) != kTypeUndefined) mark(js, socket->encoding);
     if (vtype(socket->secure_context) != kTypeUndefined) mark(js, socket->secure_context);

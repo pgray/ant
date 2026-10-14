@@ -578,42 +578,61 @@ static bool js_inspect_collection_header(
   return js_inspect_append(builder, builder->inline_mode ? " { " : " {\n", 3);
 }
 
+static bool js_inspect_more_items(js_inspect_builder_t *builder, size_t count) {
+  if (count <= ANT_INSPECT_MAX_ENTRIES) return true;
+  size_t more = count - ANT_INSPECT_MAX_ENTRIES;
+  return js_inspect_property_prefix(builder) &&
+    js_inspect_appendf(builder, "... %zu more item%s", more, more == 1 ? "" : "s");
+}
+
 bool js_inspect_map(js_inspect_builder_t *builder, ant_value_t obj, map_entry_t *head) {
+  size_t count = HASH_COUNT(head), shown = 0;
   bool nested = false;
   map_entry_t *entry, *tmp;
-  HASH_ITER(hh, head, entry, tmp)
-    if (js_inspect_is_nested(entry->key_val) || js_inspect_is_nested(entry->value)) { nested = true; break; }
   
-  if (!js_inspect_collection_header(builder, obj, "Map", HASH_COUNT(head), nested)) return false;
+  HASH_ITER(hh, head, entry, tmp) {
+    if (shown++ == ANT_INSPECT_MAX_ENTRIES) break;
+    if (js_inspect_is_nested(entry->key_val) || js_inspect_is_nested(entry->value)) { nested = true; break; }
+  }
+  
+  if (!js_inspect_collection_header(builder, obj, "Map", count, nested)) return false;
   if (builder->closed) return true;
   js_inspect_begin_body(builder);
   
+  shown = 0;
   HASH_ITER(hh, head, entry, tmp) {
+    if (shown++ == ANT_INSPECT_MAX_ENTRIES) break;
     if (!js_inspect_property_prefix(builder)) return false;
     if (!js_inspect_append_tostr(builder, entry->key_val)) return false;
     if (!js_inspect_append(builder, " => ", 4)) return false;
     if (!js_inspect_append_tostr(builder, entry->value)) return false;
   }
   
-  return js_inspect_object_body(builder, obj) && js_inspect_close(builder);
+  return js_inspect_more_items(builder, count) && js_inspect_object_body(builder, obj) && js_inspect_close(builder);
 }
 
 bool js_inspect_set(js_inspect_builder_t *builder, ant_value_t obj, set_entry_t *head) {
+  size_t count = HASH_COUNT(head), shown = 0;
   bool nested = false;
   set_entry_t *entry, *tmp;
-  HASH_ITER(hh, head, entry, tmp)
-    if (js_inspect_is_nested(entry->value)) { nested = true; break; }
   
-  if (!js_inspect_collection_header(builder, obj, "Set", HASH_COUNT(head), nested)) return false;
+  HASH_ITER(hh, head, entry, tmp) {
+    if (shown++ == ANT_INSPECT_MAX_ENTRIES) break;
+    if (js_inspect_is_nested(entry->value)) { nested = true; break; }
+  }
+  
+  if (!js_inspect_collection_header(builder, obj, "Set", count, nested)) return false;
   if (builder->closed) return true;
   js_inspect_begin_body(builder);
   
+  shown = 0;
   HASH_ITER(hh, head, entry, tmp) {
+    if (shown++ == ANT_INSPECT_MAX_ENTRIES) break;
     if (!js_inspect_property_prefix(builder)) return false;
     if (!js_inspect_append_tostr(builder, entry->value)) return false;
   }
   
-  return js_inspect_object_body(builder, obj) && js_inspect_close(builder);
+  return js_inspect_more_items(builder, count) && js_inspect_object_body(builder, obj) && js_inspect_close(builder);
 }
 
 static ant_value_t js_inspect_error_to_string(ant_t *js, ant_value_t obj) {

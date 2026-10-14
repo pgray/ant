@@ -6,7 +6,6 @@
 #include "internal.h"
 #include "modules/lmdb.h"
 #include "modules/buffer.h"
-#include "descriptors.h"
 #include "gc/modules.h"
 
 #include <lmdb.h>
@@ -334,7 +333,7 @@ static bool js_to_mdb_val(ant_t *js, ant_value_t input, MDB_val *out) {
   if (vtype(input) == kTypeObject) {
     TypedArrayData *ta = buffer_get_typedarray_data(input);
     if (ta) {
-      if (!ta->buffer || !ta->buffer->data) return false;
+      if (!Ant_Buffer_ViewIsLive(ta)) return false;
       out->mv_data = (void *)(ta->buffer->data + ta->byte_offset);
       out->mv_size = ta->byte_length;
       return true;

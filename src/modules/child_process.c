@@ -628,7 +628,7 @@ static ant_value_t child_write_impl(
     if (!data) return js_mkerr(js, "Data must be a string or Buffer");
   } else {
     TypedArrayData *ta_data = buffer_get_typedarray_data(data_arg);
-    if (!ta_data || !ta_data->buffer || !ta_data->buffer->data) {
+    if (!Ant_Buffer_ViewIsLive(ta_data)) {
       return js_mkerr(js, "Data must be a string or Buffer");
     }
     data = (const char *)(ta_data->buffer->data + ta_data->byte_offset);

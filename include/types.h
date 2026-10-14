@@ -47,6 +47,10 @@ typedef struct abort_timeout_entry abort_timeout_entry_t;
 typedef struct eventsource_state_s eventsource_state_t;
 typedef struct websocket_state_s   websocket_state_t;
 
+typedef struct net_server_s     net_server_t;
+typedef struct net_socket_s     net_socket_t;
+typedef struct ant_tls_socket_s ant_tls_socket_t;
+
 typedef uint64_t ant_offset_t;
 typedef uint64_t ant_value_t;
 

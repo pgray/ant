@@ -85,7 +85,7 @@ static ant_value_t sc_clone_typed_array(
     js, make_dom_exception(js, "TypedArray could not be cloned", "DataCloneError")
   );
   
-  if (ta_data->buffer->is_detached) return sc_detached_error(js);
+  if (!Ant_Buffer_ViewIsLive(ta_data)) return sc_detached_error(js);
   
   ArrayBufferData *buffer = NULL;
   ant_value_t ab_obj = sc_clone_view_buffer(js, key, seen, transfer, &buffer);
@@ -142,7 +142,7 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
     DataViewData *dv = buffer_get_dataview_data(val);
     if (!dv || !dv->buffer)
       return js_throw(js, make_dom_exception(js, "DataView could not be cloned", "DataCloneError"));
-    if (dv->buffer->is_detached) return sc_detached_error(js);
+    if (!Ant_Buffer_ViewIsLive(dv)) return sc_detached_error(js);
     
     ArrayBufferData *new_buf = NULL;
     ant_value_t ab_obj = sc_clone_view_buffer(js, val, seen, transfer, &new_buf);

@@ -87,16 +87,6 @@ ArrayBufferData *buffer_get_arraybuffer_data(ant_value_t value);
 TypedArrayData *buffer_get_typedarray_data(ant_value_t value);
 DataViewData *buffer_get_dataview_data(ant_value_t value);
 
-static inline bool Ant_Buffer_GetViewBytes(const TypedArrayData *ta, uint8_t **ptr, size_t *len) {
-  if (!ta || !ta->buffer || ta->buffer->is_detached) {
-    *ptr = NULL;
-    *len = 0;
-    return false;
-  }
-  *ptr = ta->buffer->data + ta->byte_offset;
-  *len = ta->byte_length;
-  return true;
-}
 
 bool buffer_bytes_to_string(
   ant_t *js, const uint8_t *data, size_t len,
@@ -126,5 +116,25 @@ bool buffer_is_binary_source(ant_value_t value);
 bool buffer_source_get_bytes(ant_t *js, ant_value_t value, const uint8_t **out, size_t *len);
 bool buffer_typedarray_data_read_index(ant_t *js, const TypedArrayData *ta_data, size_t index, ant_value_t *out);
 bool buffer_typedarray_read_index(ant_t *js, ant_value_t value, size_t index, ant_value_t *out);
+
+static inline bool Ant_Buffer_IsLive(const ArrayBufferData *buffer) {
+  return buffer && !buffer->is_detached;
+}
+
+#define Ant_Buffer_ViewIsLive(view) ({               \
+  typeof(view) _ant_view = (view);                   \
+  _ant_view && Ant_Buffer_IsLive(_ant_view->buffer); \
+})
+
+static inline bool Ant_Buffer_GetViewBytes(const TypedArrayData *ta, uint8_t **ptr, size_t *len) {
+  if (!Ant_Buffer_ViewIsLive(ta)) {
+    *ptr = NULL;
+    *len = 0;
+    return false;
+  }
+  *ptr = ta->buffer->data + ta->byte_offset;
+  *len = ta->byte_length;
+  return true;
+}
 
 #endif

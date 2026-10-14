@@ -9,6 +9,9 @@
 struct map_entry;
 struct set_entry;
 
+static constexpr size_t ANT_INSPECT_MAX_ENTRIES = 100;
+static constexpr int ANT_INSPECT_MAX_DEPTH = 2;
+
 typedef struct {
   ant_t *js;
   char *buf;

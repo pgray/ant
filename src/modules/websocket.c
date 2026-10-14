@@ -11,15 +11,14 @@
 #include <zlib.h>
 
 #include "ant.h"
+#include "ptr.h"
 #include "list.h"
 #include "loop.h"
 #include "common.h"
 #include "errors.h"
 #include "inspector.h"
 #include "internal.h"
-#include "ptr.h"
 #include "descriptors.h"
-#include "silver/call.h"
 
 #include "http/websocket.h"
 #include "modules/blob.h"
@@ -56,7 +55,6 @@ struct websocket_state_s {
   bool deflate_ready: 1;
   bool inflate_ready: 1;
   bool binary_type_blob: 1;
-  ant_value_t handler_listeners[4];
 };
 
 enum { WS_HANDLER_OPEN, WS_HANDLER_MESSAGE, WS_HANDLER_CLOSE, WS_HANDLER_ERROR, WS_HANDLER_COUNT };
@@ -123,17 +121,6 @@ static void websocket_free_state(websocket_state_t *ws) {
   if (ws->deflate_ready) deflateEnd(&ws->deflate_strm);
   if (ws->inflate_ready) inflateEnd(&ws->inflate_strm);
   free(ws);
-}
-
-static ant_value_t websocket_call(ant_t *js, ant_value_t fn, ant_value_t this_val, ant_value_t *args, int nargs) {
-  if (!is_callable(fn)) return js_mkundef();
-  ant_value_t saved_this = js->this_val;
-  ant_value_t result = js_mkundef();
-  js->this_val = this_val;
-  if (vtype(fn) == kTypeBuiltin) result = sv_invoke_native(js, js_as_cfunc(fn), args, nargs, js_mkundef());
-  else result = sv_vm_call(js->vm, js, fn, this_val, args, nargs, NULL, js_mkundef());
-  js->this_val = saved_this;
-  return result;
 }
 
 static void websocket_sync_state(ant_t *js, websocket_state_t *ws) {
@@ -269,95 +256,30 @@ static ant_offset_t websocket_listener_count(ant_t *js, websocket_state_t *ws, i
   return eventemitter_listener_count(js, ws->obj, ws_handler_types[idx]);
 }
 
-static void websocket_emit_event(ant_t *js, websocket_state_t *ws, int idx, ant_value_t event, ant_offset_t count) {
-  ant_value_t args[1] = { event };
-  ant_value_t listener = ws->handler_listeners[idx];
-
-  if (count == 1 && is_callable(listener)) {
-    ant_value_t handler = js_get_slot(listener, SLOT_DATA);
-    if (!is_callable(handler)) return;
-    
-    Ant_Event_BeginDispatch(js, event, ws->obj);
-    websocket_call(js, handler, ws->obj, args, 1);
-    Ant_Event_EndDispatch(js, event);
-    return;
-  }
-
-  ant_value_t dispatch = js_get(js, ws->obj, "dispatchEvent");
-  if (!is_callable(dispatch)) {
-    ant_value_t eventtarget_proto = js->builtins.eventtarget_proto;
-    if (is_object_type(eventtarget_proto)) dispatch = js_get(js, eventtarget_proto, "dispatchEvent");
-  }
-  
-  websocket_call(js, dispatch, ws->obj, args, 1);
-}
-
 static void websocket_emit(ant_t *js, websocket_state_t *ws, int idx, ant_value_t event) {
   ant_offset_t count = websocket_listener_count(js, ws, idx);
   if (count == 0) return;
-  websocket_emit_event(js, ws, idx, event, count);
+  Ant_EventTarget_Dispatch(js, ws->obj, event);
 }
 
 static void websocket_emit_simple(ant_t *js, websocket_state_t *ws, int idx) {
   ant_offset_t count = websocket_listener_count(js, ws, idx);
   if (count == 0) return;
   ant_value_t event = websocket_make_event(js, js->builtins.event_proto, ANT_EVENT_BASE, ws_handler_types[idx]);
-  if (!is_err(event)) websocket_emit_event(js, ws, idx, event, count);
-}
-
-static ant_value_t websocket_handler_listener(ant_params_t) {
-  ant_value_t handler = js_get_slot(js->current_func, SLOT_DATA);
-  if (!is_callable(handler)) return js_mkundef();
-  return websocket_call(js, handler, js_getthis(js), args, nargs);
-}
-
-static ant_value_t websocket_get_handler(websocket_state_t *ws, int idx) {
-  ant_value_t listener = ws->handler_listeners[idx];
-  return is_callable(listener) ? js_get_slot(listener, SLOT_DATA) : js_mknull();
-}
-
-static ant_value_t websocket_set_handler(ant_t *js, websocket_state_t *ws, int idx, ant_value_t value) {
-  const char *type = ws_handler_types[idx];
-  ant_value_t listener = ws->handler_listeners[idx];
-  bool registered = is_callable(listener);
-
-  if (!is_callable(value)) {
-    if (registered) {
-      eventemitter_remove_listener(js, ws->obj, type, listener);
-      ws->handler_listeners[idx] = js_mkundef();
-    }
-    return js_mkundef();
-  }
-
-  if (registered) {
-    js_set_slot_wb(js, listener, SLOT_DATA, value);
-    return js_mkundef();
-  }
-
-  GC_ROOT_SAVE(mark, js);
-  GC_ROOT_PIN(js, value);
-  listener = js_heavy_mkfun(js, websocket_handler_listener, value);
-  
-  if (is_err(listener)) { GC_ROOT_RESTORE(js, mark); return listener; }
-  GC_ROOT_PIN(js, listener);
-  eventemitter_add_listener(js, ws->obj, type, listener, false);
-  
-  ws->handler_listeners[idx] = listener;
-  GC_ROOT_RESTORE(js, mark);
-  
-  return js_mkundef();
+  if (!is_err(event)) Ant_EventTarget_Dispatch(js, ws->obj, event);
 }
 
 #define WS_HANDLER_ACCESSOR(name, idx) \
   static ant_value_t js_websocket_get_##name(ant_params_t) { \
     websocket_state_t *ws = websocket_data(js_getthis(js)); \
     if (!ws) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid WebSocket"); \
-    return websocket_get_handler(ws, idx); \
+    return Ant_EventTarget_GetHandler(js, ws->obj, js_mkstr(js, ws_handler_types[idx], strlen(ws_handler_types[idx]))); \
   } \
   static ant_value_t js_websocket_set_##name(ant_params_t) { \
     websocket_state_t *ws = websocket_data(js_getthis(js)); \
     if (!ws) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid WebSocket"); \
-    return websocket_set_handler(js, ws, idx, nargs > 0 ? args[0] : js_mknull()); \
+    Ant_EventTarget_SetHandler(js, ws->obj, js_mkstr(js, ws_handler_types[idx], strlen(ws_handler_types[idx])), nargs > 0 ? args[0] : js_mknull()); \
+    return js_mkundef(); \
   }
 
 WS_HANDLER_ACCESSOR(onopen, WS_HANDLER_OPEN)
@@ -413,7 +335,7 @@ static void websocket_emit_message(ant_t *js, websocket_state_t *ws, const uint8
   ant_value_t event = websocket_new_message_event(js, data_val);
   
   if (is_err(event)) return;
-  websocket_emit_event(js, ws, WS_HANDLER_MESSAGE, event, count);
+  Ant_EventTarget_Dispatch(js, ws->obj, event);
 }
 
 static void websocket_emit_close(ant_t *js, websocket_state_t *ws, uint16_t code, const char *reason, bool was_clean) {
@@ -1002,6 +924,15 @@ void init_websocket_module(ant_t *js) {
   Ant_Event_DefineFields(js, js->builtins.close_event_proto, ANT_EVENT_CLOSE);
   ant_value_t close_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_close_event_ctor, js->builtins.close_event_proto, "CloseEvent", 1);
   js_set_global_builtin(js, "CloseEvent", close_ctor);
+}
+
+void cleanup_websocket_module(ant_t *js) {
+  for (websocket_state_t *ws = js->active_websockets, *next; ws; ws = next) {
+    next = ws->next;
+    if (!ws->is_client) continue;
+    ws->close_emitted = true;
+    websocket_close_client(ws, 1001, false);
+  }
 }
 
 void gc_mark_websocket(ant_t *js, gc_mark_fn mark) {

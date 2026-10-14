@@ -77,6 +77,10 @@ struct ant_isolate_t {
   abort_timeout_entry_t *abort_timeouts;
   eventsource_state_t *active_eventsources;
   websocket_state_t *active_websockets;
+  
+  net_server_t *net_servers;
+  net_socket_t *net_sockets;
+  ant_tls_socket_t *tls_sockets;
 
   ant_fixed_arena_t obj_arena;
   ant_fixed_arena_t closure_arena;
@@ -179,6 +183,10 @@ struct ant_isolate_t {
     int multiref_ids[MAX_MULTIREF_OBJS];
     int multiref_count;
     int multiref_next_id;
+    
+    uintptr_t *visited;
+    uint32_t visited_cap;
+    uint32_t visited_len;
   } stringify;
 
   struct {

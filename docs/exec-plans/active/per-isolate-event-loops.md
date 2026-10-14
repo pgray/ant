@@ -51,11 +51,28 @@ their isolate with `Ant_Loop_Isolate(handle->loop)` instead of a stored
   methods, server hooks), the libuv handle of a client callback, or
   `Ant_Http_RequestLoop(req)` for HTTP callbacks. The SSE parser callback gets
   `js` through a stack `eventsource_feed_t`.
-- Other states still store `js` (fetch requests, abort timeouts, process
-  runs, readline, workers, napi, server, net, tls). Convert them the same way
-  when touched.
+- Abort timeout entries no longer store `js` either (fire callback uses the
+  handle's loop). net servers/sockets and tls sockets live in per-isolate lists
+  (`js->net_servers`, `js->net_sockets`, `js->tls_sockets`) via `list.h`.
+- Other states still store `js` (fetch requests, process runs, readline,
+  workers, napi, server). Convert them the same way when touched.
+
+## Teardown
+
+- `js_destroy` runs module teardowns while the VM and module state are alive:
+  `cleanup_abort_module`, `cleanup_eventsource_module` and
+  `cleanup_websocket_module` close their handles through the module's own close
+  paths (WebSocket close events are suppressed), then `Ant_Loop_Drain` runs the
+  isolate's loop (default or owned) in bounded non-blocking passes so the close
+  callbacks complete.
+- A blanket `uv_walk` close stays limited to owned loops in `Ant_Loop_Destroy`:
+  object finalizers run between the two and some of them close their own
+  handles, so closing every handle earlier would double-close.
 
 ## Follow-ups
 
 - Multiple isolates on one thread must each be driven (`uv_run` per loop);
   the reactor only runs its own isolate's loop.
+- Remaining modules with handles (net, tls, fs watchers, child_process, process
+  signals/tty, readline, server, rpc, atomics, sandbox, napi) need teardowns like
+  the three above before the default loop can be walked safely.

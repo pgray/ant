@@ -25,7 +25,7 @@ static bool napi_get_typedarray_data(
   TypedArrayData **out
 ) {
   TypedArrayData *ta = buffer_get_typedarray_data((ant_value_t)value);
-  if (!ta || !ta->buffer || ta->buffer->is_detached) return false;
+  if (!Ant_Buffer_ViewIsLive(ta)) return false;
   *out = ta;
   return true;
 }

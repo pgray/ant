@@ -43,10 +43,14 @@
 #include "silver/ops/using.h"
 #include "silver/ops/async.h"
 #include "silver/ops/eval_env.h"
+
 #include "modules/regex.h"
 #include "modules/json.h"
 #include "modules/collections.h"
 #include "modules/process.h"
+#include "modules/abort.h"
+#include "modules/eventsource.h"
+#include "modules/websocket.h"
 
 #ifndef ANT_WASM_EMBED
 #include <uv.h>
@@ -832,11 +836,54 @@ static void mark_multiref(ant_t *js, ant_value_t obj) {
   }
 }
 
+static bool scan_visit(ant_t *js, ant_value_t value) {
+  uintptr_t key = (uintptr_t)vdata(value);
+  uint32_t cap = js->stringify.visited_cap;
+  
+  if ((js->stringify.visited_len + 1) * 2 > cap) {
+    uint32_t next_cap = cap ? cap * 2 : 256;
+    uintptr_t *next = calloc(next_cap, sizeof(*next));
+    if (!next) return true;
+    for (uint32_t i = 0; i < cap; i++) {
+      uintptr_t k = js->stringify.visited[i];
+      if (!k) continue;
+      uint32_t j = (uint32_t)((k >> 3) * 0x9E3779B97F4A7C15ull >> 32) & (next_cap - 1);
+      while (next[j]) j = (j + 1) & (next_cap - 1);
+      next[j] = k;
+    }
+    free(js->stringify.visited);
+    js->stringify.visited = next;
+    js->stringify.visited_cap = cap = next_cap;
+  }
+  
+  uint32_t i = (uint32_t)((key >> 3) * 0x9E3779B97F4A7C15ull >> 32) & (cap - 1);
+  while (js->stringify.visited[i]) {
+    if (js->stringify.visited[i] == key) return false;
+    i = (i + 1) & (cap - 1);
+  }
+  
+  js->stringify.visited[i] = key;
+  js->stringify.visited_len++;
+  return true;
+}
+
+static void scan_refs_root(ant_t *js, ant_value_t value) {
+  js->stringify.multiref_count = 0;
+  js->stringify.multiref_next_id = 0;
+  js->stringify.depth = 0;
+  scan_refs(js, value);
+  free(js->stringify.visited);
+  js->stringify.visited = NULL;
+  js->stringify.visited_cap = js->stringify.visited_len = 0;
+}
+
 static void scan_obj_refs(ant_t *js, ant_value_t obj) {
   if (is_on_stack(js, obj)) {
     mark_multiref(js, obj);
     return;
   }
+  
+  if (!scan_visit(js, obj)) return;
   
   if (js->stringify.depth >= MAX_STRINGIFY_DEPTH) return;
   js->stringify.stack[js->stringify.depth++] = obj;
@@ -849,16 +896,24 @@ static void scan_obj_refs(ant_t *js, ant_value_t obj) {
     }
   }
 
+  size_t shown = 0;
   map_entry_t **map = get_map_from_obj(obj);
   if (map) {
     map_entry_t *entry, *tmp;
-    HASH_ITER(hh, *map, entry, tmp) { scan_refs(js, entry->key_val); scan_refs(js, entry->value); }
+    HASH_ITER(hh, *map, entry, tmp) {
+      if (shown++ == ANT_INSPECT_MAX_ENTRIES) break;
+      scan_refs(js, entry->key_val);
+      scan_refs(js, entry->value);
+    }
   }
 
   set_entry_t **set = get_set_from_obj(obj);
   if (set) {
     set_entry_t *entry, *tmp;
-    HASH_ITER(hh, *set, entry, tmp) scan_refs(js, entry->value);
+    HASH_ITER(hh, *set, entry, tmp) {
+      if (shown++ == ANT_INSPECT_MAX_ENTRIES) break;
+      scan_refs(js, entry->value);
+    }
   }
 
   ant_value_t proto_val = get_proto(js, obj);
@@ -872,6 +927,8 @@ static void scan_arr_refs(ant_t *js, ant_value_t obj) {
     mark_multiref(js, obj);
     return;
   }
+  
+  if (!scan_visit(js, obj)) return;
   
   if (js->stringify.depth >= MAX_STRINGIFY_DEPTH) return;
   js->stringify.stack[js->stringify.depth++] = obj;
@@ -897,6 +954,8 @@ static void scan_func_refs(ant_t *js, ant_value_t value) {
     mark_multiref(js, func_obj);
     return;
   }
+  
+  if (!scan_visit(js, func_obj)) return;
   
   if (js->stringify.depth >= MAX_STRINGIFY_DEPTH) return;
   js->stringify.stack[js->stringify.depth++] = func_obj;
@@ -1380,11 +1439,13 @@ static size_t strobj_body(ant_t *js, ant_value_t obj, char *buf, size_t len, siz
   blob_data_t *bd = blob_get_data(obj);
   if (bd) return n + stringify_blob(bd, js_brand_id(obj) == BRAND_FILE, buf + n, REMAIN(n, len));
   
+  bool too_deep = js->stringify.depth - 1 > ANT_INSPECT_MAX_DEPTH;
+  
   map_entry_t **map = get_map_from_obj(obj);
-  if (map) return strobj_map(js, obj, *map, buf, len, n);
+  if (map) return too_deep ? n + cpy(buf + n, REMAIN(n, len), "[Map]", 5) : strobj_map(js, obj, *map, buf, len, n);
   
   set_entry_t **set = get_set_from_obj(obj);
-  if (set) return strobj_set(js, obj, *set, buf, len, n);
+  if (set) return too_deep ? n + cpy(buf + n, REMAIN(n, len), "[Set]", 5) : strobj_set(js, obj, *set, buf, len, n);
   
   return strobj_inspect(js, obj, buf, len, n);
 }
@@ -2048,10 +2109,7 @@ static js_cstr_t js_cstr_impl(
     return out;
   }
 
-  js->stringify.multiref_count = 0;
-  js->stringify.multiref_next_id = 0;
-  js->stringify.depth = 0;
-  scan_refs(js, value);
+  scan_refs_root(js, value);
 
   size_t capacity = stack_size;
   char *buf = stack_buf;
@@ -2172,10 +2230,7 @@ const char *js_str(ant_t *js, ant_value_t value) {
     return "Error";
   }
   
-  js->stringify.multiref_count = 0;
-  js->stringify.multiref_next_id = 0;
-  js->stringify.depth = 0;
-  scan_refs(js, value);
+  scan_refs_root(js, value);
   
   size_t capacity = 4096;
   char *buf = (char *)calloc(1, capacity);
@@ -8093,7 +8148,7 @@ static ant_value_t object_enum(ant_t *js, ant_value_t obj, enum obj_enum_mode mo
   }
   
   ant_offset_t doff = is_arr ? get_dense_buf(obj) : 0;
-  bool typed_live = typed && typed->buffer && !typed->buffer->is_detached;
+  bool typed_live = Ant_Buffer_ViewIsLive(typed);
   ant_offset_t elem_len = doff ? dense_iterable_length(js, obj) : typed_live ? (ant_offset_t)typed->length : 0;
   
   uint64_t want = (uint64_t)elem_len + ant_shape_count(ptr->shape);
@@ -8209,7 +8264,7 @@ ant_value_t js_own_property_keys(ant_t *js, ant_value_t obj, bool include_symbol
   }
 
   TypedArrayData *typed = ptr && ptr->flags.is_exotic ? buffer_get_typedarray_data(obj) : NULL;
-  if (typed && typed->buffer && !typed->buffer->is_detached)
+  if (Ant_Buffer_ViewIsLive(typed))
     own_keys_push_string_indexes(js, arr, &out_idx, (ant_offset_t)typed->length);
 
   if (!ptr || !ptr->shape) goto done;
@@ -8989,7 +9044,7 @@ static ant_value_t for_in_keys_add_exotic_indices(
   ant_value_t prim = get_slot(obj, SLOT_PRIMITIVE);
   if (vtype(prim) == kTypeString) return for_in_keys_add_indices(js, out, seen, str_utf16_len(js, prim));
   TypedArrayData *typed = ptr->flags.is_exotic ? buffer_get_typedarray_data(obj) : NULL;
-  if (typed && typed->buffer && !typed->buffer->is_detached)
+  if (Ant_Buffer_ViewIsLive(typed))
     return for_in_keys_add_indices(js, out, seen, (ant_offset_t)typed->length);
   return js_mkundef();
 }
@@ -9458,7 +9513,7 @@ static bool typed_array_has_index(ant_value_t obj, const char *key, size_t key_l
   unsigned long index = 0;
   
   return
-    typed && typed->buffer && !typed->buffer->is_detached &&
+    Ant_Buffer_ViewIsLive(typed) &&
     parse_array_index(key, key_len, (ant_offset_t)typed->length, &index);
 }
 
@@ -22028,6 +22083,10 @@ void js_destroy(ant_t *js) {
   cleanup_timer_module(js);
   json_layout_cache_clear(js);
   cleanup_cron_module(js);
+  cleanup_abort_module(js);
+  cleanup_eventsource_module(js);
+  cleanup_websocket_module(js);
+  Ant_Loop_Drain(js);
   gc_weak_cleanup(js);
 
   if (js->vm) {

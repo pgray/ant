@@ -54,6 +54,7 @@ typedef struct {
   bool is_tdz;
   uint8_t eval_flags;
   bool char_code_at_hint;
+  bool str_accumulating;
   uint8_t inferred_type;
   sv_binding_meta_t binding;
 } sv_local_t;

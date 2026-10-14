@@ -136,7 +136,7 @@ static ant_value_t fs_get_write_data_arg(
   }
 
   TypedArrayData *ta_data = buffer_get_typedarray_data(value);
-  if (!ta_data || !ta_data->buffer || !ta_data->buffer->data)
+  if (!Ant_Buffer_ViewIsLive(ta_data))
     return js_mkerr(js, "%s() data must be a Buffer, TypedArray, DataView, or string", fn_name);
 
   out->data = (const char *)(ta_data->buffer->data + ta_data->byte_offset);
@@ -1392,7 +1392,7 @@ static ant_value_t fs_coerce_path(ant_t *js, ant_value_t arg) {
   if (vtype(arg) != kTypeString) {
     TypedArrayData *ta = buffer_get_typedarray_data(arg);
     if (ta && ta->type == TYPED_ARRAY_UINT8) {
-      if (!ta->buffer || ta->buffer->is_detached)
+      if (!Ant_Buffer_ViewIsLive(ta))
         return js_mkerr_typed(js, JS_ERR_TYPE, "path must not be detached");
       arg = js_mkstr(js, ta->byte_length ? (const char *)ta->buffer->data + ta->byte_offset : "", ta->byte_length);
     } else {
@@ -1755,7 +1755,7 @@ static ant_value_t builtin_fs_filehandle_read(ant_params_t) {
   if (nargs < 1) return fs_rejected_promise(js, js_mkerr(js, "FileHandle.read() requires a buffer argument"));
 
   TypedArrayData *ta_data = buffer_get_typedarray_data(args[0]);
-  if (!ta_data || !ta_data->buffer || !ta_data->buffer->data)
+  if (!Ant_Buffer_ViewIsLive(ta_data))
     return fs_rejected_promise(js, js_mkerr(js, "FileHandle.read() buffer must be a Buffer or TypedArray"));
 
   size_t buf_len = ta_data->byte_length;
@@ -1802,7 +1802,7 @@ static ant_value_t builtin_fs_filehandle_write(ant_params_t) {
     if (nargs >= 2 && vtype(args[1]) == kTypeNumber) position = (int64_t)js_getnum(args[1]);
   } else {
     TypedArrayData *ta_data = buffer_get_typedarray_data(args[0]);
-    if (!ta_data || !ta_data->buffer || !ta_data->buffer->data)
+    if (!Ant_Buffer_ViewIsLive(ta_data))
       return fs_rejected_promise(js, js_mkerr(js, "FileHandle.write() data must be a Buffer, TypedArray, DataView, or string"));
       
     uint8_t *buf_data = ta_data->buffer->data + ta_data->byte_offset;
@@ -1860,7 +1860,7 @@ static ant_value_t builtin_fs_filehandle_writeFile(ant_params_t) {
     if (!data) return fs_rejected_promise(js, js_mkerr(js, "Failed to get string"));
   } else {
     TypedArrayData *ta_data = buffer_get_typedarray_data(args[0]);
-    if (!ta_data || !ta_data->buffer || !ta_data->buffer->data)
+    if (!Ant_Buffer_ViewIsLive(ta_data))
       return fs_rejected_promise(js, js_mkerr(js, "FileHandle.writeFile() data must be a Buffer, TypedArray, DataView, or string"));
     data = (const char *)(ta_data->buffer->data + ta_data->byte_offset);
     len = ta_data->byte_length;
@@ -5043,7 +5043,7 @@ static void on_read_fd_complete(uv_fs_t *uv_req) {
 
   if (req->data && bytes_read > 0) {
     TypedArrayData *ta = buffer_get_typedarray_data(req->target_buffer);
-    if (ta && ta->buffer && ta->buffer->data) {
+    if (Ant_Buffer_ViewIsLive(ta)) {
       uint8_t *dest = ta->buffer->data + ta->byte_offset + req->buf_offset;
       memcpy(dest, req->data, (size_t)bytes_read);
     }
@@ -5071,7 +5071,7 @@ static ant_value_t builtin_fs_read_fd(ant_params_t) {
 
   ant_value_t buf_arg = args[1];
   TypedArrayData *ta_data = buffer_get_typedarray_data(buf_arg);
-  if (!ta_data || !ta_data->buffer || !ta_data->buffer->data)
+  if (!Ant_Buffer_ViewIsLive(ta_data))
     return js_mkerr(js, "read() buffer argument must be a Buffer or TypedArray");
 
   size_t buf_len = ta_data->byte_length;
@@ -5132,7 +5132,7 @@ static ant_value_t builtin_fs_readSync(ant_params_t) {
   int fd = (int)js_getnum(args[0]);
   
   TypedArrayData *ta_data = buffer_get_typedarray_data(args[1]);
-  if (!ta_data || !ta_data->buffer || !ta_data->buffer->data)
+  if (!Ant_Buffer_ViewIsLive(ta_data))
     return js_mkerr(js, "readSync() second argument must be a Buffer, TypedArray, or DataView");
   
   uint8_t *buf_data = ta_data->buffer->data + ta_data->byte_offset;
@@ -5194,7 +5194,7 @@ static ant_value_t builtin_fs_writeSync(ant_params_t) {
   }
   
   TypedArrayData *ta_data = buffer_get_typedarray_data(args[1]);
-  if (!ta_data || !ta_data->buffer || !ta_data->buffer->data)
+  if (!Ant_Buffer_ViewIsLive(ta_data))
     return js_mkerr(js, "writeSync() second argument must be a Buffer, TypedArray, DataView, or string");
   
   uint8_t *buf_data = ta_data->buffer->data + ta_data->byte_offset;
@@ -5253,7 +5253,7 @@ static ant_value_t builtin_fs_write_fd(ant_params_t) {
     write_len = str_len;
   } else {
     TypedArrayData *ta_data = buffer_get_typedarray_data(args[1]);
-    if (!ta_data || !ta_data->buffer || !ta_data->buffer->data)
+    if (!Ant_Buffer_ViewIsLive(ta_data))
       return js_mkerr(js, "write() second argument must be a Buffer, TypedArray, DataView, or string");
     
     uint8_t *buf_data = ta_data->buffer->data + ta_data->byte_offset;
@@ -5332,7 +5332,7 @@ static ant_value_t builtin_fs_writevSync(ant_params_t) {
   for (ant_offset_t i = 0; i < arr_len; i++) {
     ant_value_t item = js_arr_get(js, args[1], i);
     TypedArrayData *ta = buffer_get_typedarray_data(item);
-    if (!ta || !ta->buffer || !ta->buffer->data) {
+    if (!Ant_Buffer_ViewIsLive(ta)) {
       free(bufs);
       return js_mkerr(js, "writevSync() buffers must contain ArrayBufferViews");
     }
@@ -5369,7 +5369,7 @@ static ant_value_t builtin_fs_writev_fd(ant_params_t) {
   for (ant_offset_t i = 0; i < arr_len; i++) {
     ant_value_t item = js_arr_get(js, args[1], i);
     TypedArrayData *ta = buffer_get_typedarray_data(item);
-    if (!ta || !ta->buffer || !ta->buffer->data)
+    if (!Ant_Buffer_ViewIsLive(ta))
       return js_mkerr(js, "writev() buffers must contain ArrayBufferViews");
     total_len += ta->byte_length;
   }

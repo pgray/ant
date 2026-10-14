@@ -963,6 +963,7 @@ static void mark_slot_type(sv_compiler_t *c, int slot, uint8_t type) {
 static void set_local_inferred_type(sv_compiler_t *c, int local_idx, uint8_t type) {
   if (local_idx < 0 || local_idx >= c->local_count) return;
   c->locals[local_idx].inferred_type = type;
+  c->locals[local_idx].str_accumulating = false;
   if (c->locals[local_idx].depth == -1) return;
   int slot = local_idx - c->param_locals;
   mark_slot_type(c, slot, type);
@@ -1965,8 +1966,8 @@ static bool match_self_append_local(
 
   if (!rhs) return false;
   uint8_t local_type = get_local_inferred_type(c, local);
-  if (rhs_kind == SELF_APPEND_EXPR &&
-      local_type != SV_TI_STR && infer_expr_type(c, rhs) != SV_TI_STR)
+  if (rhs_kind == SELF_APPEND_EXPR && local_type != SV_TI_STR &&
+      !c->locals[local].str_accumulating && infer_expr_type(c, rhs) != SV_TI_STR)
     return false;
 
   if (match) {
@@ -2070,6 +2071,7 @@ static void compile_self_append(
     emit_slot_op(c, OP_STR_ALC_SNAPSHOT, match->slot);
   }
   set_local_inferred_type(c, match->local, SV_TI_UNKNOWN);
+  c->locals[match->local].str_accumulating = true;
 }
 
 static bool compile_self_append_stmt(sv_compiler_t *c, sv_ast_t *node) {

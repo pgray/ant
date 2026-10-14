@@ -63,6 +63,37 @@ assert.strictEqual(self, target);
 assert.deepStrictEqual(Object.getOwnPropertyNames(new Event('x')).includes('isTrusted'), false);
 assert.strictEqual(new Event('x').isTrusted, false);
 
+const viaDispatch = new AbortController();
+let handled = 0;
+viaDispatch.signal.onabort = () => handled++;
+viaDispatch.signal.dispatchEvent(new Event('abort'));
+assert.strictEqual(handled, 1);
+assert.strictEqual(viaDispatch.signal.aborted, false);
+
+const ordered = new AbortController();
+const order = [];
+ordered.signal.addEventListener('abort', () => order.push('first'));
+ordered.signal.onabort = () => order.push('on');
+ordered.signal.addEventListener('abort', () => order.push('last'));
+ordered.abort();
+assert.deepStrictEqual(order, ['first', 'on', 'last']);
+
+const slot = new AbortController();
+const slotOrder = [];
+slot.signal.onabort = () => slotOrder.push('on1');
+slot.signal.addEventListener('abort', () => slotOrder.push('l'));
+slot.signal.onabort = null;
+slot.signal.onabort = () => slotOrder.push('on2');
+slot.abort();
+assert.deepStrictEqual(slotOrder, ['l', 'on2']);
+
+const trusted = new AbortController();
+let trustedEvent;
+trusted.signal.addEventListener('abort', e => { trustedEvent = e; });
+trusted.abort();
+assert.strictEqual(trustedEvent.isTrusted, true);
+assert.strictEqual(new Event('abort').isTrusted, false);
+
 function readAborted(s) { return s.aborted; }
 function readSignal(c) { return c.signal; }
 const hot = new AbortController();
