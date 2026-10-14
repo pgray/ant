@@ -88,10 +88,10 @@ static ant_value_t process_blob_part(ant_t *js, byte_buf_t *buf, ant_value_t par
   uint8_t t = vtype(part);
 
   if (t == kTypeTypedArray) {
-    TypedArrayData *ta = (TypedArrayData *)js_gettypedarray(part);
-    if (!ta || !ta->buffer) return js_mkundef();
-    if (!byte_buf_append(buf, ta->buffer->data + ta->byte_offset, ta->byte_length))
-      return js_mkerr(js, "out of memory");
+    uint8_t *bytes; size_t size;
+    if (!Ant_Buffer_GetViewBytes((TypedArrayData *)js_gettypedarray(part), &bytes, &size))
+      return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot use a detached ArrayBuffer in a Blob");
+    if (!byte_buf_append(buf, bytes, size)) return js_mkerr(js, "out of memory");
     return js_mkundef();
   }
 

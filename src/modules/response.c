@@ -476,9 +476,10 @@ static uint8_t *concat_uint8_chunks(
       *err_out = js_mkerr_typed(js, JS_ERR_TYPE, "Response body stream chunk must be a Uint8Array");
       return NULL;
     }
-    if (ta->byte_length == 0) continue;
-    memcpy(buf + pos, ta->buffer->data + ta->byte_offset, ta->byte_length);
-    pos += ta->byte_length;
+    uint8_t *bytes; size_t size;
+    if (!Ant_Buffer_GetViewBytes(ta, &bytes, &size) || size == 0) continue;
+    memcpy(buf + pos, bytes, size);
+    pos += size;
   }
 
   *out_size = pos;

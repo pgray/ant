@@ -251,12 +251,10 @@ void cleanup_atomics_module(ant_t *js) {
 
 static bool get_atomic_array_data(ant_t *js, ant_value_t this_val, TypedArrayData **out_data, uint8_t **out_ptr) {
   TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
-  if (!ta_data || !ta_data->buffer) return false;
+  size_t len;
   
   *out_data = ta_data;
-  *out_ptr = ta_data->buffer->data + ta_data->byte_offset;
-  
-  return true;
+  return Ant_Buffer_GetViewBytes(ta_data, out_ptr, &len);
 }
 
 // Atomics.add(typedArray, index, value)

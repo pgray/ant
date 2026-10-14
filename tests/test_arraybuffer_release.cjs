@@ -2,7 +2,9 @@
 const assert = require('node:assert');
 
 const MB = 1048576;
-const ROUNDS = 32;
+const ROUNDS = 96;
+const GARBAGE_FLOOR_MB = 32;
+const LIMIT_MB = GARBAGE_FLOOR_MB + 8;
 const live = () => Ant.stats().external.buffers / MB;
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 
@@ -14,17 +16,20 @@ function churn(n) {
 
 async function measure(name, make) {
   const start = live();
+  let peak = 0;
   for (let i = 0; i < ROUNDS; i++) {
     assert.strictEqual((await make()).byteLength, MB);
     await tick();
     churn(50000);
+    peak = Math.max(peak, live() - start);
   }
   for (let i = 0; i < 4; i++) {
     await tick();
     churn(500000);
   }
   const grown = live() - start;
-  assert.ok(grown < ROUNDS / 2, `${name} kept ${Math.round(grown)} MB after ${ROUNDS} x 1 MB`);
+  assert.ok(peak < LIMIT_MB, `${name} peaked at ${Math.round(peak)} MB over ${ROUNDS} x 1 MB`);
+  assert.ok(grown < LIMIT_MB, `${name} kept ${Math.round(grown)} MB after ${ROUNDS} x 1 MB`);
 }
 
 (async () => {

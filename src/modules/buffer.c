@@ -57,6 +57,17 @@ TypedArrayData *buffer_get_typedarray_data(ant_value_t value) {
   return (TypedArrayData *)js_get_native(value, BUFFER_TYPEDARRAY_NATIVE_TAG);
 }
 
+static inline TypedArrayData *typedarray_live(ant_value_t value) {
+  TypedArrayData *ta = buffer_get_typedarray_data(value);
+  return ta && ta->buffer && !ta->buffer->is_detached ? ta : NULL;
+}
+
+static __attribute__((noinline, cold)) ant_value_t typedarray_this_error(ant_t *js, ant_value_t value) {
+  return buffer_get_typedarray_data(value)
+    ? js_mkerr_typed(js, JS_ERR_TYPE, "Cannot perform this operation on a detached ArrayBuffer")
+    : js_mkerr_typed(js, JS_ERR_TYPE, "this is not a typed array");
+}
+
 DataViewData *buffer_get_dataview_data(ant_value_t value) {
   if (!is_object_type(value)) return NULL;
   return (DataViewData *)js_get_native(value, BUFFER_DATAVIEW_NATIVE_TAG);
@@ -200,6 +211,7 @@ static ant_value_t ta_iter_next(ant_params_t) {
 }
 
 static ant_value_t ta_values(ant_params_t) {
+  if (!typedarray_live(js->this_val)) return typedarray_this_error(js, js->this_val);
   ant_value_t iter = js_mkobj(js);
   js_set_slot_wb(js, iter, SLOT_DATA, js->this_val);
   js_set_slot(iter, SLOT_ITER_STATE, js_mknum((double)iter_state_pack(ARR_ITER_VALUES, 0)));
@@ -208,6 +220,7 @@ static ant_value_t ta_values(ant_params_t) {
 }
 
 static ant_value_t ta_keys(ant_params_t) {
+  if (!typedarray_live(js->this_val)) return typedarray_this_error(js, js->this_val);
   ant_value_t iter = js_mkobj(js);
   js_set_slot_wb(js, iter, SLOT_DATA, js->this_val);
   js_set_slot(iter, SLOT_ITER_STATE, js_mknum((double)iter_state_pack(ARR_ITER_KEYS, 0)));
@@ -216,6 +229,7 @@ static ant_value_t ta_keys(ant_params_t) {
 }
 
 static ant_value_t ta_entries(ant_params_t) {
+  if (!typedarray_live(js->this_val)) return typedarray_this_error(js, js->this_val);
   ant_value_t iter = js_mkobj(js);
   js_set_slot_wb(js, iter, SLOT_DATA, js->this_val);
   js_set_slot(iter, SLOT_ITER_STATE, js_mknum((double)iter_state_pack(ARR_ITER_ENTRIES, 0)));
@@ -225,10 +239,6 @@ static ant_value_t ta_entries(ant_params_t) {
 
 static inline size_t array_buffer_owned_bytes(const ArrayBufferData *data) {
   return data->storage == ARRAY_BUFFER_STORAGE_INLINE ? data->capacity : 0;
-}
-
-static inline ArrayBufferData *array_buffer_storage_owner(ArrayBufferData *data) {
-  return data->storage == ARRAY_BUFFER_STORAGE_BORROWED ? (ArrayBufferData *)data->data - 1 : NULL;
 }
 
 static void register_buffer(ant_t *js, ArrayBufferData *data) {
@@ -300,8 +310,17 @@ static ArrayBufferData *alloc_array_buffer_data(size_t length) {
   data->length = length;
   data->capacity = length;
   data->ref_count = 1;
-  data->is_shared = 0;
-  data->is_detached = 0;
+  data->storage = ARRAY_BUFFER_STORAGE_INLINE;
+  return data;
+}
+
+ArrayBufferData *create_external_array_buffer_data(uint8_t *bytes, size_t length) {
+  ArrayBufferData *data = calloc(1, sizeof(ArrayBufferData));
+  if (!data) return NULL;
+  
+  data->data = bytes;
+  data->length = length;
+  data->capacity = length;
   return data;
 }
 
@@ -319,9 +338,21 @@ static ArrayBufferData *create_shared_array_buffer_data(size_t length) {
 
 void free_array_buffer_data(ant_t *js, ArrayBufferData *data) {
   if (!data || --data->ref_count > 0) return;
-  ArrayBufferData *owner = array_buffer_storage_owner(data);
+  ArrayBufferData *owner = data->owner;
   if (!data->is_shared) unregister_buffer(js, data);
   free(data);
+  free_array_buffer_data(js, owner);
+}
+
+void buffer_detach(ant_t *js, ArrayBufferData *data) {
+  ArrayBufferData *owner = data->owner;
+  if (data->storage != ARRAY_BUFFER_STORAGE_INLINE) data->capacity = 0;
+  if (owner) data->storage = ARRAY_BUFFER_STORAGE_INLINE;
+  
+  data->owner = NULL;
+  data->data = NULL;
+  data->length = 0;
+  data->is_detached = 1;
   free_array_buffer_data(js, owner);
 }
 
@@ -329,23 +360,17 @@ bool buffer_can_transfer(const ArrayBufferData *data) {
   return data && !data->is_shared && !data->is_detached && data->storage != ARRAY_BUFFER_STORAGE_EXTERNAL;
 }
 
-void buffer_transfer_storage(ArrayBufferData *from, ArrayBufferData *to) {
-  ArrayBufferData *owner = array_buffer_storage_owner(from);
-  if (!owner) from->ref_count++;
+void buffer_transfer_storage(ant_t *js, ArrayBufferData *from, ArrayBufferData *to) {
+  ArrayBufferData *owner = from->owner ? from->owner : from;
+  owner->ref_count++;
   
+  to->owner = owner;
   to->data = from->data;
   to->length = from->length;
   to->capacity = from->capacity;
   to->storage = ARRAY_BUFFER_STORAGE_BORROWED;
   
-  if (owner) {
-    from->storage = ARRAY_BUFFER_STORAGE_INLINE;
-    from->capacity = 0;
-  }
-  
-  from->data = NULL;
-  from->length = 0;
-  from->is_detached = 1;
+  buffer_detach(js, from);
 }
 
 static size_t get_element_size(TypedArrayType type) {
@@ -517,11 +542,10 @@ static ant_value_t js_arraybuffer_transfer(ant_params_t) {
   ArrayBufferData *new_data = create_array_buffer_data(js, same_length ? 0 : new_length);
   if (!new_data) return js_mkerr(js, "Failed to allocate new ArrayBuffer");
   
-  if (same_length) buffer_transfer_storage(data, new_data);
+  if (same_length) buffer_transfer_storage(js, data, new_data);
   else {
     memcpy(new_data->data, data->data, data->length < new_length ? data->length : new_length);
-    data->is_detached = 1;
-    data->length = 0;
+    buffer_detach(js, data);
   }
 
   ant_value_t new_obj = create_arraybuffer_obj(js, new_data);
@@ -823,10 +847,8 @@ static ant_value_t js_typedarray_every(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "TypedArray.prototype.every requires a callable");
 
   ant_value_t this_val = js_getthis(js);
-  TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
-  if (!ta_data) return js_mkerr(js, "Invalid TypedArray");
-  if (!ta_data->buffer || ta_data->buffer->is_detached)
-    return js_mkerr(js, "Cannot operate on a detached TypedArray");
+  TypedArrayData *ta_data = typedarray_live(this_val);
+  if (!ta_data) return typedarray_this_error(js, this_val);
 
   ant_value_t callback = args[0];
   ant_value_t this_arg = nargs > 1 ? args[1] : js_mkundef();
@@ -849,10 +871,8 @@ static ant_value_t js_typedarray_forEach(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "TypedArray.prototype.forEach requires a callable");
 
   ant_value_t this_val = js_getthis(js);
-  TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
-  if (!ta_data) return js_mkerr(js, "Invalid TypedArray");
-  if (!ta_data->buffer || ta_data->buffer->is_detached)
-    return js_mkerr(js, "Cannot operate on a detached TypedArray");
+  TypedArrayData *ta_data = typedarray_live(this_val);
+  if (!ta_data) return typedarray_this_error(js, this_val);
 
   ant_value_t this_arg = nargs > 1 ? args[1] : js_mkundef();
   for (size_t i = 0; i < ta_data->length; i++) {
@@ -871,10 +891,8 @@ static ant_value_t js_typedarray_some(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "TypedArray.prototype.some requires a callable");
 
   ant_value_t this_val = js_getthis(js);
-  TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
-  if (!ta_data) return js_mkerr(js, "Invalid TypedArray");
-  if (!ta_data->buffer || ta_data->buffer->is_detached)
-    return js_mkerr(js, "Cannot operate on a detached TypedArray");
+  TypedArrayData *ta_data = typedarray_live(this_val);
+  if (!ta_data) return typedarray_this_error(js, this_val);
 
   ant_value_t this_arg = nargs > 1 ? args[1] : js_mkundef();
   for (size_t i = 0; i < ta_data->length; i++) {
@@ -894,10 +912,8 @@ static ant_value_t js_typedarray_find(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "TypedArray.prototype.find requires a callable");
 
   ant_value_t this_val = js_getthis(js);
-  TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
-  if (!ta_data) return js_mkerr(js, "Invalid TypedArray");
-  if (!ta_data->buffer || ta_data->buffer->is_detached)
-    return js_mkerr(js, "Cannot operate on a detached TypedArray");
+  TypedArrayData *ta_data = typedarray_live(this_val);
+  if (!ta_data) return typedarray_this_error(js, this_val);
 
   ant_value_t this_arg = nargs > 1 ? args[1] : js_mkundef();
   for (size_t i = 0; i < ta_data->length; i++) {
@@ -917,10 +933,8 @@ static ant_value_t js_typedarray_findIndex(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "TypedArray.prototype.findIndex requires a callable");
 
   ant_value_t this_val = js_getthis(js);
-  TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
-  if (!ta_data) return js_mkerr(js, "Invalid TypedArray");
-  if (!ta_data->buffer || ta_data->buffer->is_detached)
-    return js_mkerr(js, "Cannot operate on a detached TypedArray");
+  TypedArrayData *ta_data = typedarray_live(this_val);
+  if (!ta_data) return typedarray_this_error(js, this_val);
 
   ant_value_t this_arg = nargs > 1 ? args[1] : js_mkundef();
   for (size_t i = 0; i < ta_data->length; i++) {
@@ -940,10 +954,8 @@ static ant_value_t js_typedarray_map(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "TypedArray.prototype.map requires a callable");
 
   ant_value_t this_val = js_getthis(js);
-  TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
-  if (!ta_data) return js_mkerr(js, "Invalid TypedArray");
-  if (!ta_data->buffer || ta_data->buffer->is_detached)
-    return js_mkerr(js, "Cannot operate on a detached TypedArray");
+  TypedArrayData *ta_data = typedarray_live(this_val);
+  if (!ta_data) return typedarray_this_error(js, this_val);
 
   ArrayBufferData *buffer = create_array_buffer_data(js, ta_data->byte_length);
   if (!buffer) return js_mkerr(js, "Failed to allocate buffer");
@@ -973,10 +985,8 @@ static ant_value_t js_typedarray_filter(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "TypedArray.prototype.filter requires a callable");
 
   ant_value_t this_val = js_getthis(js);
-  TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
-  if (!ta_data) return js_mkerr(js, "Invalid TypedArray");
-  if (!ta_data->buffer || ta_data->buffer->is_detached)
-    return js_mkerr(js, "Cannot operate on a detached TypedArray");
+  TypedArrayData *ta_data = typedarray_live(this_val);
+  if (!ta_data) return typedarray_this_error(js, this_val);
 
   gc_temp_root_scope_t kept;
   gc_temp_root_scope_begin(js, &kept);
@@ -1017,10 +1027,8 @@ static ant_value_t js_typedarray_reduce_common(ant_native_params_t, bool right) 
     return js_mkerr_typed(js, JS_ERR_TYPE, "TypedArray.prototype.reduce requires a callable");
 
   ant_value_t this_val = js_getthis(js);
-  TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
-  if (!ta_data) return js_mkerr(js, "Invalid TypedArray");
-  if (!ta_data->buffer || ta_data->buffer->is_detached)
-    return js_mkerr(js, "Cannot operate on a detached TypedArray");
+  TypedArrayData *ta_data = typedarray_live(this_val);
+  if (!ta_data) return typedarray_this_error(js, this_val);
   if (ta_data->length == 0 && nargs < 2)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Reduce of empty TypedArray with no initial value");
 
@@ -1378,8 +1386,8 @@ static ant_value_t js_typedarray_base_constructor(ant_params_t) {
 // TypedArray.prototype.at(index)
 static ant_value_t js_typedarray_at(ant_params_t) {
   ant_value_t this_val = js_getthis(js);
-  TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
-  if (!ta_data) return js_mkerr(js, "Invalid TypedArray");
+  TypedArrayData *ta_data = typedarray_live(this_val);
+  if (!ta_data) return typedarray_this_error(js, this_val);
   
   if (nargs == 0 || vtype(args[0]) != kTypeNumber) return js_mkundef();
   
@@ -1396,8 +1404,8 @@ static ant_value_t js_typedarray_at(ant_params_t) {
 
 static ant_value_t js_typedarray_slice(ant_params_t) {
   ant_value_t this_val = js_getthis(js);
-  TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
-  if (!ta_data) return js_mkerr(js, "Invalid TypedArray");
+  TypedArrayData *ta_data = typedarray_live(this_val);
+  if (!ta_data) return typedarray_this_error(js, this_val);
   
   ssize_t len = (ssize_t)ta_data->length;
   ssize_t begin = 0, end = len;
@@ -1431,8 +1439,8 @@ static ant_value_t js_typedarray_slice(ant_params_t) {
 // TypedArray.prototype.subarray(begin, end)
 static ant_value_t js_typedarray_subarray(ant_params_t) {
   ant_value_t this_val = js_getthis(js);
-  TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
-  if (!ta_data) return js_mkerr(js, "Invalid TypedArray");
+  TypedArrayData *ta_data = typedarray_live(this_val);
+  if (!ta_data) return typedarray_this_error(js, this_val);
   
   ssize_t len = (ssize_t)ta_data->length;
   ssize_t begin = 0, end = len;
@@ -1457,8 +1465,8 @@ static ant_value_t js_typedarray_subarray(ant_params_t) {
 // TypedArray.prototype.fill(value, start, end)
 static ant_value_t js_typedarray_fill(ant_params_t) {
   ant_value_t this_val = js_getthis(js);
-  TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
-  if (!ta_data) return js_mkerr(js, "Invalid TypedArray");
+  TypedArrayData *ta_data = typedarray_live(this_val);
+  if (!ta_data) return typedarray_this_error(js, this_val);
   
   ant_value_t value = nargs > 0 ? args[0] : js_mknum(0);
   
@@ -1530,9 +1538,8 @@ static ant_value_t js_typedarray_set(ant_params_t) {
   if (nargs < 1) return js_mkerr(js, "set requires source argument");
 
   ant_value_t this_val = js_getthis(js);
-  TypedArrayData *dst = buffer_get_typedarray_data(this_val);
-  if (!dst) return js_mkerr(js, "Invalid TypedArray");
-  if (!dst->buffer || dst->buffer->is_detached) return js_mkerr(js, "Cannot operate on a detached TypedArray");
+  TypedArrayData *dst = typedarray_live(this_val);
+  if (!dst) return typedarray_this_error(js, this_val);
 
   ssize_t offset_i = 0;
   if (nargs > 1 && vtype(args[1]) == kTypeNumber) offset_i = (ssize_t)js_getnum(args[1]);
@@ -1542,8 +1549,9 @@ static ant_value_t js_typedarray_set(ant_params_t) {
 
   ant_value_t src_val = args[0];
   TypedArrayData *src_ta = buffer_get_typedarray_data(src_val);
+  if (src_ta && !typedarray_live(src_val)) return typedarray_this_error(js, src_val);
 
-  if (src_ta && src_ta->buffer && !src_ta->buffer->is_detached) {
+  if (src_ta) {
     size_t src_len = src_ta->length;
     if (offset + src_len > dst->length) return js_mkerr(js, "Source is too large");
 
@@ -1604,9 +1612,8 @@ static ant_value_t js_typedarray_set(ant_params_t) {
 // TypedArray.prototype.copyWithin(target, start, end)
 static ant_value_t js_typedarray_copyWithin(ant_params_t) {
   ant_value_t this_val = js_getthis(js);
-  TypedArrayData *ta = buffer_get_typedarray_data(this_val);
-  if (!ta) return js_mkerr(js, "Invalid TypedArray");
-  if (!ta->buffer || ta->buffer->is_detached) return js_mkerr(js, "Cannot operate on a detached TypedArray");
+  TypedArrayData *ta = typedarray_live(this_val);
+  if (!ta) return typedarray_this_error(js, this_val);
 
   ssize_t len = (ssize_t)ta->length;
   if (len <= 0) return this_val;
@@ -1637,8 +1644,8 @@ static ant_value_t js_typedarray_copyWithin(ant_params_t) {
 static ant_value_t js_typedarray_toReversed(ant_params_t) {
   (void)args; (void)nargs;
   ant_value_t this_val = js_getthis(js);
-  TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
-  if (!ta_data) return js_mkerr(js, "Invalid TypedArray");
+  TypedArrayData *ta_data = typedarray_live(this_val);
+  if (!ta_data) return typedarray_this_error(js, this_val);
   
   size_t length = ta_data->length;
   size_t element_size = get_element_size(ta_data->type);
@@ -1663,8 +1670,8 @@ static ant_value_t js_typedarray_toReversed(ant_params_t) {
 // TypedArray.prototype.toSorted(comparefn)
 static ant_value_t js_typedarray_toSorted(ant_params_t) {
   ant_value_t this_val = js_getthis(js);
-  TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
-  if (!ta_data) return js_mkerr(js, "Invalid TypedArray");
+  TypedArrayData *ta_data = typedarray_live(this_val);
+  if (!ta_data) return typedarray_this_error(js, this_val);
   
   size_t length = ta_data->length;
   size_t element_size = get_element_size(ta_data->type);
@@ -1748,8 +1755,8 @@ static ant_value_t js_typedarray_with(ant_params_t) {
   if (nargs < 2) return js_mkerr(js, "with requires index and value");
   
   ant_value_t this_val = js_getthis(js);
-  TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
-  if (!ta_data) return js_mkerr(js, "Invalid TypedArray");
+  TypedArrayData *ta_data = typedarray_live(this_val);
+  if (!ta_data) return typedarray_this_error(js, this_val);
   
   ssize_t index = (ssize_t)js_getnum(args[0]);
   size_t length = ta_data->length;
@@ -2532,10 +2539,9 @@ static ant_value_t js_buffer_copyBytesFrom(ant_params_t) {
 }
 
 static ant_value_t typedarray_join_with(ant_t *js, ant_value_t this_val, const char *sep, size_t sep_len) {
-  TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
-  if (!ta_data) return js_mkstr(js, "", 0);
-  if (!ta_data->buffer || ta_data->buffer->is_detached || ta_data->length == 0)
-    return js_mkstr(js, "", 0);
+  TypedArrayData *ta_data = typedarray_live(this_val);
+  if (!ta_data) return typedarray_this_error(js, this_val);
+  if (ta_data->length == 0) return js_mkstr(js, "", 0);
 
   uint8_t *data = ta_data->buffer->data + ta_data->byte_offset;
   size_t len = ta_data->length;
@@ -2604,8 +2610,8 @@ static ant_value_t js_typedarray_join(ant_params_t) {
 
 static ant_value_t js_typedarray_indexOf(ant_params_t) {
   ant_value_t this_val = js_getthis(js);
-  TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
-  if (!ta_data || !ta_data->buffer || ta_data->buffer->is_detached) return js_mknum(-1);
+  TypedArrayData *ta_data = typedarray_live(this_val);
+  if (!ta_data) return typedarray_this_error(js, this_val);
 
   size_t len = ta_data->length;
   if (len == 0 || nargs < 1) return js_mknum(-1);
@@ -2647,8 +2653,8 @@ static ant_value_t js_typedarray_indexOf(ant_params_t) {
 
 static ant_value_t js_typedarray_lastIndexOf(ant_params_t) {
   ant_value_t this_val = js_getthis(js);
-  TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
-  if (!ta_data || !ta_data->buffer || ta_data->buffer->is_detached) return js_mknum(-1);
+  TypedArrayData *ta_data = typedarray_live(this_val);
+  if (!ta_data) return typedarray_this_error(js, this_val);
 
   size_t len = ta_data->length;
   if (len == 0 || nargs < 1) return js_mknum(-1);
@@ -2675,11 +2681,8 @@ static ant_value_t js_typedarray_lastIndexOf(ant_params_t) {
 
 static ant_value_t js_typedarray_includes(ant_params_t) {
   ant_value_t this_val = js_getthis(js);
-  TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
-  
-  if (!ta_data || !ta_data->buffer || ta_data->buffer->is_detached) {
-    return js_mkerr(js, "Invalid TypedArray");
-  }
+  TypedArrayData *ta_data = typedarray_live(this_val);
+  if (!ta_data) return typedarray_this_error(js, this_val);
 
   size_t len = ta_data->length;
   ant_value_t search = (nargs > 0) ? args[0] : js_mkundef();
@@ -2741,10 +2744,8 @@ static ant_value_t js_typedarray_reverse(ant_params_t) {
   (void)nargs;
 
   ant_value_t this_val = js_getthis(js);
-  TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
-  if (!ta_data) return js_mkerr(js, "Invalid TypedArray");
-  if (!ta_data->buffer || ta_data->buffer->is_detached)
-    return js_mkerr(js, "Cannot operate on a detached TypedArray");
+  TypedArrayData *ta_data = typedarray_live(this_val);
+  if (!ta_data) return typedarray_this_error(js, this_val);
 
   for (size_t left = 0, right = ta_data->length; left < right && left < --right; left++) {
     ant_value_t a = js_mkundef();
@@ -2764,10 +2765,8 @@ static ant_value_t js_typedarray_reverse(ant_params_t) {
 
 static ant_value_t js_typedarray_sort(ant_params_t) {
   ant_value_t this_val = js_getthis(js);
-  TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
-  if (!ta_data) return js_mkerr(js, "Invalid TypedArray");
-  if (!ta_data->buffer || ta_data->buffer->is_detached)
-    return js_mkerr(js, "Cannot operate on a detached TypedArray");
+  TypedArrayData *ta_data = typedarray_live(this_val);
+  if (!ta_data) return typedarray_this_error(js, this_val);
 
   bool has_compare = nargs > 0 && vtype(args[0]) != kTypeUndefined;
   if (has_compare && !is_callable(args[0]))
@@ -2915,9 +2914,7 @@ static ant_value_t js_buffer_toString(ant_params_t) {
   TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
   if (!ta_data) return js_mkerr(js, "Invalid Buffer");
   
-  if (!ta_data->buffer || ta_data->buffer->is_detached) {
-    return js_mkerr(js, "Cannot read from detached buffer");
-  }
+  if (!ta_data->buffer || ta_data->buffer->is_detached) return js_mkstr(js, "", 0);
   
   size_t start = 0;
   size_t len = 0;
@@ -3075,11 +3072,11 @@ static int64_t buffer_last_index_offset(int64_t len, double offset, int64_t need
 static ant_value_t buffer_index_of(ant_t *js, ant_value_t *args, int nargs, bool forward) {
   ant_value_t this_val = js_getthis(js);
   TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
-  if (!ta_data || !ta_data->buffer || ta_data->buffer->is_detached) return js_mknum(-1);
+  if (!ta_data) return typedarray_this_error(js, this_val);
   if (nargs < 1) return js_mknum(-1);
 
-  uint8_t *haystack = ta_data->buffer->data + ta_data->byte_offset;
-  size_t haystack_len = ta_data->byte_length;
+  uint8_t *haystack; size_t haystack_len;
+  Ant_Buffer_GetViewBytes(ta_data, &haystack, &haystack_len);
   double offset_num = forward ? 0.0 : (double)NAN;
   BufferEncoding encoding = ENC_UTF8;
   ant_value_t encoding_arg = js_mkundef();
@@ -3332,7 +3329,8 @@ static ant_value_t js_buffer_write(ant_params_t) {
   size_t str_len;
   char *str = js_getstr(js, args[0], &str_len);
   
-  size_t buf_len = ta_data->byte_length;
+  uint8_t *bytes; size_t buf_len;
+  Ant_Buffer_GetViewBytes(ta_data, &bytes, &buf_len);
   size_t offset = 0;
   size_t length = buf_len;
   BufferEncoding encoding = ENC_UTF8;
@@ -3364,11 +3362,11 @@ static ant_value_t js_buffer_write(ant_params_t) {
     if (is_err(checked)) return checked;
   }
   
-  if (offset >= ta_data->byte_length) return js_mknum(0);  
-  size_t available = ta_data->byte_length - offset;
+  if (offset >= buf_len) return js_mknum(0);
+  size_t available = buf_len - offset;
   if (length < available) available = length;
 
-  uint8_t *dst = ta_data->buffer->data + ta_data->byte_offset + offset;
+  uint8_t *dst = bytes + offset;
   size_t to_write;
   
   if (encoding == ENC_LATIN1 || encoding == ENC_ASCII)
@@ -3411,23 +3409,25 @@ static ant_value_t js_buffer_copy(ant_params_t) {
   TypedArrayData *dst = buffer_get_typedarray_data(args[0]);
   if (!src || !dst) return js_mkerr(js, "copy requires Buffer arguments");
 
+  uint8_t *src_bytes, *dst_bytes; size_t src_size, dst_size;
+  Ant_Buffer_GetViewBytes(src, &src_bytes, &src_size);
+  Ant_Buffer_GetViewBytes(dst, &dst_bytes, &dst_size);
+
   size_t target_start = (nargs > 1 && vtype(args[1]) == kTypeNumber) ? (size_t)js_getnum(args[1]) : 0;
   size_t source_start = (nargs > 2 && vtype(args[2]) == kTypeNumber) ? (size_t)js_getnum(args[2]) : 0;
-  size_t source_end = (nargs > 3 && vtype(args[3]) == kTypeNumber) ? (size_t)js_getnum(args[3]) : src->byte_length;
+  size_t source_end = (nargs > 3 && vtype(args[3]) == kTypeNumber) ? (size_t)js_getnum(args[3]) : src_size;
 
-  if (target_start > dst->byte_length) target_start = dst->byte_length;
-  if (source_start > src->byte_length) source_start = src->byte_length;
-  if (source_end > src->byte_length) source_end = src->byte_length;
+  if (target_start > dst_size) target_start = dst_size;
+  if (source_start > src_size) source_start = src_size;
+  if (source_end > src_size) source_end = src_size;
   if (source_end < source_start) source_end = source_start;
 
   size_t src_len = source_end - source_start;
-  size_t dst_len = dst->byte_length - target_start;
+  size_t dst_len = dst_size - target_start;
   size_t copy_len = src_len < dst_len ? src_len : dst_len;
   if (copy_len == 0) return js_mknum(0);
 
-  uint8_t *src_ptr = src->buffer->data + src->byte_offset + source_start;
-  uint8_t *dst_ptr = dst->buffer->data + dst->byte_offset + target_start;
-  memmove(dst_ptr, src_ptr, copy_len);
+  memmove(dst_bytes + target_start, src_bytes + source_start, copy_len);
   
   return js_mknum((double)copy_len);
 }
@@ -3509,17 +3509,17 @@ static ant_value_t buffer_access_ptr(ant_t *js, ant_value_t offset_value, size_t
   
   ant_value_t receiver = js_getthis(js);
   TypedArrayData *ta = buffer_get_typedarray_data(receiver);
-  if (ta && (!ta->buffer || ta->buffer->is_detached))
-    return js_mkerr(js, "Cannot operate on a detached TypedArray");
+  uint8_t *bytes; size_t live_len;
+  Ant_Buffer_GetViewBytes(ta, &bytes, &live_len);
 
   double n = js_getnum(offset_value);
-  double length = ta ? (double)ta->byte_length : js_to_number(js, js_getprop_fallback(js, receiver, "length"));
+  double length = ta ? (double)live_len : js_to_number(js, js_getprop_fallback(js, receiver, "length"));
   double max = length - (double)width;
   if (floor(n) != n || n < 0 || !(n <= max)) return buffer_bounds_error(js, offset_value, max);
   if (!ta) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid Buffer");
 
   *offset = (size_t)n;
-  *ptr = ta->buffer->data + ta->byte_offset + *offset;
+  *ptr = bytes + *offset;
   return js_mkundef();
 }
 
@@ -3957,14 +3957,16 @@ static ant_value_t js_buffer_concat(ant_params_t) {
     ant_value_t buf = js_get(js, list, idx);
     
     TypedArrayData *ta = buffer_get_typedarray_data(buf);
-    if (!ta || !ta->buffer) continue;
+    if (!ta) continue;
     
-    size_t copy_len = ta->byte_length;
-    if (offset + copy_len > total_length) {
-      copy_len = total_length - offset;
+    uint8_t *bytes; size_t copy_len;
+    if (!Ant_Buffer_GetViewBytes(ta, &bytes, &copy_len)) {
+      free_array_buffer_data(js, buffer);
+      return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot concatenate a detached Buffer");
     }
     
-    memcpy(buffer->data + offset, ta->buffer->data + ta->byte_offset, copy_len);
+    if (offset + copy_len > total_length) copy_len = total_length - offset;
+    memcpy(buffer->data + offset, bytes, copy_len);
     offset += copy_len;
   }
   
@@ -3972,16 +3974,18 @@ static ant_value_t js_buffer_concat(ant_params_t) {
 }
 
 static ant_value_t buffer_compare_arrays(ant_t *js, TypedArrayData *ta1, TypedArrayData *ta2) {
-  if (!ta1 || !ta1->buffer || !ta2 || !ta2->buffer) {
-    return js_mkerr(js, "Invalid buffer");
-  }
+  if (!ta1 || !ta2) return js_mkerr(js, "Invalid buffer");
   
-  size_t len = ta1->byte_length < ta2->byte_length ? ta1->byte_length : ta2->byte_length;
-  int cmp = memcmp(ta1->buffer->data + ta1->byte_offset, ta2->buffer->data + ta2->byte_offset, len);
+  uint8_t *a, *b; size_t a_len, b_len;
+  Ant_Buffer_GetViewBytes(ta1, &a, &a_len);
+  Ant_Buffer_GetViewBytes(ta2, &b, &b_len);
+  
+  size_t len = a_len < b_len ? a_len : b_len;
+  int cmp = len ? memcmp(a, b, len) : 0;
   
   if (cmp == 0) {
-    if (ta1->byte_length < ta2->byte_length) cmp = -1;
-    else if (ta1->byte_length > ta2->byte_length) cmp = 1;
+    if (a_len < b_len) cmp = -1;
+    else if (a_len > b_len) cmp = 1;
   } else cmp = cmp < 0 ? -1 : 1;
   
   return js_mknum((double)cmp);

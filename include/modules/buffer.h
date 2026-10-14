@@ -6,15 +6,16 @@
 #include "types.h"
 
 typedef enum {
+  ARRAY_BUFFER_STORAGE_EXTERNAL,
   ARRAY_BUFFER_STORAGE_INLINE,
   ARRAY_BUFFER_STORAGE_BORROWED,
-  ARRAY_BUFFER_STORAGE_EXTERNAL,
 } array_buffer_storage_t;
 
-typedef struct {
+typedef struct ArrayBufferData {
   uint8_t *data;
   size_t length;
   size_t capacity;
+  struct ArrayBufferData *owner;
   int ref_count;
   uint32_t registry_slot;
   uint8_t is_shared;
@@ -23,9 +24,9 @@ typedef struct {
 } ArrayBufferData;
 
 #if UINTPTR_MAX == UINT64_MAX
-static_assert(sizeof(ArrayBufferData) == 40, "registry slot must fit existing 64-bit padding");
+static_assert(sizeof(ArrayBufferData) == 48, "ArrayBufferData layout changed");
 #elif UINTPTR_MAX == UINT32_MAX
-static_assert(sizeof(ArrayBufferData) == 24, "registry slot must fit existing 32-bit layout");
+static_assert(sizeof(ArrayBufferData) == 28, "ArrayBufferData layout changed");
 #endif
 
 typedef enum {
@@ -73,7 +74,9 @@ void cleanup_buffer_module(ant_t *js);
 size_t buffer_get_external_memory(ant_t *js);
 void free_array_buffer_data(ant_t *js, ArrayBufferData *data);
 bool buffer_can_transfer(const ArrayBufferData *data);
-void buffer_transfer_storage(ArrayBufferData *from, ArrayBufferData *to);
+void buffer_transfer_storage(ant_t *js, ArrayBufferData *from, ArrayBufferData *to);
+void buffer_detach(ant_t *js, ArrayBufferData *data);
+ArrayBufferData *create_external_array_buffer_data(uint8_t *data, size_t length);
 
 ant_value_t create_arraybuffer_obj(ant_t *js, ArrayBufferData *buffer);
 ant_value_t create_arraybuffer_copy(ant_t *js, const void *bytes, size_t length);
@@ -83,6 +86,17 @@ ArrayBufferData *create_array_buffer_data(ant_t *js, size_t length);
 ArrayBufferData *buffer_get_arraybuffer_data(ant_value_t value);
 TypedArrayData *buffer_get_typedarray_data(ant_value_t value);
 DataViewData *buffer_get_dataview_data(ant_value_t value);
+
+static inline bool Ant_Buffer_GetViewBytes(const TypedArrayData *ta, uint8_t **ptr, size_t *len) {
+  if (!ta || !ta->buffer || ta->buffer->is_detached) {
+    *ptr = NULL;
+    *len = 0;
+    return false;
+  }
+  *ptr = ta->buffer->data + ta->byte_offset;
+  *len = ta->byte_length;
+  return true;
+}
 
 bool buffer_bytes_to_string(
   ant_t *js, const uint8_t *data, size_t len,

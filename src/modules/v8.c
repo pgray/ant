@@ -233,11 +233,9 @@ static ant_value_t des_val(ant_t *js, dec_t *d, int depth) {
 static ant_value_t v8_deserialize(ant_params_t) {
   if (nargs < 1) return js_mkerr(js, "deserialize: Buffer required");
 
-  TypedArrayData *ta = buffer_get_typedarray_data(args[0]);
-  if (!ta || !ta->buffer) return js_mkerr(js, "deserialize: expected a Buffer");
-
-  const uint8_t *data = ta->buffer->data + ta->byte_offset;
-  size_t len  = ta->byte_length;
+  uint8_t *data; size_t len;
+  if (!Ant_Buffer_GetViewBytes(buffer_get_typedarray_data(args[0]), &data, &len))
+    return js_mkerr_typed(js, JS_ERR_TYPE, "deserialize: expected an attached Buffer");
 
   if (len < 2 || data[0] != SER_MAGIC_0 || data[1] != SER_MAGIC_1)
     return js_mkerr(js, "deserialize: invalid or incompatible buffer");

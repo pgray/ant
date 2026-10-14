@@ -707,17 +707,15 @@ static ant_value_t js_crypto_get_random_values(ant_params_t) {
     return js_mkerr(js, "getRandomValues requires a TypedArray argument");
   }
 
-  TypedArrayData *ta_data = buffer_get_typedarray_data(args[0]);
-  if (!ta_data || !ta_data->buffer) {
-    return js_mkerr(js, "argument must be a TypedArray");
-  }
+  uint8_t *ptr; size_t len;
+  if (!Ant_Buffer_GetViewBytes(buffer_get_typedarray_data(args[0]), &ptr, &len))
+    return js_mkerr_typed(js, JS_ERR_TYPE, "argument must be an attached TypedArray");
   
-  if (ta_data->byte_length > 65536) {
+  if (len > 65536) {
     return js_mkerr(js, "TypedArray byte length exceeds 65536");
   }
   
-  uint8_t *ptr = ta_data->buffer->data + ta_data->byte_offset;
-  if (crypto_fill_random(ptr, ta_data->byte_length) < 0) return crypto_random_error(js);
+  if (crypto_fill_random(ptr, len) < 0) return crypto_random_error(js);
   
   return args[0];
 }

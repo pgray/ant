@@ -1815,10 +1815,6 @@ static inline ant_value_t sv_get_length_value(ant_t *js, ant_value_t obj) {
 
 static inline ant_value_t sv_get_length_at(ant_t *js, ant_value_t obj, sv_func_t *func, uint8_t *ip) {
   switch (vtype(obj)) {
-    case kTypeArray:
-      if (!js_obj_ptr(obj)->flags.arguments_object) return tov((double)(uint32_t)js_arr_len(js, obj));
-      break;
-    case kTypeString: return tov((double)str_utf16_len(js, obj));
     case kTypeObject: case kTypeFunction: case kTypeNull: case kTypeUndefined: break;
     default: return sv_get_length_value(js, obj);
   }

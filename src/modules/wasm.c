@@ -1372,21 +1372,12 @@ static bool wasm_parse_memory_descriptor(ant_t *js, ant_value_t descriptor, wasm
 
 static void wasm_detach_external_arraybuffer(ant_t *js, ant_value_t buffer) {
   ArrayBufferData *data = buffer_get_arraybuffer_data(buffer);
-  if (!data || data->is_detached) return;
-  data->is_detached = 1;
-  data->data = NULL;
-  data->length = 0;
-  data->capacity = 0;
+  if (data && !data->is_detached) buffer_detach(js, data);
 }
 
 static ant_value_t wasm_make_external_arraybuffer(ant_t *js, uint8_t *data, size_t len, ant_value_t owner) {
-  ArrayBufferData *buffer = calloc(1, sizeof(ArrayBufferData));
+  ArrayBufferData *buffer = create_external_array_buffer_data(data, len);
   if (!buffer) return js_mkerr(js, "out of memory");
-  buffer->data = data;
-  buffer->length = len;
-  buffer->capacity = len;
-  buffer->ref_count = 0;
-  buffer->storage = ARRAY_BUFFER_STORAGE_EXTERNAL;
   ant_value_t result = create_arraybuffer_obj(js, buffer);
   if (is_object_type(owner) && is_object_type(result)) js_set_slot_wb(js, result, SLOT_ENTRIES, owner);
   return result;

@@ -138,11 +138,8 @@ static ant_value_t js_textencoder_encode_into(ant_params_t) {
   TypedArrayData *ta = buffer_get_typedarray_data(args[1]);
   if (!ta) return js_mkerr_typed(js, JS_ERR_TYPE, "Second argument must be a Uint8Array");
 
-  uint8_t *dest = (ta->buffer && !ta->buffer->is_detached)
-    ? ta->buffer->data 
-    + ta->byte_offset : NULL;
-  
-  size_t available = ta->byte_length;
+  uint8_t *dest; size_t available;
+  Ant_Buffer_GetViewBytes(ta, &dest, &available);
   size_t read_units = 0;
   
   size_t written = utf8_export_into(

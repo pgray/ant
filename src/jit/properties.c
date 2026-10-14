@@ -1082,6 +1082,7 @@ bool mir_emit_get_field_ic_fastpath(
   sv_ic_entry_t *ic = &func->ic_slots[ic_idx];
   if (mir_emit_get_field_native_getter(ctx, fn, js, ic, bc_off, ic_idx, obj, dst, slow, r_global_epoch)) return true;
   if (!length_receiver && is_length_key(atom->str, atom->len)) return false;
+  if (length_receiver && !(sv_gf_ic_active(ic->cached_aux) && ic->get_kind == SV_GF_IC_OWN && ic->cached_shape)) return false;
 
   if (sv_gf_kind_is_symbol_description(ic->get_kind)) return false;
   if (!sv_gf_ic_active(ic->cached_aux) && func->code_len > 1024) return false;

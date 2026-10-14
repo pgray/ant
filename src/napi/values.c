@@ -936,8 +936,10 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_get_buffer_info(
     return napi_set_last(env, napi_invalid_arg, "not a buffer");
   }
 
-  if (data) *data = ta->buffer->data + ta->byte_offset;
-  if (length) *length = ta->byte_length;
+  uint8_t *bytes; size_t size;
+  Ant_Buffer_GetViewBytes(ta, &bytes, &size);
+  if (data) *data = bytes;
+  if (length) *length = size;
   return napi_set_last(env, napi_ok, NULL);
 }
 
@@ -976,9 +978,11 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_get_typedarray_info(
     return napi_set_last(env, napi_invalid_arg, "typedarray expected");
   }
 
+  uint8_t *bytes; size_t size;
+  bool live = Ant_Buffer_GetViewBytes(ta, &bytes, &size);
   if (type) *type = napi_from_ant_typedarray_type(ta->type);
-  if (length) *length = ta->length;
-  if (data) *data = ta->buffer->data + ta->byte_offset;
+  if (length) *length = live ? ta->length : 0;
+  if (data) *data = bytes;
   if (arraybuffer) {
     ant_value_t buffer = js_get(nenv->js, (ant_value_t)typedarray, "buffer");
     if (is_err(buffer) || Ant_Exception_Pending(nenv->js)) return napi_check_pending_from_result(env, buffer);

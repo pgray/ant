@@ -358,17 +358,14 @@ static ant_value_t sc_collect_transfer(ant_t *js, ant_value_t options, sc_entry_
   return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : js_mkundef();
 }
 
-static void sc_commit_transfer(sc_entry_t **transfer) {
+static void sc_commit_transfer(ant_t *js, sc_entry_t **transfer) {
   sc_entry_t *e, *tmp;
   HASH_ITER(hh, *transfer, e, tmp) {
     ArrayBufferData *from = buffer_get_arraybuffer_data(e->key);
     ArrayBufferData *to = buffer_get_arraybuffer_data(e->value);
     if (!from) continue;
-    if (to) buffer_transfer_storage(from, to);
-    else {
-      from->length = 0;
-      from->is_detached = 1;
-    }
+    if (to) buffer_transfer_storage(js, from, to);
+    else buffer_detach(js, from);
   }
 }
 
@@ -380,7 +377,7 @@ ant_value_t js_structured_clone(ant_params_t) {
   
   ant_value_t result = sc_collect_transfer(js, nargs > 1 ? args[1] : js_mkundef(), &transfer);
   if (!is_err(result)) result = sc_clone_rec(js, args[0], &seen, &transfer);
-  if (!is_err(result)) sc_commit_transfer(&transfer);
+  if (!is_err(result)) sc_commit_transfer(js, &transfer);
   
   sc_free(&seen);
   sc_free(&transfer);

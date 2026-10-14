@@ -356,14 +356,8 @@ static void wasi_bind_memory_export(
   uint64_t pages = mem ? wasm_memory_get_cur_page_count(mem) : 0;
   size_t mem_size = (size_t)(pages * 65536);
 
-  ArrayBufferData *buffer = calloc(1, sizeof(ArrayBufferData));
+  ArrayBufferData *buffer = create_external_array_buffer_data((uint8_t *)mem_data, mem_size);
   if (!buffer) return;
-
-  buffer->data = (uint8_t *)mem_data;
-  buffer->length = mem_size;
-  buffer->capacity = mem_size;
-  buffer->ref_count = 0;
-  buffer->storage = ARRAY_BUFFER_STORAGE_EXTERNAL;
 
   ant_value_t ab = create_arraybuffer_obj(js, buffer);
   ant_value_t mem_obj = js_mkobj(js);
