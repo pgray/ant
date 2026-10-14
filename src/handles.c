@@ -160,10 +160,11 @@ const ant_cfunc_meta_t *ant_cfunc_meta_source(const ant_cfunc_meta_t *stored) {
   return stored ? ((const ant_cfunc_entry_t *)stored)->source : NULL;
 }
 
-const ant_cfunc_meta_t *ant_cfunc_meta_create(const ant_cfunc_meta_t *meta) {
+const ant_cfunc_meta_t *ant_cfunc_meta_derive(const ant_cfunc_meta_t *base, const ant_cfunc_meta_t *meta) {
   if (!meta) return NULL;
   handles_lock_acquire();
   ant_cfunc_entry_t *entry = cfunc_create_locked(meta);
+  if (entry) entry->source = ant_cfunc_meta_source(base);
   handles_lock_release();
   return entry ? &entry->meta : NULL;
 }

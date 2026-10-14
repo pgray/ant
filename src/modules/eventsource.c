@@ -17,6 +17,7 @@
 #include "silver/call.h"
 
 #include "http/eventsource.h"
+#include "modules/events.h"
 #include "modules/eventsource.h"
 #include "modules/http.h"
 #include "modules/timer.h"
@@ -26,7 +27,7 @@ typedef struct eventsource_timer_s {
   struct eventsource_state_s *source;
 } eventsource_timer_t;
 
-typedef struct eventsource_state_s {
+struct eventsource_state_s {
   ant_t *js;
   ant_value_t obj;
   ant_http_request_t *request;
@@ -44,16 +45,10 @@ typedef struct eventsource_state_s {
   bool closed : 1;
   bool opened_request : 1;
   bool error_emitted_for_request : 1;
-} eventsource_state_t;
-
-enum {
-  ES_NATIVE_TAG = 0x45565352u, // EVSR
-  ES_CONNECTING = 0,
-  ES_OPEN = 1,
-  ES_CLOSED = 2,
 };
 
-static eventsource_state_t *g_active_eventsources = NULL;
+static constexpr uint32_t ES_NATIVE_TAG = 0x45565352u; // EVSR
+enum { ES_CONNECTING = 0, ES_OPEN = 1, ES_CLOSED = 2 };
 
 static eventsource_state_t *eventsource_data(ant_value_t value) {
   return (eventsource_state_t *)js_get_native(value, ES_NATIVE_TAG);
@@ -61,14 +56,15 @@ static eventsource_state_t *eventsource_data(ant_value_t value) {
 
 static void eventsource_add_active(eventsource_state_t *es) {
   if (!es || es->active) return;
-  es->next = g_active_eventsources;
-  g_active_eventsources = es;
+  es->next = es->js->active_eventsources;
+  es->js->active_eventsources = es;
   es->active = true;
 }
 
 static void eventsource_remove_active(eventsource_state_t *es) {
-  eventsource_state_t **it = &g_active_eventsources;
   if (!es || !es->active) return;
+  eventsource_state_t **it = &es->js->active_eventsources;
+  
   while (*it) {
     if (*it == es) {
       *it = es->next;
@@ -78,6 +74,7 @@ static void eventsource_remove_active(eventsource_state_t *es) {
     }
     it = &(*it)->next;
   }
+  
   es->active = false;
 }
 
@@ -103,17 +100,8 @@ static void eventsource_sync_state(eventsource_state_t *es) {
   js_set(es->js, es->obj, "readyState", js_mknum(es->ready_state));
 }
 
-static ant_value_t eventsource_make_event(ant_t *js, const char *type, ant_value_t proto) {
-  ant_value_t event = js_mkobj(js);
-  if (is_object_type(proto)) js_set_proto_init(event, proto);
-  js_set(js, event, "type", js_mkstr(js, type, strlen(type)));
-  js_set(js, event, "target", js_mknull());
-  js_set(js, event, "currentTarget", js_mknull());
-  js_set(js, event, "eventPhase", js_mknum(0));
-  js_set(js, event, "bubbles", js_false);
-  js_set(js, event, "cancelable", js_false);
-  js_set(js, event, "defaultPrevented", js_false);
-  return event;
+static ant_value_t eventsource_make_event(ant_t *js, const char *type, ant_value_t proto, ant_event_kind_t kind) {
+  return Ant_Event_Create(js, proto, kind, js_mkstr(js, type, strlen(type)), false, false);
 }
 
 static void eventsource_emit(eventsource_state_t *es, const char *type, ant_value_t event) {
@@ -126,16 +114,21 @@ static void eventsource_emit(eventsource_state_t *es, const char *type, ant_valu
     ant_value_t eventtarget_proto = js->builtins.eventtarget_proto;
     if (is_object_type(eventtarget_proto)) dispatch = js_get(js, eventtarget_proto, "dispatchEvent");
   }
+  
   eventsource_call(js, dispatch, es->obj, args, 1);
   snprintf(handler_name, sizeof(handler_name), "on%s", type);
+  
   ant_value_t handler = js_get(js, es->obj, handler_name);
+  Ant_Event_BeginDispatch(js, event, es->obj);
   eventsource_call(js, handler, es->obj, args, 1);
+  Ant_Event_EndDispatch(js, event);
   process_microtasks(js);
 }
 
 static void eventsource_emit_simple(eventsource_state_t *es, const char *type) {
   ant_value_t proto = es->js->builtins.event_proto;
-  eventsource_emit(es, type, eventsource_make_event(es->js, type, proto));
+  ant_value_t event = eventsource_make_event(es->js, type, proto, ANT_EVENT_BASE);
+  if (!is_err(event)) eventsource_emit(es, type, event);
 }
 
 static void eventsource_emit_error_once(eventsource_state_t *es) {
@@ -212,11 +205,18 @@ static void eventsource_schedule_reconnect(eventsource_state_t *es) {
 static bool eventsource_on_message(const ant_sse_message_t *message, void *user_data) {
   eventsource_state_t *es = (eventsource_state_t *)user_data;
   ant_t *js = es->js;
+  
   const char *type = (message->event && message->event[0]) ? message->event : "message";
   ant_value_t proto = js->builtins.message_event_proto;
-  ant_value_t event = eventsource_make_event(js, type, proto);
+  
+  ant_value_t event = eventsource_make_event(js, type, proto, ANT_EVENT_MESSAGE);
+  if (is_err(event)) return !es->closed;
 
-  js_set(js, event, "data", js_mkstr(js, message->data ? message->data : "", message->data ? strlen(message->data) : 0));
+  Ant_Event_SetField(
+    js, event, ANT_EVENT_FIELD_MESSAGE_data, 
+    js_mkstr(js, message->data ? message->data : "", message->data ? strlen(message->data) : 0)
+  );
+  
   if (message->id) {
     free(es->last_event_id);
     es->last_event_id = strdup(message->id);
@@ -224,10 +224,17 @@ static bool eventsource_on_message(const ant_sse_message_t *message, void *user_
     free(es->last_event_id);
     es->last_event_id = strdup(es->parser.last_event_id);
   }
+  
   if (!es->last_event_id) es->last_event_id = strdup("");
-  js_set(js, event, "lastEventId", js_mkstr(js, es->last_event_id ? es->last_event_id : "", es->last_event_id ? strlen(es->last_event_id) : 0));
-  js_set(js, event, "origin", js_mkstr(js, "", 0));
+  
+  Ant_Event_SetField(
+    js, event, ANT_EVENT_FIELD_MESSAGE_lastEventId, 
+    js_mkstr(js, es->last_event_id ? es->last_event_id : "", es->last_event_id ? strlen(es->last_event_id) : 0)
+  );
+  
+  Ant_Event_SetField(js, event, ANT_EVENT_FIELD_MESSAGE_origin, js_mkstr(js, "", 0));
   eventsource_emit(es, type, event);
+  
   return !es->closed;
 }
 
@@ -368,15 +375,17 @@ static void eventsource_close(eventsource_state_t *es) {
 }
 
 static void eventsource_finalize(ant_t *js, ant_object_t *obj) {
-  (void)js;
   ant_value_t value = js_obj_from_ptr(obj);
   eventsource_state_t *es = eventsource_data(value);
   if (!es) return;
+  
   js_clear_native(value, ES_NATIVE_TAG);
   if (es->request) ant_http_request_cancel(es->request);
+  
   eventsource_cancel_timer(es);
   eventsource_remove_active(es);
   ant_sse_parser_free(&es->parser);
+  
   free(es->url);
   free(es->last_event_id);
   free(es);
@@ -464,5 +473,5 @@ void init_eventsource_module(ant_t *js) {
 }
 
 void gc_mark_eventsource(ant_t *js, gc_mark_fn mark) {
-  for (eventsource_state_t *es = g_active_eventsources; es; es = es->next) mark(js, es->obj);
+  for (eventsource_state_t *es = js->active_eventsources; es; es = es->next) mark(js, es->obj);
 }

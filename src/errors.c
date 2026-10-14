@@ -392,8 +392,8 @@ void js_describe_received(ant_t *js, ant_value_t value, char *out, size_t out_le
   const char *quote = type == kTypeString ? "'" : "";
   
   snprintf(
-    out, out_len, "Received type %s (%s%.25s%s%s%s)",
-    typestr(type), quote, received.ptr, received.len > 28 ? "..." : "", quote, type == kTypeBigInt ? "n" : ""
+    out, out_len, "Received type %s (%s%.25s%s%s)",
+    typestr(type), quote, received.ptr, received.len > 28 ? "..." : "", quote
   );
   
   if (received.needs_free) free((void *)received.ptr);

@@ -997,26 +997,43 @@ static bool mir_emit_get_field_native_getter(
 #define MEM(t, off, base) MIR_new_mem_op(ctx, t, (MIR_disp_t)(off), base, 0, 1)
 #define LBL(l) MIR_new_label_op(ctx, l)
   
-  mir_emit_get_field_kind_epoch_guard(ctx, fn, ic, SV_GF_IC_PROTO_GETTER, r_ic, ptr, tmp, tmp2, r_global_epoch, slow);
-  mir_emit_value_to_objptr_or_jmp(ctx, fn, obj, ptr, tmp, slow);
-  INSN(MIR_MOV, REG(tmp), MEM(MIR_T_P, offsetof(ant_object_t, shape), ptr));
-  INSN(MIR_MOV, REG(tmp2), MEM(MIR_T_P, offsetof(sv_ic_entry_t, cached_shape), r_ic));
-  INSN(MIR_BNE, LBL(slow), REG(tmp), REG(tmp2));
-  INSN(MIR_MOV, REG(tmp), MEM(MIR_T_I64, offsetof(ant_object_t, proto), ptr));
-  INSN(MIR_MOV, REG(tmp2), MEM(MIR_T_I64, offsetof(sv_ic_entry_t, guard.receiver_proto), r_ic));
-  INSN(MIR_BNE, LBL(slow), REG(tmp), REG(tmp2));
-  INSN(MIR_URSH, REG(tmp2), REG(tmp), MIR_new_uint_op(ctx, NANBOX_TYPE_SHIFT));
-  INSN(MIR_BNE, LBL(slow), REG(tmp2), MIR_new_uint_op(ctx, NANBOX_TOBJ_TAG));
-  mir_emit_decode_ref(ctx, fn, tmp, tmp);
-  INSN(MIR_MOV, REG(tmp), MEM(MIR_T_U32, offsetof(ant_object_t, ic_identity), tmp));
-  INSN(MIR_MOV, REG(tmp2), MEM(MIR_T_U64, offsetof(sv_ic_entry_t, cached_aux), r_ic));
-  INSN(MIR_URSH, REG(tmp2), REG(tmp2), MIR_new_uint_op(ctx, SV_GF_IC_PROTO_ID_SHIFT));
-  INSN(MIR_BNE, LBL(slow), REG(tmp), REG(tmp2));
+  ant_value_t proto = ic->guard.receiver_proto;
+  bool direct = vtype(proto) == kTypeObject && js_obj_ptr(js_as_obj(proto)) == holder;
+  if (direct && mir_snapshot_shape(js, ic->cached_shape)) {
+    mir_emit_value_to_objptr_or_jmp(ctx, fn, obj, ptr, tmp, slow);
+    INSN(MIR_MOV, REG(tmp), MEM(MIR_T_P, offsetof(ant_object_t, shape), ptr));
+    mir_load_imm(ctx, fn, tmp2, (uint64_t)(uintptr_t)ic->cached_shape);
+    INSN(MIR_BNE, LBL(slow), REG(tmp), REG(tmp2));
+    mir_emit_receiver_exotic_guard(ctx, fn, ptr, tmp, slow);
+    INSN(MIR_MOV, REG(tmp), MEM(MIR_T_I64, offsetof(ant_object_t, proto), ptr));
+    mir_load_imm(ctx, fn, tmp2, proto);
+    INSN(MIR_BNE, LBL(slow), REG(tmp), REG(tmp2));
+    mir_load_imm(ctx, fn, r_ic, (uint64_t)(uintptr_t)holder);
+    INSN(MIR_MOV, REG(tmp), MEM(MIR_T_U16, offsetof(ant_object_t, flags), r_ic));
+    INSN(MIR_AND, REG(tmp), REG(tmp), MIR_new_uint_op(ctx, ANT_OBJECT_FLAG_EXOTIC));
+    INSN(MIR_BNE, LBL(slow), REG(tmp), MIR_new_int_op(ctx, 0));
+  } else {
+    mir_emit_get_field_kind_epoch_guard(ctx, fn, ic, SV_GF_IC_PROTO_GETTER, r_ic, ptr, tmp, tmp2, r_global_epoch, slow);
+    mir_emit_value_to_objptr_or_jmp(ctx, fn, obj, ptr, tmp, slow);
+    INSN(MIR_MOV, REG(tmp), MEM(MIR_T_P, offsetof(ant_object_t, shape), ptr));
+    INSN(MIR_MOV, REG(tmp2), MEM(MIR_T_P, offsetof(sv_ic_entry_t, cached_shape), r_ic));
+    INSN(MIR_BNE, LBL(slow), REG(tmp), REG(tmp2));
+    INSN(MIR_MOV, REG(tmp), MEM(MIR_T_I64, offsetof(ant_object_t, proto), ptr));
+    INSN(MIR_MOV, REG(tmp2), MEM(MIR_T_I64, offsetof(sv_ic_entry_t, guard.receiver_proto), r_ic));
+    INSN(MIR_BNE, LBL(slow), REG(tmp), REG(tmp2));
+    INSN(MIR_URSH, REG(tmp2), REG(tmp), MIR_new_uint_op(ctx, NANBOX_TYPE_SHIFT));
+    INSN(MIR_BNE, LBL(slow), REG(tmp2), MIR_new_uint_op(ctx, NANBOX_TOBJ_TAG));
+    mir_emit_decode_ref(ctx, fn, tmp, tmp);
+    INSN(MIR_MOV, REG(tmp), MEM(MIR_T_U32, offsetof(ant_object_t, ic_identity), tmp));
+    INSN(MIR_MOV, REG(tmp2), MEM(MIR_T_U64, offsetof(sv_ic_entry_t, cached_aux), r_ic));
+    INSN(MIR_URSH, REG(tmp2), REG(tmp2), MIR_new_uint_op(ctx, SV_GF_IC_PROTO_ID_SHIFT));
+    INSN(MIR_BNE, LBL(slow), REG(tmp), REG(tmp2));
+    INSN(MIR_MOV, REG(tmp), MEM(MIR_T_P, offsetof(sv_ic_entry_t, cached_holder), r_ic));
+    mir_load_imm(ctx, fn, r_ic, (uint64_t)(uintptr_t)holder);
+    INSN(MIR_BNE, LBL(slow), REG(tmp), REG(r_ic));
+  }
   
-  INSN(MIR_MOV, REG(tmp), MEM(MIR_T_P, offsetof(sv_ic_entry_t, cached_holder), r_ic));
-  mir_load_imm(ctx, fn, tmp2, (uint64_t)(uintptr_t)holder);
-  INSN(MIR_BNE, LBL(slow), REG(tmp), REG(tmp2));
-  INSN(MIR_MOV, REG(tmp), MEM(MIR_T_P, offsetof(ant_object_t, shape), tmp2));
+  INSN(MIR_MOV, REG(tmp), MEM(MIR_T_P, offsetof(ant_object_t, shape), r_ic));
   mir_load_imm(ctx, fn, tmp2, (uint64_t)(uintptr_t)holder->shape);
   INSN(MIR_BNE, LBL(slow), REG(tmp), REG(tmp2));
   
@@ -1028,8 +1045,13 @@ static bool mir_emit_get_field_native_getter(
     return true;
   }
   
-  MIR_label_t done = MIR_new_label(ctx), zero = MIR_new_label(ctx);
   INSN(MIR_MOV, REG(ptr), MEM(MIR_T_P, offsetof(ant_object_t, native) + offsetof(ant_native_entry_t, ptr), ptr));
+  if (g->kind == ANT_NATIVE_GETTER_FIELD) {
+    INSN(MIR_MOV, REG(dst), MEM(MIR_T_I64, g->field_offset, ptr));
+    return true;
+  }
+  
+  MIR_label_t done = MIR_new_label(ctx), zero = MIR_new_label(ctx);
   
   if (g->detach == ANT_NATIVE_DETACH_REF || g->detach == ANT_NATIVE_DETACH_REF_SLOW) {
     MIR_label_t detached = g->detach == ANT_NATIVE_DETACH_REF_SLOW ? slow : zero;

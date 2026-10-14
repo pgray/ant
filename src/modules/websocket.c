@@ -11,7 +11,6 @@
 #include <zlib.h>
 
 #include "ant.h"
-#include "gc.h"
 #include "common.h"
 #include "errors.h"
 #include "inspector.h"
@@ -165,17 +164,8 @@ static void websocket_sync_state(websocket_state_t *ws) {
   js_set(ws->js, ws->obj, "readyState", js_mknum(ws->ready_state));
 }
 
-static ant_value_t websocket_make_event(ant_t *js, ant_value_t proto, const char *type) {
-  ant_value_t event = js_mkobj(js);
-  if (is_object_type(proto)) js_set_proto_init(event, proto);
-  js_set(js, event, "type", js_mkstr(js, type, strlen(type)));
-  js_set(js, event, "target", js_mknull());
-  js_set(js, event, "currentTarget", js_mknull());
-  js_set(js, event, "eventPhase", js_mknum(0));
-  js_set(js, event, "bubbles", js_false);
-  js_set(js, event, "cancelable", js_false);
-  js_set(js, event, "defaultPrevented", js_false);
-  return event;
+static ant_value_t websocket_make_event(ant_t *js, ant_value_t proto, ant_event_kind_t kind, const char *type) {
+  return Ant_Event_Create(js, proto, kind, js_mkstr(js, type, strlen(type)), false, false);
 }
 
 static const uint8_t ws_deflate_flush_tail[] = { 
@@ -298,24 +288,11 @@ fail:
   return false;
 }
 
-enum {
-  WS_MSG_SLOT_TYPE,
-  WS_MSG_SLOT_TARGET,
-  WS_MSG_SLOT_CURRENT_TARGET,
-  WS_MSG_SLOT_EVENT_PHASE,
-  WS_MSG_SLOT_BUBBLES,
-  WS_MSG_SLOT_CANCELABLE,
-  WS_MSG_SLOT_DEFAULT_PREVENTED,
-  WS_MSG_SLOT_DATA,
-  WS_MSG_SLOT_ORIGIN,
-  WS_MSG_SLOT_LAST_EVENT_ID,
-};
-
 static ant_offset_t websocket_listener_count(websocket_state_t *ws, int idx) {
   return eventemitter_listener_count(ws->js, ws->obj, ws_handler_types[idx]);
 }
 
-static void websocket_emit_event(websocket_state_t *ws, int idx, ant_value_t event, ant_offset_t count, bool templated) {
+static void websocket_emit_event(websocket_state_t *ws, int idx, ant_value_t event, ant_offset_t count) {
   ant_t *js = ws->js;
   ant_value_t args[1] = { event };
   ant_value_t listener = ws->handler_listeners[idx];
@@ -324,23 +301,9 @@ static void websocket_emit_event(websocket_state_t *ws, int idx, ant_value_t eve
     ant_value_t handler = js_get_slot(listener, SLOT_DATA);
     if (!is_callable(handler)) return;
     
-    if (templated) {
-      ant_object_t *obj = js_obj_ptr(event);
-      ant_object_prop_set_unchecked(obj, WS_MSG_SLOT_CURRENT_TARGET, ws->obj);
-      gc_write_barrier(js, obj, ws->obj);
-      ant_object_prop_set_unchecked(obj, WS_MSG_SLOT_EVENT_PHASE, js_mknum(2));
-      websocket_call(js, handler, ws->obj, args, 1);
-      ant_object_prop_set_unchecked(obj, WS_MSG_SLOT_CURRENT_TARGET, js_mknull());
-      ant_object_prop_set_unchecked(obj, WS_MSG_SLOT_EVENT_PHASE, js_mknum(0));
-    } else {
-      js_set(js, event, "target", ws->obj);
-      js_set(js, event, "currentTarget", ws->obj);
-      js_set(js, event, "eventPhase", js_mknum(2));
-      websocket_call(js, handler, ws->obj, args, 1);
-      js_set(js, event, "currentTarget", js_mknull());
-      js_set(js, event, "eventPhase", js_mknum(0));
-    }
-    
+    Ant_Event_BeginDispatch(js, event, ws->obj);
+    websocket_call(js, handler, ws->obj, args, 1);
+    Ant_Event_EndDispatch(js, event);
     return;
   }
 
@@ -356,14 +319,15 @@ static void websocket_emit_event(websocket_state_t *ws, int idx, ant_value_t eve
 static void websocket_emit(websocket_state_t *ws, int idx, ant_value_t event) {
   ant_offset_t count = websocket_listener_count(ws, idx);
   if (count == 0) return;
-  websocket_emit_event(ws, idx, event, count, false);
+  websocket_emit_event(ws, idx, event, count);
 }
 
 static void websocket_emit_simple(websocket_state_t *ws, int idx) {
   ant_offset_t count = websocket_listener_count(ws, idx);
   if (count == 0) return;
   ant_value_t proto = ws->js->builtins.event_proto;
-  websocket_emit_event(ws, idx, websocket_make_event(ws->js, proto, ws_handler_types[idx]), count, false);
+  ant_value_t event = websocket_make_event(ws->js, proto, ANT_EVENT_BASE, ws_handler_types[idx]);
+  if (!is_err(event)) websocket_emit_event(ws, idx, event, count);
 }
 
 static ant_value_t websocket_handler_listener(ant_params_t) {
@@ -443,49 +407,18 @@ static ant_value_t js_websocket_on(ant_params_t) { return websocket_on_impl(js, 
 static ant_value_t js_websocket_once(ant_params_t) { return websocket_on_impl(js, args, nargs, true, false); }
 static ant_value_t js_websocket_off(ant_params_t) { return websocket_on_impl(js, args, nargs, false, true); }
 
-static ant_value_t websocket_new_message_event(ant_t *js, ant_value_t target, ant_value_t data) {
+static ant_value_t websocket_new_message_event(ant_t *js, ant_value_t data) {
   GC_ROOT_SAVE(mark, js);
   GC_ROOT_PIN(js, data);
-
-  ant_value_t seed = js->mutable_roots.websocket_message_event_template;
-  if (vtype(seed) != kTypeObject) {
-    seed = js_mkobj(js);
-    if (is_err(seed)) { GC_ROOT_RESTORE(js, mark); return seed; }
-    GC_ROOT_PIN(js, seed);
-    
-    if (is_object_type(js->builtins.message_event_proto)) 
-      js_set_proto_init(seed, js->builtins.message_event_proto);
-    
-    js_mkprop_fast(js, seed, "type", 4, js_mkstr(js, "message", 7));
-    js_mkprop_fast(js, seed, "target", 6, js_mknull());
-    js_mkprop_fast(js, seed, "currentTarget", 13, js_mknull());
-    js_mkprop_fast(js, seed, "eventPhase", 10, js_mknum(0));
-    js_mkprop_fast(js, seed, "bubbles", 7, js_false);
-    js_mkprop_fast(js, seed, "cancelable", 10, js_false);
-    js_mkprop_fast(js, seed, "defaultPrevented", 16, js_false);
-    js_mkprop_fast(js, seed, "data", 4, js_mknull());
-    js_mkprop_fast(js, seed, "origin", 6, js_mkstr(js, "", 0));
-    js_mkprop_fast(js, seed, "lastEventId", 11, js_mkstr(js, "", 0));
-
-    if (Ant_Exception_Pending(js)) {
-      GC_ROOT_RESTORE(js, mark);
-      return Ant_Exception_Current(js);
-    }
-
-    js->mutable_roots.websocket_message_event_template = seed;
-  }
-
-  ant_value_t event = js_mkobj_from_template(js, seed);
+  
+  ant_value_t event = websocket_make_event(js, js->builtins.message_event_proto, ANT_EVENT_MESSAGE, "message");
   if (!is_err(event)) {
-    ant_object_t *obj = js_obj_ptr(event);
-    
-    ant_object_prop_set_unchecked(obj, WS_MSG_SLOT_TARGET, target);
-    gc_write_barrier(js, obj, target);
-    
-    ant_object_prop_set_unchecked(obj, WS_MSG_SLOT_DATA, data);
-    gc_write_barrier(js, obj, data);
+    ant_value_t empty = js_mkstr(js, "", 0);
+    Ant_Event_SetField(js, event, ANT_EVENT_FIELD_MESSAGE_data, data);
+    Ant_Event_SetField(js, event, ANT_EVENT_FIELD_MESSAGE_origin, empty);
+    Ant_Event_SetField(js, event, ANT_EVENT_FIELD_MESSAGE_lastEventId, empty);
   }
-
+  
   GC_ROOT_RESTORE(js, mark);
   return event;
 }
@@ -503,10 +436,10 @@ static void websocket_emit_message(websocket_state_t *ws, const uint8_t *data, s
   } else data_val = js_mkstr(js, data, len);
 
   if (is_err(data_val)) return;
-  ant_value_t event = websocket_new_message_event(js, ws->obj, data_val);
+  ant_value_t event = websocket_new_message_event(js, data_val);
   
   if (is_err(event)) return;
-  websocket_emit_event(ws, WS_HANDLER_MESSAGE, event, count, true);
+  websocket_emit_event(ws, WS_HANDLER_MESSAGE, event, count);
 }
 
 static void websocket_emit_close(websocket_state_t *ws, uint16_t code, const char *reason, bool was_clean) {
@@ -519,10 +452,13 @@ static void websocket_emit_close(websocket_state_t *ws, uint16_t code, const cha
   websocket_sync_state(ws);
 
   ant_t *js = ws->js;
-  ant_value_t event = websocket_make_event(js, js->builtins.close_event_proto, "close");
-  js_set(js, event, "code", js_mknum(code));
-  js_set(js, event, "reason", js_mkstr(js, reason ? reason : "", reason ? strlen(reason) : 0));
-  js_set(js, event, "wasClean", js_bool(was_clean));
+  ant_value_t event = websocket_make_event(js, js->builtins.close_event_proto, ANT_EVENT_CLOSE, "close");
+  if (is_err(event)) return;
+  
+  Ant_Event_SetField(js, event, ANT_EVENT_FIELD_CLOSE_code, js_mknum(code));
+  Ant_Event_SetField(js, event, ANT_EVENT_FIELD_CLOSE_reason, js_mkstr(js, reason ? reason : "", reason ? strlen(reason) : 0));
+  Ant_Event_SetField(js, event, ANT_EVENT_FIELD_CLOSE_wasClean, js_bool(was_clean));
+  
   websocket_emit(ws, WS_HANDLER_CLOSE, event);
 }
 
@@ -810,19 +746,53 @@ static ant_value_t js_websocket_close(ant_params_t) {
   return js_mkundef();
 }
 
+static ant_value_t websocket_event_ctor_init(
+  ant_t *js, ant_value_t *args, int nargs, ant_value_t new_target,
+  ant_value_t fallback_proto, ant_event_kind_t kind, const char *default_type
+) {
+  ant_value_t type = nargs > 0 ? js_tostring_val(js, args[0]) : js_mkstr(js, default_type, strlen(default_type));
+  if (is_err(type)) return type;
+  ant_value_t proto = js_instance_proto_from_new_target(js, fallback_proto, new_target);
+  return Ant_Event_Create(js, proto, kind, type, false, false);
+}
+
+static ant_value_t websocket_event_init_field(
+  ant_t *js, ant_value_t event, ant_value_t init, const char *key,
+  unsigned int index, ant_value_t fallback, ant_value_t (*convert)(ant_t *, ant_value_t)
+) {
+  ant_value_t value = is_object_type(init) ? js_get(js, init, key) : js_mkundef();
+  if (is_err(value)) return value;
+  if (vtype(value) == kTypeUndefined) value = fallback;
+  else if (convert) value = convert(js, value);
+  if (is_err(value)) return value;
+  Ant_Event_SetField(js, event, index, value);
+  return js_mkundef();
+}
+
+static ant_value_t websocket_to_bool(ant_t *js, ant_value_t value) {
+  return js_bool(js_truthy(js, value));
+}
+
+static ant_value_t websocket_to_number(ant_t *js, ant_value_t value) {
+  double number = js_to_number(js, value);
+  return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : js_mknum(number);
+}
+
 static ant_value_t js_message_event_ctor(ant_params_t) {
   if (vtype(call_new_target) == kTypeUndefined)
     return js_mkerr_typed(js, JS_ERR_TYPE, "MessageEvent constructor requires 'new'");
-  ant_value_t type_val = nargs > 0 ? js_tostring_val(js, args[0]) : js_mkstr(js, "message", 7);
-  if (is_err(type_val)) return type_val;
-  ant_value_t event = websocket_make_event(js, js->builtins.message_event_proto, js_str(js, type_val));
+  
+  ant_value_t event = websocket_event_ctor_init(js, args, nargs, call_new_target, js->builtins.message_event_proto, ANT_EVENT_MESSAGE, "message");
+  if (is_err(event)) return event;
+  
   ant_value_t init = nargs > 1 ? args[1] : js_mkundef();
-  ant_value_t data = js_mknull();
-  if (is_object_type(init)) {
-    ant_value_t d = js_get(js, init, "data");
-    if (vtype(d) != kTypeUndefined) data = d;
-  }
-  js_set(js, event, "data", data);
+  ant_value_t empty = js_mkstr(js, "", 0);
+  ant_value_t r;
+  
+  if (is_err(r = websocket_event_init_field(js, event, init, "data", ANT_EVENT_FIELD_MESSAGE_data, js_mknull(), NULL))) return r;
+  if (is_err(r = websocket_event_init_field(js, event, init, "origin", ANT_EVENT_FIELD_MESSAGE_origin, empty, js_tostring_val))) return r;
+  if (is_err(r = websocket_event_init_field(js, event, init, "lastEventId", ANT_EVENT_FIELD_MESSAGE_lastEventId, empty, js_tostring_val))) return r;
+  
   return event;
 }
 
@@ -830,72 +800,49 @@ static ant_value_t js_close_event_ctor(ant_params_t) {
   if (vtype(call_new_target) == kTypeUndefined)
     return js_mkerr_typed(js, JS_ERR_TYPE, "CloseEvent constructor requires 'new'");
 
-  ant_value_t type_val = nargs > 0 ? js_tostring_val(js, args[0]) : js_mkstr(js, "close", 5);
-  if (is_err(type_val)) return type_val;
-
-  ant_value_t event = websocket_make_event(js, js->builtins.close_event_proto, js_str(js, type_val));
+  ant_value_t event = websocket_event_ctor_init(js, args, nargs, call_new_target, js->builtins.close_event_proto, ANT_EVENT_CLOSE, "close");
+  if (is_err(event)) return event;
+  
   ant_value_t init = nargs > 1 ? args[1] : js_mkundef();
-
-  js_set(js, event, "wasClean", js_false);
-  js_set(js, event, "code", js_mknum(0));
-  js_set(js, event, "reason", js_mkstr(js, "", 0));
-
-  if (is_object_type(init)) {
-    ant_value_t was_clean = js_get(js, init, "wasClean");
-    if (is_err(was_clean)) return was_clean;
-    if (vtype(was_clean) != kTypeUndefined)
-      js_set(js, event, "wasClean", js_bool(js_truthy(js, was_clean)));
-
-    ant_value_t code = js_get(js, init, "code");
-    if (is_err(code)) return code;
-
-    if (vtype(code) != kTypeUndefined) {
-      double number = js_to_number(js, code);
-      if (Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
-      js_set(js, event, "code", js_mknum(number));
-    }
-
-    ant_value_t reason = js_get(js, init, "reason");
-    if (is_err(reason)) return reason;
-
-    if (vtype(reason) != kTypeUndefined) {
-      ant_value_t reason_str = js_tostring_val(js, reason);
-      if (is_err(reason_str)) return reason_str;
-      js_set(js, event, "reason", reason_str);
-    }
-  }
-
+  ant_value_t r;
+  
+  if (is_err(r = websocket_event_init_field(js, event, init, "wasClean", ANT_EVENT_FIELD_CLOSE_wasClean, js_false, websocket_to_bool))) return r;
+  if (is_err(r = websocket_event_init_field(js, event, init, "code", ANT_EVENT_FIELD_CLOSE_code, js_mknum(0), websocket_to_number))) return r;
+  if (is_err(r = websocket_event_init_field(js, event, init, "reason", ANT_EVENT_FIELD_CLOSE_reason, js_mkstr(js, "", 0), js_tostring_val))) return r;
+  
   return event;
 }
 
 ant_value_t ant_websocket_accept_server(
-  ant_t *js,
-  ant_conn_t *conn,
-  ant_value_t request_obj,
-  const char *protocol,
-  const ant_websocket_server_options_t *options
+  ant_t *js, ant_conn_t *conn, ant_value_t request_obj, 
+  const char *protocol, const ant_websocket_server_options_t *options
 ) {
   ant_value_t obj = websocket_create_object(js);
   websocket_state_t *ws = websocket_state_new(js, obj);
   if (!ws) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+  
   ws->server_conn = conn;
   ws->request_obj = request_obj;
   ws->ready_state = WS_CONNECTING;
+  
   if (options) {
     ws->max_payload_len = options->max_payload_len;
     ws->per_message_deflate = options->per_message_deflate;
   }
+  
   js_set_native(obj, ws, WS_NATIVE_TAG);
   js_set(js, obj, "url", js_mkstr(js, "", 0));
+  
   if (protocol) js_set(js, obj, "protocol", js_mkstr(js, protocol, strlen(protocol)));
   websocket_sync_state(ws);
+  
   return obj;
 }
 
 void ant_websocket_server_open(ant_t *js, ant_value_t socket_obj) {
-  (void)js;
   websocket_state_t *ws = websocket_data(socket_obj);
   if (!ws) return;
+  
   ws->ready_state = WS_OPEN;
   websocket_sync_state(ws);
   websocket_emit_simple(ws, WS_HANDLER_OPEN);
@@ -1070,12 +1017,14 @@ void init_websocket_module(ant_t *js) {
   js->builtins.message_event_proto = js_mkobj(js);
   if (is_object_type(event_proto)) js_set_proto_init(js->builtins.message_event_proto, event_proto);
   js_set_tostringtag(js, js->builtins.message_event_proto, js_mkstr(js, "MessageEvent", 12));
+  Ant_Event_DefineFields(js, js->builtins.message_event_proto, ANT_EVENT_MESSAGE);
   ant_value_t message_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_message_event_ctor, js->builtins.message_event_proto, "MessageEvent", 1);
   js_set_global_builtin(js, "MessageEvent", message_ctor);
 
   js->builtins.close_event_proto = js_mkobj(js);
   if (is_object_type(event_proto)) js_set_proto_init(js->builtins.close_event_proto, event_proto);
   js_set_tostringtag(js, js->builtins.close_event_proto, js_mkstr(js, "CloseEvent", 10));
+  Ant_Event_DefineFields(js, js->builtins.close_event_proto, ANT_EVENT_CLOSE);
   ant_value_t close_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_close_event_ctor, js->builtins.close_event_proto, "CloseEvent", 1);
   js_set_global_builtin(js, "CloseEvent", close_ctor);
 }

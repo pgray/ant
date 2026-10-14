@@ -6,12 +6,13 @@
 
 #include <stdint.h>
 
-typedef enum : uint8_t {
+typedef enum: uint8_t {
   ANT_NATIVE_GETTER_SLOT_DATA,
   ANT_NATIVE_GETTER_SIZE,
+  ANT_NATIVE_GETTER_FIELD,
 } ant_native_getter_kind_t;
 
-typedef enum : uint8_t {
+typedef enum: uint8_t {
   ANT_NATIVE_DETACH_NONE,
   ANT_NATIVE_DETACH_SELF,
   ANT_NATIVE_DETACH_REF,

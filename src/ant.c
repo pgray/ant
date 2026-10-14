@@ -22450,7 +22450,7 @@ static ant_value_t cfunc_expose_named(ant_t *js, ant_value_t cfunc, const char *
     js->cfunc_name_cache.cap = new_cap;
   }
 
-  const ant_cfunc_meta_t *stored = ant_cfunc_meta_create(&named_meta);
+  const ant_cfunc_meta_t *stored = ant_cfunc_meta_derive(base, &named_meta);
   if (!stored) return js_mkerr(js, "oom");
 
   ant_value_t named = mkref(kTypeBuiltin, stored);

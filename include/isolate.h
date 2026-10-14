@@ -65,12 +65,15 @@ struct ant_isolate_t {
   ant_object_t *objects;
   ant_object_t *permanent_objects;
   
+  // TODO: registry struct
   descriptor_entry_t *desc_registry;
   ant_process_state_t *process_state;
   ant_event_list_t *global_events;
   ant_regex_state_t *regex_state;
   json_layout_cache_t *json_layout_cache;
   server_runtime_t *server_runtimes;
+  abort_timeout_entry_t *abort_timeouts;
+  eventsource_state_t *active_eventsources;
 
   ant_fixed_arena_t obj_arena;
   ant_fixed_arena_t closure_arena;

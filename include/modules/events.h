@@ -16,6 +16,7 @@ typedef void (*eventemitter_listener_change_fn)(
 
 ant_value_t events_library(ant_t *js);
 ant_value_t eventemitter_prototype(ant_t *js);
+ant_offset_t eventemitter_listener_count(ant_t *js, ant_value_t target, const char *event_type);
 
 void init_events_module(ant_t *js);
 void cleanup_events_module(ant_t *js);
@@ -58,9 +59,34 @@ bool eventemitter_remove_listener_val(
   ant_value_t listener
 );
 
-ant_offset_t eventemitter_listener_count(
-  ant_t *js,
-  ant_value_t target, const char *event_type
+
+typedef enum: uint8_t {
+  ANT_EVENT_BASE,
+  ANT_EVENT_CUSTOM,
+  ANT_EVENT_ERROR,
+  ANT_EVENT_PROMISE_REJECTION,
+  ANT_EVENT_MESSAGE,
+  ANT_EVENT_CLOSE,
+} ant_event_kind_t;
+
+enum {
+#define ANT_EVENT_FIELD(k, name, index) ANT_EVENT_FIELD_##k##_##name = index,
+#include "events/fields.h"
+};
+
+ant_value_t Ant_Event_Create(
+  ant_t *js, ant_value_t proto, ant_event_kind_t kind,
+  ant_value_t type, bool bubbles, bool cancelable
 );
+
+void Ant_Event_BeginDispatch(ant_t *js, ant_value_t event, ant_value_t target);
+void Ant_Event_EndDispatch(ant_t *js, ant_value_t event);
+void Ant_Event_SetField(ant_t *js, ant_value_t event, unsigned int index, ant_value_t value);
+void Ant_Event_DefineFields(ant_t *js, ant_value_t proto, ant_event_kind_t kind);
+void Ant_EventTarget_Dispatch(ant_t *js, ant_value_t target, ant_value_t event, ant_value_t handler);
+
+bool Ant_EventTarget_AddListener(ant_t *js, ant_value_t target, ant_value_t type, ant_value_t listener);
+bool Ant_EventTarget_RemoveListener(ant_t *js, ant_value_t target, ant_value_t type, ant_value_t listener);
+bool Ant_EventTarget_HasListeners(ant_t *js, ant_value_t target, ant_value_t type);
 
 #endif

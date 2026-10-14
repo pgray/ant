@@ -128,6 +128,16 @@ ant_value_t js_report_error(ant_params_t) {
   return js_mkundef();
 }
 
+static ant_value_t globals_rejection_event(
+  ant_t *js, ant_value_t type, ant_value_t promise, ant_value_t reason, bool cancelable
+) {
+  ant_value_t event = Ant_Event_Create(js, js->builtins.promiserejectionevent_proto, ANT_EVENT_PROMISE_REJECTION, type, false, cancelable);
+  if (is_err(event)) return event;
+  Ant_Event_SetField(js, event, ANT_EVENT_FIELD_PROMISE_REJECTION_promise, promise);
+  Ant_Event_SetField(js, event, ANT_EVENT_FIELD_PROMISE_REJECTION_reason, reason);
+  return event;
+}
+
 bool js_fire_unhandled_rejection(ant_t *js, ant_value_t promise_val, ant_value_t reason) {
   ant_value_t global  = js_glob(js);
   ant_value_t handler = js_get(js, global, "onunhandledrejection");
@@ -135,10 +145,8 @@ bool js_fire_unhandled_rejection(ant_t *js, ant_value_t promise_val, ant_value_t
   uint8_t ht = vtype(handler);
   if (ht != kTypeFunction && ht != kTypeBuiltin) return false;
 
-  ant_value_t event = js_mkobj(js);
-  js_set(js, event, "type",    js_mkstr(js, "unhandledrejection", 18));
-  js_set(js, event, "reason",  reason);
-  js_set(js, event, "promise", promise_val);
+  ant_value_t event = globals_rejection_event(js, ANT_STRING("unhandledrejection"), promise_val, reason, true);
+  if (is_err(event)) return false;
   
   ant_value_t call_args[1] = { event };
   sv_vm_call(js->vm, js, handler, global, call_args, 1, NULL, js_mkundef());
@@ -153,10 +161,8 @@ void js_fire_rejection_handled(ant_t *js, ant_value_t promise_val, ant_value_t r
   uint8_t ht = vtype(handler);
   if (ht != kTypeFunction && ht != kTypeBuiltin) return;
 
-  ant_value_t event = js_mkobj(js);
-  js_set(js, event, "type",    js_mkstr(js, "rejectionhandled", 16));
-  js_set(js, event, "reason",  reason);
-  js_set(js, event, "promise", promise_val);
+  ant_value_t event = globals_rejection_event(js, ANT_STRING("rejectionhandled"), promise_val, reason, false);
+  if (is_err(event)) return;
   
   ant_value_t call_args[1] = { event };
   sv_vm_call(js->vm, js, handler, global, call_args, 1, NULL, js_mkundef());

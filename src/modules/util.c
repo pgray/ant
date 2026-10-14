@@ -436,9 +436,7 @@ static bool format_emit_number(const ant_format_sink_t *sink, void *ctx, double 
 static bool format_emit_bigint(ant_t *js, const ant_format_sink_t *sink, void *ctx, ant_value_t v) {
   char cbuf[64];
   js_cstr_t cstr = js_to_cstr(js, v, cbuf, sizeof(cbuf));
-  size_t len = strlen(cstr.ptr);
-  bool ok = sink->text(ctx, cstr.ptr, len);
-  if (ok && (len == 0 || cstr.ptr[len - 1] != 'n')) ok = sink->text(ctx, "n", 1);
+  bool ok = sink->text(ctx, cstr.ptr, strlen(cstr.ptr));
   if (cstr.needs_free) free((void *)cstr.ptr);
   return ok;
 }

@@ -6,8 +6,6 @@
 #include "internal.h"
 #include "modules/domexception.h"
 
-static bool g_initialized = false;
-
 static const struct { const char *name; int code; } domex_codes[] = {
   { "IndexSizeError",             1  },
   { "HierarchyRequestError",      3  },
@@ -119,7 +117,7 @@ ant_value_t make_dom_exception(ant_t *js, const char *message, const char *name)
   int code = name_to_code(name);
 
   ant_value_t obj = js_mkobj(js);
-  if (g_initialized) js_set_slot_wb(js, obj, SLOT_PROTO, js->builtins.domexception_proto);
+  if (is_object_type(js->builtins.domexception_proto)) js_set_proto_init(obj, js->builtins.domexception_proto);
 
   js_set(js, obj, "message", js_mkstr(js, message, msg_len));
   js_set(js, obj, "name",    js_mkstr(js, name,    name_len));
@@ -133,9 +131,7 @@ ant_value_t make_dom_exception(ant_t *js, const char *message, const char *name)
 
 void init_domexception_module(ant_t *js) {
   ant_value_t proto = js_mkobj(js);
-  
   js->builtins.domexception_proto = proto;
-  g_initialized = true;
 
   ant_value_t error_proto = js->builtins.error_protos[JS_ERR_GENERIC];
   if (vtype(error_proto) != kTypeUndefined) js_set_proto_init(proto, error_proto);

@@ -10,6 +10,8 @@
 #include "errors.h"
 #include "internal.h"
 #include "descriptors.h"
+#include "builder.h"
+#include "native_getter.h"
 #include "silver/call.h"
 
 #include "gc.h"
@@ -18,10 +20,20 @@
 #include "modules/events.h"
 
 typedef struct {
+  ant_value_t type;
+  ant_value_t target;
+  ant_value_t current_target;
+  ant_value_t phase;
+  ant_value_t time_stamp;
+  ant_event_kind_t kind;
+  uint8_t field_count;
+  bool bubbles;
+  bool cancelable;
   bool canceled;
   bool stop_immediate;
   bool stop_propagation;
   bool dispatching;
+  ant_value_t fields[];
 } event_data_t;
 
 enum {
@@ -601,58 +613,366 @@ static ant_value_t eventemitter_get_listeners_array(ant_t *js, ant_value_t targe
   return event_type_get_listeners_array(js, find_emitter_event_type(js, target, key), raw);
 }
 
-static void js_init_event_obj(ant_t *js, ant_value_t obj, ant_value_t type_val, bool bubbles, bool cancelable) {
-  defhidden(js, obj, "type", 4, type_val);
-  defhidden(js, obj, "target", 6, js_mknull());
-  defhidden(js, obj, "srcElement", 10, js_mknull());
-  defhidden(js, obj, "currentTarget", 13, js_mknull());
-  defhidden(js, obj, "eventPhase", 10, js_mknum(0));
-  defhidden(js, obj, "bubbles", 7, js_bool(bubbles));
-  defhidden(js, obj, "cancelable", 10, js_bool(cancelable));
-  defhidden(js, obj, "defaultPrevented", 16, js_false);
-  defhidden(js, obj, "returnValue", 11, js_true);
-  defhidden(js, obj, "cancelBubble", 12, js_false);
-  defhidden(js, obj, "timeStamp", 9, js_mknum(get_timestamp_ms()));
-
-  if (js->builtins.isTrusted_getter)
-    js_set_accessor_desc(js, obj, "isTrusted", 9, js->builtins.isTrusted_getter, js_mkundef(), 0);
-
-  event_data_t *data = calloc(1, sizeof(event_data_t));
-  if (data) js_set_native(obj, data, EVENT_NATIVE_TAG);
+static inline uint8_t event_field_count(ant_event_kind_t kind) {
+  uint8_t count = 0;
+#define ANT_EVENT_FIELD(k, name, index) if (kind == ANT_EVENT_##k) count++;
+#include "events/fields.h"
+  return count;
 }
 
-static ant_value_t js_event_ctor(ant_params_t) {
-  if (vtype(call_new_target) == kTypeUndefined)
-    return js_mkerr_typed(js, JS_ERR_TYPE, "Event constructor requires 'new'");
+static event_data_t *event_init(
+  ant_t *js, ant_value_t obj, ant_event_kind_t kind,
+  ant_value_t type, bool bubbles, bool cancelable
+) {
+  uint8_t count = event_field_count(kind);
+  event_data_t *data = malloc(sizeof(*data) + count * sizeof(ant_value_t));
+  if (!data) return NULL;
+  
+  *data = (event_data_t){
+    .type = type, .target = js_mknull(), .current_target = js_mknull(),
+    .phase = js_mknum(0), .time_stamp = js_mknum(get_timestamp_ms()),
+    .kind = kind, .field_count = count, .bubbles = bubbles, .cancelable = cancelable,
+  };
+  
+  for (uint8_t i = 0; i < count; i++) data->fields[i] = js_mkundef();
+  js_set_native(obj, data, EVENT_NATIVE_TAG);
+  gc_write_barrier(js, js_obj_ptr(obj), type);
+  
+  return data;
+}
+
+static __attribute__((cold, noinline)) ant_value_t event_this_error(ant_t *js) {
+  return js_mkerr_typed(js, JS_ERR_TYPE, "Value of \"this\" must be of type Event");
+}
+
+static void event_set_value(ant_t *js, ant_value_t event, ant_value_t *slot, ant_value_t value) {
+  *slot = value;
+  gc_write_barrier(js, js_obj_ptr(event), value);
+}
+
+static ant_value_t event_construct(
+  ant_t *js, ant_value_t *args, int nargs, ant_value_t new_target,
+  ant_event_kind_t kind, const char *name, ant_value_t *init_out
+) {
+  if (vtype(new_target) == kTypeUndefined)
+    return js_mkerr_typed(js, JS_ERR_TYPE, "%s constructor requires 'new'", name);
   if (nargs < 1 || vtype(args[0]) == kTypeUndefined)
-    return js_mkerr_typed(js, JS_ERR_TYPE, "Event constructor: type argument is required");
+    return js_mkerr_typed(js, JS_ERR_TYPE, "%s constructor: type argument is required", name);
 
-  ant_value_t type_val = args[0];
-  if (vtype(type_val) != kTypeString) {
-    type_val = js_tostring_val(js, type_val);
-    if (is_err(type_val)) return type_val;
-  }
+  ant_value_t type = vtype(args[0]) == kTypeString ? args[0] : js_tostring_val(js, args[0]);
+  if (is_err(type)) return type;
 
+  ant_value_t init = nargs >= 2 && vtype(args[1]) == kTypeObject ? args[1] : js_mkundef();
   bool bubbles = false, cancelable = false;
-  if (nargs >= 2 && vtype(args[1]) == kTypeObject) {
-    ant_value_t b = js_get(js, args[1], "bubbles");
-    ant_value_t c = js_get(js, args[1], "cancelable");
+  if (is_object_type(init)) {
+    ant_value_t b = js_get(js, init, "bubbles");
     if (is_err(b)) return b;
+    ant_value_t c = js_get(js, init, "cancelable");
     if (is_err(c)) return c;
-    bubbles    = js_truthy(js, b);
+    bubbles = js_truthy(js, b);
     cancelable = js_truthy(js, c);
   }
 
-  ant_value_t this_obj = js_mkobj(js);
-  ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.event_proto, call_new_target);
-  if (is_object_type(proto)) js_set_proto_init(this_obj, proto);
-
-  js_init_event_obj(js, this_obj, type_val, bubbles, cancelable);
+  ant_value_t this_obj = js_getthis(js);
+  if (!is_object_type(this_obj) || !event_init(js, this_obj, kind, type, bubbles, cancelable))
+    return js_mkerr(js, "out of memory");
+  
+  *init_out = init;
   return this_obj;
 }
 
+static ant_value_t event_init_field(
+  ant_t *js, ant_value_t event, ant_value_t init,
+  const char *key, unsigned int index, ant_value_t fallback, bool to_string
+) {
+  ant_value_t value = is_object_type(init) ? js_get(js, init, key) : js_mkundef();
+  if (is_err(value)) return value;
+  if (vtype(value) == kTypeUndefined) value = fallback;
+  else if (to_string) value = js_tostring_val(js, value);
+  if (is_err(value)) return value;
+  Ant_Event_SetField(js, event, index, value);
+  return js_mkundef();
+}
+
+static ant_value_t js_event_ctor(ant_params_t) {
+  ant_value_t init;
+  ant_value_t event = event_construct(js, args, nargs, call_new_target, ANT_EVENT_BASE, "Event", &init);
+  return is_err(event) ? event : js_mkundef();
+}
+
+static ant_value_t js_customevent_ctor(ant_params_t) {
+  ant_value_t init;
+  ant_value_t event = event_construct(js, args, nargs, call_new_target, ANT_EVENT_CUSTOM, "CustomEvent", &init);
+  if (is_err(event)) return event;
+  ant_value_t r = event_init_field(js, event, init, "detail", ANT_EVENT_FIELD_CUSTOM_detail, js_mknull(), false);
+  return is_err(r) ? r : js_mkundef();
+}
+
+static ant_value_t js_errorevent_ctor(ant_params_t) {
+  ant_value_t init;
+  ant_value_t event = event_construct(js, args, nargs, call_new_target, ANT_EVENT_ERROR, "ErrorEvent", &init);
+  if (is_err(event)) return event;
+  
+  ant_value_t empty = js_mkstr(js, "", 0);
+  ant_value_t r;
+  if (is_err(r = event_init_field(js, event, init, "message",  ANT_EVENT_FIELD_ERROR_message,  empty, true)))  return r;
+  if (is_err(r = event_init_field(js, event, init, "filename", ANT_EVENT_FIELD_ERROR_filename, empty, true)))  return r;
+  if (is_err(r = event_init_field(js, event, init, "lineno",   ANT_EVENT_FIELD_ERROR_lineno,   js_mknum(0), false))) return r;
+  if (is_err(r = event_init_field(js, event, init, "colno",    ANT_EVENT_FIELD_ERROR_colno,    js_mknum(0), false))) return r;
+  if (is_err(r = event_init_field(js, event, init, "error",    ANT_EVENT_FIELD_ERROR_error,    js_mkundef(), false))) return r;
+  return js_mkundef();
+}
+
+static ant_value_t js_promiserejectionevent_ctor(ant_params_t) {
+  ant_value_t init;
+  ant_value_t event = event_construct(js, args, nargs, call_new_target, ANT_EVENT_PROMISE_REJECTION, "PromiseRejectionEvent", &init);
+  if (is_err(event)) return event;
+  
+  ant_value_t r;
+  if (is_err(r = event_init_field(js, event, init, "promise", ANT_EVENT_FIELD_PROMISE_REJECTION_promise, js_mkundef(), false))) return r;
+  if (is_err(r = event_init_field(js, event, init, "reason",  ANT_EVENT_FIELD_PROMISE_REJECTION_reason,  js_mkundef(), false))) return r;
+  return js_mkundef();
+}
+
+#define EVENT_VALUE_GETTER(field) \
+  static ant_value_t event_get_##field(ant_params_t) { \
+    event_data_t *data = get_event_data(js_getthis(js)); \
+    return data ? data->field : event_this_error(js); \
+  } \
+  static const ant_native_getter_t event_##field##_getter = { \
+    .meta = { event_get_##field, NULL, 0, CFUNC_NATIVE_GETTER }, .native_tag = EVENT_NATIVE_TAG, \
+    .kind = ANT_NATIVE_GETTER_FIELD, .field_offset = offsetof(event_data_t, field) };
+
+EVENT_VALUE_GETTER(type)
+EVENT_VALUE_GETTER(target)
+EVENT_VALUE_GETTER(current_target)
+EVENT_VALUE_GETTER(phase)
+EVENT_VALUE_GETTER(time_stamp)
+
+#define EVENT_FLAG_GETTER(name, expr) \
+  static ant_value_t event_get_##name(ant_params_t) { \
+    event_data_t *data = get_event_data(js_getthis(js)); \
+    return data ? js_bool(expr) : event_this_error(js); \
+  }
+
+EVENT_FLAG_GETTER(bubbles, data->bubbles)
+EVENT_FLAG_GETTER(cancelable, data->cancelable)
+EVENT_FLAG_GETTER(default_prevented, data->canceled)
+EVENT_FLAG_GETTER(return_value, !data->canceled)
+EVENT_FLAG_GETTER(cancel_bubble, data->stop_propagation)
+EVENT_FLAG_GETTER(composed, false)
+
 static ant_value_t js_event_get_isTrusted(ant_params_t) {
   return js_false;
+}
+
+static ant_value_t event_set_return_value(ant_params_t) {
+  event_data_t *data = get_event_data(js_getthis(js));
+  if (!data) return event_this_error(js);
+  if (nargs > 0 && !js_truthy(js, args[0]) && data->cancelable) data->canceled = true;
+  return js_mkundef();
+}
+
+static ant_value_t event_set_cancel_bubble(ant_params_t) {
+  event_data_t *data = get_event_data(js_getthis(js));
+  if (!data) return event_this_error(js);
+  if (nargs > 0 && js_truthy(js, args[0])) data->stop_propagation = true;
+  return js_mkundef();
+}
+
+static ant_value_t js_event_preventDefault(ant_params_t) {
+  event_data_t *data = get_event_data(js_getthis(js));
+  if (!data) return event_this_error(js);
+  if (data->cancelable) data->canceled = true;
+  return js_mkundef();
+}
+
+static ant_value_t js_event_stopPropagation(ant_params_t) {
+  event_data_t *data = get_event_data(js_getthis(js));
+  if (!data) return event_this_error(js);
+  data->stop_propagation = true;
+  return js_mkundef();
+}
+
+static ant_value_t js_event_stopImmediatePropagation(ant_params_t) {
+  event_data_t *data = get_event_data(js_getthis(js));
+  if (!data) return event_this_error(js);
+  data->stop_immediate = true;
+  data->stop_propagation = true;
+  return js_mkundef();
+}
+
+static ant_value_t js_event_composedPath(ant_params_t) {
+  event_data_t *data = get_event_data(js_getthis(js));
+  if (!data) return event_this_error(js);
+  ant_value_t result = js_mkarr(js);
+  if (data->dispatching && is_object_type(data->current_target)) js_arr_push(js, result, data->current_target);
+  return result;
+}
+
+static ant_value_t js_event_initEvent(ant_params_t) {
+  ant_value_t this_obj = js_getthis(js);
+  event_data_t *data = get_event_data(this_obj);
+  if (!data) return event_this_error(js);
+  if (data->dispatching) return js_mkundef();
+  
+  if (nargs >= 1) {
+    ant_value_t type = vtype(args[0]) == kTypeString ? args[0] : js_tostring_val(js, args[0]);
+    if (is_err(type)) return type;
+    event_set_value(js, this_obj, &data->type, type);
+  }
+  
+  data->bubbles = nargs >= 2 && js_truthy(js, args[1]);
+  data->cancelable = nargs >= 3 && js_truthy(js, args[2]);
+  data->canceled = data->stop_immediate = data->stop_propagation = false;
+  return js_mkundef();
+}
+
+static ant_value_t js_event_inspect(ant_params_t) {
+  ant_value_t this_obj = js_getthis(js);
+  event_data_t *data = get_event_data(this_obj);
+  if (!data) return js_mkundef();
+  
+  ant_value_t tag_val = js_get_sym(js, this_obj, js->sym.toStringTag_sym);
+  const char *tag = vtype(tag_val) == kTypeString ? js_getstr(js, tag_val, NULL) : "Event";
+  
+  js_inspect_builder_t builder;
+  if (!js_inspect_builder_init_dynamic(&builder, js, 128)) return js_mkerr(js, "out of memory");
+  
+  bool ok = js_inspect_header(&builder, "%s", tag);
+  if (ok) ok = js_inspect_field(&builder, "type", data->type);
+  if (ok) ok = js_inspect_field(&builder, "defaultPrevented", js_bool(data->canceled));
+  if (ok) ok = js_inspect_field(&builder, "cancelable", js_bool(data->cancelable));
+  if (ok) ok = js_inspect_field(&builder, "timeStamp", data->time_stamp);
+  if (ok) ok = js_inspect_close(&builder);
+  
+  if (!ok) {
+    js_inspect_builder_dispose(&builder);
+    return js_mkerr(js, "out of memory");
+  }
+  
+  return js_inspect_builder_result(&builder);
+}
+
+#define ANT_EVENT_FIELD(k, name, index) \
+  static ant_value_t event_get_##k##_##name(ant_params_t) { \
+    event_data_t *data = get_event_data(js_getthis(js)); \
+    if (!data || data->kind != ANT_EVENT_##k) return event_this_error(js); \
+    return data->fields[index]; \
+  }
+#include "events/fields.h"
+
+typedef struct {
+  ant_cfunc_meta_t getter;
+  ant_event_kind_t kind;
+} event_field_getter_t;
+
+static const event_field_getter_t event_field_getters[] = {
+#define ANT_EVENT_FIELD(k, name, index) { { event_get_##k##_##name, "get " #name, 0, 0 }, ANT_EVENT_##k },
+#include "events/fields.h"
+};
+
+ant_value_t Ant_Event_Create(
+  ant_t *js, ant_value_t proto, ant_event_kind_t kind,
+  ant_value_t type, bool bubbles, bool cancelable
+) {
+  ant_value_t event = js_mkobj(js);
+  if (is_err(event)) return event;
+  if (is_object_type(proto)) js_set_proto_init(event, proto);
+  if (!event_init(js, event, kind, type, bubbles, cancelable)) return js_mkerr(js, "out of memory");
+  return event;
+}
+
+void Ant_Event_SetField(ant_t *js, ant_value_t event, unsigned int index, ant_value_t value) {
+  event_data_t *data = get_event_data(event);
+  if (data && index < data->field_count) event_set_value(js, event, &data->fields[index], value);
+}
+
+void Ant_Event_BeginDispatch(ant_t *js, ant_value_t event, ant_value_t target) {
+  event_data_t *data = get_event_data(event);
+  if (!data) {
+    js_set(js, event, "target", target);
+    js_set(js, event, "currentTarget", target);
+    js_set(js, event, "eventPhase", js_mknum(2));
+    return;
+  }
+  
+  data->target = data->current_target = target;
+  data->phase = js_mknum(2);
+  data->dispatching = true;
+  data->stop_immediate = false;
+  gc_write_barrier(js, js_obj_ptr(event), target);
+}
+
+void Ant_Event_EndDispatch(ant_t *js, ant_value_t event) {
+  event_data_t *data = get_event_data(event);
+  if (!data) {
+    js_set(js, event, "currentTarget", js_mknull());
+    js_set(js, event, "eventPhase", js_mknum(0));
+    return;
+  }
+  
+  data->current_target = js_mknull();
+  data->phase = js_mknum(0);
+  data->dispatching = false;
+}
+
+void Ant_Event_DefineFields(ant_t *js, ant_value_t proto, ant_event_kind_t kind) {
+  for (size_t i = 0; i < countof(event_field_getters); i++) {
+    const event_field_getter_t *field = &event_field_getters[i];
+    if (field->kind != kind) continue;
+    const char *name = field->getter.name + 4;
+    js_set_getter_desc(js, proto, name, strlen(name), js_mkfun_meta(&field->getter), JS_DESC_E | JS_DESC_C);
+  }
+}
+
+static void event_define_prototype(ant_t *js, ant_value_t proto, ant_value_t ctor) {
+  static const struct { const char *name; const ant_native_getter_t *getter; } values[] = {
+    { "type",          &event_type_getter },
+    { "target",        &event_target_getter },
+    { "srcElement",    &event_target_getter },
+    { "currentTarget", &event_current_target_getter },
+    { "eventPhase",    &event_phase_getter },
+    { "timeStamp",     &event_time_stamp_getter },
+  };
+  
+  static const struct { const char *name; ant_cfunc_meta_t getter; ant_cfunc_meta_t setter; } flags[] = {
+    { "bubbles",          { event_get_bubbles,           "get bubbles",          0, 0 }, { 0 } },
+    { "cancelable",       { event_get_cancelable,        "get cancelable",       0, 0 }, { 0 } },
+    { "defaultPrevented", { event_get_default_prevented, "get defaultPrevented", 0, 0 }, { 0 } },
+    { "composed",         { event_get_composed,          "get composed",         0, 0 }, { 0 } },
+    { "returnValue",      { event_get_return_value,      "get returnValue",      0, 0 }, { event_set_return_value,  "set returnValue",  1, 0 } },
+    { "cancelBubble",     { event_get_cancel_bubble,     "get cancelBubble",     0, 0 }, { event_set_cancel_bubble, "set cancelBubble", 1, 0 } },
+  };
+  
+  static const ant_cfunc_meta_t methods[] = {
+    { js_event_preventDefault,           "preventDefault",           0, 0 },
+    { js_event_stopPropagation,          "stopPropagation",          0, 0 },
+    { js_event_stopImmediatePropagation, "stopImmediatePropagation", 0, 0 },
+    { js_event_composedPath,             "composedPath",             0, 0 },
+    { js_event_initEvent,                "initEvent",                1, 0 },
+  };
+  
+  static const char *const phases[] = { "NONE", "CAPTURING_PHASE", "AT_TARGET", "BUBBLING_PHASE" };
+  
+  for (size_t i = 0; i < countof(values); i++)
+    js_set_getter_desc(js, proto, values[i].name, strlen(values[i].name), js_mkfun_meta(&values[i].getter->meta), JS_DESC_E | JS_DESC_C);
+  
+  for (size_t i = 0; i < countof(flags); i++) js_set_accessor_desc(
+    js, proto, flags[i].name, strlen(flags[i].name), js_mkfun_meta(&flags[i].getter),
+    flags[i].setter.fn ? js_mkfun_meta(&flags[i].setter) : js_mkundef(), JS_DESC_E | JS_DESC_C
+  );
+  
+  js_set_accessor_desc(js, proto, "isTrusted", 9, Ant_Function_CreateWithMeta(js_event_get_isTrusted, "get isTrusted", 0, 0), js_mkundef(), JS_DESC_E);
+  js_define_methods(js, proto, methods, countof(methods), ANT_PROP_ATTR_DEFAULT);
+  defmethod_sym(js, proto, js->sym.inspect_sym, Ant_Function_Create(js_event_inspect));
+  js_set_tostringtag(js, proto, js_mkstr(js, "Event", 5));
+  
+  for (size_t i = 0; i < countof(phases); i++) {
+    ant_value_t key = js_mkstr(js, phases[i], strlen(phases[i]));
+    mkprop_exact_attrs(js, proto, key, js_mknum((double)i), ANT_PROP_ATTR_ENUMERABLE);
+    mkprop_exact_attrs(js, ctor, key, js_mknum((double)i), ANT_PROP_ATTR_ENUMERABLE);
+  }
 }
 
 static ant_value_t js_eventemitter_ctor(ant_params_t) {
@@ -667,183 +987,6 @@ static ant_value_t js_eventemitter_ctor(ant_params_t) {
   }
 
   return js_mkerr_typed(js, JS_ERR_TYPE, "EventEmitter constructor requires an object receiver or 'new'");
-}
-
-static ant_value_t js_event_preventDefault(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  ant_value_t cancelable = js_get(js, this_obj, "cancelable");
-  if (!js_truthy(js, cancelable)) return js_mkundef();
-  event_data_t *data = get_event_data(this_obj);
-  if (data) data->canceled = true;
-  js_set(js, this_obj, "defaultPrevented", js_true);
-  js_set(js, this_obj, "returnValue", js_false);
-  return js_mkundef();
-}
-
-static ant_value_t js_event_stopPropagation(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  event_data_t *data = get_event_data(this_obj);
-  if (data) data->stop_propagation = true;
-  js_set(js, this_obj, "cancelBubble", js_true);
-  return js_mkundef();
-}
-
-static ant_value_t js_event_stopImmediatePropagation(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  event_data_t *data = get_event_data(this_obj);
-  if (data) { data->stop_immediate = true; data->stop_propagation = true; }
-  js_set(js, this_obj, "cancelBubble", js_true);
-  return js_mkundef();
-}
-
-static ant_value_t js_event_composedPath(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  event_data_t *data = get_event_data(this_obj);
-  ant_value_t result = js_mkarr(js);
-  if (data && data->dispatching) {
-    ant_value_t ct = js_get(js, this_obj, "currentTarget");
-    if (is_object_type(ct)) js_arr_push(js, result, ct);
-  }
-  return result;
-}
-
-static ant_value_t js_event_initEvent(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  if (nargs >= 1) {
-    ant_value_t type_val = vtype(args[0]) == kTypeString ? args[0] : js_tostring_val(js, args[0]);
-    if (!is_err(type_val)) js_set(js, this_obj, "type", type_val);
-  }
-  if (nargs >= 2) js_set(js, this_obj, "bubbles",   js_bool(js_truthy(js, args[1])));
-  if (nargs >= 3) js_set(js, this_obj, "cancelable", js_bool(js_truthy(js, args[2])));
-  js_set(js, this_obj, "defaultPrevented", js_false);
-  js_set(js, this_obj, "returnValue", js_true);
-  event_data_t *data = get_event_data(this_obj);
-  if (data) { data->canceled = false; data->stop_immediate = false; data->stop_propagation = false; }
-  return js_mkundef();
-}
-
-static ant_value_t js_customevent_ctor(ant_params_t) {
-  if (vtype(call_new_target) == kTypeUndefined)
-    return js_mkerr_typed(js, JS_ERR_TYPE, "CustomEvent constructor requires 'new'");
-  if (nargs < 1 || vtype(args[0]) == kTypeUndefined)
-    return js_mkerr_typed(js, JS_ERR_TYPE, "CustomEvent constructor: type argument is required");
-
-  ant_value_t type_val = args[0];
-  if (vtype(type_val) != kTypeString) {
-    type_val = js_tostring_val(js, type_val);
-    if (is_err(type_val)) return type_val;
-  }
-
-  bool bubbles = false, cancelable = false;
-  ant_value_t detail = js_mknull();
-  if (nargs >= 2 && vtype(args[1]) == kTypeObject) {
-    ant_value_t b = js_get(js, args[1], "bubbles");
-    ant_value_t c = js_get(js, args[1], "cancelable");
-    ant_value_t d = js_get(js, args[1], "detail");
-    if (is_err(b)) return b;
-    if (is_err(c)) return c;
-    bubbles    = js_truthy(js, b);
-    cancelable = js_truthy(js, c);
-    if (vtype(d) != kTypeUndefined) detail = d;
-  }
-
-  ant_value_t this_obj = js_mkobj(js);
-  ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.customevent_proto, call_new_target);
-  if (is_object_type(proto)) js_set_proto_init(this_obj, proto);
-
-  js_init_event_obj(js, this_obj, type_val, bubbles, cancelable);
-  js_set(js, this_obj, "detail", detail);
-  return this_obj;
-}
-
-static ant_value_t js_errorevent_ctor(ant_params_t) {
-  if (vtype(call_new_target) == kTypeUndefined)
-    return js_mkerr_typed(js, JS_ERR_TYPE, "ErrorEvent constructor requires 'new'");
-  if (nargs < 1 || vtype(args[0]) == kTypeUndefined)
-    return js_mkerr_typed(js, JS_ERR_TYPE, "ErrorEvent constructor: type argument is required");
-
-  ant_value_t type_val = args[0];
-  if (vtype(type_val) != kTypeString) {
-    type_val = js_tostring_val(js, type_val);
-    if (is_err(type_val)) return type_val;
-  }
-
-  bool bubbles = false, cancelable = false;
-  ant_value_t message  = js_mkstr(js, "", 0);
-  ant_value_t filename = js_mkstr(js, "", 0);
-  ant_value_t lineno   = js_mknum(0);
-  ant_value_t colno    = js_mknum(0);
-  ant_value_t error    = js_mknull();
-
-  if (nargs >= 2 && vtype(args[1]) == kTypeObject) {
-    ant_value_t b  = js_get(js, args[1], "bubbles");
-    ant_value_t c  = js_get(js, args[1], "cancelable");
-    ant_value_t m  = js_get(js, args[1], "message");
-    ant_value_t f  = js_get(js, args[1], "filename");
-    ant_value_t l  = js_get(js, args[1], "lineno");
-    ant_value_t co = js_get(js, args[1], "colno");
-    ant_value_t e  = js_get(js, args[1], "error");
-    if (is_err(b)) return b;
-    if (is_err(c)) return c;
-    bubbles    = js_truthy(js, b);
-    cancelable = js_truthy(js, c);
-    if (vtype(m) != kTypeUndefined) { message  = js_tostring_val(js, m); if (is_err(message))  return message;  }
-    if (vtype(f) != kTypeUndefined) { filename = js_tostring_val(js, f); if (is_err(filename)) return filename; }
-    if (vtype(l) != kTypeUndefined) lineno = l;
-    if (vtype(co) != kTypeUndefined) colno = co;
-    if (vtype(e) != kTypeUndefined) error = e;
-  }
-
-  ant_value_t this_obj = js_mkobj(js);
-  ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.errorevent_proto, call_new_target);
-  if (is_object_type(proto)) js_set_proto_init(this_obj, proto);
-
-  js_init_event_obj(js, this_obj, type_val, bubbles, cancelable);
-  js_set(js, this_obj, "message",  message);
-  js_set(js, this_obj, "filename", filename);
-  js_set(js, this_obj, "lineno",   lineno);
-  js_set(js, this_obj, "colno",    colno);
-  js_set(js, this_obj, "error",    error);
-  return this_obj;
-}
-
-static ant_value_t js_promiserejectionevent_ctor(ant_params_t) {
-  if (vtype(call_new_target) == kTypeUndefined)
-    return js_mkerr_typed(js, JS_ERR_TYPE, "PromiseRejectionEvent constructor requires 'new'");
-  if (nargs < 1 || vtype(args[0]) == kTypeUndefined)
-    return js_mkerr_typed(js, JS_ERR_TYPE, "PromiseRejectionEvent constructor: type argument is required");
-
-  ant_value_t type_val = args[0];
-  if (vtype(type_val) != kTypeString) {
-    type_val = js_tostring_val(js, type_val);
-    if (is_err(type_val)) return type_val;
-  }
-
-  bool bubbles = false, cancelable = false;
-  ant_value_t promise = js_mkundef();
-  ant_value_t reason  = js_mkundef();
-
-  if (nargs >= 2 && vtype(args[1]) == kTypeObject) {
-    ant_value_t b = js_get(js, args[1], "bubbles");
-    ant_value_t c = js_get(js, args[1], "cancelable");
-    ant_value_t p = js_get(js, args[1], "promise");
-    ant_value_t r = js_get(js, args[1], "reason");
-    if (is_err(b)) return b;
-    if (is_err(c)) return c;
-    bubbles    = js_truthy(js, b);
-    cancelable = js_truthy(js, c);
-    if (vtype(p) != kTypeUndefined) promise = p;
-    if (vtype(r) != kTypeUndefined) reason  = r;
-  }
-
-  ant_value_t this_obj = js_mkobj(js);
-  ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.promiserejectionevent_proto, call_new_target);
-  if (is_object_type(proto)) js_set_proto_init(this_obj, proto);
-
-  js_init_event_obj(js, this_obj, type_val, bubbles, cancelable);
-  js_set(js, this_obj, "promise", promise);
-  js_set(js, this_obj, "reason",  reason);
-  return this_obj;
 }
 
 static ant_value_t js_eventtarget_ctor(ant_params_t) {
@@ -879,21 +1022,10 @@ static bool parse_addEventListener_options(ant_native_params_t, bool *once, bool
   return true;
 }
 
-static ant_value_t add_listener_to(ant_native_params_t, EventType *evt) {
-  if (!evt) return js_mkerr(js, "failed to create event type");
-
-  bool once, capture;
-  ant_value_t signal;
-  if (!parse_addEventListener_options(js, args, nargs, &once, &capture, &signal))
-    return js_mkerr_typed(js, JS_ERR_TYPE, "Failed to execute 'addEventListener': signal is not an AbortSignal");
-
-  if (vtype(signal) != kTypeUndefined && abort_signal_is_aborted(signal)) return js_mkundef();
-
-  ant_value_t cb = args[1];
-  uint8_t cbt = vtype(cb);
-  if (cbt == kTypeNull || cbt == kTypeUndefined) return js_mkundef();
-  if (cbt != kTypeFunction && cbt != kTypeBuiltin) return js_mkundef();
-
+static ant_value_t eventtarget_add_entry(
+  ant_t *js, EventType *evt, ant_value_t cb,
+  bool once, bool capture, ant_value_t signal
+) {
   for (unsigned int i = 0; i < utarray_len(evt->listeners); i++) {
     EventListenerEntry *e = (EventListenerEntry *)utarray_eltptr(evt->listeners, i);
     if (entry_live(e) && e->callback == cb && entry_capture(evt, e) == capture)
@@ -915,6 +1047,22 @@ static ant_value_t add_listener_to(ant_native_params_t, EventType *evt) {
   utarray_push_back(evt->listeners, &entry);
   emitter_write_barrier(js, evt->owner->target, cb);
   return js_mkundef();
+}
+
+static ant_value_t add_listener_to(ant_native_params_t, EventType *evt) {
+  if (!evt) return js_mkerr(js, "failed to create event type");
+
+  bool once, capture;
+  ant_value_t signal;
+  if (!parse_addEventListener_options(js, args, nargs, &once, &capture, &signal))
+    return js_mkerr_typed(js, JS_ERR_TYPE, "Failed to execute 'addEventListener': signal is not an AbortSignal");
+
+  if (vtype(signal) != kTypeUndefined && abort_signal_is_aborted(signal)) return js_mkundef();
+
+  ant_value_t cb = args[1];
+  uint8_t cbt = vtype(cb);
+  if (cbt != kTypeFunction && cbt != kTypeBuiltin) return js_mkundef();
+  return eventtarget_add_entry(js, evt, cb, once, capture, signal);
 }
 
 static ant_value_t remove_listener_from(ant_native_params_t, EventType *evt) {
@@ -943,16 +1091,20 @@ static ant_value_t remove_listener_from(ant_native_params_t, EventType *evt) {
   return js_mkundef();
 }
 
-static ant_value_t dispatch_event_to(ant_t *js, ant_value_t event_obj, EventType *evt, ant_value_t target) {
-  if (!evt) return js_true;
+static ant_value_t dispatch_event_to(
+  ant_t *js, ant_value_t event_obj, EventType *evt,
+  ant_value_t target, ant_value_t handler
+) {
+  bool has_handler = is_callable(handler);
+  if (!evt && !has_handler) return js_true;
 
   event_data_t *data = get_event_data(event_obj);
-  if (data) { data->dispatching = true; data->stop_immediate = false; }
-  js_set(js, event_obj, "target",        target);
-  js_set(js, event_obj, "currentTarget", target);
-  js_set(js, event_obj, "eventPhase",    js_mknum(2));
+  Ant_Event_BeginDispatch(js, event_obj, target);
 
   ant_value_t call_args[1] = { event_obj };
+  if (has_handler) eventemitter_call_listener(js, handler, target, call_args, 1);
+  if (!evt || (data && data->stop_immediate)) goto done;
+  
   unsigned int n = utarray_len(evt->listeners);
   evt->generation++;
 
@@ -973,16 +1125,15 @@ static ant_value_t dispatch_event_to(ant_t *js, ant_value_t event_obj, EventType
     uint8_t t = vtype(cb);
     if (t != kTypeFunction && t != kTypeBuiltin) continue;
 
-    eventemitter_call_listener(js, cb, js_mkundef(), call_args, 1);
+    eventemitter_call_listener(js, cb, target, call_args, 1);
     if (data && data->stop_immediate) break;
   }
   
   evt->emitting--;
   evt_sweep(evt);
 
-  if (data) data->dispatching = false;
-  js_set(js, event_obj, "currentTarget", js_mknull());
-  js_set(js, event_obj, "eventPhase",    js_mknum(0));
+done:
+  Ant_Event_EndDispatch(js, event_obj);
 
   bool canceled = data && data->canceled;
   return js_bool(!canceled);
@@ -1024,7 +1175,7 @@ static ant_value_t js_dispatch_event_method(ant_params_t) {
   ant_value_t key = js_get(js, args[0], "type");
   if (!evt_key_from_arg(key)) return js_false;
   return dispatch_event_to(js, args[0],
-    find_emitter_event_type(js, this_obj, key), this_obj);
+    find_emitter_event_type(js, this_obj, key), this_obj, js_mkundef());
 }
 
 static ant_value_t js_dispatch_event(ant_params_t) {
@@ -1032,7 +1183,7 @@ static ant_value_t js_dispatch_event(ant_params_t) {
   ant_value_t key = js_get(js, args[0], "type");
   if (!evt_key_from_arg(key)) return js_false;
   return dispatch_event_to(js, args[0],
-    find_global_event_type(js, key), js_glob(js));
+    find_global_event_type(js, key), js_glob(js), js_mkundef());
 }
 
 void js_dispatch_global_event(ant_t *js, ant_value_t event_obj) {
@@ -1040,7 +1191,7 @@ void js_dispatch_global_event(ant_t *js, ant_value_t event_obj) {
   if (!evt_key_from_arg(key)) return;
   EventType *evt = find_global_event_type(js, key);
   if (evt_live_count(evt) == 0) return;
-  dispatch_event_to(js, event_obj, evt, js_glob(js));
+  dispatch_event_to(js, event_obj, evt, js_glob(js), js_mkundef());
 }
 
 static bool eventemitter_add_listener_impl(
@@ -1594,9 +1745,11 @@ static ant_value_t js_events_add_abort_listener(ant_params_t) {
 
   bool already_aborted = abort_signal_is_aborted(args[0]);
   if (already_aborted) {
-    ant_value_t event = js_mkobj(js);
-    js_set(js, event, "type", js_mkstr(js, "abort", 5));
+    ant_value_t event = Ant_Event_Create(js, js->builtins.event_proto, ANT_EVENT_BASE, ANT_STRING("abort"), false, false);
+    if (is_err(event)) return event;
+    Ant_Event_BeginDispatch(js, event, args[0]);
     eventemitter_call_listener(js, args[1], args[0], &event, 1);
+    Ant_Event_EndDispatch(js, event);
   } else abort_signal_add_listener(js, args[0], args[1]);
 
   ant_value_t state = js_mkobj(js);
@@ -1967,30 +2120,15 @@ ant_value_t eventemitter_prototype(ant_t *js) {
 void init_events_module(ant_t *js) {
   ant_value_t global = js_glob(js);
   
-  js->builtins.isTrusted_getter = Ant_Function_Create(js_event_get_isTrusted);
   js->builtins.event_proto = js_mkobj(js);
-  
-  js_set_tostringtag(js, js->builtins.event_proto, js_mkstr(js, "Event", 5));
-  js_set(js, js->builtins.event_proto, "preventDefault",          Ant_Function_Create(js_event_preventDefault));
-  js_set(js, js->builtins.event_proto, "stopPropagation",         Ant_Function_Create(js_event_stopPropagation));
-  js_set(js, js->builtins.event_proto, "stopImmediatePropagation", Ant_Function_Create(js_event_stopImmediatePropagation));
-  js_set(js, js->builtins.event_proto, "composedPath",            Ant_Function_Create(js_event_composedPath));
-  js_set(js, js->builtins.event_proto, "initEvent",               Ant_Function_CreateWithArity(js_event_initEvent, 1));
-  js_set(js, js->builtins.event_proto, "NONE",             js_mknum(0));
-  js_set(js, js->builtins.event_proto, "CAPTURING_PHASE",  js_mknum(1));
-  js_set(js, js->builtins.event_proto, "AT_TARGET",        js_mknum(2));
-  js_set(js, js->builtins.event_proto, "BUBBLING_PHASE",   js_mknum(3));
-
   ant_value_t event_fn = Ant_Function_CreateIntrinsicConstructor(js, js_event_ctor, js->builtins.event_proto, "Event", 1);
-  js_set(js, event_fn, "NONE",            js_mknum(0));
-  js_set(js, event_fn, "CAPTURING_PHASE", js_mknum(1));
-  js_set(js, event_fn, "AT_TARGET",       js_mknum(2));
-  js_set(js, event_fn, "BUBBLING_PHASE",  js_mknum(3));
+  event_define_prototype(js, js->builtins.event_proto, event_fn);
   js_set_global_builtin(js, "Event", event_fn);
 
   js->builtins.customevent_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.customevent_proto, js->builtins.event_proto);
   js_set_tostringtag(js, js->builtins.customevent_proto, js_mkstr(js, "CustomEvent", 11));
+  Ant_Event_DefineFields(js, js->builtins.customevent_proto, ANT_EVENT_CUSTOM);
 
   ant_value_t customevent_fn = Ant_Function_CreateIntrinsicConstructor(js, js_customevent_ctor, js->builtins.customevent_proto, "CustomEvent", 1);
   js_set_global_builtin(js, "CustomEvent", customevent_fn);
@@ -1998,6 +2136,7 @@ void init_events_module(ant_t *js) {
   js->builtins.errorevent_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.errorevent_proto, js->builtins.event_proto);
   js_set_tostringtag(js, js->builtins.errorevent_proto, js_mkstr(js, "ErrorEvent", 10));
+  Ant_Event_DefineFields(js, js->builtins.errorevent_proto, ANT_EVENT_ERROR);
 
   ant_value_t errorevent_fn = Ant_Function_CreateIntrinsicConstructor(js, js_errorevent_ctor, js->builtins.errorevent_proto, "ErrorEvent", 2);
   js_set_global_builtin(js, "ErrorEvent", errorevent_fn);
@@ -2005,6 +2144,7 @@ void init_events_module(ant_t *js) {
   js->builtins.promiserejectionevent_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.promiserejectionevent_proto, js->builtins.event_proto);
   js_set_tostringtag(js, js->builtins.promiserejectionevent_proto, js_mkstr(js, "PromiseRejectionEvent", 21));
+  Ant_Event_DefineFields(js, js->builtins.promiserejectionevent_proto, ANT_EVENT_PROMISE_REJECTION);
 
   ant_value_t pre_fn = Ant_Function_CreateIntrinsicConstructor(js, js_promiserejectionevent_ctor, js->builtins.promiserejectionevent_proto, "PromiseRejectionEvent", 2);
   js_set_global_builtin(js, "PromiseRejectionEvent", pre_fn);
@@ -2026,6 +2166,37 @@ void init_events_module(ant_t *js) {
   js_set(js, global, "removeEventListener", Ant_Function_Create(js_remove_event_listener));
   js_set(js, global, "dispatchEvent",       Ant_Function_Create(js_dispatch_event));
   js_set_global_builtin(js, "EventTarget", eventtarget_fn);
+}
+
+bool Ant_EventTarget_AddListener(ant_t *js, ant_value_t target, ant_value_t type, ant_value_t listener) {
+  if (!is_object_type(target) || !is_callable(listener)) return false;
+  EventType *evt = find_or_create_emitter_event_type(js, target, type);
+  return evt && !is_err(eventtarget_add_entry(js, evt, listener, false, false, js_mkundef()));
+}
+
+bool Ant_EventTarget_RemoveListener(ant_t *js, ant_value_t target, ant_value_t type, ant_value_t listener) {
+  EventType *evt = is_object_type(target) ? find_emitter_event_type(js, target, type) : NULL;
+  if (!evt) return false;
+  
+  for (unsigned int i = 0; i < utarray_len(evt->listeners); i++) {
+    EventListenerEntry *e = (EventListenerEntry *)utarray_eltptr(evt->listeners, i);
+    if (!entry_live(e) || e->callback != listener || entry_capture(evt, e)) continue;
+    evt_retire(js, evt, i);
+    return true;
+  }
+  
+  return false;
+}
+
+bool Ant_EventTarget_HasListeners(ant_t *js, ant_value_t target, ant_value_t type) {
+  if (!is_object_type(target) || !find_emitter_events(target)) return false;
+  return evt_live_count(find_emitter_event_type(js, target, type)) > 0;
+}
+
+void Ant_EventTarget_Dispatch(ant_t *js, ant_value_t target, ant_value_t event, ant_value_t handler) {
+  ant_value_t type = js_get(js, event, "type");
+  EventType *evt = evt_key_from_arg(type) ? find_emitter_event_type(js, target, type) : NULL;
+  dispatch_event_to(js, event, evt, target, handler);
 }
 
 static void mark_event_type_listeners(ant_t *js, gc_mark_fn mark, ant_event_list_t *list) {
@@ -2057,6 +2228,14 @@ void gc_mark_events(ant_t *js, gc_mark_fn mark) {
 void gc_mark_eventemitter_object(ant_t *js, ant_value_t obj, gc_mark_fn mark) {
   ant_event_list_t *events = find_emitter_events(obj);
   if (events) mark_event_type_listeners(js, mark, events);
+  
+  event_data_t *data = get_event_data(obj);
+  if (!data) return;
+  
+  mark(js, data->type);
+  mark(js, data->target);
+  mark(js, data->current_target);
+  for (uint8_t i = 0; i < data->field_count; i++) mark(js, data->fields[i]);
 }
 
 void gc_finalize_events_object(ant_t *js, ant_value_t obj) {

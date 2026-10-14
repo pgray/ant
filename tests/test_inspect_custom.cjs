@@ -56,7 +56,7 @@ assert(
 );
 assert(
   requestInspect ===
-    "Request {\n  method: 'GET',\n  url: 'https://google.com/',\n  headers: Headers {},\n  destination: '',\n  referrer: 'about:client',\n  referrerPolicy: '',\n  mode: 'cors',\n  credentials: 'same-origin',\n  cache: 'default',\n  redirect: 'follow',\n  integrity: '',\n  keepalive: false,\n  isReloadNavigation: false,\n  isHistoryNavigation: false,\n  signal: Object [AbortSignal] {\n    aborted: false,\n    reason: undefined,\n    onabort: undefined\n  }\n}",
+    "Request {\n  method: 'GET',\n  url: 'https://google.com/',\n  headers: Headers {},\n  destination: '',\n  referrer: 'about:client',\n  referrerPolicy: '',\n  mode: 'cors',\n  credentials: 'same-origin',\n  cache: 'default',\n  redirect: 'follow',\n  integrity: '',\n  keepalive: false,\n  isReloadNavigation: false,\n  isHistoryNavigation: false,\n  signal: AbortSignal { aborted: false }\n}",
   `expected Request inspect output, got: ${requestInspect}`
 );
 assert(
