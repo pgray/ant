@@ -8,7 +8,6 @@
 #include "errors.h"
 #include "internal.h"
 #include "descriptors.h"
-
 #include "modules/localstorage.h"
 
 typedef struct storage_entry {
@@ -278,7 +277,7 @@ void init_localstorage_module(ant_t *js) {
     storage_load();
   }
   
-  ant_value_t storage_obj = js_mkobj(js);
+  ant_value_t storage_obj = js_newobj(js);
   
   js_set(js, storage_obj, "setItem", Ant_Function_Create(js_localstorage_setItem));
   js_set(js, storage_obj, "getItem", Ant_Function_Create(js_localstorage_getItem));

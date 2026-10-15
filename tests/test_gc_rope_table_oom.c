@@ -7,6 +7,8 @@
 // string reachable only through a rope must still be marked by the pool scan.
 #include "internal.h"
 #include "gc.h"
+#include "modules/symbol.h"
+#include "modules/iterator.h"
 #include "gc/objects.h"
 #include <assert.h>
 #include <stdio.h>
@@ -69,6 +71,9 @@ int main(void) {
   ant_t *js = ant_create();
   assert(js);
   js_setstackbase(js, NULL);
+  init_symbol_module(js);
+  init_intrinsic_symbols(js);
+  init_iterator_module(js);
 
   eval(js,
     "globalThis.keep = (() => {"

@@ -2,6 +2,7 @@
 #include "internal.h"
 #include "silver/engine.h"
 #include "gc/roots.h"
+#include "gc/objects.h"
 #include "modules/symbol.h"
 #include "modules/iterator.h"
 #include <assert.h>
@@ -30,7 +31,7 @@ int main(void) {
     assert(!is_err(args));
     GC_ROOT_PIN(js, args);
     ant_object_t *ptr = js_obj_ptr(args);
-    uint32_t capacity = count ? count : 1;
+    uint32_t capacity = gc_array_storage_fit(count ? count : 1);
     assert(ptr->u.array.cap == capacity && ptr->u.array.len == count);
     assert(js->alloc_bytes.arrays - before == capacity * sizeof(ant_value_t));
     assert(ptr->extra_slots == NULL && ptr->flags.arguments_object);

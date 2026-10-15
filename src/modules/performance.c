@@ -40,7 +40,7 @@ ant_value_t perf_hooks_library(ant_t *js) {
 
 void init_performance_module(ant_t *js) {
   ant_value_t glob = js_glob(js);
-  ant_value_t perf_obj = js_mkobj(js);
+  ant_value_t perf_obj = js_newobj(js);
 
   js->perf_time_origin_ms = get_current_time_ms();
   js_set(js, perf_obj, "now", Ant_Function_Create(js_performance_now));

@@ -1,6 +1,8 @@
 #ifdef ANT_BUILTIN
 ANT_BUILTIN(process_env)
 ANT_BUILTIN(arguments_template)
+ANT_BUILTIN(data_desc_template)
+ANT_BUILTIN(accessor_desc_template)
 ANT_BUILTIN(arguments_iter_template)
 ANT_BUILTIN(sloppy_arguments_template)
 ANT_BUILTIN(sloppy_arguments_iter_template)

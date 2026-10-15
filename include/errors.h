@@ -80,6 +80,7 @@ ant_value_t js_create_error_at(
 __attribute__((format(printf, 4, 5)))
 ant_value_t js_create_error(ant_t *js, js_err_type_t err_type, ant_value_t props, const char *fmt, ...);
 ant_value_t Ant_Error_Create(ant_t *js, js_err_type_t err_type, const char *message);
+ant_value_t Ant_Error_CreateConstructor(ant_t *js, const char *name, ant_value_t *out_proto);
 
 __attribute__((format(printf, 3, 4)))
 ant_value_t Ant_Error_CreateFormatted(ant_t *js, js_err_type_t err_type, const char *fmt, ...);

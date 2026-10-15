@@ -1306,8 +1306,43 @@ static size_t strobj_set(ant_t *js, ant_value_t obj, set_entry_t *head, char *bu
   return builder.n;
 }
 
+static ant_value_t strobj_inspect_tag(ant_t *js, ant_value_t obj) {
+  ant_offset_t sym_off = (ant_offset_t)vdata(js->sym.toStringTag_sym);
+  prop_meta_t meta;
+  ant_value_t cur = obj;
+  
+  for (int hops = 0; is_object_type(cur) && !is_proxy(cur) && hops < 64; hops++) {
+    if (lookup_symbol_prop_meta(js, cur, sym_off, &meta)) {
+      if (cur == obj && meta.enumerable) return js_mkundef();
+      if (!meta.has_getter) {
+        ant_prop_loc_t loc = lkp_sym(cur, sym_off);
+        return loc.obj ? js_prop_load(loc) : js_mkundef();
+      }
+      
+      GC_ROOT_SAVE(mark, js);
+      ant_value_t saved = Ant_Exception_Peek(js);
+      GC_ROOT_PIN(js, saved);
+      ant_value_t tag = js_call_getter(js, obj, meta.getter);
+      if (is_err(tag) || Ant_Exception_Pending(js)) tag = js_mkundef();
+      Ant_Exception_Set(js, saved);
+      GC_ROOT_RESTORE(js, mark);
+      return tag;
+    }
+    cur = js_get_proto(js, cur);
+  }
+  
+  return js_mkundef();
+}
+
+static size_t strobj_trailing_props(ant_t *js, ant_value_t obj, char *buf, size_t len, size_t n) {
+  js_inspect_builder_t builder;
+  js_inspect_builder_init_fixed(&builder, js, buf, len, n);
+  js_inspect_trailing_props(&builder, obj);
+  return builder.n;
+}
+
 static size_t strobj_inspect(ant_t *js, ant_value_t obj, char *buf, size_t len, size_t n) {
-  ant_value_t tag = lkp_sym_proto_val(js, obj, (ant_offset_t)vdata(js->sym.toStringTag_sym));
+  ant_value_t tag = strobj_inspect_tag(js, obj);
   js_inspect_builder_t builder;
   js_inspect_builder_init_fixed(&builder, js, buf, len, n);
   
@@ -1342,8 +1377,8 @@ static size_t strregexp(ant_t *js, ant_value_t obj, char *buf, size_t len) {
 static size_t strobj_body(ant_t *js, ant_value_t obj, char *buf, size_t len, size_t n) {
   if (get_slot(obj, SLOT_ERROR_BRAND) == js_true || vtype(get_slot(obj, SLOT_ERR_TYPE)) == kTypeNumber)
     return strobj_error(js, obj, buf, len, n);
-  if (is_date_instance(obj)) return n + strdate(js, obj, buf + n, REMAIN(n, len));
-  if (js_obj_ptr(obj)->flags.regexp_brand) return n + strregexp(js, obj, buf + n, REMAIN(n, len));
+  if (is_date_instance(obj)) return strobj_trailing_props(js, obj, buf, len, n + strdate(js, obj, buf + n, REMAIN(n, len)));
+  if (js_obj_ptr(obj)->flags.regexp_brand) return strobj_trailing_props(js, obj, buf, len, n + strregexp(js, obj, buf + n, REMAIN(n, len)));
   
   TypedArrayData *ta = buffer_get_typedarray_data(obj);
   if (ta && ta->buffer) return n + stringify_typedarray(js, obj, ta, buf + n, REMAIN(n, len));
@@ -1954,6 +1989,16 @@ static size_t strfunc(ant_t *js, ant_value_t value, char *buf, size_t len) {
   return cpy(buf, len, fmt->anon, fmt->anon_len);
 }
 
+static size_t strfunc_inspect(ant_t *js, ant_value_t value, char *buf, size_t len) {
+  int ref = get_circular_ref(js, value);
+  if (ref) return ref > 0 ? (size_t)snprintf(buf, len, "[Circular *%d]", ref) : cpy(buf, len, "[Circular]", 10);
+
+  push_stringify(js, value);
+  size_t n = strobj_trailing_props(js, js_func_obj(value), buf, len, strfunc(js, value, buf, len));
+  pop_stringify(js);
+  return stringify_ref_label(js, value, buf, len, n);
+}
+
 static size_t strcfunc(ant_t *js, ant_value_t value, char *buf, size_t len) {
   ant_offset_t name_len = 0;
   const char *name = get_func_name(js, value, &name_len);
@@ -1984,7 +2029,7 @@ size_t tostr(ant_t *js, ant_value_t value, char *buf, size_t len) {
     case kTypeString:   return strstring(js, value, buf, len);
     case kTypeNumber:   return js_number_to_chars(value, buf, len);
     case kTypePromise:  return strpromise(js, value, buf, len);
-    case kTypeFunction: return strfunc(js, value, buf, len);
+    case kTypeFunction: return strfunc_inspect(js, value, buf, len);
     case kTypeBuiltin:  return strcfunc(js, value, buf, len);
     
     case kTypeBigInt: {
@@ -7392,25 +7437,52 @@ static ant_value_t builtin_Error(ant_params_t) {
     else js_set_proto_init(this_val, js->builtins.error_protos[JS_ERR_GENERIC]);
   }
   
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, this_val);
   js_capture_stack(js, this_val);
   
-  if (nargs > 0) {
-    ant_value_t msg = args[0];
-    if (vtype(msg) != kTypeString) {
-      const char *str = js_str(js, msg);
-      msg = js_mkstr(js, str, strlen(str));
-    }
+  if (nargs > 0 && vtype(args[0]) != kTypeUndefined) {
+    ant_value_t msg = js_tostring_val(js, args[0]);
+    if (is_err(msg)) { GC_ROOT_RESTORE(js, mark); return msg; }
     mkprop_bytes(js, this_val, "message", 7, msg, JS_DESC_W | JS_DESC_C);
   }
   
-  if (nargs > 1 && vtype(args[1]) == kTypeObject) {
-    ant_prop_loc_t cause_off = lkp(js, args[1], "cause", 5);
-    if (cause_off.obj) mkprop_bytes(js, this_val, "cause", 5, js_prop_load(cause_off), JS_DESC_W | JS_DESC_C);
+  if (nargs > 1 && is_object_type(args[1]) && lkp_proto(js, args[1], "cause", 5).obj) {
+    ant_value_t cause = js_get(js, args[1], "cause");
+    if (is_err(cause)) { GC_ROOT_RESTORE(js, mark); return cause; }
+    mkprop_bytes(js, this_val, "cause", 5, cause, JS_DESC_W | JS_DESC_C);
   }
   
   set_slot(this_val, SLOT_ERROR_BRAND, js_true);
+  GC_ROOT_RESTORE(js, mark);
   
   return this_val;
+}
+
+ant_value_t Ant_Error_CreateConstructor(ant_t *js, const char *name, ant_value_t *out_proto) {
+  size_t name_len = strlen(name);
+  ant_value_t error_ctor = js->builtins.error_ctor;
+  
+  ant_value_t proto = js_mkobj(js);
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, proto);
+  set_proto(js, proto, js->builtins.error_protos[JS_ERR_GENERIC]);
+  mkprop_bytes(js, proto, "name", 4, js_mkstr(js, name, name_len), JS_DESC_W | JS_DESC_C);
+  mkprop_bytes(js, proto, "message", 7, js_mkstr(js, "", 0), JS_DESC_W | JS_DESC_C);
+  
+  ant_value_t ctor = mkobj(js, 0);
+  GC_ROOT_PIN(js, ctor);
+  set_proto(js, ctor, error_ctor);
+  set_slot(ctor, SLOT_CFUNC, Ant_Function_CreateWithArity(builtin_Error, 1));
+  js_setprop_readonly_nonconfigurable(js, ctor, "prototype", 9, proto);
+  js_set_function_name(js, ctor, name, name_len);
+  
+  ant_value_t ctor_func = js_obj_to_func(js, ctor);
+  defhidden(js, proto, "constructor", 11, ctor_func);
+  GC_ROOT_RESTORE(js, mark);
+  
+  if (out_proto) *out_proto = proto;
+  return ctor_func;
 }
 
 static ant_value_t builtin_Error_toString(ant_params_t) {
@@ -10399,6 +10471,30 @@ ant_value_t js_define_property(ant_t *js, ant_value_t obj, ant_value_t prop, ant
     : object_define_property(js, obj, prop, descriptor);
 }
 
+static ant_value_t builtin_object_getOwnPropertySymbols(ant_params_t);
+
+static ant_value_t object_define_symbol_properties(ant_t *js, ant_value_t obj, ant_value_t props) {
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, obj);
+  GC_ROOT_PIN(js, props);
+  
+  ant_value_t symbols = builtin_object_getOwnPropertySymbols(js, &props, 1, js_mkundef());
+  GC_ROOT_PIN(js, symbols);
+  ant_offset_t count = is_err(symbols) ? 0 : js_arr_len(js, symbols);
+  ant_value_t result = is_err(symbols) ? symbols : obj;
+  
+  for (ant_offset_t i = 0; i < count && !is_err(result); i++) {
+    ant_value_t sym = js_arr_get(js, symbols, i);
+    prop_meta_t meta;
+    if (!lookup_symbol_prop_meta(js, props, (ant_offset_t)vdata(sym), &meta) || !meta.enumerable) continue;
+    ant_value_t descriptor = js_get_sym(js, props, sym);
+    result = is_err(descriptor) ? descriptor : object_define_property(js, obj, sym, descriptor);
+  }
+  
+  GC_ROOT_RESTORE(js, mark);
+  return is_err(result) ? result : obj;
+}
+
 static ant_value_t object_define_properties(ant_t *js, ant_value_t obj, ant_value_t props) {
   uint8_t pt = vtype(props);
 
@@ -10476,7 +10572,7 @@ static ant_value_t object_define_properties(ant_t *js, ant_value_t obj, ant_valu
   }
   
   js_prop_iter_end(&iter);
-  return obj;
+  return object_define_symbol_properties(js, obj, props);
 }
 
 static ant_value_t builtin_object_defineProperties(ant_params_t) {
@@ -11539,6 +11635,56 @@ static ant_value_t builtin_object_fromEntries(ant_params_t) {
   return result;
 }
 
+static ant_value_t descriptor_template(ant_t *js, bool accessor) {
+  ant_value_t *slot = accessor ? &js->builtins.accessor_desc_template : &js->builtins.data_desc_template;
+  if (vtype(*slot) == kTypeObject) return *slot;
+  
+  ant_value_t template = js_newobj(js);
+  if (is_err(template)) return template;
+  
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, template);
+  js_setprop(js, template, js_mkstr(js, accessor ? "get" : "value", accessor ? 3 : 5), js_mkundef());
+  js_setprop(js, template, accessor ? js_mkstr(js, "set", 3) : js_mkstr(js, "writable", 8), accessor ? js_mkundef() : js_false);
+  js_setprop(js, template, js_mkstr(js, "enumerable", 10), js_false);
+  js_setprop(js, template, js_mkstr(js, "configurable", 12), js_false);
+  GC_ROOT_RESTORE(js, mark);
+  
+  *slot = template;
+  return template;
+}
+
+static ant_value_t from_property_descriptor(
+  ant_t *js, bool accessor, ant_value_t first, ant_value_t second, bool enumerable, bool configurable
+) {
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, first);
+  GC_ROOT_PIN(js, second);
+  
+  ant_value_t template = descriptor_template(js, accessor);
+  ant_value_t desc = is_err(template) ? template : js_mkobj_from_template(js, template);
+  GC_ROOT_RESTORE(js, mark);
+  if (is_err(desc)) return desc;
+  
+  ant_object_t *obj = js_obj_ptr(desc);
+  ant_object_prop_set_unchecked(obj, 0, first);
+  ant_object_prop_set_unchecked(obj, 1, second);
+  ant_object_prop_set_unchecked(obj, 2, js_bool(enumerable));
+  ant_object_prop_set_unchecked(obj, 3, js_bool(configurable));
+  gc_write_barrier(js, obj, first);
+  gc_write_barrier(js, obj, second);
+  
+  return desc;
+}
+
+ant_value_t js_from_data_descriptor(ant_t *js, ant_value_t value, bool writable, bool enumerable, bool configurable) {
+  return from_property_descriptor(js, false, value, js_bool(writable), enumerable, configurable);
+}
+
+ant_value_t js_from_accessor_descriptor(ant_t *js, ant_value_t getter, ant_value_t setter, bool enumerable, bool configurable) {
+  return from_property_descriptor(js, true, getter, setter, enumerable, configurable);
+}
+
 static ant_value_t object_get_own_property_descriptor_keyed(
   ant_t *js, ant_value_t obj, property_key_view_t *key
 ) {
@@ -11556,13 +11702,7 @@ static ant_value_t object_get_own_property_descriptor_keyed(
     if (!js_cfunc_try_get_own(js, obj, key->bytes, key->length, &value))
       return js_mkundef();
     
-    ant_value_t result = js_mkobj(js);
-    js_setprop(js, result, js_mkstr(js, "value", 5), value);
-    js_setprop(js, result, js_mkstr(js, "writable", 8), js_false);
-    js_setprop(js, result, js_mkstr(js, "enumerable", 10), js_false);
-    js_setprop(js, result, js_mkstr(js, "configurable", 12), js_true);
-    
-    return result;
+    return js_from_data_descriptor(js, value, false, false, true);
   }
 
   const char *key_str;
@@ -11588,12 +11728,7 @@ static ant_value_t object_get_own_property_descriptor_keyed(
     );
     if (!has_string_exotic) return js_mkundef();
 
-    ant_value_t result = js_mkobj(js);
-    js_setprop(js, result, js_mkstr(js, "value", 5), string_exotic_value);
-    js_setprop(js, result, js_mkstr(js, "writable", 8), js_false);
-    js_setprop(js, result, js_mkstr(js, "enumerable", 10), js_bool(!string_exotic_length));
-    js_setprop(js, result, js_mkstr(js, "configurable", 12), js_false);
-    return result;
+    return js_from_data_descriptor(js, string_exotic_value, false, !string_exotic_length, false);
   }
   
   ant_value_t as_obj = js_as_obj(obj);
@@ -11630,26 +11765,13 @@ static ant_value_t object_get_own_property_descriptor_keyed(
         ? exotic_own_get(js, as_obj, exotic_ptr, key_str, (size_t)key_len) : js_mkundef();
       if (vtype(element) == kTypeUndefined || element == T_EMPTY) return js_mkundef();
       
-      GC_ROOT_SAVE(element_mark, js);
-      GC_ROOT_PIN(js, element);
-      
-      ant_value_t desc = js_mkobj(js);
-      GC_ROOT_PIN(js, desc);
-      
-      js_setprop(js, desc, js_mkstr(js, "value", 5), element);
-      js_setprop(js, desc, js_mkstr(js, "writable", 8), js_true);
-      js_setprop(js, desc, js_mkstr(js, "enumerable", 10), js_true);
-      js_setprop(js, desc, js_mkstr(js, "configurable", 12), js_true);
-      
-      GC_ROOT_RESTORE(js, element_mark);
-      return desc;
+      return js_from_data_descriptor(js, element, true, true, true);
     }
   }
 
   bool has_getter = false;
   bool has_setter = false;
   
-  ant_value_t result = js_mkobj(js);
   ant_value_t getter = js_mkundef();
   ant_value_t setter = js_mkundef();
   
@@ -11675,43 +11797,30 @@ static ant_value_t object_get_own_property_descriptor_keyed(
     configurable = str_meta.configurable;
   }
 
-  if (has_getter || has_setter) {
-    if (has_getter) js_setprop(js, result, js_mkstr(js, "get", 3), getter);
-    if (has_setter) js_setprop(js, result, js_mkstr(js, "set", 3), setter);
-    js_setprop(js, result, js_mkstr(js, "enumerable", 10), js_bool(enumerable));
-    js_setprop(js, result, js_mkstr(js, "configurable", 12), js_bool(configurable));
-  } else {
-    ant_value_t prop_val = js_mkundef();
-    bool has_value_out = false;
-    if (prop_off.obj) {
-      prop_val = js_prop_load(prop_off);
-      has_value_out = true;
-    } else if (has_string_exotic) {
-      prop_val = string_exotic_value;
-      has_value_out = true;
-      writable = false;
-      enumerable = !string_exotic_length;
-      configurable = false;
-    } else if (has_arr_index) {
-      prop_val = arr_index_val;
-      has_value_out = true;
-      ant_object_t *arr_ptr = js_obj_ptr(as_obj);
-      if (arr_ptr && (arr_ptr->flags.frozen || arr_ptr->flags.sealed)) configurable = false;
-      if (arr_ptr && arr_ptr->flags.frozen) writable = false;
-    } else if (is_arr_length) {
-      prop_val = tov((double)get_array_length(js, as_obj));
-      has_value_out = true;
-      writable = !array_length_readonly(js, as_obj);
-      enumerable = false;
-      configurable = false;
-    }
-    if (has_value_out) js_setprop(js, result, js_mkstr(js, "value", 5), prop_val);
-    js_setprop(js, result, js_mkstr(js, "writable", 8), js_bool(writable));
-    js_setprop(js, result, js_mkstr(js, "enumerable", 10), js_bool(enumerable));
-    js_setprop(js, result, js_mkstr(js, "configurable", 12), js_bool(configurable));
+  if (has_getter || has_setter) return js_from_accessor_descriptor(
+    js, has_getter ? getter : js_mkundef(), has_setter ? setter : js_mkundef(), enumerable, configurable
+  );
+
+  ant_value_t prop_val = js_mkundef();
+  if (prop_off.obj) prop_val = js_prop_load(prop_off);
+  else if (has_string_exotic) {
+    prop_val = string_exotic_value;
+    writable = false;
+    enumerable = !string_exotic_length;
+    configurable = false;
+  } else if (has_arr_index) {
+    prop_val = arr_index_val;
+    ant_object_t *arr_ptr = js_obj_ptr(as_obj);
+    if (arr_ptr && (arr_ptr->flags.frozen || arr_ptr->flags.sealed)) configurable = false;
+    if (arr_ptr && arr_ptr->flags.frozen) writable = false;
+  } else if (is_arr_length) {
+    prop_val = tov((double)get_array_length(js, as_obj));
+    writable = !array_length_readonly(js, as_obj);
+    enumerable = false;
+    configurable = false;
   }
   
-  return result;
+  return js_from_data_descriptor(js, prop_val, writable, enumerable, configurable);
 }
 
 ant_value_t builtin_object_getOwnPropertyDescriptor(ant_params_t) {
@@ -20125,19 +20234,7 @@ static ant_value_t proxy_host_desc(ant_t *js, ant_proxy_state_t *data, ant_value
   ant_value_t value = data->host->get(js, target, key, key_len);
   if (vtype(value) == kTypeUndefined) return value;
   
-  GC_ROOT_SAVE(root_mark, js);
-  GC_ROOT_PIN(js, value);
-  ant_value_t desc = mkobj(js, 0);
-  
-  GC_ROOT_PIN(js, desc);
-  js_set_proto_init(desc, js->sym.object_proto);
-  js_set(js, desc, "value", value);
-  js_set(js, desc, "writable", js_true);
-  js_set(js, desc, "enumerable", js_true);
-  js_set(js, desc, "configurable", js_true);
-  GC_ROOT_RESTORE(js, root_mark);
-  
-  return desc;
+  return js_from_data_descriptor(js, value, true, true, true);
 }
 
 bool is_array_value(ant_value_t value) {
@@ -21106,19 +21203,26 @@ ant_value_t js_set_with_receiver(ant_t *js, ant_value_t target, ant_value_t key,
 }
 
 static ant_value_t proxy_complete_property_descriptor(ant_t *js, ant_value_t desc) {
-  if (!descriptor_has_own_key(js, desc, "enumerable", 10))
-    js_setprop(js, desc, js_mkstr(js, "enumerable", 10), js_false);
-  if (!descriptor_has_own_key(js, desc, "configurable", 12))
-    js_setprop(js, desc, js_mkstr(js, "configurable", 12), js_false);
-
-  bool has_value = descriptor_has_own_key(js, desc, "value", 5);
-  bool has_writable = descriptor_has_own_key(js, desc, "writable", 8);
+  bool enumerable = descriptor_bool_value(js, desc, "enumerable", 10, false);
+  bool configurable = descriptor_bool_value(js, desc, "configurable", 12, false);
   bool has_get = descriptor_has_own_key(js, desc, "get", 3);
   bool has_set = descriptor_has_own_key(js, desc, "set", 3);
-  if ((has_value || has_writable || (!has_get && !has_set)) && !has_writable)
-    js_setprop(js, desc, js_mkstr(js, "writable", 8), js_false);
 
-  return desc;
+  if (has_get || has_set) {
+    ant_value_t getter = has_get ? js_get(js, desc, "get") : js_mkundef();
+    if (is_err(getter)) return getter;
+    GC_ROOT_SAVE(mark, js);
+    GC_ROOT_PIN(js, getter);
+    ant_value_t setter = has_set ? js_get(js, desc, "set") : js_mkundef();
+    ant_value_t result = is_err(setter) ? setter : js_from_accessor_descriptor(js, getter, setter, enumerable, configurable);
+    GC_ROOT_RESTORE(js, mark);
+    return result;
+  }
+
+  ant_value_t value = descriptor_has_own_key(js, desc, "value", 5) ? js_get(js, desc, "value") : js_mkundef();
+  if (is_err(value)) return value;
+  bool writable = descriptor_bool_value(js, desc, "writable", 8, false);
+  return js_from_data_descriptor(js, value, writable, enumerable, configurable);
 }
 
 static ant_value_t proxy_get_own_property_descriptor(ant_t *js, ant_value_t proxy, ant_value_t key_val) {
@@ -21710,17 +21814,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   js_setprop(js, err_ctor_func, ANT_STRING("stackTraceLimit"), js_mknum(10));
   
   #define REGISTER_ERROR_SUBTYPE(err_type, name_str) do { \
-    ant_value_t proto = js_mkobj(js); \
-    set_proto(js, proto, error_proto); \
-    js->builtins.error_protos[err_type] = proto; \
-    mkprop_bytes(js, proto, "name", 4, ANT_STRING(name_str), JS_DESC_W | JS_DESC_C); \
-    ant_value_t ctor = mkobj(js, 0); \
-    set_proto(js, ctor, err_ctor_func); \
-    set_slot(ctor, SLOT_CFUNC, Ant_Function_CreateWithArity(builtin_Error, 1)); \
-    js_setprop_readonly_nonconfigurable(js, ctor, "prototype", 9, proto); \
-    js_set_function_name(js, ctor, name_str, sizeof(name_str) - 1); \
-    ant_value_t ctor_func = js_obj_to_func(js, ctor); \
-    defhidden(js, proto, "constructor", 11, ctor_func); \
+    ant_value_t ctor_func = Ant_Error_CreateConstructor(js, name_str, &js->builtins.error_protos[err_type]); \
     js_set_global_builtin(js, name_str, ctor_func); \
   } while(0)
   

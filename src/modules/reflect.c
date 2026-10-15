@@ -244,7 +244,7 @@ static ant_value_t reflect_prevent_extensions(ant_params_t) {
 }
 
 void init_reflect_module(ant_t *js) {
-  ant_value_t reflect_obj = js_mkobj(js);
+  ant_value_t reflect_obj = js_newobj(js);
   
   defmethod(js, reflect_obj, "get", 3, Ant_Function_CreateWithArity(reflect_get, 2));
   defmethod(js, reflect_obj, "set", 3, Ant_Function_CreateWithArity(reflect_set, 3));

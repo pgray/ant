@@ -1026,7 +1026,7 @@ static ant_value_t js_atomics_pause(ant_params_t) {
 }
 
 void init_atomics_module(ant_t *js) {
-  ant_value_t atomics = js_mkobj(js);
+  ant_value_t atomics = js_newobj(js);
   
   defmethod(js, atomics, "add", 3, Ant_Function_CreateWithArity(js_atomics_add, 3));
   defmethod(js, atomics, "and", 3, Ant_Function_CreateWithArity(js_atomics_and, 3));

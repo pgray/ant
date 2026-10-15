@@ -2250,7 +2250,8 @@ void Ant_EventTarget_SetHandler(ant_t *js, ant_value_t target, const char *type,
 }
 
 void Ant_EventTarget_Dispatch(ant_t *js, ant_value_t target, ant_value_t event) {
-  ant_value_t type = js_get(js, event, "type");
+  event_data_t *data = get_event_data(event);
+  ant_value_t type = data ? data->type : js_get(js, event, "type");
   EventType *evt = evt_key_from_arg(type) ? find_emitter_event_type(js, target, type) : NULL;
   dispatch_event_to(js, event, evt, target);
 }

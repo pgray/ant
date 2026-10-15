@@ -18,6 +18,7 @@
 #include "errors.h"
 #include "inspector.h"
 #include "internal.h"
+#include "modules/timer.h"
 #include "descriptors.h"
 
 #include "http/websocket.h"
@@ -250,7 +251,9 @@ fail:
 
 static void websocket_emit_simple(ant_t *js, websocket_state_t *ws, int idx) {
   ant_value_t event = Ant_EventTarget_CreateEvent(js, ws->obj, js->builtins.event_proto, ANT_EVENT_BASE, ws_handler_types[idx]);
-  if (is_object_type(event)) Ant_EventTarget_Dispatch(js, ws->obj, event);
+  if (!is_object_type(event)) return;
+  Ant_EventTarget_Dispatch(js, ws->obj, event);
+  js_maybe_drain_microtasks(js);
 }
 
 static ant_value_t websocket_invalid_this(ant_t *js, ant_value_t this_obj) {
@@ -298,7 +301,8 @@ static void websocket_emit_message(ant_t *js, websocket_state_t *ws, const uint8
     Ant_Event_SetField(js, event, ANT_EVENT_FIELD_MESSAGE_lastEventId, empty);
     Ant_EventTarget_Dispatch(js, ws->obj, event);
   }
-
+  
+  js_maybe_drain_microtasks(js);
   GC_ROOT_RESTORE(js, mark);
 }
 
@@ -319,6 +323,7 @@ static void websocket_emit_close(ant_t *js, websocket_state_t *ws, uint16_t code
   Ant_Event_SetField(js, event, ANT_EVENT_FIELD_CLOSE_wasClean, js_bool(was_clean));
   
   Ant_EventTarget_Dispatch(js, ws->obj, event);
+  js_maybe_drain_microtasks(js);
 }
 
 static void websocket_client_close_cb(uv_handle_t *handle) {

@@ -310,10 +310,19 @@ bool js_inspect_header(js_inspect_builder_t *builder, const char *fmt, ...) {
 }
 
 bool js_inspect_tagged_header(js_inspect_builder_t *builder, ant_value_t obj, const char *tag, size_t tag_len) {
+  ant_offset_t class_len = 0;
+  const char *class_name = get_class_name(builder->js, obj, &class_len, NULL);
+  if (class_name && (size_t)class_len == tag_len && memcmp(class_name, tag, tag_len) == 0)
+    return js_inspect_plain_header(builder, obj);
+  
   int prop_count = 0;
   bool inline_mode = is_small_object(builder->js, obj, &prop_count);
 
-  if (!js_inspect_append(builder, "Object [", 8)) return false;
+  if (vtype(js_get_proto(builder->js, obj)) == kTypeNull) { class_name = "[Object: null prototype]"; class_len = 24; }
+  else if (!class_name || class_len == 0) { class_name = "Object"; class_len = 6; }
+  
+  if (!js_inspect_append(builder, class_name, (size_t)class_len)) return false;
+  if (!js_inspect_append(builder, " [", 2)) return false;
   if (!js_inspect_append(builder, tag, tag_len)) return false;
 
   if (prop_count == 0) {
@@ -436,7 +445,6 @@ bool js_inspect_object_body(js_inspect_builder_t *builder, ant_value_t obj) {
   js_inspect_begin_body(builder);
 
   ant_t *js = builder->js;
-  ant_value_t tag_sym = js->sym.toStringTag_sym;
   ant_value_t as_obj = js_as_obj(obj);
   ant_object_t *ptr = js_obj_ptr(as_obj);
   
@@ -451,8 +459,6 @@ bool js_inspect_object_body(js_inspect_builder_t *builder, ant_value_t obj) {
     
     if (prop->type == ANT_SHAPE_KEY_SYMBOL) {
       ant_offset_t sym_off = prop->key.sym_off;
-      if (vtype(tag_sym) == kTypeSymbol && sym_off == (ant_offset_t)vdata(tag_sym)) continue;
-      
       if (ptr && ptr->flags.is_exotic) {
         prop_meta_t meta;
         if (lookup_symbol_prop_meta(js, as_obj, sym_off, &meta) && !meta.enumerable) continue;
@@ -531,6 +537,20 @@ bool js_inspect_object_body(js_inspect_builder_t *builder, ant_value_t obj) {
   }
 
   return true;
+}
+
+bool js_inspect_trailing_props(js_inspect_builder_t *builder, ant_value_t obj) {
+  int prop_count = 0;
+  bool inline_mode = is_small_object(builder->js, obj, &prop_count);
+  if (prop_count == 0) return true;
+
+  if (!js_inspect_append(builder, inline_mode ? " { " : " {\n", 3)) return false;
+  builder->inline_mode = inline_mode;
+  builder->first = true;
+  builder->closed = false;
+  builder->did_indent = false;
+
+  return js_inspect_object_body(builder, obj) && js_inspect_close(builder);
 }
 
 bool js_inspect_close(js_inspect_builder_t *builder) {

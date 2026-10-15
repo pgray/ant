@@ -8,6 +8,8 @@
 // the site happens to overwrite them.
 #include "internal.h"
 #include "gc.h"
+#include "modules/symbol.h"
+#include "modules/iterator.h"
 #include "shapes.h"
 #include <assert.h>
 #include <stdio.h>
@@ -23,6 +25,9 @@ int main(void) {
   ant_t *js = ant_create();
   assert(js);
   js_setstackbase(js, &stack_base);
+  init_symbol_module(js);
+  init_intrinsic_symbols(js);
+  init_iterator_module(js);
 
   // one read site and one store site that each see 8 shapes built from
   // property names used nowhere else, so nothing else keeps those shapes

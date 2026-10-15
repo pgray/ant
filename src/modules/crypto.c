@@ -2224,8 +2224,8 @@ static ant_value_t js_crypto_scrypt(ant_params_t) {
 }
 
 static ant_value_t create_crypto_obj(ant_t *js) {
-  ant_value_t crypto_obj = js_mkobj(js);
-  ant_value_t subtle_obj = js_mkobj(js);
+  ant_value_t crypto_obj = js_newobj(js);
+  ant_value_t subtle_obj = js_newobj(js);
   
   js_set(js, crypto_obj, "random", Ant_Function_Create(js_crypto_random));
   js_set(js, crypto_obj, "randomBytes", Ant_Function_CreateWithArity(js_crypto_random_bytes, 2));

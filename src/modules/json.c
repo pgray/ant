@@ -1423,7 +1423,7 @@ ant_value_t json_stringify_value(ant_t *js, ant_value_t value) {
 }
 
 void init_json_module(ant_t *js) {
-  ant_value_t json_obj = js_mkobj(js);
+  ant_value_t json_obj = js_newobj(js);
   
   defmethod(js, json_obj, "parse", 5, Ant_Function_CreateWithArity(js_json_parse, 2));
   defmethod(js, json_obj, "stringify", 9, Ant_Function_CreateWithArity(js_json_stringify, 3));

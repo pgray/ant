@@ -402,7 +402,7 @@ static ant_value_t locks_query(ant_params_t) {
 }
 
 void init_navigator_module(ant_t *js) {
-  ant_value_t navigator_obj = js_mkobj(js);
+  ant_value_t navigator_obj = js_newobj(js);
   
   js_set(js, navigator_obj, "hardwareConcurrency", js_mknum((double)get_hardware_concurrency()));
   js_set(js, navigator_obj, "language", js_mkstr(js, "en-US", 5));
@@ -418,7 +418,7 @@ void init_navigator_module(ant_t *js) {
   snprintf(user_agent, sizeof(user_agent), "Ant/%s", ANT_VERSION);
   js_set(js, navigator_obj, "userAgent", js_mkstr(js, user_agent, strlen(user_agent)));
   
-  ant_value_t locks_obj = js_mkobj(js);
+  ant_value_t locks_obj = js_newobj(js);
   js_set(js, locks_obj, "request", Ant_Function_Create(locks_request));
   js_set(js, locks_obj, "query", Ant_Function_Create(locks_query));
   js_set_tostringtag(js, locks_obj, js_mkstr(js, "LockManager", 11));

@@ -406,6 +406,7 @@ static void InspectOnceAbortListener(ant_t *js, ant_value_t value) {
 static ant_value_t FailOnceAttachment(ant_params_t) {
   once_abort_edges = 0;
   gc_mark_abort_signal_object(js, once_signal, InspectOnceAbortListener);
+  gc_mark_eventemitter_object(js, once_signal, InspectOnceAbortListener);
   assert(once_abort_edges == 2 && is_callable(once_saved_abort));
   return js_throw(js, expected_reason);
 }
@@ -469,6 +470,7 @@ static void CheckOnceAttachmentCleanup(ant_t *js) {
       // The signal must release our listener and retain unrelated listeners.
       once_abort_edges = 0;
       gc_mark_abort_signal_object(js, once_signal, InspectOnceAbortListener);
+      gc_mark_eventemitter_object(js, once_signal, InspectOnceAbortListener);
       assert(once_abort_edges == 1);
       // Even a saved callback must ignore the settled, failed operation.
       ant_value_t result = sv_vm_call(js->vm, js, once_saved_abort, once_signal, NULL, 0, NULL, js_mkundef());

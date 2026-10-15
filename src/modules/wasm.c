@@ -25,6 +25,8 @@
 #include "modules/buffer.h"
 #include "modules/wasm.h"
 #include "modules/wasi.h"
+#include "modules/assert.h"
+#include "modules/bigint.h"
 
 typedef struct {
   wasm_store_t *store;
@@ -215,6 +217,7 @@ static ant_value_t wasm_wrap_func(
 static bool ensure_wasm_engine(void) {
   if (g_wasm_engine) return true;
   g_wasm_engine = wasm_engine_new();
+  if (g_wasm_engine) wasm_runtime_set_log_level(WASM_LOG_LEVEL_FATAL);
   return g_wasm_engine != NULL;
 }
 
@@ -261,30 +264,31 @@ static wasm_extern_handle_t *wasm_extern_handle(ant_value_t value, wasm_extern_w
   return handle && handle->kind == kind ? handle : NULL;
 }
 
-static ant_value_t wasm_make_error(ant_t *js, ant_value_t proto, const char *name, const char *message) {
-  ant_value_t err = Ant_Error_Create(js, JS_ERR_TYPE, message ? message : "");
-  if (vtype(err) != kTypeObject) return err;
+static ant_value_t wasm_make_error(ant_t *js, ant_value_t proto, const char *message) {
+  ant_value_t err = js_mkobj(js);
+  if (is_err(err)) return err;
 
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, err);
-  js_set(js, err, "name", js_mkstr(js, name, strlen(name)));
-
-  if (is_object_type(proto)) js_set_proto_init(err, proto);
+  js_set_proto_init(err, proto);
+  defhidden(js, err, "message", 7, js_mkstr(js, message ? message : "", message ? strlen(message) : 0));
+  js_set_slot(err, SLOT_ERROR_BRAND, js_true);
+  js_capture_stack(js, err);
   GC_ROOT_RESTORE(js, root_mark);
 
   return err;
 }
 
 static ant_value_t wasm_make_compile_error(ant_t *js, const char *message) {
-  return wasm_make_error(js, js->builtins.wasm_compileerror_proto, "CompileError", message);
+  return wasm_make_error(js, js->builtins.wasm_compileerror_proto, message);
 }
 
 static ant_value_t wasm_make_link_error(ant_t *js, const char *message) {
-  return wasm_make_error(js, js->builtins.wasm_linkerror_proto, "LinkError", message);
+  return wasm_make_error(js, js->builtins.wasm_linkerror_proto, message);
 }
 
 static ant_value_t wasm_make_runtime_error(ant_t *js, const char *message) {
-  return wasm_make_error(js, js->builtins.wasm_runtimeerror_proto, "RuntimeError", message);
+  return wasm_make_error(js, js->builtins.wasm_runtimeerror_proto, message);
 }
 
 static ant_value_t wasm_error_value(ant_t *js, ant_value_t value) {
@@ -666,13 +670,30 @@ static ant_value_t wasm_wrap_export_value(ant_t *js, ant_value_t instance_obj, c
   }
 }
 
-static ant_value_t wasm_module_from_bytes(ant_t *js, ant_value_t value, ant_value_t *out_module) {
+static void wasm_load_failure_reason(const wasm_byte_vec_t *binary, char *reason, size_t reason_len) {
+  static const char prefix[] = "WASM module load failed: ";
+  snprintf(reason, reason_len, "invalid module");
+
+  uint8_t *copy = binary->size ? malloc(binary->size) : NULL;
+  if (!copy) return;
+  memcpy(copy, binary->data, binary->size);
+
+  char error_buf[128] = {0};
+  wasm_module_t loaded = wasm_runtime_load(copy, (uint32_t)binary->size, error_buf, sizeof(error_buf));
+  if (loaded) wasm_runtime_unload(loaded);
+  else if (error_buf[0]) {
+    const char *text = strncmp(error_buf, prefix, sizeof(prefix) - 1) == 0 ? error_buf + sizeof(prefix) - 1 : error_buf;
+    snprintf(reason, reason_len, "%s", text);
+  }
+  free(copy);
+}
+
+static ant_value_t wasm_module_from_bytes(ant_t *js, ant_value_t value, ant_value_t *out_module, const char *api) {
   wasm_byte_vec_t binary = WASM_EMPTY_VEC;
   wasm_store_t *store = NULL;
   wasm_module_t *module = NULL;
-  
+
   char error_buf[128] = {0};
-  bool suppress_wasi_warning = false;
 
   *out_module = js_mkundef();
 
@@ -684,19 +705,15 @@ static ant_value_t wasm_module_from_bytes(ant_t *js, ant_value_t value, ant_valu
     return js_mkerr_typed(js, JS_ERR_TYPE, "%s", error_buf);
   }
 
-  suppress_wasi_warning = wasi_bytes_need_wasi_command_warning_suppression(
-    (const uint8_t *)binary.data, binary.size
-  );
-  
-  if (suppress_wasi_warning) wasm_runtime_set_log_level(WASM_LOG_LEVEL_ERROR);
   module = wasm_module_new(store, &binary);
-  
-  if (suppress_wasi_warning) wasm_runtime_set_log_level(WASM_LOG_LEVEL_WARNING);
-  
+
   if (!module) {
+    char reason[160], message[200];
+    wasm_load_failure_reason(&binary, reason, sizeof(reason));
+    snprintf(message, sizeof(message), "%s: %s", api, reason);
     wasm_byte_vec_delete(&binary);
     wasm_store_delete(store);
-    return wasm_make_compile_error(js, "Failed to compile WebAssembly module");
+    return wasm_make_compile_error(js, message);
   }
 
   *out_module = wasm_wrap_module(js, store, module);
@@ -725,7 +742,7 @@ static ant_value_t js_wasm_module_ctor(ant_params_t) {
   if (nargs < 1)
     return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Module requires a BufferSource");
 
-  err = wasm_module_from_bytes(js, args[0], &module);
+  err = wasm_module_from_bytes(js, args[0], &module, "WebAssembly.Module()");
   if (is_err(err)) return err;
   if (vtype(module) != kTypeObject) return js_throw(js, wasm_error_value(js, err));
   return module;
@@ -745,7 +762,7 @@ static ant_value_t wasm_module_type_descriptors(ant_t *js, ant_value_t module_ob
       const wasm_name_t *name = wasm_importtype_name(entry);
       const wasm_externtype_t *type = wasm_importtype_type(entry);
 
-      ant_value_t item = js_mkobj(js);
+      ant_value_t item = js_newobj(js);
       js_set(js, item, "module", js_mkstr(js, module_name->data, wasm_name_len(module_name)));
       js_set(js, item, "name", js_mkstr(js, name->data, wasm_name_len(name)));
       js_set(js, item, "kind", js_mkstr(js, wasm_extern_kind_name(wasm_externtype_kind(type)), strlen(wasm_extern_kind_name(wasm_externtype_kind(type)))));
@@ -760,7 +777,7 @@ static ant_value_t wasm_module_type_descriptors(ant_t *js, ant_value_t module_ob
       const wasm_name_t *name = wasm_exporttype_name(entry);
       const wasm_externtype_t *type = wasm_exporttype_type(entry);
       
-      ant_value_t item = js_mkobj(js);
+      ant_value_t item = js_newobj(js);
       js_set(js, item, "name", js_mkstr(js, name->data, wasm_name_len(name)));
       js_set(js, item, "kind", js_mkstr(js, wasm_extern_kind_name(wasm_externtype_kind(type)), strlen(wasm_extern_kind_name(wasm_externtype_kind(type)))));
       js_arr_push(js, arr, item);
@@ -1786,21 +1803,12 @@ static ant_value_t js_wasm_table_ctor(ant_params_t) {
   return result;
 }
 
-static ant_value_t js_wasm_tag_ctor(ant_params_t) {
-  return js_mkerr_typed(js, JS_ERR_TYPE, "The current WAMR backend does not expose WebAssembly.Tag");
-}
-
-static ant_value_t js_wasm_exception_ctor(ant_params_t) {
-  return js_mkerr_typed(js, JS_ERR_TYPE, "The current WAMR backend does not expose WebAssembly.Exception");
-}
-
 static ant_value_t js_wasm_validate(ant_params_t) {
   wasm_byte_vec_t binary = WASM_EMPTY_VEC;
   wasm_store_t *store;
   
   bool ok;
   char error_buf[128] = {0};
-  bool suppress_wasi_warning = false;
 
   if (nargs < 1) return js_false;
   if (!ensure_wasm_engine()) return js_false;
@@ -1811,14 +1819,7 @@ static ant_value_t js_wasm_validate(ant_params_t) {
     return js_false;
   }
 
-  suppress_wasi_warning = wasi_bytes_need_wasi_command_warning_suppression(
-    (const uint8_t *)binary.data, binary.size
-  );
-  
-  if (suppress_wasi_warning) wasm_runtime_set_log_level(WASM_LOG_LEVEL_ERROR);
   ok = wasm_module_validate(store, &binary);
-  
-  if (suppress_wasi_warning) wasm_runtime_set_log_level(WASM_LOG_LEVEL_WARNING);
   wasm_byte_vec_delete(&binary);
   wasm_store_delete(store);
   
@@ -1835,7 +1836,7 @@ static ant_value_t js_wasm_compile(ant_params_t) {
     return promise;
   }
 
-  err = wasm_module_from_bytes(js, args[0], &module);
+  err = wasm_module_from_bytes(js, args[0], &module, "WebAssembly.compile()");
   if (is_err(err) || vtype(module) != kTypeObject) {
     wasm_reject_with_error(js, promise, err);
     return promise;
@@ -1843,6 +1844,13 @@ static ant_value_t js_wasm_compile(ant_params_t) {
 
   js_resolve_promise(js, promise, module);
   return promise;
+}
+
+static ant_value_t wasm_instantiate_result(ant_t *js, ant_value_t module, ant_value_t instance) {
+  ant_value_t result = js_newobj(js);
+  js_set(js, result, "module", module);
+  js_set(js, result, "instance", instance);
+  return result;
 }
 
 static ant_value_t js_wasm_instantiate(ant_params_t) {
@@ -1867,7 +1875,7 @@ static ant_value_t js_wasm_instantiate(ant_params_t) {
     return promise;
   }
 
-  err = wasm_module_from_bytes(js, args[0], &module);
+  err = wasm_module_from_bytes(js, args[0], &module, "WebAssembly.instantiate()");
   if (is_err(err) || vtype(module) != kTypeObject) {
     wasm_reject_with_error(js, promise, err);
     return promise;
@@ -1879,30 +1887,376 @@ static ant_value_t js_wasm_instantiate(ant_params_t) {
     return promise;
   }
 
-  ant_value_t result = js_mkobj(js);
-  js_set(js, result, "module", module);
-  js_set(js, result, "instance", instance);
-  js_resolve_promise(js, promise, result);
-  
+  js_resolve_promise(js, promise, wasm_instantiate_result(js, module, instance));
   return promise;
 }
 
-static ant_value_t js_wasm_compile_error_ctor(ant_params_t) {
-  ant_value_t msg = (nargs > 0) ? js_tostring_val(js, args[0]) : js_mkstr(js, "", 0);
-  if (is_err(msg)) return msg;
-  return wasm_make_error(js, js->builtins.wasm_compileerror_proto, "CompileError", js_str(js, msg));
+static ant_value_t js_wasm_memory_to_fixed_length_buffer(ant_params_t) {
+  return js_wasm_memory_buffer_getter(js, args, nargs, call_new_target);
 }
 
-static ant_value_t js_wasm_link_error_ctor(ant_params_t) {
-  ant_value_t msg = (nargs > 0) ? js_tostring_val(js, args[0]) : js_mkstr(js, "", 0);
-  if (is_err(msg)) return msg;
-  return wasm_make_error(js, js->builtins.wasm_linkerror_proto, "LinkError", js_str(js, msg));
+static ant_value_t wasm_iterable_to_array(ant_t *js, ant_value_t iterable, const char *what) {
+  if (vtype(iterable) == kTypeArray) return iterable;
+
+  ant_value_t iter_fn = is_object_type(iterable) ? js_get_sym(js, iterable, js->sym.iterator_sym) : js_mkundef();
+  if (is_err(iter_fn)) return iter_fn;
+  if (!is_callable(iter_fn)) return js_mkerr_typed(js, JS_ERR_TYPE, "%s must be iterable", what);
+
+  GC_ROOT_SAVE(mark, js);
+  ant_value_t out = js_mkarr(js);
+  GC_ROOT_PIN(js, out);
+  ant_value_t iter = sv_vm_call(js->vm, js, iter_fn, iterable, NULL, 0, NULL, js_mkundef());
+  GC_ROOT_PIN(js, iter);
+  ant_value_t next = is_err(iter) ? iter : js_get(js, iter, "next");
+  GC_ROOT_PIN(js, next);
+  ant_value_t result = is_err(next) ? next : out;
+
+  while (!is_err(result)) {
+    ant_value_t step = sv_vm_call(js->vm, js, next, iter, NULL, 0, NULL, js_mkundef());
+    if (is_err(step)) { result = step; break; }
+    if (!is_object_type(step)) { result = js_mkerr_typed(js, JS_ERR_TYPE, "Iterator result is not an object"); break; }
+    ant_value_t done = js_get(js, step, "done");
+    if (is_err(done)) { result = done; break; }
+    if (js_truthy(js, done)) break;
+    ant_value_t value = js_get(js, step, "value");
+    if (is_err(value)) { result = value; break; }
+    js_arr_push(js, out, value);
+  }
+
+  GC_ROOT_RESTORE(js, mark);
+  return result;
 }
 
-static ant_value_t js_wasm_runtime_error_ctor(ant_params_t) {
-  ant_value_t msg = (nargs > 0) ? js_tostring_val(js, args[0]) : js_mkstr(js, "", 0);
-  if (is_err(msg)) return msg;
-  return wasm_make_error(js, js->builtins.wasm_runtimeerror_proto, "RuntimeError", js_str(js, msg));
+static bool wasm_tag_kind_from_string(const char *name, size_t len, wasm_valkind_t *out) {
+  bool ok = false;
+  *out = wasm_valkind_from_string(name, len, &ok);
+  if (ok) return true;
+  if (len == 6 && !memcmp(name, "anyref", 6)) { *out = WASM_EXTERNREF; return true; }
+  return false;
+}
+
+static bool wasm_is_tag(ant_value_t value) {
+  return is_object_type(value) && js_check_brand(value, BRAND_WASM_TAG);
+}
+
+static ant_value_t wasm_make_tag(ant_t *js, ant_value_t proto, ant_value_t kinds, bool js_tag) {
+  ant_value_t tag = js_mkobj(js);
+  if (is_err(tag)) return tag;
+  js_set_proto_init(tag, proto);
+  js_set_slot(tag, SLOT_BRAND, js_mknum(BRAND_WASM_TAG));
+  js_set_slot_wb(js, tag, SLOT_DATA, kinds);
+  if (js_tag) js_set_slot(tag, SLOT_AUX, js_true);
+  return tag;
+}
+
+static ant_value_t js_wasm_tag_ctor(ant_params_t) {
+  if (vtype(call_new_target) == kTypeUndefined)
+    return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Tag constructor requires 'new'");
+  if (nargs < 1 || !is_object_type(args[0]))
+    return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Tag(): Argument 0 must be a tag type");
+
+  GC_ROOT_SAVE(mark, js);
+  ant_value_t params = js_get(js, args[0], "parameters");
+  GC_ROOT_PIN(js, params);
+  ant_value_t list = is_err(params) ? params : wasm_iterable_to_array(js, params, "WebAssembly.Tag(): Argument 0 parameters");
+  GC_ROOT_PIN(js, list);
+  if (is_err(list)) { GC_ROOT_RESTORE(js, mark); return list; }
+
+  ant_value_t kinds = js_mkarr(js);
+  GC_ROOT_PIN(js, kinds);
+  ant_offset_t count = js_arr_len(js, list);
+  for (ant_offset_t i = 0; i < count; i++) {
+    ant_value_t name = js_tostring_val(js, js_arr_get(js, list, i));
+    if (is_err(name)) { GC_ROOT_RESTORE(js, mark); return name; }
+    size_t len = 0;
+    const char *str = js_getstr(js, name, &len);
+    wasm_valkind_t kind;
+    if (!str || !wasm_tag_kind_from_string(str, len, &kind)) {
+      GC_ROOT_RESTORE(js, mark);
+      return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Tag(): Argument 0 parameter type at index #%u must be a value type", (unsigned)i);
+    }
+    js_arr_push(js, kinds, js_mknum((double)kind));
+  }
+
+  ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.wasm_tag_proto, call_new_target);
+  ant_value_t tag = wasm_make_tag(js, proto, kinds, false);
+  GC_ROOT_RESTORE(js, mark);
+  return tag;
+}
+
+static ant_value_t wasm_exception_value(ant_t *js, wasm_valkind_t kind, ant_value_t value) {
+  switch (kind) {
+    case WASM_I32: {
+      double d = js_to_number(js, value);
+      return js_mknum((double)js_to_int32(d));
+    }
+    case WASM_I64: {
+      int64_t out = 0;
+      if (vtype(value) != kTypeBigInt || !bigint_to_int64_wrapping(js, value, &out)) {
+        ant_value_t text = js_tostring_val(js, value);
+        size_t len = 0;
+        const char *str = is_err(text) ? NULL : js_getstr(js, text, &len);
+        return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert %.*s to a BigInt", (int)len, str ? str : "value");
+      }
+      return wasm_value_from_i64(js, out);
+    }
+    case WASM_F32: return js_mknum((double)(float)js_to_number(js, value));
+    case WASM_F64: return js_mknum(js_to_number(js, value));
+    case WASM_FUNCREF: {
+      wasm_val_t tmp;
+      if (!js_value_to_wasm(js, value, WASM_FUNCREF, &tmp))
+        return js_mkerr_typed(js, JS_ERR_TYPE, "type incompatibility when transforming from/to JS");
+      return value;
+    }
+    default: return value;
+  }
+}
+
+static ant_value_t js_wasm_exception_ctor(ant_params_t) {
+  if (vtype(call_new_target) == kTypeUndefined)
+    return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Exception constructor requires 'new'");
+  if (nargs < 1 || !wasm_is_tag(args[0]))
+    return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Exception(): Argument 0 must be a WebAssembly tag");
+  if (js_get_slot(args[0], SLOT_AUX) == js_true)
+    return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Exception(): Argument 0 cannot be WebAssembly.JSTag");
+
+  GC_ROOT_SAVE(mark, js);
+  ant_value_t kinds = js_get_slot(args[0], SLOT_DATA);
+  ant_value_t list = wasm_iterable_to_array(js, nargs > 1 ? args[1] : js_mkundef(), "WebAssembly.Exception(): Argument 1");
+  GC_ROOT_PIN(js, list);
+  if (is_err(list)) { GC_ROOT_RESTORE(js, mark); return list; }
+
+  ant_offset_t count = js_arr_len(js, kinds);
+  if (js_arr_len(js, list) != count) {
+    GC_ROOT_RESTORE(js, mark);
+    return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Exception(): Number of exception values does not match signature length");
+  }
+
+  ant_value_t payload = js_mkarr(js);
+  GC_ROOT_PIN(js, payload);
+  for (ant_offset_t i = 0; i < count; i++) {
+    wasm_valkind_t kind = (wasm_valkind_t)js_getnum(js_arr_get(js, kinds, i));
+    ant_value_t value = wasm_exception_value(js, kind, js_arr_get(js, list, i));
+    if (is_err(value)) { GC_ROOT_RESTORE(js, mark); return value; }
+    js_arr_push(js, payload, value);
+  }
+
+  ant_value_t stack = js_mkundef();
+  if (nargs > 2 && is_object_type(args[2])) {
+    ant_value_t trace = js_get(js, args[2], "traceStack");
+    if (is_err(trace)) { GC_ROOT_RESTORE(js, mark); return trace; }
+    if (js_truthy(js, trace)) {
+      ant_value_t holder = Ant_Error_Create(js, JS_ERR_GENERIC, "");
+      GC_ROOT_PIN(js, holder);
+      stack = is_object_type(holder) ? js_get(js, holder, "stack") : js_mkundef();
+      if (is_err(stack)) stack = js_mkundef();
+    }
+  }
+  GC_ROOT_PIN(js, stack);
+
+  ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.wasm_exception_proto, call_new_target);
+  ant_value_t exception = js_mkobj(js);
+  if (!is_err(exception)) {
+    js_set_proto_init(exception, proto);
+    js_set_slot(exception, SLOT_BRAND, js_mknum(BRAND_WASM_EXCEPTION));
+    js_set_slot_wb(js, exception, SLOT_DATA, args[0]);
+    js_set_slot_wb(js, exception, SLOT_AUX, payload);
+    js_set_slot_wb(js, exception, SLOT_ENTRIES, stack);
+  }
+  GC_ROOT_RESTORE(js, mark);
+  return exception;
+}
+
+static bool wasm_is_exception(ant_value_t value) {
+  return is_object_type(value) && js_check_brand(value, BRAND_WASM_EXCEPTION);
+}
+
+static ant_value_t js_wasm_exception_get_arg(ant_params_t) {
+  ant_value_t self = js->this_val;
+  if (!wasm_is_exception(self))
+    return js_mkerr_typed(js, JS_ERR_TYPE, "Receiver is not a WebAssembly.Exception");
+  if (nargs < 1 || !wasm_is_tag(args[0]))
+    return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Exception.getArg(): Argument 0 must be a WebAssembly.Tag");
+  if (vdata(js_get_slot(self, SLOT_DATA)) != vdata(args[0]))
+    return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Exception.getArg(): First argument does not match the exception tag");
+
+  double index = nargs > 1 ? js_to_number(js, args[1]) : 0;
+  ant_value_t payload = js_get_slot(self, SLOT_AUX);
+  ant_offset_t count = js_arr_len(js, payload);
+  if (!isfinite(index) || index < 0 || index >= (double)count || index != floor(index))
+    return js_mkerr_typed(js, JS_ERR_RANGE, "WebAssembly.Exception.getArg(): Index out of range");
+
+  return js_arr_get(js, payload, (ant_offset_t)index);
+}
+
+static ant_value_t js_wasm_exception_is(ant_params_t) {
+  ant_value_t self = js->this_val;
+  if (!wasm_is_exception(self))
+    return js_mkerr_typed(js, JS_ERR_TYPE, "Receiver is not a WebAssembly.Exception");
+  if (nargs < 1 || !wasm_is_tag(args[0]))
+    return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Exception.is(): Argument 0 must be a WebAssembly.Tag");
+  return js_bool(vdata(js_get_slot(self, SLOT_DATA)) == vdata(args[0]));
+}
+
+static ant_value_t js_wasm_exception_stack_getter(ant_params_t) {
+  ant_value_t self = js->this_val;
+  if (!wasm_is_exception(self))
+    return js_mkerr_typed(js, JS_ERR_TYPE, "Receiver is not a WebAssembly.Exception");
+  return js_get_slot(self, SLOT_ENTRIES);
+}
+
+static ant_value_t wasm_streaming_state(ant_t *js) {
+  return js_get_slot(js_getcurrentfunc(js), SLOT_DATA);
+}
+
+static void wasm_streaming_fail(ant_t *js, ant_value_t state, ant_value_t error) {
+  ant_value_t value = is_err(error) ? Ant_Exception_Value(js, error) : error;
+  js_reject_promise(js, js_get_slot(state, SLOT_DATA), value);
+}
+
+static ant_value_t wasm_streaming_type_error(ant_t *js, ant_value_t state, const char *detail) {
+  ant_value_t api = js_get_slot(state, SLOT_ENTRIES);
+  size_t api_len = 0;
+  const char *api_str = js_getstr(js, api, &api_len);
+  return js_mkerr_typed(js, JS_ERR_TYPE, "%.*s: %s", (int)api_len, api_str ? api_str : "", detail);
+}
+
+static ant_value_t wasm_streaming_on_reject(ant_params_t) {
+  ant_value_t state = wasm_streaming_state(js);
+  js_reject_promise(js, js_get_slot(state, SLOT_DATA), nargs > 0 ? args[0] : js_mkundef());
+  return js_mkundef();
+}
+
+static ant_value_t wasm_streaming_on_bytes(ant_params_t) {
+  ant_value_t state = wasm_streaming_state(js);
+  ant_value_t promise = js_get_slot(state, SLOT_DATA);
+  ant_value_t imports = js_get_slot(state, SLOT_AUX);
+  ant_value_t api = js_get_slot(state, SLOT_ENTRIES);
+  ant_value_t module = js_mkundef();
+
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, state);
+  size_t api_len = 0;
+  ant_value_t err = wasm_module_from_bytes(js, nargs > 0 ? args[0] : js_mkundef(), &module, js_getstr(js, api, &api_len));
+  GC_ROOT_PIN(js, module);
+
+  if (is_err(err) || vtype(module) != kTypeObject) wasm_streaming_fail(js, state, err);
+  else if (js_get_slot(state, SLOT_MAP) != js_true) js_resolve_promise(js, promise, module);
+  else {
+    ant_value_t instance = js_mkundef();
+    err = wasm_instantiate_module(js, module, is_object_type(imports) ? imports : js_mkundef(), &instance);
+    if (is_err(err) || vtype(instance) != kTypeObject) wasm_streaming_fail(js, state, err);
+    else js_resolve_promise(js, promise, wasm_instantiate_result(js, module, instance));
+  }
+
+  GC_ROOT_RESTORE(js, mark);
+  return js_mkundef();
+}
+
+static bool wasm_mime_is_wasm(ant_t *js, ant_value_t content_type) {
+  size_t len = 0;
+  const char *str = vtype(content_type) == kTypeString ? js_getstr(js, content_type, &len) : NULL;
+  if (!str) return false;
+
+  size_t start = 0, end = len;
+  for (size_t i = 0; i < len; i++) if (str[i] == ';') { end = i; break; }
+  while (start < end && (str[start] == ' ' || str[start] == '\t')) start++;
+  while (end > start && (str[end - 1] == ' ' || str[end - 1] == '\t')) end--;
+  return end - start == 16 && strncasecmp(str + start, "application/wasm", 16) == 0;
+}
+
+static ant_value_t wasm_streaming_on_response(ant_params_t) {
+  ant_value_t state = wasm_streaming_state(js);
+  ant_value_t response = nargs > 0 ? args[0] : js_mkundef();
+
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, state);
+  ant_value_t error = js_mkundef();
+
+  if (!is_object_type(response) || !js_check_brand(response, BRAND_RESPONSE)) {
+    error = wasm_streaming_type_error(js, state, "Argument 0 must be provided and must be a Response");
+    goto fail;
+  }
+
+  ant_value_t headers = js_get(js, response, "headers");
+  GC_ROOT_PIN(js, headers);
+  ant_value_t get_fn = is_err(headers) ? headers : js_get(js, headers, "get");
+  if (is_err(get_fn)) { error = get_fn; goto fail; }
+
+  ant_value_t header_name = js_mkstr(js, "content-type", 12);
+  ant_value_t content_type = sv_vm_call(js->vm, js, get_fn, headers, &header_name, 1, NULL, js_mkundef());
+  if (is_err(content_type)) { error = content_type; goto fail; }
+  if (!wasm_mime_is_wasm(js, content_type)) {
+    error = wasm_streaming_type_error(js, state, "Incorrect response MIME type. Expected 'application/wasm'.");
+    goto fail;
+  }
+
+  ant_value_t ok = js_get(js, response, "ok");
+  if (is_err(ok)) { error = ok; goto fail; }
+  if (!js_truthy(js, ok)) {
+    error = wasm_streaming_type_error(js, state, "HTTP status code is not ok");
+    goto fail;
+  }
+
+  ant_value_t array_buffer = js_get(js, response, "arrayBuffer");
+  ant_value_t bytes = is_err(array_buffer) ? array_buffer : sv_vm_call(js->vm, js, array_buffer, response, NULL, 0, NULL, js_mkundef());
+  if (is_err(bytes)) { error = bytes; goto fail; }
+  GC_ROOT_PIN(js, bytes);
+
+  ant_value_t on_bytes = js_heavy_mkfun(js, wasm_streaming_on_bytes, state);
+  GC_ROOT_PIN(js, on_bytes);
+  ant_value_t on_reject = js_heavy_mkfun(js, wasm_streaming_on_reject, state);
+  GC_ROOT_PIN(js, on_reject);
+  ant_value_t next = js_promise_then(js, bytes, on_bytes, on_reject);
+  if (is_err(next)) { error = next; goto fail; }
+  promise_mark_handled(next);
+
+  GC_ROOT_RESTORE(js, mark);
+  return js_mkundef();
+
+fail:
+  wasm_streaming_fail(js, state, error);
+  GC_ROOT_RESTORE(js, mark);
+  return js_mkundef();
+}
+
+static ant_value_t wasm_streaming_start(ant_native_params_t, bool instantiate) {
+  ant_value_t promise = js_mkpromise(js);
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, promise);
+
+  ant_value_t state = js_mkobj(js);
+  GC_ROOT_PIN(js, state);
+  js_set_slot_wb(js, state, SLOT_DATA, promise);
+  js_set_slot_wb(js, state, SLOT_AUX, instantiate && nargs > 1 ? args[1] : js_mkundef());
+  js_set_slot_wb(js, state, SLOT_ENTRIES, instantiate
+    ? ANT_STRING("WebAssembly.instantiateStreaming()")
+    : ANT_STRING("WebAssembly.compileStreaming()"));
+  js_set_slot(state, SLOT_MAP, js_bool(instantiate));
+
+  ant_value_t source = js_mkpromise(js);
+  GC_ROOT_PIN(js, source);
+  js_resolve_promise(js, source, nargs > 0 ? args[0] : js_mkundef());
+
+  ant_value_t on_response = js_heavy_mkfun(js, wasm_streaming_on_response, state);
+  GC_ROOT_PIN(js, on_response);
+  ant_value_t on_reject = js_heavy_mkfun(js, wasm_streaming_on_reject, state);
+  GC_ROOT_PIN(js, on_reject);
+
+  ant_value_t next = js_promise_then(js, source, on_response, on_reject);
+  if (is_err(next)) js_reject_promise(js, promise, Ant_Exception_Value(js, next));
+  else promise_mark_handled(next);
+
+  GC_ROOT_RESTORE(js, mark);
+  return promise;
+}
+
+static ant_value_t js_wasm_compile_streaming(ant_params_t) {
+  return wasm_streaming_start(js, args, nargs, false);
+}
+
+static ant_value_t js_wasm_instantiate_streaming(ant_params_t) {
+  return wasm_streaming_start(js, args, nargs, true);
 }
 
 void gc_mark_wasm(ant_t *js, gc_mark_fn mark) {
@@ -1913,50 +2267,43 @@ void gc_mark_wasm(ant_t *js, gc_mark_fn mark) {
   }
 }
 
-void init_wasm_module(ant_t *js) {
-  ant_value_t global = js_glob(js);
-  
-  ant_value_t error_proto = js->builtins.error_protos[JS_ERR_GENERIC];
-  ant_value_t ns = js_mkobj(js);
+static ant_value_t wasm_make_proto(ant_t *js, const char *tag) {
+  ant_value_t proto = js_newobj(js);
+  js_set_tostringtag(js, proto, js_mkstr(js, tag, strlen(tag)));
+  return proto;
+}
 
+void init_wasm_module(ant_t *js) {
   if (!ensure_wasm_engine()) return;
 
-  js->builtins.wasm_module_proto = js_mkobj(js);
-  js->builtins.wasm_instance_proto = js_mkobj(js);
-  js->builtins.wasm_global_proto = js_mkobj(js);
-  js->builtins.wasm_memory_proto = js_mkobj(js);
-  js->builtins.wasm_table_proto = js_mkobj(js);
-  js->builtins.wasm_tag_proto = js_mkobj(js);
-  js->builtins.wasm_exception_proto = js_mkobj(js);
+  ant_value_t ns = js_newobj(js);
+  js_set_tostringtag(js, ns, ANT_STRING("WebAssembly"));
 
-  js->builtins.wasm_compileerror_proto = js_mkobj(js);
-  js->builtins.wasm_linkerror_proto = js_mkobj(js);
-  js->builtins.wasm_runtimeerror_proto = js_mkobj(js);
-
-  js_set_proto_init(js->builtins.wasm_module_proto, js->sym.object_proto);
-  js_set_proto_init(js->builtins.wasm_instance_proto, js->sym.object_proto);
-  js_set_proto_init(js->builtins.wasm_global_proto, js->sym.object_proto);
-  js_set_proto_init(js->builtins.wasm_memory_proto, js->sym.object_proto);
-  js_set_proto_init(js->builtins.wasm_table_proto, js->sym.object_proto);
-  js_set_proto_init(js->builtins.wasm_tag_proto, js->sym.object_proto);
-  js_set_proto_init(js->builtins.wasm_exception_proto, js->sym.object_proto);
-
-  js_set_proto_init(js->builtins.wasm_compileerror_proto, error_proto);
-  js_set_proto_init(js->builtins.wasm_linkerror_proto, error_proto);
-  js_set_proto_init(js->builtins.wasm_runtimeerror_proto, error_proto);
+  js->builtins.wasm_module_proto = wasm_make_proto(js, "WebAssembly.Module");
+  js->builtins.wasm_instance_proto = wasm_make_proto(js, "WebAssembly.Instance");
+  js->builtins.wasm_global_proto = wasm_make_proto(js, "WebAssembly.Global");
+  js->builtins.wasm_memory_proto = wasm_make_proto(js, "WebAssembly.Memory");
+  js->builtins.wasm_table_proto = wasm_make_proto(js, "WebAssembly.Table");
+  js->builtins.wasm_tag_proto = wasm_make_proto(js, "WebAssembly.Tag");
+  js->builtins.wasm_exception_proto = wasm_make_proto(js, "WebAssembly.Exception");
 
   js_set(js, js->builtins.wasm_global_proto, "valueOf", Ant_Function_Create(js_wasm_global_value_of));
-  js_set_getter_desc(js, js->builtins.wasm_global_proto, "value", 5, Ant_Function_Create(js_wasm_global_value_getter), JS_DESC_C);
-  js_set_setter_desc(js, js->builtins.wasm_global_proto, "value", 5, Ant_Function_Create(js_wasm_global_value_setter), JS_DESC_C);
+  js_set_getter_desc(js, js->builtins.wasm_global_proto, "value", 5, Ant_Function_Create(js_wasm_global_value_getter), JS_DESC_E | JS_DESC_C);
+  js_set_setter_desc(js, js->builtins.wasm_global_proto, "value", 5, Ant_Function_Create(js_wasm_global_value_setter), JS_DESC_E | JS_DESC_C);
 
-  js_set_getter_desc(js, js->builtins.wasm_instance_proto, "exports", 7, Ant_Function_Create(js_wasm_instance_exports_getter), JS_DESC_C);
-  js_set_getter_desc(js, js->builtins.wasm_memory_proto, "buffer", 6, Ant_Function_Create(js_wasm_memory_buffer_getter), JS_DESC_C);
+  js_set_getter_desc(js, js->builtins.wasm_instance_proto, "exports", 7, Ant_Function_Create(js_wasm_instance_exports_getter), JS_DESC_E | JS_DESC_C);
+  js_set_getter_desc(js, js->builtins.wasm_memory_proto, "buffer", 6, Ant_Function_Create(js_wasm_memory_buffer_getter), JS_DESC_E | JS_DESC_C);
   js_set(js, js->builtins.wasm_memory_proto, "grow", Ant_Function_CreateWithArity(js_wasm_memory_grow, 1));
+  js_set(js, js->builtins.wasm_memory_proto, "toFixedLengthBuffer", Ant_Function_Create(js_wasm_memory_to_fixed_length_buffer));
 
-  js_set_getter_desc(js, js->builtins.wasm_table_proto, "length", 6, Ant_Function_Create(js_wasm_table_length_getter), JS_DESC_C);
+  js_set_getter_desc(js, js->builtins.wasm_table_proto, "length", 6, Ant_Function_Create(js_wasm_table_length_getter), JS_DESC_E | JS_DESC_C);
   js_set(js, js->builtins.wasm_table_proto, "get", Ant_Function_CreateWithArity(js_wasm_table_get, 1));
   js_set(js, js->builtins.wasm_table_proto, "set", Ant_Function_CreateWithArity(js_wasm_table_set, 1));
   js_set(js, js->builtins.wasm_table_proto, "grow", Ant_Function_CreateWithArity(js_wasm_table_grow, 1));
+
+  js_set(js, js->builtins.wasm_exception_proto, "getArg", Ant_Function_CreateWithArity(js_wasm_exception_get_arg, 2));
+  js_set(js, js->builtins.wasm_exception_proto, "is", Ant_Function_CreateWithArity(js_wasm_exception_is, 1));
+  js_set_getter_desc(js, js->builtins.wasm_exception_proto, "stack", 5, Ant_Function_Create(js_wasm_exception_stack_getter), JS_DESC_E | JS_DESC_C);
 
   ant_value_t module_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_wasm_module_ctor, js->builtins.wasm_module_proto, "Module", 1);
   ant_value_t instance_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_wasm_instance_ctor, js->builtins.wasm_instance_proto, "Instance", 1);
@@ -1966,17 +2313,19 @@ void init_wasm_module(ant_t *js) {
   ant_value_t tag_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_wasm_tag_ctor, js->builtins.wasm_tag_proto, "Tag", 1);
   ant_value_t exception_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_wasm_exception_ctor, js->builtins.wasm_exception_proto, "Exception", 2);
 
-  ant_value_t compile_error_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_wasm_compile_error_ctor, js->builtins.wasm_compileerror_proto, "CompileError", 1);
-  ant_value_t link_error_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_wasm_link_error_ctor, js->builtins.wasm_linkerror_proto, "LinkError", 1);
-  ant_value_t runtime_error_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_wasm_runtime_error_ctor, js->builtins.wasm_runtimeerror_proto, "RuntimeError", 1);
+  ant_value_t compile_error_ctor = Ant_Error_CreateConstructor(js, "CompileError", &js->builtins.wasm_compileerror_proto);
+  ant_value_t link_error_ctor = Ant_Error_CreateConstructor(js, "LinkError", &js->builtins.wasm_linkerror_proto);
+  ant_value_t runtime_error_ctor = Ant_Error_CreateConstructor(js, "RuntimeError", &js->builtins.wasm_runtimeerror_proto);
 
-  js_set(js, module_ctor, "imports", Ant_Function_Create(js_wasm_module_imports));
-  js_set(js, module_ctor, "exports", Ant_Function_Create(js_wasm_module_exports));
-  js_set(js, module_ctor, "customSections", Ant_Function_Create(js_wasm_module_custom_sections));
+  js_set(js, module_ctor, "imports", Ant_Function_CreateWithArity(js_wasm_module_imports, 1));
+  js_set(js, module_ctor, "exports", Ant_Function_CreateWithArity(js_wasm_module_exports, 1));
+  js_set(js, module_ctor, "customSections", Ant_Function_CreateWithArity(js_wasm_module_custom_sections, 2));
 
   js_set(js, ns, "validate", Ant_Function_CreateWithArity(js_wasm_validate, 1));
   js_set(js, ns, "compile", Ant_Function_CreateWithArity(js_wasm_compile, 1));
   js_set(js, ns, "instantiate", Ant_Function_CreateWithArity(js_wasm_instantiate, 1));
+  js_set(js, ns, "compileStreaming", Ant_Function_CreateWithArity(js_wasm_compile_streaming, 1));
+  js_set(js, ns, "instantiateStreaming", Ant_Function_CreateWithArity(js_wasm_instantiate_streaming, 1));
 
   defhidden(js, ns, "Module", 6, module_ctor);
   defhidden(js, ns, "Instance", 8, instance_ctor);
@@ -1989,6 +2338,9 @@ void init_wasm_module(ant_t *js) {
   defhidden(js, ns, "LinkError", 9, link_error_ctor);
   defhidden(js, ns, "RuntimeError", 12, runtime_error_ctor);
 
-  js_set(js, global, "WebAssembly", ns);
-  js_set_descriptor(js, global, "WebAssembly", 11, JS_DESC_W | JS_DESC_C);
+  ant_value_t js_tag_kinds = js_mkarr(js);
+  js_arr_push(js, js_tag_kinds, js_mknum((double)WASM_EXTERNREF));
+  defhidden(js, ns, "JSTag", 5, wasm_make_tag(js, js->builtins.wasm_tag_proto, js_tag_kinds, true));
+
+  js_set_global_builtin(js, "WebAssembly", ns);
 }
