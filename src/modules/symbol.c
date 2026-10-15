@@ -12,18 +12,19 @@ static ant_value_t builtin_Symbol(ant_params_t) {
   if (vtype(call_new_target) != kTypeUndefined)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Symbol is not a constructor");
 
-  const char *desc = NULL;
-  if (nargs > 0 && vtype(args[0]) == kTypeString)
-    desc = js_getstr(js, args[0], NULL);
+  if (nargs == 0 || vtype(args[0]) == kTypeUndefined) return js_mksym(js, NULL);
   
-  return js_mksym(js, desc);
+  ant_value_t desc = js_template_to_string(js, args[0]);
+  if (is_err(desc)) return desc;
+  
+  return js_mksym(js, js_getstr(js, desc, NULL));
 }
 
 static ant_value_t builtin_Symbol_for(ant_params_t) {
-  if (nargs < 1 || vtype(args[0]) != kTypeString)
-    return js_mkerr(js, "Symbol.for requires a string argument");
+  ant_value_t key_str = js_template_to_string(js, nargs > 0 ? args[0] : js_mkundef());
+  if (is_err(key_str)) return key_str;
   
-  char *key = js_getstr(js, args[0], NULL);
+  char *key = js_getstr(js, key_str, NULL);
   if (!key) return js_mkerr(js, "Invalid key");
   
   return js_mksym_for(js, key);

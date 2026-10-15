@@ -283,6 +283,10 @@ static int io_iso_utc_token_len(const char *p) {
   if (*p == end_char) ant_output_stream_putc(out, *p++); \
   ant_output_stream_append_cstr(out, C_RESET); goto next;
 
+#define EMIT_UNTIL_BEFORE(end_char, color) \
+  ant_output_stream_append_cstr(out, color); \
+  while (*p && *p != end_char) ant_output_stream_putc(out, *p++);
+
 #define EMIT_TYPE(tag, len, color) \
   if (!(is_key && brace_depth > 0) && memcmp(p, tag, len) == 0) { \
     ant_output_stream_append_cstr(out, color); ant_output_stream_append_cstr(out, tag); ant_output_stream_append_cstr(out, C_RESET); \
@@ -353,6 +357,7 @@ lbrack:
       break;
     case 'b': if (memcmp(p + 2, "yte", 3) == 0 || memcmp(p + 2, "uffer]", 6) == 0) { EMIT_UNTIL(']', JSON_STRING) } break;
     case 'F': if (memcmp(p + 2, "unction", 7) == 0) { EMIT_UNTIL(']', JSON_FUNC) } break;
+    case 'c': if (memcmp(p + 2, "lass ", 5) == 0) { EMIT_UNTIL(']', JSON_FUNC) } break;
     case 'n': if (memcmp(p + 2, "ative code", 10) == 0) { EMIT_UNTIL(']', JSON_FUNC) } break;
     case 'C': if (memcmp(p + 2, "ircular", 7) == 0) { EMIT_UNTIL(']', JSON_REF) } break;
     case 'G':
@@ -469,7 +474,19 @@ gt:
 
 alpha:
   if (memcmp(p, "Object [", 8) == 0) { EMIT_UNTIL(']', JSON_TAG) }
-  if (memcmp(p, "Symbol(", 7) == 0) { EMIT_UNTIL(')', JSON_STRING) }
+  
+  if (memcmp(p, "Symbol(", 7) == 0) {
+    ant_output_stream_append_cstr(out, JSON_FUNC);
+    ant_output_stream_append(out, "Symbol", 6);
+    ant_output_stream_append_cstr(out, JSON_BRACE);
+    ant_output_stream_putc(out, '(');
+    p += 7;
+    if (*p != ')') { EMIT_UNTIL_BEFORE(')', JSON_STRING) }
+    ant_output_stream_append_cstr(out, JSON_BRACE);
+    if (*p == ')') ant_output_stream_putc(out, *p++);
+    ant_output_stream_append_cstr(out, C_RESET);
+    goto next;
+  }
 
   size_t type_len = io_binary_type_len(p);
   if (type_len > 0) {
