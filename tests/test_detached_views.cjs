@@ -34,15 +34,26 @@ const throwsType = {
   atomicsAdd: () => Atomics.add(detached(Int32Array, 2), 0, 1),
   bufferConcat: () => Buffer.concat([detachedBuffer(), Buffer.from('x')]),
   blob: () => new Blob([detached()]),
+  blobArrayBuffer: () => new Blob([detached().buffer]),
+  bufferConcatAlone: () => Buffer.concat([detachedBuffer()]),
+  inflateArrayBuffer: () => require('node:zlib').inflateSync(detached().buffer),
   bigOffset: () => detached(Uint8Array, 8, 1 << 20).slice(0),
 };
 for (const [name, op] of Object.entries(throwsType)) assert.throws(op, TypeError, name);
 
-try {
-  assert.strictEqual(crypto.getRandomValues(detached()).length, 0);
-} catch (e) {
-  assert.ok(e instanceof TypeError, 'getRandomValues');
-}
+const randomTarget = detached();
+assert.strictEqual(crypto.getRandomValues(randomTarget), randomTarget);
+assert.strictEqual(require('node:crypto').randomFillSync(detached()).length, 0);
+assert.throws(() => require('node:zlib').inflateSync(detached()), { code: 'Z_BUF_ERROR' });
+
+const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+const file = path.join(os.tmpdir(), `ant-detached-${process.pid}.bin`);
+fs.writeFileSync(file, detached());
+assert.strictEqual(fs.readFileSync(file).length, 0);
+const fd = fs.openSync(file, 'w');
+assert.strictEqual(fs.writeSync(fd, detached()), 0);
+fs.closeSync(fd);
+fs.unlinkSync(file);
 
 assert.strictEqual(detached().length, 0);
 assert.strictEqual(detached()[0], undefined);

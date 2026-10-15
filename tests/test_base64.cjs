@@ -128,4 +128,11 @@ console.log("\nTest 13: Non-Latin-1 input rejection");
 assert.throws(() => btoa("✓"));
 console.log("  Pass: true");
 
+assert.strictEqual(atob("YWI"), "ab");
+assert.strictEqual(atob(" YW Jj\n"), "abc");
+assert.strictEqual(atob("AA= ="), "\0");
+for (const bad of ["a", "AA=", "AA=A", "YQ===", "-_", "\u00e9"]) {
+  assert.throws(() => atob(bad), error => error instanceof DOMException && error.name === "InvalidCharacterError", bad);
+}
+
 console.log("\n=== All Base64 tests completed ===");

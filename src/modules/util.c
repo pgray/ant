@@ -11,6 +11,7 @@
 
 #include "ant.h"
 #include "errors.h"
+#include "builder.h"
 #include "internal.h"
 #include "numbers.h"
 #include "esm/library.h"
@@ -574,10 +575,24 @@ static ant_value_t util_format_with_options(ant_params_t) {
   return util_format_impl(js, args, nargs, 1);
 }
 
+static int util_inspect_depth(ant_t *js, ant_value_t *args, int nargs) {
+  ant_value_t depth = js_mkundef();
+  if (nargs > 1 && is_object_type(args[1])) depth = js_get(js, args[1], "depth");
+  else if (nargs > 2) depth = args[2];
+
+  if (vtype(depth) == kTypeNull) return MAX_STRINGIFY_DEPTH;
+  if (vtype(depth) != kTypeNumber) return ANT_INSPECT_MAX_DEPTH;
+  
+  double d = js_getnum(depth);
+  if (!(d >= 0)) return ANT_INSPECT_MAX_DEPTH;
+  
+  return d >= MAX_STRINGIFY_DEPTH ? MAX_STRINGIFY_DEPTH : (int)d;
+}
+
 static ant_value_t util_inspect(ant_params_t) {
   if (nargs < 1) return js_mkstr(js, "undefined", 9);
   char cbuf[512];
-  js_cstr_t cstr = js_inspect_cstr(js, args[0], cbuf, sizeof(cbuf));
+  js_cstr_t cstr = js_inspect_cstr_depth(js, args[0], cbuf, sizeof(cbuf), util_inspect_depth(js, args, nargs));
   ant_value_t out = js_mkstr(js, cstr.ptr, strlen(cstr.ptr));
   if (cstr.needs_free) free((void *)cstr.ptr);
   return out;

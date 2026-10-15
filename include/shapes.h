@@ -54,9 +54,11 @@ ant_shape_t *ant_shape_new_with_inobj_limit(uint8_t inobj_limit);
 ant_shape_t *ant_shape_clone(const ant_shape_t *shape);
 ant_shape_t *shape_clone_reserve(const ant_shape_t *shape, uint32_t extra);
 ant_shape_t *ant_shape_clone_bulk(const ant_shape_t *shape, uint32_t extra);
+ant_shape_t *ant_shape_index_layout(ant_t *js, ant_shape_t **cache, const ant_shape_t *base, uint32_t count);
 
 void ant_shape_retain(ant_shape_t *shape);
 void ant_shape_release(ant_shape_t *shape);
+void ant_shape_index_layout_trim(ant_shape_t **cache);
 void ant_shape_mark_jit_snapshot(ant_shape_t *shape);
 void ant_shape_transition_existing(ant_shape_t **shape_pp, ant_shape_t *to_shape);
 

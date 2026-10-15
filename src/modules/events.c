@@ -1977,22 +1977,10 @@ static ant_value_t js_events_on_error_cb(ant_params_t) {
   return js_mkundef();
 }
 
-static ant_value_t events_make_abort_error(ant_t *js, ant_value_t signal) {
-  ant_value_t error = Ant_Error_Create(js, JS_ERR_GENERIC, "The operation was aborted");
-  if (!is_object_type(error)) return error;
-
-  js_set(js, error, "name", js_mkstr(js, "AbortError", 10));
-  js_set(js, error, "code", js_mkstr(js, "ABORT_ERR", 9));
-
-  ant_value_t reason = abort_signal_get_reason(signal);
-  if (vtype(reason) != kTypeUndefined) js_set(js, error, "cause", reason);
-  return error;
-}
-
 static ant_value_t js_events_on_abort_cb(ant_params_t) {
   ant_value_t state = js_get_slot(js_getcurrentfunc(js), SLOT_DATA);
   if (!is_object_type(state)) return js_mkundef();
-  events_on_fail(js, state, events_make_abort_error(js, js_get(js, state, "signal")));
+  events_on_fail(js, state, abort_signal_make_error(js, js_get(js, state, "signal")));
   return js_mkundef();
 }
 
@@ -2052,7 +2040,7 @@ static ant_value_t js_events_on(ant_params_t) {
   ant_value_t options = nargs >= 3 && is_object_type(args[2]) ? args[2] : js_mkundef();
   ant_value_t signal = is_object_type(options) ? js_get(js, options, "signal") : js_mkundef();
   if (abort_signal_is_signal(signal) && abort_signal_is_aborted(signal))
-    return js_throw(js, events_make_abort_error(js, signal));
+    return js_throw(js, abort_signal_make_error(js, signal));
 
   ant_value_t state = js_mkobj(js);
   ant_value_t listener = js_heavy_mkfun(js, js_events_on_event_cb, state);

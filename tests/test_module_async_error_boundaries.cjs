@@ -33,7 +33,10 @@ const cases = {
         const promise = immediate
           ? timers.setImmediate(42, { signal: controller.signal })
           : timers.setTimeout(100, 42, { signal: controller.signal });
-        const handled = rejected(promise, TypeError);
+        const handled = promise.then(
+          () => { throw new Error('expected rejection'); },
+          error => assert(error.name === 'AbortError' && error.code === 'ABORT_ERR' && error.cause === null, 'wrong abort error')
+        );
         if (!preAborted) controller.abort(null);
         await handled;
       }

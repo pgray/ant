@@ -556,12 +556,6 @@ static ant_value_t timers_promises_get_state(ant_t *js) {
   return js_get_slot(js->current_func, SLOT_DATA);
 }
 
-static ant_value_t timers_promises_abort_reason(ant_t *js, ant_value_t signal) {
-  ant_value_t reason = abort_signal_get_reason(signal);
-  if (vtype(reason) != kTypeUndefined && vtype(reason) != kTypeNull) return reason;
-  return Ant_Error_Create(js, JS_ERR_TYPE, "The operation was aborted");
-}
-
 static void timers_promises_remove_abort_listener(ant_t *js, ant_value_t state) {
   ant_value_t signal = 0;
   ant_value_t listener = 0;
@@ -624,7 +618,7 @@ static ant_value_t timers_promises_on_abort(ant_params_t) {
     else js_clear_timeout(js, clear_args, 1, js_mkundef());
   }
 
-  if (abort_signal_is_signal(signal)) reason = timers_promises_abort_reason(js, signal);
+  if (abort_signal_is_signal(signal)) reason = abort_signal_make_error(js, signal);
   else reason = Ant_Error_Create(js, JS_ERR_TYPE, "The operation was aborted");
 
   GC_ROOT_SAVE(root_mark, js);
@@ -682,7 +676,7 @@ static ant_value_t timers_promises_schedule(
   ant_value_t args[2];
 
   if (abort_signal_is_signal(signal) && abort_signal_is_aborted(signal)) {
-    js_reject_promise(js, promise, timers_promises_abort_reason(js, signal));
+    js_reject_promise(js, promise, abort_signal_make_error(js, signal));
     return promise;
   }
 

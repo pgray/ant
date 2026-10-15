@@ -37,6 +37,7 @@ pkgs.mkShellNoCC ({
   CFLAGS = optArgs;
   CXXFLAGS = optArgs;
   NIX_ENFORCE_NO_NATIVE = "0";
+  hardeningDisable = [ "all" ];
 } // (if isDarwin then {
   CC = "${darwinClang}/bin/clang";
   CXX = "${darwinClang}/bin/clang++";

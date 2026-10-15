@@ -339,17 +339,19 @@ static ant_value_t crypto_make_buffer(ant_t *js, const uint8_t *data, size_t len
 
 static bool crypto_get_mutable_bytes(ant_value_t value, uint8_t **out, size_t *len) {
   TypedArrayData *ta = buffer_get_typedarray_data(value);
-  if (ta) return Ant_Buffer_GetViewBytes(ta, out, len);
-
-  ArrayBufferData *ab = buffer_get_arraybuffer_data(value);
-  if (ab) {
-    if (ab->is_detached) return false;
-    *out = ab->data;
-    *len = ab->length;
+  if (ta) {
+    Ant_Buffer_GetViewBytes(ta, out, len);
     return true;
   }
 
-  return false;
+  ArrayBufferData *ab = buffer_get_arraybuffer_data(value);
+  if (!ab) return false;
+  
+  bool live = Ant_Buffer_IsLive(ab);
+  *out = live ? ab->data : NULL;
+  *len = live ? ab->length : 0;
+  
+  return true;
 }
 
 static crypto_text_encoding_t crypto_parse_encoding(const char *str, size_t len) {
@@ -698,18 +700,15 @@ static ant_value_t js_crypto_random_uuidv7(ant_params_t) {
 
 // crypto.getRandomValues(typedArray)
 static ant_value_t js_crypto_get_random_values(ant_params_t) {
-  if (nargs < 1) {
-    return js_mkerr(js, "getRandomValues requires a TypedArray argument");
-  }
+  if (nargs < 1) return js_mkerr(js, "getRandomValues requires a TypedArray argument");
+
+  TypedArrayData *ta = buffer_get_typedarray_data(args[0]);
+  if (!ta) return js_mkerr_typed(js, JS_ERR_TYPE, "getRandomValues requires a TypedArray argument");
 
   uint8_t *ptr; size_t len;
-  if (!Ant_Buffer_GetViewBytes(buffer_get_typedarray_data(args[0]), &ptr, &len))
-    return js_mkerr_typed(js, JS_ERR_TYPE, "argument must be an attached TypedArray");
+  Ant_Buffer_GetViewBytes(ta, &ptr, &len);
   
-  if (len > 65536) {
-    return js_mkerr(js, "TypedArray byte length exceeds 65536");
-  }
-  
+  if (len > 65536) return js_mkerr(js, "TypedArray byte length exceeds 65536");
   if (crypto_fill_random(ptr, len) < 0) return crypto_random_error(js);
   
   return args[0];

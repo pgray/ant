@@ -84,34 +84,38 @@ static bool byte_buf_append(byte_buf_t *b, const uint8_t *data, size_t len) {
   return true;
 }
 
+static bool blob_part_buffer_source(ant_value_t part, uint8_t **bytes, size_t *size, bool *live) {
+  TypedArrayData *ta = buffer_get_typedarray_data(part);
+  DataViewData *dv = ta ? NULL : buffer_get_dataview_data(part);
+  ArrayBufferData *abd = ta || dv ? NULL : buffer_get_arraybuffer_data(part);
+
+  if (ta) *live = Ant_Buffer_GetViewBytes(ta, bytes, size);
+  else if (dv) *live = Ant_Buffer_GetViewBytes(dv, bytes, size);
+  else if (abd) {
+    *live = Ant_Buffer_IsLive(abd);
+    *bytes = *live ? abd->data : NULL;
+    *size = *live ? abd->length : 0;
+  } else return false;
+
+  return true;
+}
+
 static ant_value_t process_blob_part(ant_t *js, byte_buf_t *buf, ant_value_t part) {
   uint8_t t = vtype(part);
+  uint8_t *bytes;
+  size_t size;
+  bool live;
 
-  if (t == kTypeTypedArray) {
-    uint8_t *bytes; size_t size;
-    if (!Ant_Buffer_GetViewBytes((TypedArrayData *)js_gettypedarray(part), &bytes, &size))
-      return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot use a detached ArrayBuffer in a Blob");
+  if (blob_part_buffer_source(part, &bytes, &size, &live)) {
+    if (!live) return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot use a detached ArrayBuffer in a Blob");
     if (!byte_buf_append(buf, bytes, size)) return js_mkerr(js, "out of memory");
     return js_mkundef();
   }
 
-  if (t == kTypeObject) {
-    TypedArrayData *ta = buffer_get_typedarray_data(part);
-    uint8_t *bytes; size_t size;
-    if (Ant_Buffer_GetViewBytes(ta, &bytes, &size)) {
-      if (!byte_buf_append(buf, bytes, size)) return js_mkerr(js, "out of memory");
-      return js_mkundef();
-    }
-    ArrayBufferData *abd = buffer_get_arraybuffer_data(part);
-    if (abd && !abd->is_detached) {
-      if (!byte_buf_append(buf, abd->data, abd->length)) return js_mkerr(js, "out of memory");
-      return js_mkundef();
-    }
-    blob_data_t *bd = blob_get_data(part);
-    if (bd && bd->size > 0) {
-      if (!byte_buf_append(buf, bd->data, bd->size)) return js_mkerr(js, "out of memory");
-      return js_mkundef();
-    }
+  blob_data_t *bd = t == kTypeObject ? blob_get_data(part) : NULL;
+  if (bd) {
+    if (!byte_buf_append(buf, bd->data, bd->size)) return js_mkerr(js, "out of memory");
+    return js_mkundef();
   }
 
   ant_value_t str = (t == kTypeString) ? part : js_tostring_val(js, part);

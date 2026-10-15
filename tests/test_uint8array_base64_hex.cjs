@@ -27,4 +27,28 @@ assert(base64Result.read === 16, "Uint8Array.setFromBase64 read count");
 assert(base64Result.written === 11, "Uint8Array.setFromBase64 written count");
 assert(bytes.every((value, index) => value === base64Target[index]), "Uint8Array.setFromBase64 bytes");
 
+const strict = require("node:assert");
+const decode = (s, o) => Array.from(Uint8Array.fromBase64(s, o));
+strict.deepStrictEqual(decode("YQ"), [97]);
+strict.deepStrictEqual(decode(" YW Jj "), [97, 98, 99]);
+strict.deepStrictEqual(decode("_-8", { alphabet: "base64url" }), [255, 239]);
+strict.deepStrictEqual(decode("YWJj ZA", { lastChunkHandling: "stop-before-partial" }), [97, 98, 99]);
+strict.deepStrictEqual(decode("YQ==", { lastChunkHandling: "strict" }), [97]);
+strict.throws(() => decode("YR==", { lastChunkHandling: "strict" }), SyntaxError);
+strict.throws(() => decode("YQ", { lastChunkHandling: "strict" }), SyntaxError);
+strict.throws(() => decode("+/", { alphabet: "base64url" }), SyntaxError);
+strict.throws(() => decode("Y"), SyntaxError);
+strict.throws(() => decode("YQ", { alphabet: "nope" }), TypeError);
+strict.throws(() => Uint8Array.fromBase64(123), TypeError);
+
+const partialTarget = new Uint8Array(4);
+strict.deepStrictEqual({ ...partialTarget.setFromBase64("YWJjZGVm") }, { read: 4, written: 3 });
+strict.deepStrictEqual(Array.from(partialTarget), [97, 98, 99, 0]);
+
+const encodeBytes = new Uint8Array([251, 255]);
+strict.strictEqual(encodeBytes.toBase64(), "+/8=");
+strict.strictEqual(encodeBytes.toBase64({ alphabet: "base64url" }), "-_8=");
+strict.strictEqual(encodeBytes.toBase64({ alphabet: "base64url", omitPadding: true }), "-_8");
+strict.throws(() => encodeBytes.toBase64({ alphabet: "x" }), TypeError);
+
 console.log("Uint8Array base64/hex tests completed!");

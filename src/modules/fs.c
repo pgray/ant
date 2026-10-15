@@ -38,6 +38,7 @@
 #include "modules/fs.h"
 #include "modules/date.h"
 #include "modules/buffer.h"
+#include "modules/abort.h"
 #include "modules/events.h"
 #include "modules/stream.h"
 #include "modules/url.h"
@@ -92,6 +93,7 @@ typedef struct fs_request_s {
   ant_value_t target_buffer;
   ant_value_t callback_fn;
   ant_value_t owner;
+  ant_value_t signal;
 
   char *path;
   char *path2;
@@ -120,6 +122,15 @@ typedef struct {
   size_t len;
 } fs_write_data_t;
 
+static bool fs_view_bytes(ant_value_t value, uint8_t **bytes, size_t *len) {
+  TypedArrayData *ta = buffer_get_typedarray_data(value);
+  DataViewData *dv = ta ? NULL : buffer_get_dataview_data(value);
+  if (ta) Ant_Buffer_GetViewBytes(ta, bytes, len);
+  else if (dv) Ant_Buffer_GetViewBytes(dv, bytes, len);
+  else return false;
+  return true;
+}
+
 static ant_value_t fs_get_write_data_arg(
   ant_t *js,
   ant_value_t value,
@@ -135,13 +146,11 @@ static ant_value_t fs_get_write_data_arg(
     return js_mkundef();
   }
 
-  TypedArrayData *ta_data = buffer_get_typedarray_data(value);
   uint8_t *bytes;
-  if (!Ant_Buffer_GetViewBytes(ta_data, &bytes, &out->len))
+  if (!fs_view_bytes(value, &bytes, &out->len))
     return js_mkerr(js, "%s() data must be a Buffer, TypedArray, DataView, or string", fn_name);
 
   out->data = (const char *)bytes;
-  
   return js_mkundef();
 }
 
@@ -1801,9 +1810,8 @@ static ant_value_t builtin_fs_filehandle_write(ant_params_t) {
     if (!write_data) return fs_rejected_promise(js, js_mkerr(js, "Failed to get string"));
     if (nargs >= 2 && vtype(args[1]) == kTypeNumber) position = (int64_t)js_getnum(args[1]);
   } else {
-    TypedArrayData *ta_data = buffer_get_typedarray_data(args[0]);
     uint8_t *buf_data; size_t buf_len;
-    if (!Ant_Buffer_GetViewBytes(ta_data, &buf_data, &buf_len))
+    if (!fs_view_bytes(args[0], &buf_data, &buf_len))
       return fs_rejected_promise(js, js_mkerr(js, "FileHandle.write() data must be a Buffer, TypedArray, DataView, or string"));
       
     size_t offset = 0;
@@ -1858,9 +1866,8 @@ static ant_value_t builtin_fs_filehandle_writeFile(ant_params_t) {
     data = js_getstr(js, args[0], &len);
     if (!data) return fs_rejected_promise(js, js_mkerr(js, "Failed to get string"));
   } else {
-    TypedArrayData *ta_data = buffer_get_typedarray_data(args[0]);
     uint8_t *bytes;
-    if (!Ant_Buffer_GetViewBytes(ta_data, &bytes, &len))
+    if (!fs_view_bytes(args[0], &bytes, &len))
       return fs_rejected_promise(js, js_mkerr(js, "FileHandle.writeFile() data must be a Buffer, TypedArray, DataView, or string"));
     data = (const char *)bytes;
   }
@@ -1967,6 +1974,8 @@ static void complete_request(fs_request_t *req) {
       if (is_undefined(reject_value)) reject_value = js_mkstr(fs_req_isolate(req), err_msg, strlen(err_msg));
     }
     js_reject_promise(fs_req_isolate(req), req->promise, reject_value);
+  } else if (abort_signal_is_aborted(req->signal)) {
+    js_reject_promise(fs_req_isolate(req), req->promise, abort_signal_make_error(fs_req_isolate(req), req->signal));
   } else {
     ant_value_t result = js_mkundef();
     if (req->op_type == FS_OP_READ && req->data) {
@@ -2537,11 +2546,14 @@ static ant_value_t builtin_fs_readFile(ant_params_t) {
   char *path = js_getstr(js, path_val, &path_len);
   if (!path) return js_mkerr(js, "Failed to get path string");
   
+  ant_value_t signal = nargs > 1 && is_object_type(args[1]) ? js_get(js, args[1], "signal") : js_mkundef();
+  if (abort_signal_is_aborted(signal)) return fs_rejected_promise(js, abort_signal_make_error(js, signal));
   
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
   
   req->uv_req.loop = js->loop;
+  req->signal = signal;
   req->op_type = FS_OP_READ;
   req->encoding = (nargs > 1) ? parse_encoding(js, args[1]) : FS_ENC_NONE;
   req->promise = js_mkpromise(js);
@@ -5192,9 +5204,8 @@ static ant_value_t builtin_fs_writeSync(ant_params_t) {
     return js_mknum((double)result);
   }
   
-  TypedArrayData *ta_data = buffer_get_typedarray_data(args[1]);
   uint8_t *buf_data; size_t buf_len;
-  if (!Ant_Buffer_GetViewBytes(ta_data, &buf_data, &buf_len))
+  if (!fs_view_bytes(args[1], &buf_data, &buf_len))
     return js_mkerr(js, "writeSync() second argument must be a Buffer, TypedArray, DataView, or string");
   
   size_t offset = 0;
@@ -5250,9 +5261,8 @@ static ant_value_t builtin_fs_write_fd(ant_params_t) {
     write_data = str;
     write_len = str_len;
   } else {
-    TypedArrayData *ta_data = buffer_get_typedarray_data(args[1]);
     uint8_t *buf_data; size_t buf_len;
-    if (!Ant_Buffer_GetViewBytes(ta_data, &buf_data, &buf_len))
+    if (!fs_view_bytes(args[1], &buf_data, &buf_len))
       return js_mkerr(js, "write() second argument must be a Buffer, TypedArray, DataView, or string");
     
     size_t offset = 0;
@@ -5328,9 +5338,8 @@ static ant_value_t builtin_fs_writevSync(ant_params_t) {
   
   for (ant_offset_t i = 0; i < arr_len; i++) {
     ant_value_t item = js_arr_get(js, args[1], i);
-    TypedArrayData *ta = buffer_get_typedarray_data(item);
     uint8_t *bytes; size_t len;
-    if (!Ant_Buffer_GetViewBytes(ta, &bytes, &len)) {
+    if (!fs_view_bytes(item, &bytes, &len)) {
       free(bufs);
       return js_mkerr(js, "writevSync() buffers must contain ArrayBufferViews");
     }
@@ -5365,17 +5374,16 @@ static ant_value_t builtin_fs_writev_fd(ant_params_t) {
   
   size_t total_len = 0;
   for (ant_offset_t i = 0; i < arr_len; i++) {
-    ant_value_t item = js_arr_get(js, args[1], i);
-    TypedArrayData *ta = buffer_get_typedarray_data(item);
-    if (!Ant_Buffer_ViewIsLive(ta))
+    uint8_t *bytes; size_t len;
+    if (!fs_view_bytes(js_arr_get(js, args[1], i), &bytes, &len))
       return js_mkerr(js, "writev() buffers must contain ArrayBufferViews");
-    total_len += ta->byte_length;
+    total_len += len;
   }
   
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
   
-  req->data = malloc(total_len);
+  req->data = malloc(total_len ? total_len : 1);
   if (!req->data) {
     free(req);
     return js_mkerr(js, "Out of memory");
@@ -5383,10 +5391,10 @@ static ant_value_t builtin_fs_writev_fd(ant_params_t) {
   
   size_t off = 0;
   for (ant_offset_t i = 0; i < arr_len; i++) {
-    ant_value_t item = js_arr_get(js, args[1], i);
-    TypedArrayData *ta = buffer_get_typedarray_data(item);
-    memcpy(req->data + off, ta->buffer->data + ta->byte_offset, ta->byte_length);
-    off += ta->byte_length;
+    uint8_t *bytes; size_t len;
+    fs_view_bytes(js_arr_get(js, args[1], i), &bytes, &len);
+    if (len) memcpy(req->data + off, bytes, len);
+    off += len;
   }
   
   req->uv_req.loop = js->loop;
@@ -6919,6 +6927,7 @@ void gc_mark_fs(ant_t *js, gc_mark_fn mark) {
     if (is_object_type((*reqp)->target_buffer)) mark(js, (*reqp)->target_buffer);
     if (is_object_type((*reqp)->owner))         mark(js, (*reqp)->owner);
     if (is_callable((*reqp)->callback_fn))      mark(js, (*reqp)->callback_fn);
+    if (is_object_type((*reqp)->signal))        mark(js, (*reqp)->signal);
   }}
 
   for (watcher = active_watchers; watcher; watcher = watcher->next_active) {

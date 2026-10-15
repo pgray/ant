@@ -62,6 +62,15 @@ static inline TypedArrayData *typedarray_live(ant_value_t value) {
   return Ant_Buffer_ViewIsLive(ta) ? ta : NULL;
 }
 
+static __attribute__((noinline, cold)) ant_value_t buffer_arg_type_error(
+  ant_t *js, const char *name, const char *expected, ant_value_t received
+) {
+  char got[160], message[320];
+  js_describe_received(js, received, got, sizeof(got));
+  snprintf(message, sizeof(message), "The \"%s\" argument must be %s. %s", name, expected, got);
+  return js_mkerr_code(js, JS_ERR_TYPE, "ERR_INVALID_ARG_TYPE", message);
+}
+
 static __attribute__((noinline, cold)) ant_value_t typedarray_this_error(ant_t *js, ant_value_t value) {
   return buffer_get_typedarray_data(value)
     ? js_mkerr_typed(js, JS_ERR_TYPE, "Cannot perform this operation on a detached ArrayBuffer")
@@ -2136,18 +2145,67 @@ static ant_value_t js_uint8array_fromHex(ant_params_t) {
   return result;
 }
 
-static ant_value_t js_uint8array_fromBase64(ant_params_t) {
-  ant_value_t source = nargs > 0 ? js_tostring_val(js, args[0]) : js_mkstr(js, "", 0);
-  if (is_err(source)) return source;
-
+static bool base64_option_is(ant_t *js, ant_value_t value, const char *name) {
   size_t len = 0;
-  char *str = js_getstr(js, source, &len);
-  
-  size_t decoded_len = 0;
-  uint8_t *decoded = ant_base64_decode(str, len, &decoded_len);
-  if (!decoded) return js_mkerr_typed(js, JS_ERR_SYNTAX, "Invalid base64 string");
+  const char *str = vtype(value) == kTypeString ? js_getstr(js, value, &len) : NULL;
+  return str && len == strlen(name) && memcmp(str, name, len) == 0;
+}
 
-  ant_value_t result = uint8array_from_bytes(js, decoded, decoded_len);
+static ant_value_t base64_options(
+  ant_t *js, ant_value_t options, bool *url, 
+  ant_base64_last_chunk_t *last_chunk, bool *omit_padding
+) {
+  *url = false;
+  
+  if (last_chunk) *last_chunk = ANT_BASE64_LOOSE;
+  if (omit_padding) *omit_padding = false;
+  
+  if (vtype(options) == kTypeUndefined) return js_mkundef();
+  if (!is_object_type(options)) return js_mkerr_typed(js, JS_ERR_TYPE, "options must be an object");
+
+  ant_value_t alphabet = js_get(js, options, "alphabet");
+  if (base64_option_is(js, alphabet, "base64url")) *url = true;
+  else if (vtype(alphabet) != kTypeUndefined && !base64_option_is(js, alphabet, "base64"))
+    return js_mkerr_typed(js, JS_ERR_TYPE, "alphabet must be \"base64\" or \"base64url\"");
+
+  if (last_chunk) {
+    ant_value_t handling = js_get(js, options, "lastChunkHandling");
+    if (base64_option_is(js, handling, "strict")) *last_chunk = ANT_BASE64_STRICT;
+    else if (base64_option_is(js, handling, "stop-before-partial")) *last_chunk = ANT_BASE64_STOP_BEFORE_PARTIAL;
+    else if (vtype(handling) != kTypeUndefined && !base64_option_is(js, handling, "loose"))
+      return js_mkerr_typed(js, JS_ERR_TYPE, "lastChunkHandling must be \"loose\", \"strict\", or \"stop-before-partial\"");
+  }
+
+  if (omit_padding) *omit_padding = js_truthy(js, js_get(js, options, "omitPadding"));
+  return js_mkundef();
+}
+
+static ant_value_t base64_source_arg(ant_t *js, ant_value_t *args, int nargs, const char **str, size_t *len) {
+  if (nargs < 1 || vtype(args[0]) != kTypeString) return js_mkerr_typed(js, JS_ERR_TYPE, "input argument must be a string");
+  *str = js_getstr(js, args[0], len);
+  return js_mkundef();
+}
+
+static ant_value_t js_uint8array_fromBase64(ant_params_t) {
+  const char *str; size_t len;
+  ant_value_t checked = base64_source_arg(js, args, nargs, &str, &len);
+  if (is_err(checked)) return checked;
+
+  bool url; ant_base64_last_chunk_t last_chunk;
+  checked = base64_options(js, nargs > 1 ? args[1] : js_mkundef(), &url, &last_chunk, NULL);
+  if (is_err(checked)) return checked;
+
+  size_t cap = (len / 4) * 3 + 3, read = 0, written = 0;
+  uint8_t *decoded = malloc(cap);
+  if (!decoded) return js_mkerr(js, "Failed to allocate buffer");
+
+  const char *error = NULL;
+  if (!ant_base64_decode_into(str, len, url, last_chunk, decoded, cap, &read, &written, &error)) {
+    free(decoded);
+    return js_mkerr_typed(js, JS_ERR_SYNTAX, "%s", error);
+  }
+
+  ant_value_t result = uint8array_from_bytes(js, decoded, written);
   free(decoded);
   
   return result;
@@ -2184,13 +2242,22 @@ static ant_value_t js_uint8array_toBase64(ant_params_t) {
   if (!Ant_Buffer_GetViewBytes(ta_data, &data, &len))
     return js_mkerr(js, "Cannot read from detached Uint8Array");
 
+  bool url, omit_padding;
+  ant_value_t checked = base64_options(js, nargs > 0 ? args[0] : js_mkundef(), &url, NULL, &omit_padding);
+  if (is_err(checked)) return checked;
+
   size_t out_len = 0;
   char *encoded = ant_base64_encode(data, len, &out_len);
-  
   if (!encoded) return js_mkerr(js, "Failed to encode base64");
+
+  if (url) for (size_t i = 0; i < out_len; i++) {
+    if (encoded[i] == '+') encoded[i] = '-';
+    else if (encoded[i] == '/') encoded[i] = '_';
+  }
+  if (omit_padding) while (out_len > 0 && encoded[out_len - 1] == '=') out_len--;
+
   ant_value_t result = js_mkstr(js, encoded, out_len);
   free(encoded);
-  
   return result;
 }
 
@@ -2235,20 +2302,26 @@ static ant_value_t js_uint8array_setFromHex(ant_params_t) {
 }
 
 static ant_value_t js_uint8array_setFromBase64(ant_params_t) {
-  ant_value_t source = nargs > 0 ? js_tostring_val(js, args[0]) : js_mkstr(js, "", 0);
-  if (is_err(source)) return source;
+  TypedArrayData *ta_data = buffer_get_typedarray_data(js_getthis(js));
+  if (!ta_data || ta_data->type != TYPED_ARRAY_UINT8)
+    return js_mkerr(js, "Uint8Array setFrom called on incompatible receiver");
 
-  size_t len = 0;
-  char *str = js_getstr(js, source, &len);
-  size_t decoded_len = 0;
-  
-  uint8_t *decoded = ant_base64_decode(str, len, &decoded_len);
-  if (!decoded) return js_mkerr_typed(js, JS_ERR_SYNTAX, "Invalid base64 string");
+  const char *str; size_t len;
+  ant_value_t checked = base64_source_arg(js, args, nargs, &str, &len);
+  if (is_err(checked)) return checked;
 
-  ant_value_t result = uint8array_set_bytes(js, decoded, decoded_len, len);
-  free(decoded);
-  
-  return result;
+  bool url; ant_base64_last_chunk_t last_chunk;
+  checked = base64_options(js, nargs > 1 ? args[1] : js_mkundef(), &url, &last_chunk, NULL);
+  if (is_err(checked)) return checked;
+
+  uint8_t *data; size_t cap;
+  if (!Ant_Buffer_GetViewBytes(ta_data, &data, &cap)) return js_mkerr(js, "Cannot write to detached Uint8Array");
+
+  size_t read = 0, written = 0;
+  const char *error = NULL;
+  if (!ant_base64_decode_into(str, len, url, last_chunk, data, cap, &read, &written, &error))
+    return js_mkerr_typed(js, JS_ERR_SYNTAX, "%s", error);
+  return uint8array_set_result(js, read, written);
 }
 
 typedef enum {
@@ -3445,13 +3518,6 @@ static __attribute__((noinline, cold)) ant_value_t buffer_out_of_range(ant_t *js
   return js_mkerr_code(js, JS_ERR_RANGE, "ERR_OUT_OF_RANGE", message);
 }
 
-static __attribute__((noinline, cold)) ant_value_t buffer_arg_type_error(ant_t *js, const char *name, ant_value_t received) {
-  char got[160], message[256];
-  js_describe_received(js, received, got, sizeof(got));
-  snprintf(message, sizeof(message), "The \"%s\" argument must be of type number. %s", name, got);
-  return js_mkerr_code(js, JS_ERR_TYPE, "ERR_INVALID_ARG_TYPE", message);
-}
-
 static __attribute__((noinline, cold)) ant_value_t buffer_bounds_error(ant_t *js, ant_value_t offset, double max) {
   double n = js_getnum(offset);
   if (floor(n) != n) return buffer_out_of_range(js, "offset", "an integer", offset);
@@ -3465,7 +3531,7 @@ static __attribute__((noinline, cold)) ant_value_t buffer_bounds_error(ant_t *js
 
 static ant_value_t buffer_access_ptr(ant_t *js, ant_value_t offset_value, size_t width, uint8_t **ptr, size_t *offset) {
   if (vtype(offset_value) == kTypeUndefined) offset_value = js_mknum(0);
-  if (vtype(offset_value) != kTypeNumber) return buffer_arg_type_error(js, "offset", offset_value);
+  if (vtype(offset_value) != kTypeNumber) return buffer_arg_type_error(js, "offset", "of type number", offset_value);
   
   ant_value_t receiver = js_getthis(js);
   TypedArrayData *ta = buffer_get_typedarray_data(receiver);
@@ -3531,7 +3597,7 @@ typedef enum {
 } buffer_num_endian_t;
 
 static ant_value_t buffer_num_width(ant_t *js, ant_value_t value, size_t *width) {
-  if (vtype(value) != kTypeNumber) return buffer_arg_type_error(js, "byteLength", value);
+  if (vtype(value) != kTypeNumber) return buffer_arg_type_error(js, "byteLength", "of type number", value);
   double n = js_getnum(value);
   if (floor(n) != n) return buffer_out_of_range(js, "byteLength", "an integer", value);
   if (n < 1 || n > 6) return buffer_out_of_range(js, "byteLength", ">= 1 and <= 6", value);
@@ -3852,54 +3918,44 @@ static ant_value_t js_buffer_byteLength(ant_params_t) {
 
 // Buffer.concat(list, totalLength)
 static ant_value_t js_buffer_concat(ant_params_t) {
-  if (nargs < 1 || !is_special_object(args[0])) {
-    return js_mkerr(js, "First argument must be an array");
-  }
-  
-  ant_value_t list = args[0];
-  ant_value_t len_val = js_get(js, list, "length");
-  if (vtype(len_val) != kTypeNumber) {
-    return js_mkerr(js, "First argument must be an array");
-  }
-  
-  size_t list_len = (size_t)js_getnum(len_val);
+  ant_value_t list = nargs > 0 ? args[0] : js_mkundef();
+  if (vtype(list) != kTypeArray) return buffer_arg_type_error(js, "list", "an instance of Array", list);
+
+  ant_offset_t count = js_arr_len(js, list);
   size_t total_length = 0;
   
-  if (nargs > 1 && vtype(args[1]) == kTypeNumber) {
-    total_length = (size_t)js_getnum(args[1]);
-  } else {
-    for (size_t i = 0; i < list_len; i++) {
-      char idx[16];
-      snprintf(idx, sizeof(idx), "%zu", i);
-      ant_value_t buf = js_get(js, list, idx);
-      ant_value_t buf_len = js_get(js, buf, "length");
-      if (vtype(buf_len) == kTypeNumber) total_length += (size_t)js_getnum(buf_len);
+  for (ant_offset_t i = 0; i < count; i++) {
+    ant_value_t item = js_arr_get(js, list, i);
+    TypedArrayData *ta = buffer_get_typedarray_data(item);
+    
+    if (!ta || ta->type != TYPED_ARRAY_UINT8) {
+      char name[32];
+      snprintf(name, sizeof(name), "list[%u]", (unsigned)i);
+      return buffer_arg_type_error(js, name, "an instance of Buffer or Uint8Array", item);
     }
+    
+    if (Ant_Buffer_ViewIsLive(ta)) total_length += ta->byte_length;
   }
-  
+
+  if (nargs > 1 && vtype(args[1]) == kTypeNumber) total_length = (size_t)js_getnum(args[1]);
   ArrayBufferData *buffer = create_array_buffer_data(js, total_length);
   if (!buffer) return js_mkerr(js, "Failed to allocate buffer");
-  
+
   size_t offset = 0;
-  for (size_t i = 0; i < list_len && offset < total_length; i++) {
-    char idx[16];
-    snprintf(idx, sizeof(idx), "%zu", i);
-    ant_value_t buf = js_get(js, list, idx);
+  for (ant_offset_t i = 0; i < count; i++) {
+    uint8_t *bytes;
+    size_t len;
     
-    TypedArrayData *ta = buffer_get_typedarray_data(buf);
-    if (!ta) continue;
-    
-    uint8_t *bytes; size_t copy_len;
-    if (!Ant_Buffer_GetViewBytes(ta, &bytes, &copy_len)) {
+    if (!Ant_Buffer_GetViewBytes(buffer_get_typedarray_data(js_arr_get(js, list, i)), &bytes, &len)) {
       free_array_buffer_data(js, buffer);
-      return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot concatenate a detached Buffer");
+      return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot perform %%TypedArray%%.prototype.set on a detached or out-of-bounds ArrayBuffer");
     }
     
-    if (offset + copy_len > total_length) copy_len = total_length - offset;
-    memcpy(buffer->data + offset, bytes, copy_len);
-    offset += copy_len;
+    if (len > total_length - offset) len = total_length - offset;
+    memcpy(buffer->data + offset, bytes, len);
+    offset += len;
   }
-  
+
   return create_typed_array(js, TYPED_ARRAY_UINT8, buffer, 0, total_length, js->builtins.buffer_proto);
 }
 

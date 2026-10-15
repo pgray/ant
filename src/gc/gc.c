@@ -327,9 +327,13 @@ void gc_run(ant_t *js) {
   js->gc.pool_last_live = gc_pool_live_bytes(js);
   js->gc.pool_alloc = 0;
   js->gc.offheap_alloc = 0;
+  
+  ant_shape_index_layout_trim(&js->index_layout_shape);
+  
   js->gc.offheap_last_live = gc_offheap_live(js);
   js->gc.code_alloc = 0;
   js->rope_gc.young_alloc = 0;
+  
   js->gc.closure_alloc = 0;
   js->gc.closure_at_minor = 0;
   js->gc.closure_wm_at_major = js->closure_arena.watermark;

@@ -31,23 +31,13 @@ ant_value_t brotli_stream_transform(
   ant_value_t ctrl_obj, const uint8_t *input, size_t input_len
 );
 
-ant_value_t brotli_stream_flush(
-  ant_t *js, brotli_stream_state_t *st,
-  ant_value_t ctrl_obj
-);
-
 int brotli_stream_process(
-  brotli_stream_state_t *st,
-  const uint8_t *input,
-  size_t input_len,
-  brotli_stream_chunk_cb cb,
-  void *ctx
+  brotli_stream_state_t *st, const uint8_t *input,
+  size_t input_len, brotli_stream_chunk_cb cb, void *ctx
 );
 
-int brotli_stream_finish(
-  brotli_stream_state_t *st,
-  brotli_stream_chunk_cb cb,
-  void *ctx
-);
+int brotli_stream_finish(brotli_stream_state_t *st, brotli_stream_chunk_cb cb, void *ctx);
+int brotli_stream_decoder_error(brotli_stream_state_t *st, const char **name);
+ant_value_t brotli_stream_flush(ant_t *js, brotli_stream_state_t *st, ant_value_t ctrl_obj);
 
 #endif

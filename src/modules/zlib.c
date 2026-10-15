@@ -771,6 +771,39 @@ static ant_value_t zlib_too_large(ant_t *js, size_t limit) {
     "Cannot create a Buffer larger than %zu bytes", limit);
 }
 
+static const char *zlib_code_name(int code) {
+  switch (code) {
+    case Z_NEED_DICT: return "Z_NEED_DICT";
+    case Z_ERRNO: return "Z_ERRNO";
+    case Z_STREAM_ERROR: return "Z_STREAM_ERROR";
+    case Z_DATA_ERROR: return "Z_DATA_ERROR";
+    case Z_MEM_ERROR: return "Z_MEM_ERROR";
+    case Z_BUF_ERROR: return "Z_BUF_ERROR";
+    case Z_VERSION_ERROR: return "Z_VERSION_ERROR";
+    default: return "Z_UNKNOWN";
+  }
+}
+
+static ant_value_t zlib_error(ant_t *js, const char *message, const char *code, int errnum) {
+  ant_value_t props = js_mkobj(js);
+  js_set(js, props, "code", js_mkstr(js, code, strlen(code)));
+  js_set(js, props, "errno", js_mknum((double)errnum));
+  return js_mkerr_props(js, JS_ERR_GENERIC, props, "%s", message);
+}
+
+static ant_value_t zlib_stream_error(ant_t *js, int ret, const z_stream *strm) {
+  if (ret == Z_BUF_ERROR) return zlib_error(js, "unexpected end of file", "Z_BUF_ERROR", Z_BUF_ERROR);
+  if (ret == Z_NEED_DICT) return zlib_error(js, "Missing dictionary", "Z_NEED_DICT", Z_NEED_DICT);
+  return zlib_error(js, strm->msg ? strm->msg : "zlib error", zlib_code_name(ret), ret);
+}
+
+static ant_value_t zlib_brotli_error(ant_t *js, int code, const char *name) {
+  if (code >= 0) return zlib_error(js, "unexpected end of file", "Z_BUF_ERROR", Z_BUF_ERROR);
+  char code_name[96];
+  snprintf(code_name, sizeof(code_name), "ERR_%s", name ? name : "BROTLI");
+  return zlib_error(js, "Decompression failed", code_name, code);
+}
+
 static ant_value_t zlib_sync_op(
   ant_t *js, zlib_kind_t kind,
   const uint8_t *input, size_t input_len,
@@ -799,13 +832,20 @@ static ant_value_t zlib_sync_op(
     int rc = brotli_stream_process(bs, input, input_len, zbuf_brotli_cb, &out);
     if (rc >= 0) rc = brotli_stream_finish(bs, zbuf_brotli_cb, &out);
     
+    const char *error_name = NULL;
+    int error_code = brotli_stream_decoder_error(bs, &error_name);
     brotli_stream_state_destroy(bs);
+    
     if (rc < 0 || out.error || out.overflow) {
-      int over = out.overflow;
+      int over = out.overflow, failed = out.error;
       free(tmp); free(out.data);
+      
       if (over) return zlib_too_large(js, opts.max_output_length);
-      return js_mkerr(js, "brotli operation failed");
+      if (failed || kind == ZLIB_KIND_BROTLI_COMPRESS) return js_mkerr(js, "brotli operation failed");
+      
+      return zlib_brotli_error(js, error_code, error_name);
     }
+    
     ant_value_t buf = zlib_make_buffer(js, out.data, out.len);
     free(tmp);
     free(out.data);
@@ -853,11 +893,12 @@ static ant_value_t zlib_sync_op(
       }
     }
     if (ret == Z_STREAM_ERROR || ret == Z_DATA_ERROR || ret == Z_MEM_ERROR || ret == Z_NEED_DICT) {
+      ant_value_t err = zlib_stream_error(js, ret, &strm);
       if (compress) deflateEnd(&strm);
       else inflateEnd(&strm);
       free(tmp);
       free(out.data);
-      return js_mkerr(js, "zlib operation failed");
+      return err;
     }
     size_t have = (size_t)opts.chunk_size - strm.avail_out;
     if (have > 0 && zbuf_append(&out, tmp, have) < 0) {
@@ -875,26 +916,40 @@ static ant_value_t zlib_sync_op(
   if (compress) deflateEnd(&strm);
   else inflateEnd(&strm);
 
+  if (!compress && ret != Z_STREAM_END && opts.finish_flush == Z_FINISH) {
+    free(tmp);
+    free(out.data);
+    return zlib_stream_error(js, Z_BUF_ERROR, &strm);
+  }
+
   ant_value_t buf = zlib_make_buffer(js, out.data, out.len);
   free(tmp);
   free(out.data);
   return buf;
 }
 
-static bool get_input_bytes(ant_t *js, ant_value_t val, const uint8_t **out_bytes, size_t *out_len) {
-  if (is_object_type(val) && buffer_source_get_bytes(js, val, out_bytes, out_len)) return true;
+static ant_value_t get_input_bytes(ant_t *js, ant_value_t val, const uint8_t **out_bytes, size_t *out_len) {
+  ArrayBufferData *ab = buffer_get_arraybuffer_data(val);
+  
+  if (ab && ab->is_detached) return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot perform Construct on a detached ArrayBuffer");
+  if (is_object_type(val) && buffer_source_get_bytes(js, val, out_bytes, out_len)) return js_mkundef();
+  
   size_t slen = 0;
   char *s = js_getstr(js, val, &slen);
-  if (s) { *out_bytes = (const uint8_t *)s; *out_len = slen; return true; }
-  return false;
+  if (!s) return js_mkerr_typed(js, JS_ERR_TYPE, "argument must be a string or Buffer");
+  
+  *out_bytes = (const uint8_t *)s;
+  *out_len = slen;
+  
+  return js_mkundef();
 }
 
 static ant_value_t zlib_sync_fn(ant_native_params_t, zlib_kind_t kind) {
   if (nargs < 1) return js_mkerr(js, "argument required");
   const uint8_t *bytes = NULL;
   size_t len = 0;
-  if (!get_input_bytes(js, args[0], &bytes, &len))
-    return js_mkerr_typed(js, JS_ERR_TYPE, "argument must be a string or Buffer");
+  ant_value_t input = get_input_bytes(js, args[0], &bytes, &len);
+  if (is_err(input)) return input;
   return zlib_sync_op(js, kind, bytes, len, nargs > 1 ? args[1] : js_mkundef());
 }
 
@@ -905,8 +960,8 @@ static ant_value_t zlib_async_fn(ant_native_params_t, zlib_kind_t kind) {
   size_t len = 0;
   ant_value_t cb = pick_callback(args, nargs);
 
-  if (!get_input_bytes(js, args[0], &bytes, &len))
-    return js_mkerr_typed(js, JS_ERR_TYPE, "argument must be a string or Buffer");
+  ant_value_t input = get_input_bytes(js, args[0], &bytes, &len);
+  if (is_err(input)) return input;
 
   ant_value_t opts = (nargs > 1 && is_object_type(args[1])) ? args[1] : js_mkundef();
   ant_value_t result = zlib_sync_op(js, kind, bytes, len, opts);
@@ -962,8 +1017,8 @@ static ant_value_t js_zlib_crc32(ant_params_t) {
   if (nargs >= 2 && vtype(args[1]) == kTypeNumber)
     init_val = (uLong)js_getnum(args[1]);
 
-  if (!get_input_bytes(js, args[0], &bytes, &len))
-    return js_mkerr_typed(js, JS_ERR_TYPE, "argument must be a string or Buffer");
+  ant_value_t input = get_input_bytes(js, args[0], &bytes, &len);
+  if (is_err(input)) return input;
 
   uLong crc = crc32(init_val, bytes, (uInt)len);
   return js_mknum((double)(uint32_t)crc);

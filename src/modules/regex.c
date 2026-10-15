@@ -1660,6 +1660,52 @@ static bool regexp_has_internal_slots(ant_t *js, ant_value_t value) {
   return obj && obj->flags.regexp_brand;
 }
 
+static ant_value_t regexp_escape_source(ant_t *js, ant_value_t pattern) {
+  size_t len = 0;
+  const char *src = js_getstr(js, pattern, &len);
+  if (!src) return pattern;
+  if (len == 0) return ANT_STRING("(?:)");
+
+  bool needs_escape = false;
+  for (size_t i = 0; i < len && !needs_escape; i++) {
+    unsigned char c = (unsigned char)src[i];
+    needs_escape = c == '/' || c == '\n' || c == '\r' || c == 0xe2;
+  }
+  if (!needs_escape) return pattern;
+
+  char *out = malloc(len * 2);
+  if (!out) return js_mkerr(js, "out of memory");
+  size_t n = 0;
+  bool in_class = false;
+
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)src[i];
+    if (c == '\\' && i + 1 < len) {
+      out[n++] = src[i++];
+      out[n++] = src[i];
+    } else if (c == '/' && !in_class) {
+      out[n++] = '\\';
+      out[n++] = '/';
+    } else if (c == '\n' || c == '\r') {
+      out[n++] = '\\';
+      out[n++] = c == '\n' ? 'n' : 'r';
+    } else if (c == 0xe2 && i + 2 < len && (unsigned char)src[i + 1] == 0x80 &&
+               ((unsigned char)src[i + 2] == 0xa8 || (unsigned char)src[i + 2] == 0xa9)) {
+      memcpy(out + n, (unsigned char)src[i + 2] == 0xa8 ? "\\u2028" : "\\u2029", 6);
+      n += 6;
+      i += 2;
+    } else {
+      if (c == '[') in_class = true;
+      else if (c == ']') in_class = false;
+      out[n++] = (char)c;
+    }
+  }
+
+  ant_value_t escaped = js_mkstr(js, out, n);
+  free(out);
+  return escaped;
+}
+
 static ant_value_t builtin_RegExp(ant_params_t) {
   bool pattern_is_regexp = false;
   if (nargs > 0) {
@@ -1721,7 +1767,10 @@ static ant_value_t builtin_RegExp(ant_params_t) {
     }
   }
 
-  defhidden(js, regexp_obj, "source", 6, pattern);
+  ant_value_t source = regexp_escape_source(js, pattern);
+  if (is_err(source)) return source;
+  
+  defhidden(js, regexp_obj, "source", 6, source);
   js_set_slot(regexp_obj, SLOT_DATA, pattern);
   regexp_init_flags(js, regexp_obj, flags, true);
 
@@ -2432,10 +2481,13 @@ static ant_value_t builtin_regexp_compile(ant_params_t) {
     if (is_err(flags)) return flags;
   }
 
-  js_setprop(js, rx, js_mkstr(js, "source", 6), pattern);
+  ant_value_t source = regexp_escape_source(js, pattern);
+  if (is_err(source)) return source;
+  
+  js_setprop(js, rx, js_mkstr(js, "source", 6), source);
   js_set_slot(rx, SLOT_DATA, pattern);
+  
   regexp_init_flags(js, rx, flags, false);
-
   regexp_object_compiled_detach(js, rx);
 
   return rx;
@@ -4440,7 +4492,6 @@ void init_regex_module(ant_t *js) {
   
   js_set_sym(js, regexp_proto, js->sym.replace_sym, Ant_Function_CreateWithArity(builtin_regexp_symbol_replace, 2));
   js_set_sym(js, regexp_proto, js->sym.search_sym, Ant_Function_CreateWithArity(builtin_regexp_symbol_search, 1));
-  js_set_tostringtag(js, regexp_proto, js_mkstr(js, "RegExp", 6));
   js_set_getter_desc(js, regexp_proto, "flags", 5, Ant_Function_Create(builtin_regexp_flags_getter), JS_DESC_C);
   defmethod(js, regexp_proto, "compile", 7, Ant_Function_CreateWithArity(builtin_regexp_compile, 2));
 

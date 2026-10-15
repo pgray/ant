@@ -73,6 +73,7 @@ struct ant_isolate_t {
   ant_event_list_t *global_events;
   ant_regex_state_t *regex_state;
   json_layout_cache_t *json_layout_cache;
+  ant_shape_t *index_layout_shape;
   server_runtime_t *server_runtimes;
   abort_timeout_entry_t *abort_timeouts;
   eventsource_state_t *active_eventsources;
@@ -178,6 +179,7 @@ struct ant_isolate_t {
     ant_value_t stack[MAX_STRINGIFY_DEPTH];
     int depth;
     int indent;
+    int max_depth;
 
     ant_value_t multiref_objs[MAX_MULTIREF_OBJS];
     int multiref_ids[MAX_MULTIREF_OBJS];

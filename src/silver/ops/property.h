@@ -81,6 +81,12 @@ static inline ant_object_t *sv_array_obj_ptr(ant_value_t obj) {
   return (ptr && ptr->type_tag == kTypeArray) ? ptr : NULL;
 }
 
+static inline bool sv_array_proto_owns_key(const ant_object_t *ptr, const char *interned) {
+  if (ptr->type_tag != kTypeArray) return false;
+  char c = interned[0];
+  return (c >= '0' && c <= '9') || (c == 'l' && strcmp(interned, "length") == 0);
+}
+
 static inline bool sv_try_get_shape_data_prop(
   ant_t *js,
   ant_object_t *ptr,
@@ -498,6 +504,7 @@ static inline __attribute__((always_inline)) bool sv_ic_probe_get_chain(
   while (is_object_type(cur)) {
     ant_object_t *ptr = js_obj_ptr(js_as_obj(cur));
     if (!ptr || (ptr->flags.is_exotic && !(admit_receiver && cur == obj))) return false;
+    if (cur != obj && sv_array_proto_owns_key(ptr, interned)) return false;
     cache_miss = cache_miss && vtype(cur) == kTypeObject && ptr->type_tag == kTypeObject;
     
     if (!ptr->shape) {
@@ -844,6 +851,7 @@ static inline ant_value_t sv_prop_get_at(
     sv_proto_guard_init(&guard);
     while (is_object_type(cur)) {
       ant_object_t *ptr = js_obj_ptr(js_as_obj(cur));
+      if (cur != obj && ptr && sv_array_proto_owns_key(ptr, interned)) break;
       bool should_fallback = false;
       ant_value_t fast_out = js_mkundef();
       if (sv_try_get_shape_data_prop(js, ptr, interned, &fast_out, &should_fallback))

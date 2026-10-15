@@ -60,6 +60,8 @@ export function targets() {
     'test_reflect_builtin_targets.cjs',
     'test_receiver_edges.cjs',
     'test_detached_views.cjs',
+    'test_array_proto_abort_regexp.mjs',
+    'test_object_spread_large_arrays.cjs',
     'test_event_prototype_getters.cjs',
     'test_eventsource_handlers.cjs',
     'test_eventtarget_listener_errors.cjs',

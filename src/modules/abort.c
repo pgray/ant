@@ -30,7 +30,6 @@ typedef struct {
 struct abort_timeout_entry {
   uv_timer_t handle;
   ant_value_t signal;
-  int closed;
   abort_timeout_entry_t *next;
   abort_timeout_entry_t **pprev;
 };
@@ -223,13 +222,12 @@ static void abort_timeout_close_cb(uv_handle_t *h) {
   if (!entry) return;
 
   Ant_List_Remove(entry);
-  entry->closed = 1;
   free(entry);
 }
 
 static void abort_timeout_fire_cb(uv_timer_t *handle) {
   abort_timeout_entry_t *entry = (abort_timeout_entry_t *)handle->data;
-  if (!entry || entry->closed) return;
+  if (!entry || uv_is_closing((uv_handle_t *)handle)) return;
 
   ant_t *js = Ant_Loop_Isolate(handle->loop);
   signal_do_abort(js, entry->signal, make_timeout_error(js));
@@ -253,8 +251,6 @@ static ant_value_t abort_signal_static_timeout(ant_params_t) {
   if (!entry) return js_mkerr(js, "AbortSignal.timeout: out of memory");
 
   entry->signal = signal;
-  entry->closed = 0;
-  
   Ant_List_Insert(&js->abort_timeouts, entry);
   uv_timer_init(js->loop, &entry->handle);
   
@@ -369,8 +365,7 @@ void cleanup_abort_module(ant_t *js) {
 }
 
 void gc_mark_abort(ant_t *js, gc_mark_fn mark) {
-  for (abort_timeout_entry_t *e = js->abort_timeouts; e; e = e->next)
-    if (!e->closed) mark(js, e->signal);
+  for (abort_timeout_entry_t *e = js->abort_timeouts; e; e = e->next) mark(js, e->signal);
 }
 
 void gc_mark_abort_signal_object(ant_t *js, ant_value_t signal, gc_mark_fn mark) {
@@ -395,6 +390,18 @@ bool abort_signal_is_signal(ant_value_t signal) {
 ant_value_t abort_signal_get_reason(ant_value_t signal) {
   abort_signal_data_t *data = get_signal_data(signal);
   return data ? data->reason : js_mkundef();
+}
+
+ant_value_t abort_signal_make_error(ant_t *js, ant_value_t signal) {
+  ant_value_t error = Ant_Error_Create(js, JS_ERR_GENERIC, "The operation was aborted");
+  if (!is_object_type(error)) return error;
+
+  js_set(js, error, "name", ANT_STRING("AbortError"));
+  js_set(js, error, "code", ANT_STRING("ABORT_ERR"));
+
+  ant_value_t reason = abort_signal_get_reason(signal);
+  if (vtype(reason) != kTypeUndefined) js_set(js, error, "cause", reason);
+  return error;
 }
 
 void abort_signal_add_listener(ant_t *js, ant_value_t signal, ant_value_t callback) {

@@ -162,7 +162,9 @@ async function readFrame(socket, initial = Buffer.alloc(0)) {
 
 function inflateMessage(payload) {
   return Buffer.from(
-    zlib.inflateRawSync(Buffer.concat([payload, Buffer.from([0x00, 0x00, 0xff, 0xff])]))
+    zlib.inflateRawSync(Buffer.concat([payload, Buffer.from([0x00, 0x00, 0xff, 0xff])]), {
+      finishFlush: zlib.constants.Z_SYNC_FLUSH,
+    })
   ).toString();
 }
 

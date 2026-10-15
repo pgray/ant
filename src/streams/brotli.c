@@ -219,6 +219,13 @@ int brotli_stream_finish(
   return brotli_encoder_step(st, NULL, 0, BROTLI_OPERATION_FINISH, cb, ctx);
 }
 
+int brotli_stream_decoder_error(brotli_stream_state_t *st, const char **name) {
+  if (!st || !st->decompress) return 0;
+  BrotliDecoderErrorCode code = BrotliDecoderGetErrorCode(st->u.dec);
+  if (name) *name = BrotliDecoderErrorString(code);
+  return (int)code;
+}
+
 typedef struct {
   ant_t *js;
   ant_value_t ctrl_obj;

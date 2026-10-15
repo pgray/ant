@@ -2,7 +2,9 @@
 #include "ant.h"
 #include "gc.h"
 #include "hash.h"
+#include "gc/strings.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdatomic.h>
@@ -698,6 +700,40 @@ ant_shape_t *ant_shape_clone_bulk(const ant_shape_t *shape, uint32_t extra) {
   ant_shape_t *copy = shape_clone_reserve(shape, extra);
   if (copy) copy->bulk_layout = true;
   return copy;
+}
+
+ant_shape_t *ant_shape_index_layout(ant_t *js, ant_shape_t **cache, const ant_shape_t *base, uint32_t count) {
+  if (count < SHAPE_TRANSITION_MAX_PROPS) return NULL;
+  
+  ant_shape_t *cached = *cache;
+  if (cached && cached->count == count && cached->inobj_limit == base->inobj_limit) return cached;
+
+  ant_shape_t *shape = ant_shape_clone_bulk(base, count);
+  if (!shape) return NULL;
+
+  for (uint32_t i = 0; i < count; i++) {
+    char key[16];
+    int len = snprintf(key, sizeof(key), "%u", i);
+    
+    const char *interned = intern_string(key, (size_t)len);
+    uint32_t slot = 0;
+    
+    if (!interned || !ant_shape_add_interned(js, shape, interned, ANT_PROP_ATTR_DEFAULT, &slot) || slot != i) {
+      ant_shape_release(shape);
+      return NULL;
+    }
+  }
+
+  if (cached) ant_shape_release(cached);
+  *cache = shape;
+  
+  return shape;
+}
+
+void ant_shape_index_layout_trim(ant_shape_t **cache) {
+  if (!*cache || ant_shape_is_shared(*cache)) return;
+  ant_shape_release(*cache);
+  *cache = NULL;
 }
 
 size_t ant_shape_storage_bytes(const ant_shape_t *shape) {
