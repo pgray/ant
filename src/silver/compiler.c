@@ -7331,6 +7331,7 @@ void compile_class(sv_compiler_t *c, sv_ast_t *node) {
 
     sv_func_t *fn = sv_func_new(c->js);
     fn->is_derived_ctor = node->left != NULL;
+    fn->is_class_ctor = true;
     sv_func_init_code_and_map_templates(&comp, fn);
     sv_func_init_obj_sites(&comp, fn);
     if (comp.const_count > 0) {
@@ -8026,6 +8027,7 @@ sv_func_t *compile_function_body(
   func->is_generator = !!(node->flags & FN_GENERATOR);
   func->is_method = !!(node->flags & FN_METHOD);
   func->is_derived_ctor = !!(node->flags & FN_DERIVED_CTOR);
+  func->is_class_ctor = !!(node->flags & FN_CLASS_CTOR);
   func->is_static = !!(node->flags & FN_STATIC);
   func->is_tla = comp.is_tla;
   func->debug->filename = enclosing->filename ? enclosing->filename : enclosing->js->filename;

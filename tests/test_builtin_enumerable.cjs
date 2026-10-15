@@ -58,6 +58,6 @@ assert.strictEqual(inspect(RegExp.prototype), '{}');
 assert.strictEqual(inspect(Map.prototype), 'Object [Map] {}');
 assert.strictEqual(inspect(JSON), 'Object [JSON] {}');
 assert.strictEqual(inspect(Math), 'Object [Math] {}');
-assert.strictEqual(inspect({ a: 1, [Symbol.toStringTag]: 'T' }), "{ a: 1, [Symbol(Symbol.toStringTag)]: 'T' }");
+assert.strictEqual(inspect({ a: 1, [Symbol.toStringTag]: 'T' }), "{ a: 1, Symbol(Symbol.toStringTag): 'T' }");
 
 console.log('builtin enumerable OK');

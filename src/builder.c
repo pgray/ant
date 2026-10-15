@@ -440,6 +440,11 @@ static bool js_inspect_error_key_in_stack(js_inspect_builder_t *builder, const c
   return text && js_inspect_contains(builder->error_stack, builder->error_stack_len, text, len);
 }
 
+static bool js_inspect_append_prop_key(js_inspect_builder_t *builder, const ant_shape_prop_t *prop, const char *key, size_t klen) {
+  if (prop->type != ANT_SHAPE_KEY_SYMBOL) return js_inspect_append_key_interned(builder, key, klen);
+  return js_inspect_append_tostr(builder, mkval(kTypeSymbol, prop->key.sym_off));
+}
+
 bool js_inspect_object_body(js_inspect_builder_t *builder, ant_value_t obj) {
   if (builder->closed) return true;
   js_inspect_begin_body(builder);
@@ -457,39 +462,35 @@ bool js_inspect_object_body(js_inspect_builder_t *builder, ant_value_t obj) {
     if ((ant_shape_get_attrs(ptr->shape, i) & ANT_PROP_ATTR_ENUMERABLE) == 0) continue;
     ant_value_t val = (i < ptr->prop_count) ? ant_object_prop_get_unchecked(ptr, i) : js_mkundef();
     
-    if (prop->type == ANT_SHAPE_KEY_SYMBOL) {
-      ant_offset_t sym_off = prop->key.sym_off;
-      if (ptr && ptr->flags.is_exotic) {
-        prop_meta_t meta;
-        if (lookup_symbol_prop_meta(js, as_obj, sym_off, &meta) && !meta.enumerable) continue;
-      }
-      
-      ant_value_t sym = mkval(kTypeSymbol, sym_off);
-      
-      if (!js_inspect_property_prefix(builder)) return false;
-      if (!js_inspect_append(builder, "[", 1)) return false;
-      if (!js_inspect_append_tostr(builder, sym)) return false;
-      if (!js_inspect_append(builder, "]: ", 3)) return false;
-      if (!js_inspect_append_tostr(builder, val)) return false;
-      continue;
-    }
-
-    const char *key = prop->key.interned;
-    ant_offset_t klen = (ant_offset_t)intern_length(key);
+    bool is_sym = prop->type == ANT_SHAPE_KEY_SYMBOL;
+    const char *key = is_sym ? NULL : prop->key.interned;
+    ant_offset_t klen = is_sym ? 0 : (ant_offset_t)intern_length(key);
+    
     if (ptr && ptr->flags.is_exotic) {
       prop_meta_t meta;
-      if (lookup_string_prop_meta(js, as_obj, key, (size_t)klen, &meta) && !meta.enumerable) continue;
+      bool found = is_sym
+        ? lookup_symbol_prop_meta(js, as_obj, prop->key.sym_off, &meta)
+        : lookup_string_prop_meta(js, as_obj, key, (size_t)klen, &meta);
+      if (found && !meta.enumerable) continue;
     }
 
     if (prop->has_getter || prop->has_setter) {
       if (!js_inspect_property_prefix(builder)) return false;
-      if (!js_inspect_append_key_interned(builder, key, (size_t)klen)) return false;
+      if (!js_inspect_append_prop_key(builder, prop, key, (size_t)klen)) return false;
       if (!js_inspect_append(builder, ": ", 2)) return false;
       if (prop->has_getter && prop->has_setter) {
         if (!js_inspect_append(builder, "[Getter/Setter]", 15)) return false;
       } else if (prop->has_getter) {
         if (!js_inspect_append(builder, "[Getter]", 8)) return false;
       } else if (!js_inspect_append(builder, "[Setter]", 8)) return false;
+      continue;
+    }
+
+    if (is_sym) {
+      if (!js_inspect_property_prefix(builder)) return false;
+      if (!js_inspect_append_prop_key(builder, prop, key, 0)) return false;
+      if (!js_inspect_append(builder, ": ", 2)) return false;
+      if (!js_inspect_append_tostr(builder, val)) return false;
       continue;
     }
 

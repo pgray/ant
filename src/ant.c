@@ -1920,6 +1920,22 @@ static const char *func_code_text(ant_t *js, ant_value_t code_val) {
   return (const char *)(uintptr_t)vstr(js, code_val, &len);
 }
 
+static size_t strclass(ant_t *js, ant_value_t value, const char *name, ant_offset_t name_len, char *buf, size_t len) {
+  size_t n = cpy(buf, len, "[class ", 7);
+  n += name && name_len > 0
+    ? cpy(buf + n, REMAIN(n, len), name, name_len)
+    : cpy(buf + n, REMAIN(n, len), "(anonymous)", 11);
+
+  ant_offset_t parent_len = 0;
+  const char *parent = get_func_name(js, get_proto(js, value), &parent_len);
+  if (parent && parent_len > 0) {
+    n += cpy(buf + n, REMAIN(n, len), " extends ", 9);
+    n += cpy(buf + n, REMAIN(n, len), parent, parent_len);
+  }
+
+  return n + cpy(buf + n, REMAIN(n, len), "]", 1);
+}
+
 // todo: make it work with bytecode NAME
 static size_t strfunc(ant_t *js, ant_value_t value, char *buf, size_t len) {
   ant_offset_t name_len = 0;
@@ -1930,6 +1946,11 @@ static size_t strfunc(ant_t *js, ant_value_t value, char *buf, size_t len) {
   ant_value_t builtin_slot = get_slot(func_obj, SLOT_BUILTIN);
   ant_value_t async_slot = get_slot(func_obj, SLOT_ASYNC);
   sv_closure_t *closure = js_func_closure(value);
+  
+  if (
+    closure && ((closure->call_flags & SV_CALL_IS_DEFAULT_CTOR) || 
+    (closure->func && closure->func->is_class_ctor))
+  ) return strclass(js, value, name, name_len, buf, len);
   
   bool is_async = (async_slot == js_true);
   bool has_code = func_has_code(code_slot);
@@ -7426,6 +7447,22 @@ static ant_value_t builtin_error_isError(ant_params_t) {
   return get_slot(val, SLOT_ERROR_BRAND) == js_true ? js_true : js_false;
 }
 
+static ant_value_t error_install_message_cause(ant_t *js, ant_value_t err, ant_value_t message, ant_value_t options) {
+  if (vtype(message) != kTypeUndefined) {
+    ant_value_t msg = js_template_to_string(js, message);
+    if (is_err(msg)) return msg;
+    mkprop_bytes(js, err, "message", 7, msg, JS_DESC_W | JS_DESC_C);
+  }
+  
+  if (is_object_type(options) && lkp_proto(js, options, "cause", 5).obj) {
+    ant_value_t cause = js_get(js, options, "cause");
+    if (is_err(cause)) return cause;
+    mkprop_bytes(js, err, "cause", 5, cause, JS_DESC_W | JS_DESC_C);
+  }
+  
+  return js_mkundef();
+}
+
 static ant_value_t builtin_Error(ant_params_t) {
   bool is_new = (vtype(call_new_target) != kTypeUndefined);
   ant_value_t this_val = js->this_val;
@@ -7441,22 +7478,15 @@ static ant_value_t builtin_Error(ant_params_t) {
   GC_ROOT_PIN(js, this_val);
   js_capture_stack(js, this_val);
   
-  if (nargs > 0 && vtype(args[0]) != kTypeUndefined) {
-    ant_value_t msg = js_tostring_val(js, args[0]);
-    if (is_err(msg)) { GC_ROOT_RESTORE(js, mark); return msg; }
-    mkprop_bytes(js, this_val, "message", 7, msg, JS_DESC_W | JS_DESC_C);
-  }
-  
-  if (nargs > 1 && is_object_type(args[1]) && lkp_proto(js, args[1], "cause", 5).obj) {
-    ant_value_t cause = js_get(js, args[1], "cause");
-    if (is_err(cause)) { GC_ROOT_RESTORE(js, mark); return cause; }
-    mkprop_bytes(js, this_val, "cause", 5, cause, JS_DESC_W | JS_DESC_C);
-  }
+  ant_value_t installed = error_install_message_cause(
+    js, this_val, nargs > 0 ? args[0] : js_mkundef(), 
+    nargs > 1 ? args[1] : js_mkundef()
+  );
   
   set_slot(this_val, SLOT_ERROR_BRAND, js_true);
   GC_ROOT_RESTORE(js, mark);
   
-  return this_val;
+  return is_err(installed) ? installed : this_val;
 }
 
 ant_value_t Ant_Error_CreateConstructor(ant_t *js, const char *name, ant_value_t *out_proto) {
@@ -7538,26 +7568,26 @@ static ant_value_t builtin_AggregateError(ant_params_t) {
     else js_set_proto_init(this_val, js->builtins.error_protos[JS_ERR_AGGREGATE]);
   }
   
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, this_val);
+  
+  ant_value_t installed = error_install_message_cause(
+    js, this_val, nargs > 1 ? args[1] : js_mkundef(), 
+    nargs > 2 ? args[2] : js_mkundef()
+  );
+  
+  if (is_err(installed)) { 
+    GC_ROOT_RESTORE(js, mark); 
+    return installed;
+  }
+  
   ant_value_t errors = nargs > 0 ? args[0] : mkarr(js);
   if (vtype(errors) != kTypeArray) errors = mkarr(js);
   mkprop_bytes(js, this_val, "errors", 6, errors, JS_DESC_W | JS_DESC_C);
   
-  if (nargs > 1 && vtype(args[1]) != kTypeUndefined) {
-    ant_value_t msg = args[1];
-    if (vtype(msg) != kTypeString) {
-      const char *str = js_str(js, msg);
-      msg = js_mkstr(js, str, strlen(str));
-    }
-    mkprop_bytes(js, this_val, "message", 7, msg, JS_DESC_W | JS_DESC_C);
-  }
-  
-  if (nargs > 2 && vtype(args[2]) == kTypeObject) {
-    ant_prop_loc_t cause_off = lkp(js, args[2], "cause", 5);
-    if (cause_off.obj) js_mkprop_fast(js, this_val, "cause", 5, js_prop_load(cause_off));
-  }
-  
   set_slot(this_val, SLOT_ERROR_BRAND, js_true);
   js_capture_stack(js, this_val);
+  GC_ROOT_RESTORE(js, mark);
 
   return this_val;
 }
@@ -7576,17 +7606,16 @@ static ant_value_t builtin_SuppressedError(ant_params_t) {
   ant_value_t error = nargs > 0 ? args[0] : js_mkundef();
   ant_value_t suppressed = nargs > 1 ? args[1] : js_mkundef();
   
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, this_val);
+  
+  ant_value_t installed = error_install_message_cause(js, this_val, nargs > 2 ? args[2] : js_mkundef(), js_mkundef());
+  
+  GC_ROOT_RESTORE(js, mark);
+  if (is_err(installed)) return installed;
+
   mkprop_bytes(js, this_val, "error", 5, error, JS_DESC_W | JS_DESC_C);
   mkprop_bytes(js, this_val, "suppressed", 10, suppressed, JS_DESC_W | JS_DESC_C);
-
-  if (nargs > 2 && vtype(args[2]) != kTypeUndefined) {
-    ant_value_t msg = args[2];
-    if (vtype(msg) != kTypeString) {
-      const char *str = js_str(js, msg);
-      msg = js_mkstr(js, str, strlen(str));
-    }
-    mkprop_bytes(js, this_val, "message", 7, msg, JS_DESC_W | JS_DESC_C);
-  }
 
   set_slot(this_val, SLOT_ERROR_BRAND, js_true);
   js_capture_stack(js, this_val);
@@ -11644,11 +11673,23 @@ static ant_value_t descriptor_template(ant_t *js, bool accessor) {
   
   GC_ROOT_SAVE(mark, js);
   GC_ROOT_PIN(js, template);
-  js_setprop(js, template, js_mkstr(js, accessor ? "get" : "value", accessor ? 3 : 5), js_mkundef());
-  js_setprop(js, template, accessor ? js_mkstr(js, "set", 3) : js_mkstr(js, "writable", 8), accessor ? js_mkundef() : js_false);
-  js_setprop(js, template, js_mkstr(js, "enumerable", 10), js_false);
-  js_setprop(js, template, js_mkstr(js, "configurable", 12), js_false);
+  
+  ant_value_t first = mkprop_interned(js, template, accessor ? js->intern.get : js->intern.value, js_mkundef(), 0);
+  ant_value_t second = mkprop_interned(js, template, accessor ? js->intern.set : js->intern.writable, accessor ? js_mkundef() : js_false, 0);
+  
+  ant_value_t third = mkprop_interned(js, template, js->intern.enumerable, js_false, 0);
+  ant_value_t fourth = mkprop_interned(js, template, js->intern.configurable, js_false, 0);
+  
   GC_ROOT_RESTORE(js, mark);
+
+  if (is_err(first)) return first;
+  if (is_err(second)) return second;
+  if (is_err(third)) return third;
+  if (is_err(fourth)) return fourth;
+  
+  ant_object_t *ptr = js_obj_ptr(template);
+  if (!ptr->shape || ant_shape_count(ptr->shape) != 4 || ptr->prop_count != 4)
+    return js_mkerr(js, "invalid descriptor template");
   
   *slot = template;
   return template;
@@ -21202,27 +21243,51 @@ ant_value_t js_set_with_receiver(ant_t *js, ant_value_t target, ant_value_t key,
   return result;
 }
 
-static ant_value_t proxy_complete_property_descriptor(ant_t *js, ant_value_t desc) {
-  bool enumerable = descriptor_bool_value(js, desc, "enumerable", 10, false);
-  bool configurable = descriptor_bool_value(js, desc, "configurable", 12, false);
-  bool has_get = descriptor_has_own_key(js, desc, "get", 3);
-  bool has_set = descriptor_has_own_key(js, desc, "set", 3);
+typedef struct {
+  bool accessor;
+  bool enumerable;
+  bool configurable;
+  bool has_writable;
+  bool writable;
+  ant_value_t first;
+  ant_value_t second;
+} proxy_full_desc_t;
 
-  if (has_get || has_set) {
-    ant_value_t getter = has_get ? js_get(js, desc, "get") : js_mkundef();
-    if (is_err(getter)) return getter;
-    GC_ROOT_SAVE(mark, js);
-    GC_ROOT_PIN(js, getter);
-    ant_value_t setter = has_set ? js_get(js, desc, "set") : js_mkundef();
-    ant_value_t result = is_err(setter) ? setter : js_from_accessor_descriptor(js, getter, setter, enumerable, configurable);
-    GC_ROOT_RESTORE(js, mark);
-    return result;
-  }
+static ant_value_t proxy_to_complete_descriptor(ant_t *js, ant_value_t obj, proxy_full_desc_t *out) {
+  define_desc_raw_t raw = {0};
+  ant_value_t err = define_desc_read(js, obj, &raw);
+  if (is_err(err)) return err;
+  
+  bool accessor = raw.has[DESC_GET] || raw.has[DESC_SET];
+  if (accessor && (raw.has[DESC_VALUE] || raw.has[DESC_WRITABLE])) return js_mkerr_typed(
+    js, JS_ERR_TYPE, "Invalid property descriptor. Cannot both specify accessors and a value or writable attribute"
+  );
+  
+  *out = (proxy_full_desc_t){
+    .accessor = accessor,
+    .enumerable = raw.has[DESC_ENUMERABLE] && js_truthy(js, raw.val[DESC_ENUMERABLE]),
+    .configurable = raw.has[DESC_CONFIGURABLE] && js_truthy(js, raw.val[DESC_CONFIGURABLE]),
+    .has_writable = raw.has[DESC_WRITABLE],
+    .writable = raw.has[DESC_WRITABLE] && js_truthy(js, raw.val[DESC_WRITABLE]),
+    .first = raw.has[accessor ? DESC_GET : DESC_VALUE] ? raw.val[accessor ? DESC_GET : DESC_VALUE] : js_mkundef(),
+    .second = raw.has[DESC_SET] ? raw.val[DESC_SET] : js_mkundef(),
+  };
+  
+  return js_mkundef();
+}
 
-  ant_value_t value = descriptor_has_own_key(js, desc, "value", 5) ? js_get(js, desc, "value") : js_mkundef();
-  if (is_err(value)) return value;
-  bool writable = descriptor_bool_value(js, desc, "writable", 8, false);
-  return js_from_data_descriptor(js, value, writable, enumerable, configurable);
+static bool proxy_desc_compatible(ant_t *js, bool extensible, const proxy_full_desc_t *desc, const proxy_full_desc_t *current, bool exists) {
+  if (!exists) return extensible;
+  if (current->configurable) return true;
+  if (desc->configurable || desc->enumerable != current->enumerable) return false;
+  if (desc->accessor != current->accessor) return false;
+  
+  if (current->accessor) return
+    same_value_values(js, desc->first, current->first) &&
+    same_value_values(js, desc->second, current->second);
+    
+  if (current->writable) return true;
+  return !desc->writable && same_value_values(js, desc->first, current->first);
 }
 
 static ant_value_t proxy_get_own_property_descriptor(ant_t *js, ant_value_t proxy, ant_value_t key_val) {
@@ -21250,26 +21315,54 @@ static ant_value_t proxy_get_own_property_descriptor(ant_t *js, ant_value_t prox
     ant_value_t target_desc = builtin_object_getOwnPropertyDescriptor(js, target_args, 2, js_mkundef());
     if (is_err(target_desc)) return target_desc;
     bool target_exists = vtype(target_desc) != kTypeUndefined;
-    bool target_configurable = target_exists
-      ? descriptor_bool_value(js, target_desc, "configurable", 12, false)
-      : true;
+    
+    GC_ROOT_SAVE(mark, js);
+    GC_ROOT_PIN(js, result);
+    GC_ROOT_PIN(js, target_desc);
+    
+    proxy_full_desc_t current = {0};
+    if (target_exists) {
+      ant_value_t read = proxy_to_complete_descriptor(js, target_desc, &current);
+      if (is_err(read)) { GC_ROOT_RESTORE(js, mark); return read; }
+      GC_ROOT_PIN(js, current.first);
+      GC_ROOT_PIN(js, current.second);
+    }
     bool target_extensible = proxy_target_is_extensible(target);
 
     if (vtype(result) == kTypeUndefined) {
-      if (target_exists && (!target_configurable || !target_extensible))
+      GC_ROOT_RESTORE(js, mark);
+      if (target_exists && (!current.configurable || !target_extensible))
         return js_mkerr_typed(js, JS_ERR_TYPE, "'getOwnPropertyDescriptor' on proxy: trap reported existing property as undefined");
       return result;
     }
 
-    bool result_configurable = descriptor_bool_value(js, result, "configurable", 12, false);
-    if (!target_exists) {
-      if (!target_extensible || !result_configurable)
-        return js_mkerr_typed(js, JS_ERR_TYPE, "'getOwnPropertyDescriptor' on proxy: trap reported invalid new property descriptor");
-    } else if (!result_configurable && target_configurable) {
-      return js_mkerr_typed(js, JS_ERR_TYPE, "'getOwnPropertyDescriptor' on proxy: trap reported configurable property as non-configurable");
+    proxy_full_desc_t desc = {0};
+    ant_value_t read = proxy_to_complete_descriptor(js, result, &desc);
+    
+    if (is_err(read)) { 
+      GC_ROOT_RESTORE(js, mark); 
+      return read;
     }
-
-    return proxy_complete_property_descriptor(js, result);
+    
+    GC_ROOT_PIN(js, desc.first);
+    GC_ROOT_PIN(js, desc.second);
+    
+    const char *invalid = NULL;
+    if (!proxy_desc_compatible(js, target_extensible, &desc, &current, target_exists))
+      invalid = "trap returned descriptor incompatible with the target property";
+    else if (!desc.configurable && (!target_exists || current.configurable))
+      invalid = "trap reported non-configurability for a configurable or missing property";
+    else if (desc.has_writable && !desc.writable && current.writable)
+      invalid = "trap reported non-configurable and writable property as non-writable";
+    
+    ant_value_t completed = invalid
+      ? js_mkerr_typed(js, JS_ERR_TYPE, "'getOwnPropertyDescriptor' on proxy: %s", invalid)
+      : desc.accessor
+      ? js_from_accessor_descriptor(js, desc.first, desc.second, desc.enumerable, desc.configurable)
+      : js_from_data_descriptor(js, desc.first, desc.writable, desc.enumerable, desc.configurable);
+    GC_ROOT_RESTORE(js, mark);
+    
+    return completed;
   }
 
   ant_value_t args[2] = { target, key_val };

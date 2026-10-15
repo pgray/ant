@@ -559,6 +559,7 @@ struct sv_func {
   bool is_static: 1;
   bool is_tla: 1;
   bool is_derived_ctor: 1;
+  bool is_class_ctor: 1;
   bool has_dynamic_eval: 1;
   bool is_curried_step: 1;
   bool is_fusable_leaf: 1;
