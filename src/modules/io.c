@@ -79,16 +79,17 @@ void io_set_sandbox_terminal(uint32_t capabilities) {
   io_no_color = (capabilities & ANT_SANDBOX_CAP_COLOR_STRIP) != 0;
 }
 
-#define JSON_KEY    "\x1b[0m"
-#define JSON_STRING "\x1b[32m"
-#define JSON_NUMBER "\x1b[33m"
-#define JSON_BOOL   "\x1b[35m"
-#define JSON_NULL   "\x1b[90m"
-#define JSON_BRACE  "\x1b[37m"
-#define JSON_FUNC   "\x1b[36m"
-#define JSON_TAG    "\x1b[34m"
-#define JSON_REF    "\x1b[90m"
-#define JSON_WHITE  "\x1b[97m"
+#define JSON_KEY      "\x1b[0m"
+#define JSON_STRING   "\x1b[32m"
+#define JSON_NUMBER   "\x1b[33m"
+#define JSON_BOOL     "\x1b[35m"
+#define JSON_NULL     "\x1b[90m"
+#define JSON_BRACE    "\x1b[37m"
+#define JSON_FUNC     "\x1b[36m"
+#define JSON_TAG      "\x1b[34m"
+#define JSON_REF      "\x1b[90m"
+#define JSON_WHITE    "\x1b[97m"
+#define JSON_PROPERTY "\x1b[35m"
 
 static inline bool io_is_digit_ascii(char c) {
   return c >= '0' && c <= '9';
@@ -481,7 +482,14 @@ alpha:
     ant_output_stream_append_cstr(out, JSON_BRACE);
     ant_output_stream_putc(out, '(');
     p += 7;
-    if (*p != ')') { EMIT_UNTIL_BEFORE(')', JSON_STRING) }
+    if (memcmp(p, "Symbol.", 7) == 0) {
+      ant_output_stream_append_cstr(out, JSON_FUNC);
+      ant_output_stream_append(out, "Symbol", 6);
+      ant_output_stream_append_cstr(out, JSON_BRACE);
+      ant_output_stream_putc(out, '.');
+      p += 7;
+      EMIT_UNTIL_BEFORE(')', JSON_PROPERTY)
+    } else if (*p != ')') { EMIT_UNTIL_BEFORE(')', JSON_KEY) }
     ant_output_stream_append_cstr(out, JSON_BRACE);
     if (*p == ')') ant_output_stream_putc(out, *p++);
     ant_output_stream_append_cstr(out, C_RESET);
