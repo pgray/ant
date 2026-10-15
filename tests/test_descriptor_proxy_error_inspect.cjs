@@ -38,12 +38,24 @@ assert.deepStrictEqual(gopd({ value: 1, configurable: false }, frozen), { value:
 const writableFixed = Object.defineProperty({}, 'q', { value: 1, writable: true, configurable: false });
 assert.throws(() => gopd({ value: 1, writable: false, configurable: false }, writableFixed), TypeError);
 assert.throws(() => gopd({ value: 1, configurable: false }), TypeError);
+assert.deepStrictEqual(gopd({ value: 1, writable: false, configurable: true }, { q: 1 }), { value: 1, writable: false, enumerable: false, configurable: true });
+const plainProxy = new Proxy({ q: 1 }, { getOwnPropertyDescriptor: () => ({ value: 1, writable: false, configurable: true }) });
+assert.strictEqual(Object.prototype.hasOwnProperty.call(plainProxy, 'q'), true);
+assert.throws(() => gopd({ value: 1, configurable: false }, writableFixed), TypeError);
 
 assert.throws(() => new Error(Symbol('x')), TypeError);
 assert.throws(() => new TypeError(Symbol('x')), TypeError);
 assert.throws(() => new AggregateError([], Symbol('x')), TypeError);
 assert.throws(() => new SuppressedError(1, 2, Symbol('x')), TypeError);
 assert.strictEqual(new AggregateError([], { toString: () => 'm' }).message, 'm');
+assert.deepStrictEqual(new AggregateError(new Set([1, 2])).errors, [1, 2]);
+const source = [3];
+assert.notStrictEqual(new AggregateError(source).errors, source);
+assert.throws(() => new AggregateError(5), TypeError);
+assert.throws(() => new AggregateError(), TypeError);
+const order = [];
+assert.throws(() => new AggregateError({ [Symbol.iterator]() { order.push('iter'); throw new RangeError('it'); } }, { toString() { order.push('msg'); return 'm'; } }), RangeError);
+assert.deepStrictEqual(order, ['msg', 'iter']);
 assert.strictEqual(new AggregateError([], 'm', Object.create({ cause: 4 })).cause, 4);
 assert.deepStrictEqual(Object.getOwnPropertyNames(new SuppressedError(1, 2, 'm')).filter(k => k !== 'stack'), ['message', 'error', 'suppressed']);
 

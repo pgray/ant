@@ -27,6 +27,7 @@
 #include "modules/wasi.h"
 #include "modules/assert.h"
 #include "modules/bigint.h"
+#include "modules/iterator.h"
 
 typedef struct {
   wasm_store_t *store;
@@ -1895,36 +1896,9 @@ static ant_value_t js_wasm_memory_to_fixed_length_buffer(ant_params_t) {
   return js_wasm_memory_buffer_getter(js, args, nargs, call_new_target);
 }
 
-static ant_value_t wasm_iterable_to_array(ant_t *js, ant_value_t iterable, const char *what) {
-  if (vtype(iterable) == kTypeArray) return iterable;
-
-  ant_value_t iter_fn = is_object_type(iterable) ? js_get_sym(js, iterable, js->sym.iterator_sym) : js_mkundef();
-  if (is_err(iter_fn)) return iter_fn;
-  if (!is_callable(iter_fn)) return js_mkerr_typed(js, JS_ERR_TYPE, "%s must be iterable", what);
-
-  GC_ROOT_SAVE(mark, js);
-  ant_value_t out = js_mkarr(js);
-  GC_ROOT_PIN(js, out);
-  ant_value_t iter = sv_vm_call(js->vm, js, iter_fn, iterable, NULL, 0, NULL, js_mkundef());
-  GC_ROOT_PIN(js, iter);
-  ant_value_t next = is_err(iter) ? iter : js_get(js, iter, "next");
-  GC_ROOT_PIN(js, next);
-  ant_value_t result = is_err(next) ? next : out;
-
-  while (!is_err(result)) {
-    ant_value_t step = sv_vm_call(js->vm, js, next, iter, NULL, 0, NULL, js_mkundef());
-    if (is_err(step)) { result = step; break; }
-    if (!is_object_type(step)) { result = js_mkerr_typed(js, JS_ERR_TYPE, "Iterator result is not an object"); break; }
-    ant_value_t done = js_get(js, step, "done");
-    if (is_err(done)) { result = done; break; }
-    if (js_truthy(js, done)) break;
-    ant_value_t value = js_get(js, step, "value");
-    if (is_err(value)) { result = value; break; }
-    js_arr_push(js, out, value);
-  }
-
-  GC_ROOT_RESTORE(js, mark);
-  return result;
+static ant_value_t wasm_sequence_to_list(ant_t *js, ant_value_t value, const char *not_iterable) {
+  if (!is_object_type(value)) return js_mkerr_typed(js, JS_ERR_TYPE, "%s", not_iterable);
+  return Ant_Iterator_ToList(js, value, not_iterable);
 }
 
 static bool wasm_tag_kind_from_string(const char *name, size_t len, wasm_valkind_t *out) {
@@ -1957,13 +1931,16 @@ static ant_value_t js_wasm_tag_ctor(ant_params_t) {
 
   GC_ROOT_SAVE(mark, js);
   ant_value_t params = js_get(js, args[0], "parameters");
+  
   GC_ROOT_PIN(js, params);
-  ant_value_t list = is_err(params) ? params : wasm_iterable_to_array(js, params, "WebAssembly.Tag(): Argument 0 parameters");
+  ant_value_t list = is_err(params) ? params : wasm_sequence_to_list(js, params, "WebAssembly.Tag(): Argument 0 parameters must be iterable");
+  
   GC_ROOT_PIN(js, list);
   if (is_err(list)) { GC_ROOT_RESTORE(js, mark); return list; }
 
   ant_value_t kinds = js_mkarr(js);
   GC_ROOT_PIN(js, kinds);
+  
   ant_offset_t count = js_arr_len(js, list);
   for (ant_offset_t i = 0; i < count; i++) {
     ant_value_t name = js_tostring_val(js, js_arr_get(js, list, i));
@@ -1981,6 +1958,7 @@ static ant_value_t js_wasm_tag_ctor(ant_params_t) {
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.wasm_tag_proto, call_new_target);
   ant_value_t tag = wasm_make_tag(js, proto, kinds, false);
   GC_ROOT_RESTORE(js, mark);
+  
   return tag;
 }
 
@@ -2022,7 +2000,7 @@ static ant_value_t js_wasm_exception_ctor(ant_params_t) {
 
   GC_ROOT_SAVE(mark, js);
   ant_value_t kinds = js_get_slot(args[0], SLOT_DATA);
-  ant_value_t list = wasm_iterable_to_array(js, nargs > 1 ? args[1] : js_mkundef(), "WebAssembly.Exception(): Argument 1");
+  ant_value_t list = wasm_sequence_to_list(js, nargs > 1 ? args[1] : js_mkundef(), "WebAssembly.Exception(): Argument 1 must be iterable");
   GC_ROOT_PIN(js, list);
   if (is_err(list)) { GC_ROOT_RESTORE(js, mark); return list; }
 

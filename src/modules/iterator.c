@@ -328,6 +328,29 @@ bool js_iter_open(ant_t *js, ant_value_t iterable, iterator_t *it) {
   return true;
 }
 
+ant_value_t Ant_Iterator_ToList(ant_t *js, ant_value_t iterable, const char *not_iterable) {
+  ant_value_t list = js_mkarr(js);
+  if (is_err(list)) return list;
+  
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, list);
+  
+  iterator_t it;
+  if (!js_iter_open(js, iterable, &it)) {
+    GC_ROOT_RESTORE(js, mark);
+    return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : js_mkerr_typed(js, JS_ERR_TYPE, "%s", not_iterable);
+  }
+  
+  GC_ROOT_PIN(js, it.iterator);
+  GC_ROOT_PIN(js, it.next_fn);
+  
+  ant_value_t value;
+  while (js_iter_next(js, &it, &value)) js_arr_push(js, list, value);
+  GC_ROOT_RESTORE(js, mark);
+  
+  return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : list;
+}
+
 bool js_iter_next(ant_t *js, iterator_t *it, ant_value_t *out) {
   if (it->advance) return it->advance(js, it, out);
 

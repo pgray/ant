@@ -7581,11 +7581,15 @@ static ant_value_t builtin_AggregateError(ant_params_t) {
     return installed;
   }
   
-  ant_value_t errors = nargs > 0 ? args[0] : mkarr(js);
-  if (vtype(errors) != kTypeArray) errors = mkarr(js);
-  mkprop_bytes(js, this_val, "errors", 6, errors, JS_DESC_W | JS_DESC_C);
+  ant_value_t errors = Ant_Iterator_ToList(js, nargs > 0 ? args[0] : js_mkundef(), "AggregateError errors is not iterable");
+  if (is_err(errors)) {
+    GC_ROOT_RESTORE(js, mark);
+    return errors;
+  }
   
+  mkprop_bytes(js, this_val, "errors", 6, errors, JS_DESC_W | JS_DESC_C);
   set_slot(this_val, SLOT_ERROR_BRAND, js_true);
+  
   js_capture_stack(js, this_val);
   GC_ROOT_RESTORE(js, mark);
 
@@ -21247,7 +21251,6 @@ typedef struct {
   bool accessor;
   bool enumerable;
   bool configurable;
-  bool has_writable;
   bool writable;
   ant_value_t first;
   ant_value_t second;
@@ -21267,7 +21270,6 @@ static ant_value_t proxy_to_complete_descriptor(ant_t *js, ant_value_t obj, prox
     .accessor = accessor,
     .enumerable = raw.has[DESC_ENUMERABLE] && js_truthy(js, raw.val[DESC_ENUMERABLE]),
     .configurable = raw.has[DESC_CONFIGURABLE] && js_truthy(js, raw.val[DESC_CONFIGURABLE]),
-    .has_writable = raw.has[DESC_WRITABLE],
     .writable = raw.has[DESC_WRITABLE] && js_truthy(js, raw.val[DESC_WRITABLE]),
     .first = raw.has[accessor ? DESC_GET : DESC_VALUE] ? raw.val[accessor ? DESC_GET : DESC_VALUE] : js_mkundef(),
     .second = raw.has[DESC_SET] ? raw.val[DESC_SET] : js_mkundef(),
@@ -21352,7 +21354,7 @@ static ant_value_t proxy_get_own_property_descriptor(ant_t *js, ant_value_t prox
       invalid = "trap returned descriptor incompatible with the target property";
     else if (!desc.configurable && (!target_exists || current.configurable))
       invalid = "trap reported non-configurability for a configurable or missing property";
-    else if (desc.has_writable && !desc.writable && current.writable)
+    else if (!desc.configurable && !desc.accessor && !desc.writable && target_exists && current.writable)
       invalid = "trap reported non-configurable and writable property as non-writable";
     
     ant_value_t completed = invalid

@@ -48,6 +48,7 @@ bool js_iter_is_array_values(ant_value_t iterator, ant_value_t next, ant_value_t
 
 ant_value_t js_iter_result(ant_t *js, bool has_value, ant_value_t value);
 ant_value_t make_array_iterator(ant_t *js, ant_value_t array, array_iter_kind_t kind);
+ant_value_t Ant_Iterator_ToList(ant_t *js, ant_value_t iterable, const char *not_iterable);
 
 static inline ant_value_t js_iter_next_result(ant_t *js, js_iter_advance_fn advance) {
   iterator_t it = { .iterator = js->this_val };
