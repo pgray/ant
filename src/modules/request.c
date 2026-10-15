@@ -555,30 +555,28 @@ static void resolve_body_promise(
   }}
 }
 
+static bool chunk_bytes(ant_t *js, ant_value_t chunk, uint8_t **bytes, size_t *len) {
+  if (vtype(chunk) != kTypeTypedArray) return false;
+  return Ant_Buffer_GetViewBytes((TypedArrayData *)js_gettypedarray(chunk), bytes, len);
+}
+
 static uint8_t *concat_chunks(ant_t *js, ant_value_t chunks, size_t *out_size) {
   ant_offset_t n = js_arr_len(js, chunks);
-  size_t total = 0;
+  uint8_t *bytes;
+  size_t len, total = 0;
 
-  for (ant_offset_t i = 0; i < n; i++) {
-  ant_value_t chunk = js_arr_get(js, chunks, i);
-  if (vtype(chunk) == kTypeTypedArray) {
-    TypedArrayData *ta = (TypedArrayData *)js_gettypedarray(chunk);
-    if (Ant_Buffer_ViewIsLive(ta)) total += ta->byte_length;
-  }}
+  for (ant_offset_t i = 0; i < n; i++)
+    if (chunk_bytes(js, js_arr_get(js, chunks, i), &bytes, &len)) total += len;
 
   uint8_t *buf = total > 0 ? malloc(total) : NULL;
   if (total > 0 && !buf) return NULL;
 
   size_t pos = 0;
   for (ant_offset_t i = 0; i < n; i++) {
-  ant_value_t chunk = js_arr_get(js, chunks, i);
-  
-  if (vtype(chunk) == kTypeTypedArray) {
-  TypedArrayData *ta = (TypedArrayData *)js_gettypedarray(chunk);
-  if (Ant_Buffer_ViewIsLive(ta) && ta->byte_length > 0) {
-    memcpy(buf + pos, ta->buffer->data + ta->byte_offset, ta->byte_length);
-    pos += ta->byte_length;
-  }}}
+    if (!chunk_bytes(js, js_arr_get(js, chunks, i), &bytes, &len) || len == 0) continue;
+    memcpy(buf + pos, bytes, len);
+    pos += len;
+  }
 
   *out_size = pos;
   return buf;

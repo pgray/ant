@@ -19,6 +19,7 @@ double half_to_double(uint16_t bits16);
 uint16_t double_to_half(double value);
 
 char hex_char(int v);
+void hex_encode(const uint8_t *src, size_t len, char *dst);
 char *resolve_js_file(const char *filename);
 char *resolve_typescript_source_fallback(const char *filename);
 

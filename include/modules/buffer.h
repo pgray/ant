@@ -126,15 +126,14 @@ static inline bool Ant_Buffer_IsLive(const ArrayBufferData *buffer) {
   _ant_view && Ant_Buffer_IsLive(_ant_view->buffer); \
 })
 
-static inline bool Ant_Buffer_GetViewBytes(const TypedArrayData *ta, uint8_t **ptr, size_t *len) {
-  if (!Ant_Buffer_ViewIsLive(ta)) {
-    *ptr = NULL;
-    *len = 0;
-    return false;
-  }
-  *ptr = ta->buffer->data + ta->byte_offset;
-  *len = ta->byte_length;
-  return true;
-}
+#define Ant_Buffer_GetViewBytes(view, ptr, len) ({                 \
+  typeof(view) _ant_bytes_view = (view);                           \
+  bool _ant_bytes_live = Ant_Buffer_ViewIsLive(_ant_bytes_view);   \
+  *(ptr) = _ant_bytes_live                                         \
+    ? _ant_bytes_view->buffer->data + _ant_bytes_view->byte_offset \
+    : NULL;                                                        \
+  *(len) = _ant_bytes_live ? _ant_bytes_view->byte_length : 0;     \
+  _ant_bytes_live;                                                 \
+})
 
 #endif

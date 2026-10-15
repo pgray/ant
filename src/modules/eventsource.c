@@ -18,7 +18,6 @@
 #include "inspector.h"
 
 #include "http/eventsource.h"
-#include "descriptors.h"
 #include "modules/events.h"
 #include "modules/eventsource.h"
 #include "modules/http.h"
@@ -66,18 +65,14 @@ static void eventsource_sync_state(ant_t *js, eventsource_state_t *es) {
   js_set(js, es->obj, "readyState", js_mknum(es->ready_state));
 }
 
-static ant_value_t eventsource_make_event(ant_t *js, const char *type, ant_value_t proto, ant_event_kind_t kind) {
-  return Ant_Event_Create(js, proto, kind, js_mkstr(js, type, strlen(type)), false, false);
-}
-
 static void eventsource_emit(ant_t *js, eventsource_state_t *es, ant_value_t event) {
   Ant_EventTarget_Dispatch(js, es->obj, event);
   process_microtasks(js);
 }
 
 static void eventsource_emit_simple(ant_t *js, eventsource_state_t *es, const char *type) {
-  ant_value_t event = eventsource_make_event(js, type, js->builtins.event_proto, ANT_EVENT_BASE);
-  if (!is_err(event)) eventsource_emit(js, es, event);
+  ant_value_t event = Ant_EventTarget_CreateEvent(js, es->obj, js->builtins.event_proto, ANT_EVENT_BASE, type);
+  if (is_object_type(event)) eventsource_emit(js, es, event);
 }
 
 static void eventsource_emit_error_once(ant_t *js, eventsource_state_t *es) {
@@ -162,16 +157,7 @@ static bool eventsource_on_message(const ant_sse_message_t *message, void *user_
   ant_t *js = feed->js;
   
   const char *type = (message->event && message->event[0]) ? message->event : "message";
-  ant_value_t proto = js->builtins.message_event_proto;
-  
-  ant_value_t event = eventsource_make_event(js, type, proto, ANT_EVENT_MESSAGE);
-  if (is_err(event)) return !es->closed;
 
-  Ant_Event_SetField(
-    js, event, ANT_EVENT_FIELD_MESSAGE_data, 
-    js_mkstr(js, message->data ? message->data : "", message->data ? strlen(message->data) : 0)
-  );
-  
   if (message->id) {
     free(es->last_event_id);
     es->last_event_id = strdup(message->id);
@@ -179,9 +165,16 @@ static bool eventsource_on_message(const ant_sse_message_t *message, void *user_
     free(es->last_event_id);
     es->last_event_id = strdup(es->parser.last_event_id);
   }
-  
+
   if (!es->last_event_id) es->last_event_id = strdup("");
-  
+  ant_value_t event = Ant_EventTarget_CreateEvent(js, es->obj, js->builtins.message_event_proto, ANT_EVENT_MESSAGE, type);
+  if (!is_object_type(event)) return !es->closed;
+
+  Ant_Event_SetField(
+    js, event, ANT_EVENT_FIELD_MESSAGE_data, 
+    js_mkstr(js, message->data ? message->data : "", message->data ? strlen(message->data) : 0)
+  );
+
   Ant_Event_SetField(
     js, event, ANT_EVENT_FIELD_MESSAGE_lastEventId, 
     js_mkstr(js, es->last_event_id ? es->last_event_id : "", es->last_event_id ? strlen(es->last_event_id) : 0)
@@ -405,20 +398,13 @@ static ant_value_t js_eventsource_close(ant_params_t) {
   return js_mkundef();
 }
 
-#define ES_HANDLER(name, type) \
-  static ant_value_t eventsource_get_##name(ant_params_t) { \
-    if (!eventsource_data(js_getthis(js))) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid EventSource"); \
-    return Ant_EventTarget_GetHandler(js, js_getthis(js), ANT_STRING(type)); \
-  } \
-  static ant_value_t eventsource_set_##name(ant_params_t) { \
-    if (!eventsource_data(js_getthis(js))) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid EventSource"); \
-    Ant_EventTarget_SetHandler(js, js_getthis(js), ANT_STRING(type), nargs > 0 ? args[0] : js_mknull()); \
-    return js_mkundef(); \
-  }
+static ant_value_t eventsource_invalid_this(ant_t *js, ant_value_t this_obj) {
+  return eventsource_data(this_obj) ? 0 : js_mkerr_typed(js, JS_ERR_TYPE, "Invalid EventSource");
+}
 
-ES_HANDLER(onopen, "open")
-ES_HANDLER(onmessage, "message")
-ES_HANDLER(onerror, "error")
+ANT_EVENT_HANDLER_ACCESSORS(eventsource, open, eventsource_invalid_this)
+ANT_EVENT_HANDLER_ACCESSORS(eventsource, message, eventsource_invalid_this)
+ANT_EVENT_HANDLER_ACCESSORS(eventsource, error, eventsource_invalid_this)
 
 void init_eventsource_module(ant_t *js) {
   ant_value_t eventtarget_proto = js->builtins.eventtarget_proto;
@@ -427,20 +413,9 @@ void init_eventsource_module(ant_t *js) {
   if (is_object_type(eventtarget_proto)) js_set_proto_init(js->builtins.eventsource_proto, eventtarget_proto);
   js_set(js, js->builtins.eventsource_proto, "close", Ant_Function_Create(js_eventsource_close));
   
-  js_set_accessor_desc(
-    js, js->builtins.eventsource_proto, "onopen", 6, Ant_Function_Create(eventsource_get_onopen), 
-    Ant_Function_CreateWithArity(eventsource_set_onopen, 1), JS_DESC_E | JS_DESC_C
-  );
-  
-  js_set_accessor_desc(
-    js, js->builtins.eventsource_proto, "onmessage", 9, Ant_Function_Create(eventsource_get_onmessage),
-    Ant_Function_CreateWithArity(eventsource_set_onmessage, 1), JS_DESC_E | JS_DESC_C
-  );
-  
-  js_set_accessor_desc(
-    js, js->builtins.eventsource_proto, "onerror", 7, Ant_Function_Create(eventsource_get_onerror), 
-    Ant_Function_CreateWithArity(eventsource_set_onerror, 1), JS_DESC_E | JS_DESC_C
-  );
+  ANT_EVENT_HANDLER_DEFINE(js->builtins.eventsource_proto, eventsource, open);
+  ANT_EVENT_HANDLER_DEFINE(js->builtins.eventsource_proto, eventsource, message);
+  ANT_EVENT_HANDLER_DEFINE(js->builtins.eventsource_proto, eventsource, error);
   
   js_set(js, js->builtins.eventsource_proto, "CONNECTING", js_mknum(ES_CONNECTING));
   js_set(js, js->builtins.eventsource_proto, "OPEN", js_mknum(ES_OPEN));

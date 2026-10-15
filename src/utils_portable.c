@@ -18,6 +18,13 @@ char hex_char(int v) {
   return "0123456789abcdef"[v & 0x0f];
 }
 
+void hex_encode(const uint8_t *src, size_t len, char *dst) {
+  for (size_t i = 0; i < len; i++) {
+    dst[i * 2] = hex_char(src[i] >> 4);
+    dst[i * 2 + 1] = hex_char(src[i]);
+  }
+}
+
 double half_to_double(uint16_t bits16) {
   uint32_t sign = ((uint32_t)bits16 & 0x8000u) << 16;
   uint32_t exp = ((uint32_t)bits16 >> 10) & 0x1fu;

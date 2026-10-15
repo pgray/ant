@@ -339,12 +339,7 @@ static ant_value_t crypto_make_buffer(ant_t *js, const uint8_t *data, size_t len
 
 static bool crypto_get_mutable_bytes(ant_value_t value, uint8_t **out, size_t *len) {
   TypedArrayData *ta = buffer_get_typedarray_data(value);
-  if (ta) {
-    if (!Ant_Buffer_ViewIsLive(ta)) return false;
-    *out = ta->buffer->data + ta->byte_offset;
-    *len = ta->byte_length;
-    return true;
-  }
+  if (ta) return Ant_Buffer_GetViewBytes(ta, out, len);
 
   ArrayBufferData *ab = buffer_get_arraybuffer_data(value);
   if (ab) {

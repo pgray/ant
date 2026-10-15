@@ -95,10 +95,8 @@ static void signal_add_follower(ant_t *js, ant_value_t source, abort_signal_data
 }
 
 static void signal_fire(ant_t *js, ant_value_t signal, abort_signal_data_t *data) {
-  ant_value_t type = ANT_STRING("abort");
-  if (!Ant_EventTarget_HasListeners(js, signal, type)) return;
-  ant_value_t event = Ant_Event_Create(js, js->builtins.event_proto, ANT_EVENT_BASE, type, false, false);
-  if (!is_err(event)) Ant_EventTarget_Dispatch(js, signal, event);
+  ant_value_t event = Ant_EventTarget_CreateEvent(js, signal, js->builtins.event_proto, ANT_EVENT_BASE, "abort");
+  if (is_object_type(event)) Ant_EventTarget_Dispatch(js, signal, event);
 }
 
 void signal_do_abort(ant_t *js, ant_value_t signal, ant_value_t reason) {
@@ -150,18 +148,11 @@ static ant_value_t abort_signal_get_reason_fn(ant_params_t) {
   return data ? data->reason : abort_this_error(js, "AbortSignal");
 }
 
-static ant_value_t abort_signal_get_onabort(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  if (!get_signal_data(this_obj)) return abort_this_error(js, "AbortSignal");
-  return Ant_EventTarget_GetHandler(js, this_obj, ANT_STRING("abort"));
+static ant_value_t abort_signal_invalid_this(ant_t *js, ant_value_t this_obj) {
+  return get_signal_data(this_obj) ? 0 : abort_this_error(js, "AbortSignal");
 }
 
-static ant_value_t abort_signal_set_onabort(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  if (!get_signal_data(this_obj)) return abort_this_error(js, "AbortSignal");
-  Ant_EventTarget_SetHandler(js, this_obj, ANT_STRING("abort"), nargs > 0 ? args[0] : js_mknull());
-  return js_mkundef();
-}
+ANT_EVENT_HANDLER_ACCESSORS(abort_signal, abort, abort_signal_invalid_this)
 
 static ant_value_t abort_signal_inspect(ant_params_t) {
   abort_signal_data_t *data = get_signal_data(js_getthis(js));
@@ -342,8 +333,7 @@ void init_abort_module(ant_t *js) {
 
   js_set_getter_desc(js, signal_proto, "aborted", 7, js_mkfun_meta(&signal_aborted_getter.meta), JS_DESC_E | JS_DESC_C);
   js_set_getter_desc(js, signal_proto, "reason", 6, js_mkfun_meta(&signal_reason_getter.meta), JS_DESC_E | JS_DESC_C);
-  js_set_accessor_desc(js, signal_proto, "onabort", 7,
-    Ant_Function_Create(abort_signal_get_onabort), Ant_Function_CreateWithArity(abort_signal_set_onabort, 1), JS_DESC_E | JS_DESC_C);
+  ANT_EVENT_HANDLER_DEFINE(signal_proto, abort_signal, abort);
   js_set(js, signal_proto, "throwIfAborted", Ant_Function_Create(abort_signal_throw_if_aborted));
   defmethod_sym(js, signal_proto, js->sym.inspect_sym, Ant_Function_Create(abort_signal_inspect));
   js_set_tostringtag(js, signal_proto, js_mkstr(js, "AbortSignal", 11));
@@ -411,14 +401,14 @@ void abort_signal_add_listener(ant_t *js, ant_value_t signal, ant_value_t callba
   abort_signal_data_t *data = get_signal_data(signal);
   if (!data) return;
 
-  ant_value_t type = ANT_STRING("abort");
   if (!signal_aborted(data)) {
-    Ant_EventTarget_AddListener(js, signal, type, callback);
+    Ant_EventTarget_AddListener(js, signal, ANT_STRING("abort"), callback);
     return;
   }
 
-  ant_value_t event = Ant_Event_Create(js, js->builtins.event_proto, ANT_EVENT_BASE, type, false, false);
+  ant_value_t event = Ant_Event_CreateTrusted(js, js->builtins.event_proto, ANT_EVENT_BASE, "abort");
   if (is_err(event)) return;
+  
   Ant_Event_BeginDispatch(js, event, signal);
   sv_vm_call(js->vm, js, callback, signal, &event, 1, NULL, js_mkundef());
   Ant_Event_EndDispatch(js, event);

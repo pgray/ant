@@ -3,6 +3,7 @@
 #include "cli/registry.h"
 
 #include "base64.h"
+#include "utils.h"
 #include "modules/http.h"
 #include "modules/io.h"
 
@@ -779,7 +780,10 @@ static int build_publish_payload(publish_payload_t *payload, bool include_attach
     byte_buf_free(&gz);
     return -1;
   }
-  for (size_t i = 0; i < digest_len; i++) snprintf(payload->shasum + i * 2, 3, "%02x", digest[i]);
+  
+  hex_encode(digest, digest_len, payload->shasum);
+  payload->shasum[digest_len * 2] = '\0';
+  
   if (EVP_Digest(gz.data, gz.len, digest, &digest_len, EVP_sha512(), NULL) != 1 || digest_len != 64) {
     fprintf(stderr, "Error: failed to hash package tarball\n");
     yyjson_doc_free(pkg_doc);
@@ -787,6 +791,7 @@ static int build_publish_payload(publish_payload_t *payload, bool include_attach
     byte_buf_free(&gz);
     return -1;
   }
+  
   size_t digest_b64_len = 0;
   char *digest_b64 = ant_base64_encode(digest, digest_len, &digest_b64_len);
   if (!digest_b64 || digest_b64_len + 8 >= sizeof(payload->integrity)) {

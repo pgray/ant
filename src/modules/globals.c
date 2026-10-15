@@ -131,10 +131,16 @@ ant_value_t js_report_error(ant_params_t) {
 static ant_value_t globals_rejection_event(
   ant_t *js, ant_value_t type, ant_value_t promise, ant_value_t reason, bool cancelable
 ) {
-  ant_value_t event = Ant_Event_Create(js, js->builtins.promiserejectionevent_proto, ANT_EVENT_PROMISE_REJECTION, type, false, cancelable);
+  ant_value_t event = Ant_Event_Create(
+    js, js->builtins.promiserejectionevent_proto, ANT_EVENT_PROMISE_REJECTION, 
+    type, ANT_EVENT_TRUSTED | (cancelable ? ANT_EVENT_CANCELABLE : 0)
+  );
+  
   if (is_err(event)) return event;
+  
   Ant_Event_SetField(js, event, ANT_EVENT_FIELD_PROMISE_REJECTION_promise, promise);
   Ant_Event_SetField(js, event, ANT_EVENT_FIELD_PROMISE_REJECTION_reason, reason);
+  
   return event;
 }
 

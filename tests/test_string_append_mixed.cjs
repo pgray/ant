@@ -27,11 +27,20 @@ assert.strictEqual(mixed(3), 'lit0lit1lit2');
 assert.strictEqual(stale(), 7);
 assert.strictEqual(viaClosure(), 15);
 
-const started = performance.now();
-const big = mixed(100000);
-const elapsed = performance.now() - started;
-assert.strictEqual(big.length, 400000);
-assert.strictEqual(big.slice(-8), 'lit8lit9');
-assert.ok(elapsed < 500, `mixed string/number appends took ${elapsed.toFixed(0)} ms`);
+function fastest(n) {
+  let best = Infinity;
+  for (let round = 0; round < 3; round++) {
+    const started = performance.now();
+    const s = mixed(n);
+    best = Math.min(best, performance.now() - started);
+    assert.strictEqual(s.length, n * 4);
+  }
+  return best;
+}
+
+assert.strictEqual(mixed(100000).slice(-8), 'lit8lit9');
+const small = fastest(25000);
+const large = fastest(200000);
+assert.ok(large / small < 20, `8x more appends took ${(large / small).toFixed(1)}x longer (${small.toFixed(1)} ms vs ${large.toFixed(1)} ms)`);
 
 console.log('string append mixed OK');

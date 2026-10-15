@@ -97,8 +97,9 @@ static ant_value_t process_blob_part(ant_t *js, byte_buf_t *buf, ant_value_t par
 
   if (t == kTypeObject) {
     TypedArrayData *ta = buffer_get_typedarray_data(part);
-    if (Ant_Buffer_ViewIsLive(ta)) {
-      if (!byte_buf_append(buf, ta->buffer->data + ta->byte_offset, ta->byte_length)) return js_mkerr(js, "out of memory");
+    uint8_t *bytes; size_t size;
+    if (Ant_Buffer_GetViewBytes(ta, &bytes, &size)) {
+      if (!byte_buf_append(buf, bytes, size)) return js_mkerr(js, "out of memory");
       return js_mkundef();
     }
     ArrayBufferData *abd = buffer_get_arraybuffer_data(part);

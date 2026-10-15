@@ -87,6 +87,12 @@ static void remove_timer_entry(ant_t *js, timer_entry_t *entry) {
   entry->prev = NULL;
 }
 
+static void timer_entry_hold_young(ant_t *js, timer_entry_t *entry) {
+  if (entry->young) return;
+  remove_timer_entry(js, entry);
+  add_timer_entry(js, entry);
+}
+
 static timer_entry_t *find_timer_entry_by_id(ant_t *js, int timer_id) {
   for (timer_entry_t *entry = js->timers.timers; entry != NULL; entry = entry->next)
     if (entry->timer_id == timer_id) return entry;
@@ -337,7 +343,7 @@ static ant_value_t timer_make_object(ant_t *js, timer_entry_t *entry, double del
   js_set_native(obj, entry, TIMER_NATIVE_TAG);
   js_set_finalizer(obj, timer_object_finalize);
   entry->obj = obj;
-  entry->young = true;
+  timer_entry_hold_young(js, entry);
 
   return obj;
 }
@@ -383,8 +389,7 @@ static ant_value_t js_timer_refresh(ant_params_t) {
       if (!is_callable(entry->callback)) return this_obj;
       if (timer_copy_args_from_object(js, entry, this_obj) != 0)
         return js_mkerr(js, "failed to allocate timer args");
-      remove_timer_entry(js, entry);
-      add_timer_entry(js, entry);
+      timer_entry_hold_young(js, entry);
     }
     entry->active = 1;
     js->timers.active_timer_count++;
@@ -965,7 +970,7 @@ while (batch != NULL) {
 static void process_microtasks_internal(ant_t *js, bool check_unhandled_rejections) {
   microtask_entry_t *batch = NULL;
 
-  if (!js || js->microtasks_draining) return;
+  if (!js || js->microtasks_draining || js->destroying) return;
   bool at_job_boundary = js->vm_exec_depth == 0;
   js->microtasks_draining = true;
 

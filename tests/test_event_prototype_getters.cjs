@@ -93,4 +93,23 @@ for (let i = 0; i < 20000; i++) readType(hot);
 hot.initEvent('cold');
 assert.strictEqual(readType(hot), 'cold');
 
+assert.deepStrictEqual([new MessageEvent('x').isTrusted, new CloseEvent('x').isTrusted, new Event('x').isTrusted], [false, false, false]);
+const trusted = new AbortController();
+let abortEvent;
+trusted.signal.onabort = event => { abortEvent = event; };
+trusted.abort();
+assert.strictEqual(abortEvent.isTrusted, true);
+
+const objectHandler = new AbortController();
+objectHandler.signal.onabort = {};
+objectHandler.abort();
+const handleEventHandler = new AbortController();
+let handleEventCalls = 0;
+handleEventHandler.signal.onabort = { handleEvent() { handleEventCalls++; } };
+handleEventHandler.abort();
+assert.strictEqual(handleEventCalls, 0);
+
+for (const [proto, name] of [[AbortSignal.prototype, 'onabort'], [WebSocket.prototype, 'onopen'], [WebSocket.prototype, 'onclose'], [EventSource.prototype, 'onmessage']])
+  assert.strictEqual(Object.getOwnPropertyDescriptor(proto, name).set.length, 1, name);
+
 console.log('event prototype getters OK');

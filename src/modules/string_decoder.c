@@ -9,6 +9,7 @@
 #include "base64.h"
 #include "errors.h"
 #include "internal.h"
+#include "utils.h"
 #include "descriptors.h"
 
 #include "modules/buffer.h"
@@ -87,15 +88,11 @@ static ant_value_t sd_latin1_to_str(ant_t *js, const uint8_t *src, size_t len) {
 }
 
 static ant_value_t sd_hex_decode(ant_t *js, const uint8_t *src, size_t len) {
-  static const char hex[] = "0123456789abcdef";
   if (len == 0) return js_mkstr(js, "", 0);
   
   char *out = malloc(len * 2 + 1);
   if (!out) return js_mkerr(js, "out of memory");
-  for (size_t i = 0; i < len; i++) {
-    out[i*2]   = hex[(src[i] >> 4) & 0xF];
-    out[i*2+1] = hex[src[i] & 0xF];
-  }
+  hex_encode(src, len, out);
   
   ant_value_t result = js_mkstr(js, out, len * 2);
   free(out);

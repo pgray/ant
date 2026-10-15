@@ -183,10 +183,6 @@ struct ant_isolate_t {
     int multiref_ids[MAX_MULTIREF_OBJS];
     int multiref_count;
     int multiref_next_id;
-    
-    uintptr_t *visited;
-    uint32_t visited_cap;
-    uint32_t visited_len;
   } stringify;
 
   struct {
@@ -428,6 +424,7 @@ struct ant_isolate_t {
 
   ant_timer_state_t timers;
   bool microtasks_draining;
+  bool destroying;
   
   struct coroutine *active_async_coro;
   struct gc_temp_root_scope *temp_roots;

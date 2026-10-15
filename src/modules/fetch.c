@@ -445,14 +445,7 @@ static bool fetch_get_upload_chunk(ant_value_t value, const uint8_t **out, size_
   TypedArrayData *ta = buffer_get_typedarray_data(value);
 
   if (!ta || ta->type != TYPED_ARRAY_UINT8) return false;
-  if (!Ant_Buffer_ViewIsLive(ta)) {
-    *out = NULL;
-    *len = 0;
-    return true;
-  }
-
-  *out = ta->buffer->data + ta->byte_offset;
-  *len = ta->byte_length;
+  Ant_Buffer_GetViewBytes(ta, out, len);
   return true;
 }
 

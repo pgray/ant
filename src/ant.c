@@ -836,35 +836,16 @@ static void mark_multiref(ant_t *js, ant_value_t obj) {
   }
 }
 
-static bool scan_visit(ant_t *js, ant_value_t value) {
-  uintptr_t key = (uintptr_t)vdata(value);
-  uint32_t cap = js->stringify.visited_cap;
-  
-  if ((js->stringify.visited_len + 1) * 2 > cap) {
-    uint32_t next_cap = cap ? cap * 2 : 256;
-    uintptr_t *next = calloc(next_cap, sizeof(*next));
-    if (!next) return true;
-    for (uint32_t i = 0; i < cap; i++) {
-      uintptr_t k = js->stringify.visited[i];
-      if (!k) continue;
-      uint32_t j = (uint32_t)((k >> 3) * 0x9E3779B97F4A7C15ull >> 32) & (next_cap - 1);
-      while (next[j]) j = (j + 1) & (next_cap - 1);
-      next[j] = k;
-    }
-    free(js->stringify.visited);
-    js->stringify.visited = next;
-    js->stringify.visited_cap = cap = next_cap;
+static void scan_shown_props(ant_t *js, ant_value_t obj) {
+  ant_object_t *ptr = js_obj_ptr(obj);
+  if (!ptr || !ptr->shape) return;
+  uint32_t count = ant_shape_count(ptr->shape);
+  for (uint32_t i = 0; i < count && i < ptr->prop_count; i++) {
+    const ant_shape_prop_t *prop = ant_shape_prop_at(ptr->shape, i);
+    if (!prop || prop->has_getter || prop->has_setter) continue;
+    if ((ant_shape_get_attrs(ptr->shape, i) & ANT_PROP_ATTR_ENUMERABLE) == 0) continue;
+    scan_refs(js, ant_object_prop_get_unchecked(ptr, i));
   }
-  
-  uint32_t i = (uint32_t)((key >> 3) * 0x9E3779B97F4A7C15ull >> 32) & (cap - 1);
-  while (js->stringify.visited[i]) {
-    if (js->stringify.visited[i] == key) return false;
-    i = (i + 1) & (cap - 1);
-  }
-  
-  js->stringify.visited[i] = key;
-  js->stringify.visited_len++;
-  return true;
 }
 
 static void scan_refs_root(ant_t *js, ant_value_t value) {
@@ -872,9 +853,6 @@ static void scan_refs_root(ant_t *js, ant_value_t value) {
   js->stringify.multiref_next_id = 0;
   js->stringify.depth = 0;
   scan_refs(js, value);
-  free(js->stringify.visited);
-  js->stringify.visited = NULL;
-  js->stringify.visited_cap = js->stringify.visited_len = 0;
 }
 
 static void scan_obj_refs(ant_t *js, ant_value_t obj) {
@@ -883,21 +861,20 @@ static void scan_obj_refs(ant_t *js, ant_value_t obj) {
     return;
   }
   
-  if (!scan_visit(js, obj)) return;
-  
   if (js->stringify.depth >= MAX_STRINGIFY_DEPTH) return;
   js->stringify.stack[js->stringify.depth++] = obj;
   
-  ant_object_t *ptr = js_obj_ptr(obj);
-  if (ptr && ptr->shape) {
-    uint32_t count = ant_shape_count(ptr->shape);
-    for (uint32_t i = 0; i < count && i < ptr->prop_count; i++) {
-      scan_refs(js, ant_object_prop_get_unchecked(ptr, i));
-    }
+  map_entry_t **map = get_map_from_obj(obj);
+  set_entry_t **set = get_set_from_obj(obj);
+  
+  if ((map || set) && js->stringify.depth - 1 > ANT_INSPECT_MAX_DEPTH) {
+    js->stringify.depth--;
+    return;
   }
+  
+  scan_shown_props(js, obj);
 
   size_t shown = 0;
-  map_entry_t **map = get_map_from_obj(obj);
   if (map) {
     map_entry_t *entry, *tmp;
     HASH_ITER(hh, *map, entry, tmp) {
@@ -907,7 +884,6 @@ static void scan_obj_refs(ant_t *js, ant_value_t obj) {
     }
   }
 
-  set_entry_t **set = get_set_from_obj(obj);
   if (set) {
     set_entry_t *entry, *tmp;
     HASH_ITER(hh, *set, entry, tmp) {
@@ -916,9 +892,6 @@ static void scan_obj_refs(ant_t *js, ant_value_t obj) {
     }
   }
 
-  ant_value_t proto_val = get_proto(js, obj);
-  if (vtype(proto_val) == kTypeObject) scan_refs(js, proto_val);
-  
   js->stringify.depth--;
 }
 
@@ -928,22 +901,13 @@ static void scan_arr_refs(ant_t *js, ant_value_t obj) {
     return;
   }
   
-  if (!scan_visit(js, obj)) return;
-  
   if (js->stringify.depth >= MAX_STRINGIFY_DEPTH) return;
   js->stringify.stack[js->stringify.depth++] = obj;
   
   ant_offset_t length = get_array_length(js, obj);
   for (ant_offset_t i = 0; i < length; i++) scan_refs(js, arr_get(js, obj, i));
   
-  ant_object_t *ptr = js_obj_ptr(obj);
-  if (ptr && ptr->shape) {
-    uint32_t count = ant_shape_count(ptr->shape);
-    for (uint32_t i = 0; i < count && i < ptr->prop_count; i++) {
-      scan_refs(js, ant_object_prop_get_unchecked(ptr, i));
-    }
-  }
-  
+  scan_shown_props(js, obj);
   js->stringify.depth--;
 }
 
@@ -955,19 +919,10 @@ static void scan_func_refs(ant_t *js, ant_value_t value) {
     return;
   }
   
-  if (!scan_visit(js, func_obj)) return;
-  
   if (js->stringify.depth >= MAX_STRINGIFY_DEPTH) return;
   js->stringify.stack[js->stringify.depth++] = func_obj;
   
-  ant_object_t *ptr = js_obj_ptr(func_obj);
-  if (ptr && ptr->shape) {
-    uint32_t count = ant_shape_count(ptr->shape);
-    for (uint32_t i = 0; i < count && i < ptr->prop_count; i++) {
-      scan_refs(js, ant_object_prop_get_unchecked(ptr, i));
-    }
-  }
-  
+  scan_shown_props(js, func_obj);
   js->stringify.depth--;
 }
 
@@ -22079,6 +22034,7 @@ ant_t *ant_create() {
 
 void js_destroy(ant_t *js) {
   if (js == NULL) return;
+  js->destroying = true;
   
   cleanup_timer_module(js);
   json_layout_cache_clear(js);

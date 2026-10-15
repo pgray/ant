@@ -2,6 +2,7 @@
 #include "internal.h"
 #include "stringify.h"
 #include "builder.h"
+#include "utils.h"
 
 #include <inttypes.h>
 #include <math.h>
@@ -12,7 +13,9 @@ static size_t stringify_hex_bytes(const uint8_t *data, size_t count, bool lead_s
   size_t n = 0;
   for (size_t i = 0; i < count; i++) {
     if (lead_space || i > 0) n += cpy(buf + n, REMAIN(n, len), " ", 1);
-    n += (size_t)snprintf(buf + n, REMAIN(n, len), "%02x", data[i]);
+    char hex[2];
+    hex_encode(data + i, 1, hex);
+    n += cpy(buf + n, REMAIN(n, len), hex, 2);
   }
   return n;
 }
@@ -43,11 +46,11 @@ static size_t stringify_node_buffer(const uint8_t *data, size_t byte_length, cha
 }
 
 size_t stringify_typedarray(ant_t *js, ant_value_t obj, const TypedArrayData *ta, char *buf, size_t len) {
-  bool detached = !Ant_Buffer_ViewIsLive(ta);
+  const uint8_t *data; size_t byte_length;
+  bool detached = !Ant_Buffer_GetViewBytes(ta, &data, &byte_length);
   size_t length = detached ? 0 : ta->length;
-  const uint8_t *data = ta->buffer->data + ta->byte_offset;
-  
-  if (stringify_is_buffer(js, obj)) return stringify_node_buffer(data, detached ? 0 : ta->byte_length, buf, len);
+
+  if (stringify_is_buffer(js, obj)) return stringify_node_buffer(data, byte_length, buf, len);
   
   const char *name = ta->type < TYPED_ARRAY_COUNT ? buffer_typedarray_type_name(ta->type) : "TypedArray";
   size_t n = cpy(buf, len, name, strlen(name));

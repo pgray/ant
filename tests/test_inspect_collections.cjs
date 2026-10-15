@@ -40,6 +40,18 @@ loop.set('m', loop);
 assert.strictEqual(flat(loop), "<ref *1> Map(1) { 'm' => [Circular *1] }");
 const shared = { x: 1 };
 assert.strictEqual(flat([shared, shared]), '[ { x: 1 }, { x: 1 } ]');
+const left = {}, right = { left };
+left.right = right;
+assert.strictEqual(flat([left, right]), '[ <ref *1> { right: <ref *2> { left: [Circular *1] } }, <ref *2> { left: <ref *1> { right: [Circular *2] } } ]');
+const viaProto = {};
+viaProto.child = Object.create(viaProto);
+assert.strictEqual(flat(viaProto), '{ child: {} }');
+const hidden = { x: 1 };
+Object.defineProperty(hidden, 'me', { value: hidden, enumerable: false });
+assert.strictEqual(flat(hidden), '{ x: 1 }');
+const deep = { name: 'deep' };
+deep.m = new Map([[1, new Map([[2, new Map([[3, deep]])]])]]);
+assert.strictEqual(flat(deep), "{ name: 'deep', m: Map(1) { 1 => Map(1) { 2 => [Map] } } }");
 
 const many = new Map();
 for (let i = 0; i < 105; i++) many.set(i, i);

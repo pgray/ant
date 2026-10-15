@@ -333,9 +333,10 @@ static bool js_to_mdb_val(ant_t *js, ant_value_t input, MDB_val *out) {
   if (vtype(input) == kTypeObject) {
     TypedArrayData *ta = buffer_get_typedarray_data(input);
     if (ta) {
-      if (!Ant_Buffer_ViewIsLive(ta)) return false;
-      out->mv_data = (void *)(ta->buffer->data + ta->byte_offset);
-      out->mv_size = ta->byte_length;
+      uint8_t *bytes; size_t len;
+      if (!Ant_Buffer_GetViewBytes(ta, &bytes, &len)) return false;
+      out->mv_data = (void *)bytes;
+      out->mv_size = len;
       return true;
     }
     

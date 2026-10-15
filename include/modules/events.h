@@ -74,22 +74,51 @@ enum {
 #include "events/fields.h"
 };
 
+enum {
+  ANT_EVENT_BUBBLES = 1 << 0,
+  ANT_EVENT_CANCELABLE = 1 << 1,
+  ANT_EVENT_TRUSTED = 1 << 2,
+};
+
 ant_value_t Ant_Event_Create(
   ant_t *js, ant_value_t proto, ant_event_kind_t kind,
-  ant_value_t type, bool bubbles, bool cancelable
+  ant_value_t type, unsigned int flags
 );
 
-ant_value_t Ant_EventTarget_GetHandler(ant_t *js, ant_value_t target, ant_value_t type);
+ant_value_t Ant_Event_CreateTrusted(ant_t *js, ant_value_t proto, ant_event_kind_t kind, const char *type);
+ant_value_t Ant_EventTarget_CreateEvent(ant_t *js, ant_value_t target, ant_value_t proto, ant_event_kind_t kind, const char *type);
+ant_value_t Ant_EventTarget_GetHandler(ant_t *js, ant_value_t target, const char *type, size_t len);
 
 void Ant_Event_BeginDispatch(ant_t *js, ant_value_t event, ant_value_t target);
 void Ant_Event_EndDispatch(ant_t *js, ant_value_t event);
 void Ant_Event_SetField(ant_t *js, ant_value_t event, unsigned int index, ant_value_t value);
 void Ant_Event_DefineFields(ant_t *js, ant_value_t proto, ant_event_kind_t kind);
 void Ant_EventTarget_Dispatch(ant_t *js, ant_value_t target, ant_value_t event);
-void Ant_EventTarget_SetHandler(ant_t *js, ant_value_t target, ant_value_t type, ant_value_t handler);
+void Ant_EventTarget_SetHandler(ant_t *js, ant_value_t target, const char *type, size_t len, ant_value_t handler);
 
 bool Ant_EventTarget_AddListener(ant_t *js, ant_value_t target, ant_value_t type, ant_value_t listener);
 bool Ant_EventTarget_RemoveListener(ant_t *js, ant_value_t target, ant_value_t type, ant_value_t listener);
-bool Ant_EventTarget_HasListeners(ant_t *js, ant_value_t target, ant_value_t type);
+
+#define ANT_EVENT_HANDLER_ACCESSORS(prefix, type, invalid_this)              \
+  static ant_value_t prefix##_get_on##type(ant_params_t) {                   \
+    ant_value_t self = js_getthis(js);                                       \
+    ant_value_t invalid = invalid_this(js, self);                            \
+    if (invalid) return invalid;                                             \
+    return Ant_EventTarget_GetHandler(js, self, #type, sizeof(#type) - 1);   \
+  }                                                                          \
+  static ant_value_t prefix##_set_on##type(ant_params_t) {                   \
+    ant_value_t self = js_getthis(js);                                       \
+    ant_value_t invalid = invalid_this(js, self);                            \
+    if (invalid) return invalid;                                             \
+    ant_value_t handler = nargs > 0 ? args[0] : js_mknull();                 \
+    Ant_EventTarget_SetHandler(js, self, #type, sizeof(#type) - 1, handler); \
+    return js_mkundef();                                                     \
+  }
+
+#define ANT_EVENT_HANDLER_DEFINE(proto, prefix, type)                        \
+  js_set_accessor_desc(js, proto, "on" #type, sizeof("on" #type) - 1,        \
+    Ant_Function_Create(prefix##_get_on##type),                              \
+    Ant_Function_CreateWithArity(prefix##_set_on##type, 1),                  \
+    JS_DESC_E | JS_DESC_C)
 
 #endif

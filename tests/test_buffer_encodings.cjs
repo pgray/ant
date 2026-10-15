@@ -97,4 +97,15 @@ const expected = [
 ];
 for (let i = 0; i < expected.length; i++) assert.deepStrictEqual(actual[i], expected[i], `${expected[i][0]} ${JSON.stringify(expected[i][1])}`);
 
+assert.deepStrictEqual(
+  ['ab=c', 'ab==', 'a=', '=', '==', 'abc='].map(s => Buffer.byteLength(s, 'base64')),
+  [3, 1, 0, 0, 0, 2]
+);
+
+const tiny = Buffer.alloc(4, 0xaa);
+assert.strictEqual(tiny.write('\u00e9'.repeat(100000), 0, 'utf16le'), 4);
+assert.strictEqual(tiny.toString('hex'), 'e900e900');
+assert.strictEqual(tiny.write('\u00e9\u0101x', 1, 'latin1'), 3);
+assert.strictEqual(tiny.toString('hex'), 'e9e90178');
+
 console.log('buffer encodings OK');

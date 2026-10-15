@@ -120,9 +120,7 @@ bool buffer_source_get_bytes(ant_t *js, ant_value_t value, const uint8_t **out, 
   TypedArrayData *ta = buffer_get_typedarray_data(value);
   
   if (ta) {
-    if (!Ant_Buffer_ViewIsLive(ta)) { *out = NULL; *len = 0; return true; }
-    *out = ta->buffer->data + ta->byte_offset;
-    *len = ta->byte_length;
+    Ant_Buffer_GetViewBytes(ta, out, len);
     return true;
   }
 
@@ -136,9 +134,7 @@ bool buffer_source_get_bytes(ant_t *js, ant_value_t value, const uint8_t **out, 
 
   if (buffer_is_dataview(value)) {
     DataViewData *dv = buffer_get_dataview_data(value);
-    if (!Ant_Buffer_ViewIsLive(dv)) { *out = NULL; *len = 0; return true; }
-    *out = dv->buffer->data + dv->byte_offset;
-    *len = dv->byte_length;
+    Ant_Buffer_GetViewBytes(dv, out, len);
     return true;
   }
 
@@ -146,9 +142,9 @@ bool buffer_source_get_bytes(ant_t *js, ant_value_t value, const uint8_t **out, 
 }
 
 bool buffer_typedarray_data_read_index(ant_t *js, const TypedArrayData *ta_data, size_t index, ant_value_t *out) {
-  if (!out || !Ant_Buffer_ViewIsLive(ta_data) || index >= ta_data->length) return false;
+  uint8_t *data; size_t byte_length;
+  if (!out || !Ant_Buffer_GetViewBytes(ta_data, &data, &byte_length) || index >= ta_data->length) return false;
 
-  uint8_t *data = ta_data->buffer->data + ta_data->byte_offset;
   switch (ta_data->type) {
     case TYPED_ARRAY_INT8:          *out = js_mknum((double)((int8_t *)data)[index]); return true;
     case TYPED_ARRAY_UINT8:
@@ -686,11 +682,11 @@ static uint8_t typedarray_to_uint8_clamped(double value) {
 }
 
 static ant_value_t typedarray_write_value(ant_t *js, TypedArrayData *ta_data, size_t index, ant_value_t value) {
-  if (!Ant_Buffer_ViewIsLive(ta_data) || index >= ta_data->length) {
+  uint8_t *data; size_t byte_length;
+  if (!Ant_Buffer_GetViewBytes(ta_data, &data, &byte_length) || index >= ta_data->length) {
     return js_mkundef();
   }
 
-  uint8_t *data = ta_data->buffer->data + ta_data->byte_offset;
   switch (ta_data->type) {
     case TYPED_ARRAY_INT8:          ((int8_t *)data)[index] = (int8_t)js_to_int32(js_to_number(js, value)); return js_mkundef();
     case TYPED_ARRAY_UINT8:         data[index] = (uint8_t)js_to_uint32(js_to_number(js, value)); return js_mkundef();
@@ -819,8 +815,8 @@ static ant_value_t typedarray_index_definer(
 }
 
 static bool typedarray_read_number(const TypedArrayData *ta_data, size_t index, double *out) {
-  if (!Ant_Buffer_ViewIsLive(ta_data) || index >= ta_data->length) return false;
-  uint8_t *data = ta_data->buffer->data + ta_data->byte_offset;
+  uint8_t *data; size_t byte_length;
+  if (!Ant_Buffer_GetViewBytes(ta_data, &data, &byte_length) || index >= ta_data->length) return false;
 
   static const void *dispatch[] = {
     &&R_INT8, &&R_UINT8, &&R_UINT8, &&R_INT16, &&R_UINT16,
@@ -2163,15 +2159,14 @@ static ant_value_t js_uint8array_toHex(ant_params_t) {
   
   if (!ta_data || ta_data->type != TYPED_ARRAY_UINT8)
     return js_mkerr(js, "Uint8Array.prototype.toHex called on incompatible receiver");
-  if (!Ant_Buffer_ViewIsLive(ta_data))
+  uint8_t *data; size_t len;
+  if (!Ant_Buffer_GetViewBytes(ta_data, &data, &len))
     return js_mkerr(js, "Cannot read from detached Uint8Array");
 
-  uint8_t *data = ta_data->buffer->data + ta_data->byte_offset;
-  size_t len = ta_data->byte_length;
   char *hex = malloc(len * 2 + 1);
   
   if (!hex) return js_mkerr(js, "Failed to allocate hex string");
-  for (size_t i = 0; i < len; i++) snprintf(hex + i * 2, 3, "%02x", data[i]);
+  hex_encode(data, len, hex);
 
   ant_value_t result = js_mkstr(js, hex, len * 2);
   free(hex);
@@ -2185,14 +2180,12 @@ static ant_value_t js_uint8array_toBase64(ant_params_t) {
   
   if (!ta_data || ta_data->type != TYPED_ARRAY_UINT8)
     return js_mkerr(js, "Uint8Array.prototype.toBase64 called on incompatible receiver");
-  if (!Ant_Buffer_ViewIsLive(ta_data))
+  uint8_t *data; size_t len;
+  if (!Ant_Buffer_GetViewBytes(ta_data, &data, &len))
     return js_mkerr(js, "Cannot read from detached Uint8Array");
 
   size_t out_len = 0;
-  char *encoded = ant_base64_encode(
-    ta_data->buffer->data + ta_data->byte_offset,
-    ta_data->byte_length, &out_len
-  );
+  char *encoded = ant_base64_encode(data, len, &out_len);
   
   if (!encoded) return js_mkerr(js, "Failed to encode base64");
   ant_value_t result = js_mkstr(js, encoded, out_len);
@@ -2214,12 +2207,13 @@ static ant_value_t uint8array_set_bytes(ant_t *js, const uint8_t *bytes, size_t 
   
   if (!ta_data || ta_data->type != TYPED_ARRAY_UINT8)
     return js_mkerr(js, "Uint8Array setFrom called on incompatible receiver");
-  if (!Ant_Buffer_ViewIsLive(ta_data))
+  uint8_t *data; size_t len;
+  if (!Ant_Buffer_GetViewBytes(ta_data, &data, &len))
     return js_mkerr(js, "Cannot write to detached Uint8Array");
-  if (byte_len > ta_data->byte_length)
+  if (byte_len > len)
     return js_mkerr_typed(js, JS_ERR_RANGE, "Decoded data does not fit in Uint8Array");
 
-  if (byte_len > 0) memcpy(ta_data->buffer->data + ta_data->byte_offset, bytes, byte_len);
+  if (byte_len > 0) memcpy(data, bytes, byte_len);
   return uint8array_set_result(js, read, byte_len);
 }
 
@@ -2316,76 +2310,89 @@ static ant_value_t buffer_require_encoding(ant_t *js, ant_value_t value, BufferE
   return js_mkundef();
 }
 
-static size_t buffer_encode_single_byte_into(
-  const char *str, size_t str_len, uint8_t *dst, size_t dst_len
-) {
-  if (dst_len == 0) return 0;
-
-  if (str_is_ascii(str)) {
-    size_t written = str_len < dst_len ? str_len : dst_len;
+static size_t buffer_encode_units_into(const char *str, size_t len, uint8_t *dst, size_t cap, bool wide) {
+  if (!wide && str_is_ascii(str)) {
+    size_t written = len < cap ? len : cap;
     memcpy(dst, str, written);
     return written;
   }
 
-  size_t written = 0;
-  while (written < dst_len) {
-    uint32_t unit = utf16_code_unit_at(str, str_len, written);
-    if (unit > UINT16_MAX) break;
+  utf16_iterator_t iterator = utf16_iterator(str, len);
+  size_t written = 0, step = wide ? 2 : 1;
+  uint16_t unit;
+  while (cap - written >= step && utf16_next_code_unit(&iterator, &unit)) {
     dst[written++] = (uint8_t)unit;
+    if (wide) dst[written++] = (uint8_t)(unit >> 8);
   }
   return written;
 }
 
-// Buffer.from(array/string/buffer, encoding)
+static ant_value_t buffer_decode_binary(
+  ant_t *js, const char *str, size_t len, BufferEncoding encoding, uint8_t **out, size_t *out_len
+) {
+  if (encoding == ENC_HEX) {
+    *out = hex_decode_node_prefix(str, len, out_len);
+    return *out ? js_mkundef() : js_mkerr(js, "Failed to allocate buffer");
+  }
+  *out = ant_base64_decode_loose(str, len, out_len);
+  return *out ? js_mkundef() : js_mkerr_typed(js, JS_ERR_TYPE, "Invalid base64 string");
+}
+
+static inline bool buffer_encoding_is_binary(BufferEncoding encoding) {
+  return encoding == ENC_HEX || encoding == ENC_BASE64 || encoding == ENC_BASE64URL;
+}
+
+static ant_value_t buffer_encode_into(
+  ant_t *js, const char *str, size_t len, BufferEncoding encoding,
+  uint8_t *dst, size_t cap, size_t *written
+) {
+  if (buffer_encoding_is_binary(encoding)) {
+    uint8_t *decoded = NULL;
+    size_t decoded_len = 0;
+    ant_value_t result = buffer_decode_binary(js, str, len, encoding, &decoded, &decoded_len);
+    if (is_err(result)) return result;
+    *written = decoded_len < cap ? decoded_len : cap;
+    memcpy(dst, decoded, *written);
+    free(decoded);
+    return js_mkundef();
+  }
+
+  if (encoding == ENC_UTF8) *written = utf8_export_into(str, len, dst, cap, NULL);
+  else *written = buffer_encode_units_into(str, len, dst, cap, encoding == ENC_UCS2);
+  return js_mkundef();
+}
+
+static size_t buffer_encode_capacity(ant_t *js, ant_value_t str_value, size_t len, BufferEncoding encoding) {
+  if (encoding == ENC_UTF8) return len;
+  size_t units = (size_t)str_utf16_len(js, str_value);
+  return encoding == ENC_UCS2 ? units * 2 : units;
+}
+
 static ant_value_t buffer_encode_string(ant_t *js, ant_value_t value, BufferEncoding encoding, const uint8_t **out, size_t *out_len, uint8_t **owned) {
   ant_value_t str_value = js_tostring_val(js, value);
   if (is_err(str_value)) return str_value;
 
   size_t len = 0;
-  char *str = js_getstr(js, str_value, &len);
-
-  *out = (const uint8_t *)str;
-  *out_len = len;
+  const char *str = js_getstr(js, str_value, &len);
   *owned = NULL;
 
-  if (encoding == ENC_BASE64 || encoding == ENC_BASE64URL) {
-    size_t decoded_len = 0;
-    uint8_t *decoded = ant_base64_decode_loose(str, len, &decoded_len);
-    if (!decoded) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid base64 string");
-    *out = decoded;
-    *out_len = decoded_len;
-    *owned = decoded;
-  } else if (encoding == ENC_HEX) {
-    size_t decoded_len = 0;
-    uint8_t *decoded = hex_decode_node_prefix(str, len, &decoded_len);
-    if (!decoded) return js_mkerr(js, "Failed to allocate buffer");
-    *out = decoded;
-    *out_len = decoded_len;
-    *owned = decoded;
-  } else if (encoding == ENC_UCS2) {
-    size_t unit_count = (size_t)str_utf16_len(js, str_value);
-    size_t decoded_len = unit_count * 2;
-    uint8_t *decoded = malloc(decoded_len == 0 ? 1 : decoded_len);
-    if (!decoded) return js_mkerr(js, "Failed to allocate string");
-    for (size_t i = 0; i < unit_count; i++) {
-      uint32_t unit = utf16_code_unit_at(str, len, i);
-      decoded[i * 2] = (uint8_t)(unit & 0xff);
-      decoded[i * 2 + 1] = (uint8_t)((unit >> 8) & 0xff);
-    }
-    *out = decoded;
-    *out_len = decoded_len;
-    *owned = decoded;
-  } else if (encoding == ENC_LATIN1 || encoding == ENC_ASCII) {
-    size_t unit_count = (size_t)str_utf16_len(js, str_value);
-    uint8_t *encoded = malloc(unit_count == 0 ? 1 : unit_count);
-    if (!encoded) return js_mkerr(js, "Failed to allocate string");
-    size_t encoded_len = buffer_encode_single_byte_into(str, len, encoded, unit_count);
-    *out = encoded;
-    *out_len = encoded_len;
-    *owned = encoded;
+  if (encoding == ENC_UTF8 && str_is_valid_utf8(str)) {
+    *out = (const uint8_t *)str;
+    *out_len = len;
+    return js_mkundef();
   }
 
-  return js_mkundef();
+  if (buffer_encoding_is_binary(encoding)) {
+    ant_value_t result = buffer_decode_binary(js, str, len, encoding, owned, out_len);
+    *out = *owned;
+    return result;
+  }
+
+  size_t cap = buffer_encode_capacity(js, str_value, len, encoding);
+  *owned = malloc(cap ? cap : 1);
+  if (!*owned) return js_mkerr(js, "Failed to allocate buffer");
+  *out = *owned;
+  return buffer_encode_into(js, str, len, encoding, *owned, cap, out_len);
 }
 
 static size_t buffer_encoded_length(ant_t *js, ant_value_t str_value, const char *str, size_t len, BufferEncoding encoding) {
@@ -2397,8 +2404,10 @@ static size_t buffer_encoded_length(ant_t *js, ant_value_t str_value, const char
     case ENC_UCS2: return units * 2;
     case ENC_BASE64:
     case ENC_BASE64URL:
-      if (units > 0 && str[len - 1] == '=') units--;
-      if (units > 1 && str[len - 2] == '=') units--;
+      if (units > 0 && str[len - 1] == '=') {
+        units--;
+        if (units > 0 && str[len - 2] == '=') units--;
+      }
       return (units * 3) >> 2;
     default: return units;
   }
@@ -2418,24 +2427,27 @@ static ant_value_t js_buffer_from(ant_params_t) {
       if (is_err(checked)) return checked;
     }
     
-    if (encoding != ENC_UTF8) {
-      const uint8_t *bytes; size_t bytes_len; uint8_t *owned;
-      ant_value_t encoded = buffer_encode_string(js, args[0], encoding, &bytes, &bytes_len, &owned);
-      if (is_err(encoded)) return encoded;
-      
-      ArrayBufferData *buffer = create_array_buffer_data(js, bytes_len);
-      if (!buffer) { free(owned); return js_mkerr(js, "Failed to allocate buffer"); }
-      
-      memcpy(buffer->data, bytes, bytes_len);
-      free(owned);
-      return create_typed_array(js, TYPED_ARRAY_UINT8, buffer, 0, bytes_len, js->builtins.buffer_proto);
-    } else {
-      ArrayBufferData *buffer = create_array_buffer_data(js, len);
-      if (!buffer) return js_mkerr(js, "Failed to allocate buffer");
+    if (buffer_encoding_is_binary(encoding)) {
+      uint8_t *decoded = NULL;
+      size_t decoded_len = 0;
+      ant_value_t result = buffer_decode_binary(js, str, len, encoding, &decoded, &decoded_len);
+      if (is_err(result)) return result;
 
-      size_t written = utf8_export_into(str, len, buffer->data, len, NULL);
-      return create_typed_array(js, TYPED_ARRAY_UINT8, buffer, 0, written, js->builtins.buffer_proto);
+      ArrayBufferData *buffer = create_array_buffer_data(js, decoded_len);
+      if (!buffer) { free(decoded); return js_mkerr(js, "Failed to allocate buffer"); }
+      memcpy(buffer->data, decoded, decoded_len);
+      free(decoded);
+      return create_typed_array(js, TYPED_ARRAY_UINT8, buffer, 0, decoded_len, js->builtins.buffer_proto);
     }
+
+    size_t cap = buffer_encode_capacity(js, args[0], len, encoding);
+    ArrayBufferData *buffer = create_array_buffer_data(js, cap);
+    if (!buffer) return js_mkerr(js, "Failed to allocate buffer");
+
+    size_t written = 0;
+    ant_value_t result = buffer_encode_into(js, str, len, encoding, buffer->data, cap, &written);
+    if (is_err(result)) return result;
+    return create_typed_array(js, TYPED_ARRAY_UINT8, buffer, 0, written, js->builtins.buffer_proto);
   }
 
   ArrayBufferData *arraybuffer = buffer_get_arraybuffer_data(args[0]);
@@ -2875,9 +2887,7 @@ static ant_value_t buffer_bytes_to_string_enc(ant_t *js, const uint8_t *data, si
     char *hex = malloc(len * 2 + 1);
     if (!hex) return js_mkerr(js, "Failed to allocate hex string");
     
-    for (size_t i = 0; i < len; i++) {
-      snprintf(hex + i * 2, 3, "%02x", data[i]);
-    }
+    hex_encode(data, len, hex);
     
     ant_value_t result = js_mkstr(js, hex, len * 2);
     free(hex);
@@ -2983,20 +2993,21 @@ static ant_value_t js_buffer_utf8Slice(ant_params_t) {
   size_t end = 0;
 
   if (!ta_data) return js_mkerr(js, "Invalid Buffer");
-  if (!Ant_Buffer_ViewIsLive(ta_data))
+  uint8_t *bytes; size_t byte_length;
+  if (!Ant_Buffer_GetViewBytes(ta_data, &bytes, &byte_length))
     return js_mkerr(js, "Cannot read from detached buffer");
 
-  end = ta_data->byte_length;
+  end = byte_length;
   if (nargs > 0 && vtype(args[0]) == kTypeNumber && js_getnum(args[0]) > 0)
     start = (size_t)js_getnum(args[0]);
   if (nargs > 1 && vtype(args[1]) == kTypeNumber && js_getnum(args[1]) >= 0)
     end = (size_t)js_getnum(args[1]);
 
-  if (start > ta_data->byte_length) start = ta_data->byte_length;
-  if (end > ta_data->byte_length) end = ta_data->byte_length;
+  if (start > byte_length) start = byte_length;
+  if (end > byte_length) end = byte_length;
   if (end < start) end = start;
 
-  uint8_t *data = ta_data->buffer->data + ta_data->byte_offset + start;
+  uint8_t *data = bytes + start;
   size_t len = end - start; size_t out_cap = len * 3 + 1;
   
   char *out = malloc(out_cap);
@@ -3111,7 +3122,9 @@ static ant_value_t buffer_index_of(ant_t *js, ant_value_t *args, int nargs, bool
   size_t needle_len = 0;
   uint8_t *owned_needle = NULL;
 
-  if (vtype(search) == kTypeString) {
+  if (vtype(search) == kTypeString && encoding == ENC_UTF8) {
+    needle = (const uint8_t *)js_getstr(js, search, &needle_len);
+  } else if (vtype(search) == kTypeString) {
     if (encoding == ENC_UNKNOWN) return buffer_unknown_encoding_error(js, encoding_arg);
     ant_value_t encoded = buffer_encode_string(js, search, encoding, &needle, &needle_len, &owned_needle);
     if (is_err(encoded)) return encoded;
@@ -3186,15 +3199,8 @@ static ant_value_t buffer_fill_range(
     size_t pattern_len = 0;
     uint8_t *owned = NULL;
 
-    if (encoding == ENC_UTF8) {
-      owned = malloc(str_len);
-      if (!owned) return js_mkerr(js, "Failed to allocate buffer");
-      pattern_len = utf8_export_into(str, str_len, owned, str_len, NULL);
-      pattern = owned;
-    } else {
-      ant_value_t encoded = buffer_encode_string(js, value, encoding, &pattern, &pattern_len, &owned);
-      if (is_err(encoded)) return encoded;
-    }
+    ant_value_t encoded = buffer_encode_string(js, value, encoding, &pattern, &pattern_len, &owned);
+    if (is_err(encoded)) return encoded;
 
     if (pattern_len == 0) {
       free(owned);
@@ -3266,7 +3272,8 @@ static ant_value_t js_buffer_fill(ant_params_t) {
   ant_value_t this_val = js_getthis(js);
   TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
   if (!ta_data) return js_mkerr(js, "Invalid Buffer");
-  if (!Ant_Buffer_ViewIsLive(ta_data))
+  uint8_t *data; size_t len;
+  if (!Ant_Buffer_GetViewBytes(ta_data, &data, &len))
     return js_mkerr(js, "Cannot write to detached buffer");
 
   ant_value_t value = nargs > 0 ? args[0] : js_mkundef();
@@ -3284,7 +3291,6 @@ static ant_value_t js_buffer_fill(ant_params_t) {
     }
   } else encoding_val = js_mkundef();
 
-  size_t len = ta_data->byte_length;
   size_t start = 0, end = len;
 
   if (vtype(offset_val) != kTypeUndefined) {
@@ -3297,7 +3303,6 @@ static ant_value_t js_buffer_fill(ant_params_t) {
     if (start >= end) return this_val;
   }
 
-  uint8_t *data = ta_data->buffer->data + ta_data->byte_offset;
   ant_value_t result = buffer_fill_range(js, data, start, end, value, encoding_val);
   
   return is_err(result) ? result : this_val;
@@ -3351,22 +3356,9 @@ static ant_value_t js_buffer_write(ant_params_t) {
   size_t available = buf_len - offset;
   if (length < available) available = length;
 
-  uint8_t *dst = bytes + offset;
-  size_t to_write;
-  
-  if (encoding != ENC_UTF8) {
-    const uint8_t *encoded; size_t encoded_len; uint8_t *owned;
-    ant_value_t result = buffer_encode_string(js, args[0], encoding, &encoded, &encoded_len, &owned);
-    if (is_err(result)) return result;
-    to_write = encoded_len < available ? encoded_len : available;
-    if (encoding == ENC_UCS2) to_write &= ~(size_t)1;
-    memcpy(dst, encoded, to_write);
-    free(owned);
-  } else {
-    to_write = str_len < available ? str_len : available;
-    to_write = utf8_export_into(str, str_len, dst, to_write, NULL);
-  }
-  
+  size_t to_write = 0;
+  ant_value_t result = buffer_encode_into(js, str, str_len, encoding, bytes + offset, available, &to_write);
+  if (is_err(result)) return result;
   return js_mknum((double)to_write);
 }
 
@@ -3684,9 +3676,10 @@ static __attribute__((noinline)) ant_value_t dataview_access_error(ant_t *js, Da
 }
 
 static inline __attribute__((always_inline)) uint8_t *dataview_access(DataViewData *dv, size_t index, size_t width) {
-  if (!Ant_Buffer_ViewIsLive(dv)) return NULL;
-  if (index > dv->byte_length || width > dv->byte_length - index) return NULL;
-  return dv->buffer->data + dv->byte_offset + index;
+  uint8_t *data; size_t len;
+  if (!Ant_Buffer_GetViewBytes(dv, &data, &len)) return NULL;
+  if (index > len || width > len - index) return NULL;
+  return data + index;
 }
 
 static inline __attribute__((always_inline)) bool dataview_fast_ptr(DataViewData *dv, ant_value_t offset, size_t width, uint8_t **out) {
