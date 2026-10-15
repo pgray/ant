@@ -981,11 +981,9 @@ void init_readable_stream_module(ant_t *js) {
   js_set_descriptor(js, g, "ReadableStreamDefaultReader", 27, JS_DESC_W | JS_DESC_C);
 
   js->builtins.rs_async_iter_proto = js_mkobj(js);
-  js_set(js, js->builtins.rs_async_iter_proto, "next", Ant_Function_Create(js_rs_async_iter_next));
-  js_set_descriptor(js, js->builtins.rs_async_iter_proto, "next", 4, JS_DESC_W | JS_DESC_C);
-  js_set(js, js->builtins.rs_async_iter_proto, "return", Ant_Function_Create(js_rs_async_iter_return));
-  js_set_descriptor(js, js->builtins.rs_async_iter_proto, "return", 6, JS_DESC_W | JS_DESC_C);
-  js_set_sym(js, js->builtins.rs_async_iter_proto, js->sym.asyncIterator_sym, Ant_Function_Create(sym_this_cb));
+  defmethod(js, js->builtins.rs_async_iter_proto, "next", 4, Ant_Function_Create(js_rs_async_iter_next));
+  defmethod(js, js->builtins.rs_async_iter_proto, "return", 6, Ant_Function_Create(js_rs_async_iter_return));
+  defmethod_sym(js, js->builtins.rs_async_iter_proto, js->sym.asyncIterator_sym, Ant_Function_Create(sym_this_cb));
 
   js->builtins.rs_proto = js_mkobj(js);
   js_set_getter_desc(js, js->builtins.rs_proto, "locked", 6, Ant_Function_Create(js_rs_get_locked), JS_DESC_C);
@@ -997,7 +995,7 @@ void init_readable_stream_module(ant_t *js) {
   
   js_set(js, js->builtins.rs_proto, "values", Ant_Function_Create(js_rs_values));
   js_set_descriptor(js, js->builtins.rs_proto, "values", 6, JS_DESC_W | JS_DESC_C);
-  js_set_sym(js, js->builtins.rs_proto, js->sym.asyncIterator_sym, js_get(js, js->builtins.rs_proto, "values"));
+  defalias_sym_of(js, js->builtins.rs_proto, js->sym.asyncIterator_sym, "values");
   js_set_tostringtag(js, js->builtins.rs_proto, js_mkstr(js, "ReadableStream", 14));
 
   ant_value_t rs_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_rs_ctor, js->builtins.rs_proto, "ReadableStream", 0);

@@ -123,8 +123,6 @@ static void check_inline_emission(sv_func_t *callee, uintptr_t live_slot, uintpt
 }
 
 static void check_dead_object_site(int dead_keys) {
-  // The forward jump hides the second OBJECT from escape analysis, but the
-  // inline emitter still visits it. Inspect MIR before dead-code elimination.
   uint8_t code[] = {
     OP_OBJECT, OP_POP, OP_JMP, 2, 0, 0, 0,
     OP_OBJECT, OP_POP, OP_RETURN_UNDEF,
@@ -148,7 +146,7 @@ static void check_dead_object_site(int dead_keys) {
     // Recompilation/OSR feedback changes do not invalidate bytecode analysis.
     callee.tfb_version++;
     callee.jit_code_cold = !callee.jit_code_cold;
-    check_inline_emission(&callee, live_slot, dead_slot, 2, 2, dead_keys == 0 ? 2 : 0);
+    check_inline_emission(&callee, live_slot, dead_slot, 1, 2, 0);
     assert(callee.jit_inline_reuse_checked && callee.jit_inline_reuse_empty);
   }
 }
@@ -191,7 +189,7 @@ int main(void) {
   check_dead_object_site(-1);
   check_dead_object_site(1);
   check_dead_object_site(0);
-  puts("PASS inline object reuse guards each site, including unreachable objects");
+  puts("PASS inline object reuse guards each site and skips unreachable objects");
   check_rejected_reuse(false);
   check_rejected_reuse(true);
   puts("PASS inline object reuse caches positive and negative decisions across emissions");

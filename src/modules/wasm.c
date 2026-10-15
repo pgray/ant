@@ -1978,16 +1978,16 @@ void init_wasm_module(ant_t *js) {
   js_set(js, ns, "compile", Ant_Function_CreateWithArity(js_wasm_compile, 1));
   js_set(js, ns, "instantiate", Ant_Function_CreateWithArity(js_wasm_instantiate, 1));
 
-  js_set(js, ns, "Module", module_ctor);
-  js_set(js, ns, "Instance", instance_ctor);
-  js_set(js, ns, "Global", global_ctor);
-  js_set(js, ns, "Memory", memory_ctor);
-  js_set(js, ns, "Table", table_ctor);
-  js_set(js, ns, "Tag", tag_ctor);
-  js_set(js, ns, "Exception", exception_ctor);
-  js_set(js, ns, "CompileError", compile_error_ctor);
-  js_set(js, ns, "LinkError", link_error_ctor);
-  js_set(js, ns, "RuntimeError", runtime_error_ctor);
+  defhidden(js, ns, "Module", 6, module_ctor);
+  defhidden(js, ns, "Instance", 8, instance_ctor);
+  defhidden(js, ns, "Global", 6, global_ctor);
+  defhidden(js, ns, "Memory", 6, memory_ctor);
+  defhidden(js, ns, "Table", 5, table_ctor);
+  defhidden(js, ns, "Tag", 3, tag_ctor);
+  defhidden(js, ns, "Exception", 9, exception_ctor);
+  defhidden(js, ns, "CompileError", 12, compile_error_ctor);
+  defhidden(js, ns, "LinkError", 9, link_error_ctor);
+  defhidden(js, ns, "RuntimeError", 12, runtime_error_ctor);
 
   js_set(js, global, "WebAssembly", ns);
   js_set_descriptor(js, global, "WebAssembly", 11, JS_DESC_W | JS_DESC_C);

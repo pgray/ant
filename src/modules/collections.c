@@ -1961,31 +1961,32 @@ void init_collections_module(ant_t *js) {
   
   js->builtins.map_iter_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.map_iter_proto, js->sym.iterator_proto);
-  js_set(js, js->builtins.map_iter_proto, "next", Ant_Function_Create(map_iter_next));
+  defmethod(js, js->builtins.map_iter_proto, "next", 4, Ant_Function_Create(map_iter_next));
   js_set_tostringtag(js, js->builtins.map_iter_proto, js_mkstr(js, "Map Iterator", 12));
   js_iter_register_advance(js, js->builtins.map_iter_proto, advance_map);
   
   js->builtins.set_iter_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.set_iter_proto, js->sym.iterator_proto);
-  js_set(js, js->builtins.set_iter_proto, "next", Ant_Function_Create(set_iter_next));
+  defmethod(js, js->builtins.set_iter_proto, "next", 4, Ant_Function_Create(set_iter_next));
   js_set_tostringtag(js, js->builtins.set_iter_proto, js_mkstr(js, "Set Iterator", 12));
   js_iter_register_advance(js, js->builtins.set_iter_proto, advance_set);
   
   ant_value_t map_proto = js_mkobj(js);
   js_set_proto_init(map_proto, object_proto);
   js->builtins.map_proto = map_proto;
-  js_set(js, map_proto, "set", Ant_Function_CreateWithArity(map_set, 2));
-  js_set(js, map_proto, "get", Ant_Function_CreateWithArity(map_get, 1));
-  js_set(js, map_proto, "has", Ant_Function_CreateWithArity(map_has, 1));
-  js_set(js, map_proto, "upsert", Ant_Function_CreateWithArity(map_upsert, 3));
-  js_set(js, map_proto, "delete", Ant_Function_CreateWithArity(map_delete, 1));
-  js_set(js, map_proto, "clear", Ant_Function_Create(map_clear));
+  defmethod(js, map_proto, "set", 3, Ant_Function_CreateWithArity(map_set, 2));
+  defmethod(js, map_proto, "get", 3, Ant_Function_CreateWithArity(map_get, 1));
+  defmethod(js, map_proto, "has", 3, Ant_Function_CreateWithArity(map_has, 1));
+  defmethod(js, map_proto, "upsert", 6, Ant_Function_CreateWithArity(map_upsert, 3));
+  defmethod(js, map_proto, "delete", 6, Ant_Function_CreateWithArity(map_delete, 1));
+  defmethod(js, map_proto, "clear", 5, Ant_Function_Create(map_clear));
   js_set_getter_desc(js, map_proto, "size", 4, Ant_Function_Create(map_size), JS_DESC_C);
-  js_set(js, map_proto, "entries", Ant_Function_Create(map_entries));
-  js_set(js, map_proto, "keys", Ant_Function_Create(map_keys));
-  js_set(js, map_proto, "values", Ant_Function_Create(map_values));
-  js_set(js, map_proto, "forEach", Ant_Function_CreateWithArity(map_forEach, 1));
-  js_set_sym(js, map_proto, iter_sym, js_get(js, map_proto, "entries"));
+  
+  defmethod(js, map_proto, "entries", 7, Ant_Function_Create(map_entries));
+  defmethod(js, map_proto, "keys", 4, Ant_Function_Create(map_keys));
+  defmethod(js, map_proto, "values", 6, Ant_Function_Create(map_values));
+  defmethod(js, map_proto, "forEach", 7, Ant_Function_CreateWithArity(map_forEach, 1));
+  defalias_sym_of(js, map_proto, iter_sym, "entries");
   js_set_tostringtag(js, map_proto, js_mkstr(js, "Map", 3));
   
   ant_value_t map_ctor = Ant_Function_CreateIntrinsicConstructor(js, builtin_Map, map_proto, "Map", 0);
@@ -1996,23 +1997,24 @@ void init_collections_module(ant_t *js) {
   ant_value_t set_proto = js_mkobj(js);
   js_set_proto_init(set_proto, object_proto);
   js->builtins.set_proto = set_proto;
-  js_set(js, set_proto, "add", Ant_Function_CreateWithArity(set_add, 1));
-  js_set(js, set_proto, "has", Ant_Function_CreateWithArity(set_has, 1));
-  js_set(js, set_proto, "delete", Ant_Function_CreateWithArity(set_delete, 1));
-  js_set(js, set_proto, "clear", Ant_Function_Create(set_clear));
+  defmethod(js, set_proto, "add", 3, Ant_Function_CreateWithArity(set_add, 1));
+  defmethod(js, set_proto, "has", 3, Ant_Function_CreateWithArity(set_has, 1));
+  defmethod(js, set_proto, "delete", 6, Ant_Function_CreateWithArity(set_delete, 1));
+  defmethod(js, set_proto, "clear", 5, Ant_Function_Create(set_clear));
   js_set_getter_desc(js, set_proto, "size", 4, Ant_Function_Create(set_size), JS_DESC_C);
-  js_set(js, set_proto, "values", Ant_Function_Create(set_values));
-  js_set_exact(js, set_proto, "keys", js_get(js, set_proto, "values"));
-  js_set(js, set_proto, "entries", Ant_Function_Create(set_entries));
-  js_set(js, set_proto, "forEach", Ant_Function_CreateWithArity(set_forEach, 1));
-  js_set(js, set_proto, "union", Ant_Function_CreateWithArity(set_union, 1));
-  js_set(js, set_proto, "intersection", Ant_Function_CreateWithArity(set_intersection, 1));
-  js_set(js, set_proto, "difference", Ant_Function_CreateWithArity(set_difference, 1));
-  js_set(js, set_proto, "symmetricDifference", Ant_Function_CreateWithArity(set_symmetricDifference, 1));
-  js_set(js, set_proto, "isSubsetOf", Ant_Function_CreateWithArity(set_isSubsetOf, 1));
-  js_set(js, set_proto, "isSupersetOf", Ant_Function_CreateWithArity(set_isSupersetOf, 1));
-  js_set(js, set_proto, "isDisjointFrom", Ant_Function_CreateWithArity(set_isDisjointFrom, 1));
-  js_set_sym(js, set_proto, iter_sym, js_get(js, set_proto, "values"));
+  
+  defmethod(js, set_proto, "values", 6, Ant_Function_Create(set_values));
+  defalias_of(js, set_proto, "keys", "values");
+  defmethod(js, set_proto, "entries", 7, Ant_Function_Create(set_entries));
+  defmethod(js, set_proto, "forEach", 7, Ant_Function_CreateWithArity(set_forEach, 1));
+  defmethod(js, set_proto, "union", 5, Ant_Function_CreateWithArity(set_union, 1));
+  defmethod(js, set_proto, "intersection", 12, Ant_Function_CreateWithArity(set_intersection, 1));
+  defmethod(js, set_proto, "difference", 10, Ant_Function_CreateWithArity(set_difference, 1));
+  defmethod(js, set_proto, "symmetricDifference", 19, Ant_Function_CreateWithArity(set_symmetricDifference, 1));
+  defmethod(js, set_proto, "isSubsetOf", 10, Ant_Function_CreateWithArity(set_isSubsetOf, 1));
+  defmethod(js, set_proto, "isSupersetOf", 12, Ant_Function_CreateWithArity(set_isSupersetOf, 1));
+  defmethod(js, set_proto, "isDisjointFrom", 14, Ant_Function_CreateWithArity(set_isDisjointFrom, 1));
+  defalias_sym_of(js, set_proto, iter_sym, "values");
   js_set_tostringtag(js, set_proto, js_mkstr(js, "Set", 3));
   
   ant_value_t set_ctor = Ant_Function_CreateIntrinsicConstructor(js, builtin_Set, set_proto, "Set", 0);
@@ -2022,11 +2024,11 @@ void init_collections_module(ant_t *js) {
   ant_value_t weakmap_proto = js_mkobj(js);
   js_set_proto_init(weakmap_proto, object_proto);
   js->builtins.weakmap_proto = weakmap_proto;
-  js_set(js, weakmap_proto, "set", Ant_Function_CreateWithArity(weakmap_set, 2));
-  js_set(js, weakmap_proto, "get", Ant_Function_CreateWithArity(weakmap_get, 1));
-  js_set(js, weakmap_proto, "has", Ant_Function_CreateWithArity(weakmap_has, 1));
-  js_set(js, weakmap_proto, "upsert", Ant_Function_CreateWithArity(weakmap_upsert, 3));
-  js_set(js, weakmap_proto, "delete", Ant_Function_CreateWithArity(weakmap_delete, 1));
+  defmethod(js, weakmap_proto, "set", 3, Ant_Function_CreateWithArity(weakmap_set, 2));
+  defmethod(js, weakmap_proto, "get", 3, Ant_Function_CreateWithArity(weakmap_get, 1));
+  defmethod(js, weakmap_proto, "has", 3, Ant_Function_CreateWithArity(weakmap_has, 1));
+  defmethod(js, weakmap_proto, "upsert", 6, Ant_Function_CreateWithArity(weakmap_upsert, 3));
+  defmethod(js, weakmap_proto, "delete", 6, Ant_Function_CreateWithArity(weakmap_delete, 1));
   js_set_tostringtag(js, weakmap_proto, js_mkstr(js, "WeakMap", 7));
   
   ant_value_t weakmap_ctor = Ant_Function_CreateIntrinsicConstructor(js, builtin_WeakMap, weakmap_proto, "WeakMap", 0);
@@ -2035,9 +2037,9 @@ void init_collections_module(ant_t *js) {
   ant_value_t weakset_proto = js_mkobj(js);
   js_set_proto_init(weakset_proto, object_proto);
   js->builtins.weakset_proto = weakset_proto;
-  js_set(js, weakset_proto, "add", Ant_Function_CreateWithArity(weakset_add, 1));
-  js_set(js, weakset_proto, "has", Ant_Function_CreateWithArity(weakset_has, 1));
-  js_set(js, weakset_proto, "delete", Ant_Function_CreateWithArity(weakset_delete, 1));
+  defmethod(js, weakset_proto, "add", 3, Ant_Function_CreateWithArity(weakset_add, 1));
+  defmethod(js, weakset_proto, "has", 3, Ant_Function_CreateWithArity(weakset_has, 1));
+  defmethod(js, weakset_proto, "delete", 6, Ant_Function_CreateWithArity(weakset_delete, 1));
   js_set_tostringtag(js, weakset_proto, js_mkstr(js, "WeakSet", 7));
   
   ant_value_t weakset_ctor = Ant_Function_CreateIntrinsicConstructor(js, builtin_WeakSet, weakset_proto, "WeakSet", 0);
@@ -2046,7 +2048,7 @@ void init_collections_module(ant_t *js) {
   ant_value_t weakref_proto = js_mkobj(js);
   js_set_proto_init(weakref_proto, object_proto);
   js->builtins.weakref_proto = weakref_proto;
-  js_set(js, weakref_proto, "deref", Ant_Function_Create(weakref_deref));
+  defmethod(js, weakref_proto, "deref", 5, Ant_Function_Create(weakref_deref));
   js_set_tostringtag(js, weakref_proto, js_mkstr(js, "WeakRef", 7));
   
   ant_value_t weakref_ctor = Ant_Function_CreateIntrinsicConstructor(js, builtin_WeakRef, weakref_proto, "WeakRef", 1);
@@ -2055,8 +2057,8 @@ void init_collections_module(ant_t *js) {
   ant_value_t finreg_proto = js_mkobj(js);
   js_set_proto_init(finreg_proto, object_proto);
   js->builtins.finreg_proto = finreg_proto;
-  js_set(js, finreg_proto, "register", Ant_Function_CreateWithArity(finreg_register, 2));
-  js_set(js, finreg_proto, "unregister", Ant_Function_CreateWithArity(finreg_unregister, 1));
+  defmethod(js, finreg_proto, "register", 8, Ant_Function_CreateWithArity(finreg_register, 2));
+  defmethod(js, finreg_proto, "unregister", 10, Ant_Function_CreateWithArity(finreg_unregister, 1));
   js_set_tostringtag(js, finreg_proto, js_mkstr(js, "FinalizationRegistry", 20));
   
   ant_value_t finreg_ctor = Ant_Function_CreateIntrinsicConstructor(js, builtin_FinalizationRegistry, finreg_proto, "FinalizationRegistry", 1);

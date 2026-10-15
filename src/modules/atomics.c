@@ -1028,20 +1028,20 @@ static ant_value_t js_atomics_pause(ant_params_t) {
 void init_atomics_module(ant_t *js) {
   ant_value_t atomics = js_mkobj(js);
   
-  js_set(js, atomics, "add", Ant_Function_CreateWithArity(js_atomics_add, 3));
-  js_set(js, atomics, "and", Ant_Function_CreateWithArity(js_atomics_and, 3));
-  js_set(js, atomics, "compareExchange", Ant_Function_CreateWithArity(js_atomics_compareExchange, 4));
-  js_set(js, atomics, "exchange", Ant_Function_CreateWithArity(js_atomics_exchange, 3));
-  js_set(js, atomics, "isLockFree", Ant_Function_CreateWithArity(js_atomics_isLockFree, 1));
-  js_set(js, atomics, "load", Ant_Function_CreateWithArity(js_atomics_load, 2));
-  js_set(js, atomics, "notify", Ant_Function_CreateWithArity(js_atomics_notify, 3));
-  js_set(js, atomics, "or", Ant_Function_CreateWithArity(js_atomics_or, 3));
-  js_set(js, atomics, "pause", Ant_Function_Create(js_atomics_pause));
-  js_set(js, atomics, "store", Ant_Function_CreateWithArity(js_atomics_store, 3));
-  js_set(js, atomics, "sub", Ant_Function_CreateWithArity(js_atomics_sub, 3));
-  js_set(js, atomics, "wait", Ant_Function_CreateWithArity(js_atomics_wait, 4));
-  js_set(js, atomics, "waitAsync", Ant_Function_CreateWithArity(js_atomics_waitAsync, 4));
-  js_set(js, atomics, "xor", Ant_Function_CreateWithArity(js_atomics_xor, 3));
+  defmethod(js, atomics, "add", 3, Ant_Function_CreateWithArity(js_atomics_add, 3));
+  defmethod(js, atomics, "and", 3, Ant_Function_CreateWithArity(js_atomics_and, 3));
+  defmethod(js, atomics, "compareExchange", 15, Ant_Function_CreateWithArity(js_atomics_compareExchange, 4));
+  defmethod(js, atomics, "exchange", 8, Ant_Function_CreateWithArity(js_atomics_exchange, 3));
+  defmethod(js, atomics, "isLockFree", 10, Ant_Function_CreateWithArity(js_atomics_isLockFree, 1));
+  defmethod(js, atomics, "load", 4, Ant_Function_CreateWithArity(js_atomics_load, 2));
+  defmethod(js, atomics, "notify", 6, Ant_Function_CreateWithArity(js_atomics_notify, 3));
+  defmethod(js, atomics, "or", 2, Ant_Function_CreateWithArity(js_atomics_or, 3));
+  defmethod(js, atomics, "pause", 5, Ant_Function_Create(js_atomics_pause));
+  defmethod(js, atomics, "store", 5, Ant_Function_CreateWithArity(js_atomics_store, 3));
+  defmethod(js, atomics, "sub", 3, Ant_Function_CreateWithArity(js_atomics_sub, 3));
+  defmethod(js, atomics, "wait", 4, Ant_Function_CreateWithArity(js_atomics_wait, 4));
+  defmethod(js, atomics, "waitAsync", 9, Ant_Function_CreateWithArity(js_atomics_waitAsync, 4));
+  defmethod(js, atomics, "xor", 3, Ant_Function_CreateWithArity(js_atomics_xor, 3));
   
   js_set_tostringtag(js, atomics, js_mkstr(js, "Atomics", 7));
   js_set_global_builtin(js, "Atomics", atomics);

@@ -4139,13 +4139,13 @@ void init_buffer_module(ant_t *js) {
 
   js->builtins.typedarray_iter_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.typedarray_iter_proto, js->sym.iterator_proto);
-  js_set(js, js->builtins.typedarray_iter_proto, "next", Ant_Function_Create(ta_iter_next));
+  defmethod(js, js->builtins.typedarray_iter_proto, "next", 4, Ant_Function_Create(ta_iter_next));
   js_iter_register_advance(js, js->builtins.typedarray_iter_proto, advance_typedarray);
 
   defmethod(js, typedarray_proto, "values", 6, Ant_Function_Create(ta_values));
   defmethod(js, typedarray_proto, "keys", 4, Ant_Function_Create(ta_keys));
   defmethod(js, typedarray_proto, "entries", 7, Ant_Function_Create(ta_entries));
-  js_set_sym(js, typedarray_proto, js->sym.iterator_sym, js_get(js, typedarray_proto, "values"));
+  defalias_sym_of(js, typedarray_proto, js->sym.iterator_sym, "values");
   
   for (TypedArrayType type = TYPED_ARRAY_INT8; type <= TYPED_ARRAY_BIGUINT64; type++)
     setup_typedarray_kind(js, type, typedarray_ctor, typedarray_proto);

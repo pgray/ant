@@ -1324,11 +1324,11 @@ void init_date_module(ant_t *js) {
   };
   
   js_define_methods(js, date_proto, date_proto_methods, countof(date_proto_methods), ANT_PROP_ATTR_METHOD);
+  
   defalias_of(js, date_proto, "toGMTString", "toUTCString");
-
   ant_value_t to_primitive_sym = js->sym.toPrimitive_sym;
-  if (vtype(to_primitive_sym) == kTypeSymbol) js_set_sym(js, date_proto, to_primitive_sym, Ant_Function_CreateWithArity(date_toPrimitive, 1));
-
+  
+  if (vtype(to_primitive_sym) == kTypeSymbol) defmethod_sym(js, date_proto, to_primitive_sym, Ant_Function_CreateWithArity(date_toPrimitive, 1));
   ant_value_t date_ctor_func = Ant_Function_CreateIntrinsicConstructor(js, builtin_Date, date_proto, "Date", 7);
   
   static const ant_cfunc_meta_t date_ctor_methods[] = {

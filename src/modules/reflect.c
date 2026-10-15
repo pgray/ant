@@ -246,19 +246,19 @@ static ant_value_t reflect_prevent_extensions(ant_params_t) {
 void init_reflect_module(ant_t *js) {
   ant_value_t reflect_obj = js_mkobj(js);
   
-  js_set(js, reflect_obj, "get", Ant_Function_CreateWithArity(reflect_get, 2));
-  js_set(js, reflect_obj, "set", Ant_Function_CreateWithArity(reflect_set, 3));
-  js_set(js, reflect_obj, "has", Ant_Function_CreateWithArity(reflect_has, 2));
-  js_set(js, reflect_obj, "deleteProperty", Ant_Function_CreateWithArity(reflect_delete_property, 2));
-  js_set(js, reflect_obj, "ownKeys", Ant_Function_CreateWithArity(reflect_own_keys, 1));
-  js_set(js, reflect_obj, "construct", Ant_Function_CreateWithArity(reflect_construct, 2));
-  js_set(js, reflect_obj, "apply", Ant_Function_CreateWithArity(reflect_apply, 3));
-  js_set(js, reflect_obj, "getOwnPropertyDescriptor", Ant_Function_CreateWithArity(reflect_get_own_property_descriptor, 2));
-  js_set(js, reflect_obj, "defineProperty", Ant_Function_CreateWithArity(reflect_define_property, 3));
-  js_set(js, reflect_obj, "getPrototypeOf", Ant_Function_CreateWithArity(reflect_get_prototype_of, 1));
-  js_set(js, reflect_obj, "setPrototypeOf", Ant_Function_CreateWithArity(reflect_set_prototype_of, 2));
-  js_set(js, reflect_obj, "isExtensible", Ant_Function_CreateWithArity(reflect_is_extensible, 1));
-  js_set(js, reflect_obj, "preventExtensions", Ant_Function_CreateWithArity(reflect_prevent_extensions, 1));
+  defmethod(js, reflect_obj, "get", 3, Ant_Function_CreateWithArity(reflect_get, 2));
+  defmethod(js, reflect_obj, "set", 3, Ant_Function_CreateWithArity(reflect_set, 3));
+  defmethod(js, reflect_obj, "has", 3, Ant_Function_CreateWithArity(reflect_has, 2));
+  defmethod(js, reflect_obj, "deleteProperty", 14, Ant_Function_CreateWithArity(reflect_delete_property, 2));
+  defmethod(js, reflect_obj, "ownKeys", 7, Ant_Function_CreateWithArity(reflect_own_keys, 1));
+  defmethod(js, reflect_obj, "construct", 9, Ant_Function_CreateWithArity(reflect_construct, 2));
+  defmethod(js, reflect_obj, "apply", 5, Ant_Function_CreateWithArity(reflect_apply, 3));
+  defmethod(js, reflect_obj, "getOwnPropertyDescriptor", 24, Ant_Function_CreateWithArity(reflect_get_own_property_descriptor, 2));
+  defmethod(js, reflect_obj, "defineProperty", 14, Ant_Function_CreateWithArity(reflect_define_property, 3));
+  defmethod(js, reflect_obj, "getPrototypeOf", 14, Ant_Function_CreateWithArity(reflect_get_prototype_of, 1));
+  defmethod(js, reflect_obj, "setPrototypeOf", 14, Ant_Function_CreateWithArity(reflect_set_prototype_of, 2));
+  defmethod(js, reflect_obj, "isExtensible", 12, Ant_Function_CreateWithArity(reflect_is_extensible, 1));
+  defmethod(js, reflect_obj, "preventExtensions", 17, Ant_Function_CreateWithArity(reflect_prevent_extensions, 1));
   
   js_set_tostringtag(js, reflect_obj, js_mkstr(js, "Reflect", 7));
   js_set_global_builtin(js, "Reflect", reflect_obj);

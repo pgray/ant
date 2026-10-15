@@ -9,6 +9,7 @@
 #include "descriptors.h"
 
 #include "modules/date.h"
+#include "modules/regex.h"
 #include "modules/buffer.h"
 #include "modules/collections.h"
 #include "modules/domexception.h"
@@ -280,19 +281,30 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
     return clone;
   }
 
+  if (obj_ptr->flags.regexp_brand) {
+    ant_value_t clone = regexp_create_literal(js, js_get_slot(val, SLOT_DATA), js_get_slot(val, SLOT_REGEXP_FLAGS_STRING));
+    if (is_err(clone)) return clone;
+    sc_add(seen, val, clone);
+    return clone;
+  }
+
   blob_data_t *bd = js_is_prototype_of(js, js->builtins.blob_proto, val) ? blob_get_data(val) : NULL;
   if (bd) {
     ant_value_t clone = blob_create(js, bd->data, bd->size, bd->type);
     if (is_err(clone)) return clone;
+    
     sc_add(seen, val, clone);
+    
     if (bd->name) {
       blob_data_t *nbd = blob_get_data(clone);
       if (nbd) {
         nbd->name = strdup(bd->name);
         nbd->last_modified = bd->last_modified;
       }
+      
       js_set_proto_init(clone, js->builtins.file_proto);
     }
+    
     return clone;
   }
 

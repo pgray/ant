@@ -43,13 +43,12 @@ static bool is_small_object(ant_t *js, ant_value_t obj, int *prop_count) {
     for (uint32_t i = 0; i < shape_count; i++) {
       const ant_shape_prop_t *prop = ant_shape_prop_at(ptr->shape, i);
       if (!prop) continue;
+      if ((ant_shape_get_attrs(ptr->shape, i) & ANT_PROP_ATTR_ENUMERABLE) == 0) continue;
 
       if (prop->type == ANT_SHAPE_KEY_SYMBOL) {
         count++;
         continue;
       }
-
-      if ((ant_shape_get_attrs(ptr->shape, i) & ANT_PROP_ATTR_ENUMERABLE) == 0) continue;
 
       ant_value_t val = (i < ptr->prop_count) ? ant_object_prop_get_unchecked(ptr, i) : js_mkundef();
       uint8_t t = vtype(val);
@@ -310,12 +309,21 @@ bool js_inspect_header(js_inspect_builder_t *builder, const char *fmt, ...) {
   return ok;
 }
 
-bool js_inspect_tagged_header(js_inspect_builder_t *builder, const char *tag, size_t tag_len) {
+bool js_inspect_tagged_header(js_inspect_builder_t *builder, ant_value_t obj, const char *tag, size_t tag_len) {
+  int prop_count = 0;
+  bool inline_mode = is_small_object(builder->js, obj, &prop_count);
+
   if (!js_inspect_append(builder, "Object [", 8)) return false;
   if (!js_inspect_append(builder, tag, tag_len)) return false;
-  if (!js_inspect_append(builder, "] {\n", 4)) return false;
 
-  builder->inline_mode = false;
+  if (prop_count == 0) {
+    if (!js_inspect_append(builder, "] {}", 4)) return false;
+    builder->closed = true;
+    return true;
+  }
+
+  if (!js_inspect_append(builder, inline_mode ? "] { " : "] {\n", 4)) return false;
+  builder->inline_mode = inline_mode;
   builder->first = true;
   builder->closed = false;
   builder->did_indent = false;

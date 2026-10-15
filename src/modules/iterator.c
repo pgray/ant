@@ -1781,19 +1781,19 @@ void init_iterator_module(ant_t *js) {
   
   js->builtins.wrap_iter_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.wrap_iter_proto, iter_proto);
-  js_set(js, js->builtins.wrap_iter_proto, "next", Ant_Function_Create(wrap_iter_next));
+  defmethod(js, js->builtins.wrap_iter_proto, "next", 4, Ant_Function_Create(wrap_iter_next));
 
-  js_set(js, iter_proto, "map",     Ant_Function_CreateWithArity(iter_map, 1));
-  js_set(js, iter_proto, "filter",  Ant_Function_CreateWithArity(iter_filter, 1));
-  js_set(js, iter_proto, "take",    Ant_Function_CreateWithArity(iter_take, 1));
-  js_set(js, iter_proto, "drop",    Ant_Function_CreateWithArity(iter_drop, 1));
-  js_set(js, iter_proto, "flatMap", Ant_Function_CreateWithArity(iter_flatMap, 1));
-  js_set(js, iter_proto, "every",   Ant_Function_CreateWithArity(iter_every, 1));
-  js_set(js, iter_proto, "some",    Ant_Function_CreateWithArity(iter_some, 1));
-  js_set(js, iter_proto, "find",    Ant_Function_CreateWithArity(iter_find, 1));
-  js_set(js, iter_proto, "forEach", Ant_Function_CreateWithArity(iter_forEach, 1));
-  js_set(js, iter_proto, "reduce",  Ant_Function_CreateWithArity(iter_reduce, 1));
-  js_set(js, iter_proto, "toArray", Ant_Function_Create(iter_toArray));
+  defmethod(js, iter_proto, "map", 3,     Ant_Function_CreateWithArity(iter_map, 1));
+  defmethod(js, iter_proto, "filter", 6,  Ant_Function_CreateWithArity(iter_filter, 1));
+  defmethod(js, iter_proto, "take", 4,    Ant_Function_CreateWithArity(iter_take, 1));
+  defmethod(js, iter_proto, "drop", 4,    Ant_Function_CreateWithArity(iter_drop, 1));
+  defmethod(js, iter_proto, "flatMap", 7, Ant_Function_CreateWithArity(iter_flatMap, 1));
+  defmethod(js, iter_proto, "every", 5,   Ant_Function_CreateWithArity(iter_every, 1));
+  defmethod(js, iter_proto, "some", 4,    Ant_Function_CreateWithArity(iter_some, 1));
+  defmethod(js, iter_proto, "find", 4,    Ant_Function_CreateWithArity(iter_find, 1));
+  defmethod(js, iter_proto, "forEach", 7, Ant_Function_CreateWithArity(iter_forEach, 1));
+  defmethod(js, iter_proto, "reduce", 6,  Ant_Function_CreateWithArity(iter_reduce, 1));
+  defmethod(js, iter_proto, "toArray", 7, Ant_Function_Create(iter_toArray));
   
   js_set_sym_getter_desc(js, iter_proto, js->sym.toStringTag_sym, Ant_Function_Create(iterator_tag_get), JS_DESC_C);
   static const ant_cfunc_meta_t dispose_meta = { iter_dispose, "[Symbol.dispose]", 0, 0 };
@@ -1803,12 +1803,12 @@ void init_iterator_module(ant_t *js) {
 
   ant_value_t ctor_obj = js_mkobj(js);
   js_set_slot(ctor_obj, SLOT_CFUNC, Ant_Function_Create(iter_ctor));
-  js_mkprop_fast(js, ctor_obj, "prototype", 9, iter_proto);
+  js_setprop_readonly_nonconfigurable(js, ctor_obj, "prototype", 9, iter_proto);
   js_set_function_name(js, ctor_obj, "Iterator", sizeof("Iterator") - 1);
   
   ant_value_t ctor = js_obj_to_func(js, ctor_obj);
-  js_set(js, ctor, "from", Ant_Function_CreateWithArity(iter_from, 1));
-  js_set(js, iter_proto, "constructor", ctor);
+  defmethod(js, ctor, "from", 4, Ant_Function_CreateWithArity(iter_from, 1));
+  defhidden(js, iter_proto, "constructor", 11, ctor);
   js_set_global_builtin(js, "Iterator", ctor);
 
   ant_value_t async_iter_proto = js_mkobj(js);
@@ -1827,29 +1827,29 @@ void init_iterator_module(ant_t *js) {
 
   ant_value_t async_ctor_obj = js_mkobj(js);
   js_set_slot(async_ctor_obj, SLOT_CFUNC, Ant_Function_Create(async_iter_ctor));
-  js_mkprop_fast(js, async_ctor_obj, "prototype", 9, async_iter_proto);
+  js_setprop_readonly_nonconfigurable(js, async_ctor_obj, "prototype", 9, async_iter_proto);
   js_set_function_name(js, async_ctor_obj, "AsyncIterator", sizeof("AsyncIterator") - 1);
   
   ant_value_t async_ctor = js_obj_to_func(js, async_ctor_obj);
-  js_set(js, async_iter_proto, "constructor", async_ctor);
+  defhidden(js, async_iter_proto, "constructor", 11, async_ctor);
   js_set_global_builtin(js, "AsyncIterator", async_ctor);
 
   js->builtins.async_wrap_iter_proto = js_mkobj(js);
   js_set_proto_init(js->builtins.async_wrap_iter_proto, async_iter_proto);
-  js_set(js, js->builtins.async_wrap_iter_proto, "next", Ant_Function_Create(async_wrap_next));
-  js_set(js, js->builtins.async_wrap_iter_proto, "return", Ant_Function_Create(async_wrap_return));
-  js_set(js, js->builtins.async_wrap_iter_proto, "throw", Ant_Function_Create(async_wrap_throw));
+  defmethod(js, js->builtins.async_wrap_iter_proto, "next", 4, Ant_Function_Create(async_wrap_next));
+  defmethod(js, js->builtins.async_wrap_iter_proto, "return", 6, Ant_Function_Create(async_wrap_return));
+  defmethod(js, js->builtins.async_wrap_iter_proto, "throw", 5, Ant_Function_Create(async_wrap_throw));
 
-  js_set(js, async_ctor, "from", Ant_Function_Create(async_iter_from));
-  js_set(js, async_iter_proto, "map", Ant_Function_Create(async_iter_map));
-  js_set(js, async_iter_proto, "filter", Ant_Function_Create(async_iter_filter));
-  js_set(js, async_iter_proto, "take", Ant_Function_Create(async_iter_take));
-  js_set(js, async_iter_proto, "drop", Ant_Function_Create(async_iter_drop));
-  js_set(js, async_iter_proto, "flatMap", Ant_Function_Create(async_iter_flatMap));
-  js_set(js, async_iter_proto, "every", Ant_Function_Create(async_iter_every));
-  js_set(js, async_iter_proto, "some", Ant_Function_Create(async_iter_some));
-  js_set(js, async_iter_proto, "find", Ant_Function_Create(async_iter_find));
-  js_set(js, async_iter_proto, "forEach", Ant_Function_Create(async_iter_forEach));
-  js_set(js, async_iter_proto, "reduce", Ant_Function_Create(async_iter_reduce));
-  js_set(js, async_iter_proto, "toArray", Ant_Function_Create(async_iter_toArray));
+  defmethod(js, async_ctor, "from", 4, Ant_Function_Create(async_iter_from));
+  defmethod(js, async_iter_proto, "map", 3, Ant_Function_Create(async_iter_map));
+  defmethod(js, async_iter_proto, "filter", 6, Ant_Function_Create(async_iter_filter));
+  defmethod(js, async_iter_proto, "take", 4, Ant_Function_Create(async_iter_take));
+  defmethod(js, async_iter_proto, "drop", 4, Ant_Function_Create(async_iter_drop));
+  defmethod(js, async_iter_proto, "flatMap", 7, Ant_Function_Create(async_iter_flatMap));
+  defmethod(js, async_iter_proto, "every", 5, Ant_Function_Create(async_iter_every));
+  defmethod(js, async_iter_proto, "some", 4, Ant_Function_Create(async_iter_some));
+  defmethod(js, async_iter_proto, "find", 4, Ant_Function_Create(async_iter_find));
+  defmethod(js, async_iter_proto, "forEach", 7, Ant_Function_Create(async_iter_forEach));
+  defmethod(js, async_iter_proto, "reduce", 6, Ant_Function_Create(async_iter_reduce));
+  defmethod(js, async_iter_proto, "toArray", 7, Ant_Function_Create(async_iter_toArray));
 }

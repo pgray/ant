@@ -2121,8 +2121,11 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
         vtype(call_func) == kTypeFunction) {
       sv_closure_t *closure = js_func_closure(call_func);
       if (closure->func != NULL) {
-        if (closure->call_flags & (SV_CALL_HAS_BOUND_ARGS | SV_CALL_HAS_SUPER))
+        if (closure->call_flags & (SV_CALL_HAS_BOUND_ARGS | SV_CALL_HAS_SUPER)) {
+          if (!(closure->call_flags & SV_CALL_HAS_BOUND_ARGS) && sv_func_type_feedback(func))
+            sv_tfb_record_call_target(func, (int)(ip - func->code), closure->func);
           goto call_method_fallback;
+        }
         if (closure->func->is_async || closure->func->is_generator) goto call_method_fallback;
         {
           ant_value_t jit_this = sv_closure_has_lexical_this(closure)
@@ -2468,6 +2471,8 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
             tc_this = closure->bound_this;
           goto tail_call_inline;
         }
+        if (!(closure->call_flags & SV_CALL_HAS_BOUND_ARGS) && sv_func_type_feedback(func))
+          sv_tfb_record_call_target(func, (int)(ip - func->code), closure->func);
       }
     }
     if (vtype(call_func) == kTypeBuiltin) sv_tfb_record_builtin_call(func, ip);
@@ -2539,14 +2544,25 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
     DISPATCH();
   }
   
-  L_NEW:         { VM_CHECK(sv_op_new(vm, js, ip));                NEXT(OP_NEW); }
+  L_NEW: {
+    if (sv_func_type_feedback(func)) {
+      ant_value_t new_func = vm->stack[vm->sp - sv_get_u16(ip + 1) - 2];
+      if (vtype(new_func) == kTypeFunction)
+        sv_tfb_record_call_target(func, (int)(ip - func->code), js_func_closure(new_func)->func);
+    }
+    
+    VM_CHECK(sv_op_new(vm, js, ip));
+    NEXT(OP_NEW);
+  }
+  
   L_APPLY:       { VM_CHECK(sv_op_apply(vm, js, ip));              NEXT(OP_APPLY); }
   L_SUPER_APPLY: { VM_CHECK(sv_op_super_apply(vm, js, frame, ip)); NEXT(OP_SUPER_APPLY); }
   L_NEW_APPLY:   { VM_CHECK(sv_op_new_apply(vm, js, ip));          NEXT(OP_NEW_APPLY); }
   L_EVAL:        { VM_CHECK(sv_op_eval(vm, js, frame, ip));        NEXT(OP_EVAL); }
   
-  L_GET_EVAL_GLOBAL:       { VM_CHECK(sv_op_get_eval_global(vm, js, frame, func, ip));        NEXT(OP_GET_EVAL_GLOBAL); }
-  L_GET_EVAL_GLOBAL_UNDEF: { VM_CHECK(sv_op_get_eval_global_undef(vm, js, frame, func, ip));  NEXT(OP_GET_EVAL_GLOBAL_UNDEF); }
+  L_GET_EVAL_GLOBAL:       { VM_CHECK(sv_op_get_eval_global(vm, js, frame, func, ip));       NEXT(OP_GET_EVAL_GLOBAL); }
+  L_GET_EVAL_GLOBAL_UNDEF: { VM_CHECK(sv_op_get_eval_global_undef(vm, js, frame, func, ip)); NEXT(OP_GET_EVAL_GLOBAL_UNDEF); }
+  
   L_PUT_EVAL_GLOBAL:       { VM_CHECK(sv_op_put_eval_global(vm, js, frame, func, ip)); NEXT(OP_PUT_EVAL_GLOBAL); }
   L_DELETE_EVAL_VAR:       { sv_op_delete_eval_var(vm, js, frame, func, ip);           NEXT(OP_DELETE_EVAL_VAR); }
 

@@ -209,6 +209,7 @@ typedef struct {
   MIR_reg_t r_args_buf;
   int *next_inline_id;
   bool reader_only;
+  bool fresh_this;
 } jit_inline_ext_t;
 
 void mir_emit_mod_numbers(
@@ -546,7 +547,7 @@ bool mir_emit_put_field_ic_fastpath(
     MIR_reg_t r_js, MIR_reg_t obj, MIR_reg_t val,
     MIR_label_t slow, MIR_reg_t r_global_epoch,
     MIR_item_t shape_transition_proto, MIR_item_t imp_shape_transition,
-    MIR_item_t remember_proto, MIR_item_t imp_remember);
+    MIR_item_t remember_proto, MIR_item_t imp_remember, bool add_only);
 bool mir_emit_get_field_ic_fastpath(
     MIR_context_t ctx,
     MIR_item_t fn,

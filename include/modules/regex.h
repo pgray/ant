@@ -24,6 +24,7 @@ void regexp_note_exec_property_write(ant_t *js);
 void regexp_note_replace_property_write(ant_t *js);
 
 ant_value_t is_regexp_like(ant_t *js, ant_value_t value);
+ant_value_t regexp_source_value(ant_t *js, ant_value_t rx);
 ant_value_t do_regex_match_pcre2(ant_t *js, regex_match_args_t args);
 ant_value_t reject_regexp_arg(ant_t *js, ant_value_t value, const char *method_name);
 ant_value_t regexp_create_literal(ant_t *js, ant_value_t pattern, ant_value_t flags);

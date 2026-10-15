@@ -479,17 +479,17 @@ void init_observable_module(ant_t *js) {
   ant_value_t observable_proto = js_mkobj(js);
   js->builtins.observable_proto = observable_proto;
   
-  js_set(js, observable_proto, "subscribe", Ant_Function_Create(js_observable_subscribe));
-  js_set_sym(js, observable_proto, js->sym.observable_sym, Ant_Function_Create(js_observable_symbol_observable));
+  defmethod(js, observable_proto, "subscribe", 9, Ant_Function_Create(js_observable_subscribe));
+  defmethod_sym(js, observable_proto, js->sym.observable_sym, Ant_Function_Create(js_observable_symbol_observable));
   js_set_tostringtag(js, observable_proto, js_mkstr(js, "Observable", 10));
   
   js_set_slot(observable_ctor, SLOT_CFUNC, Ant_Function_CreateWithArity(js_observable_constructor, 1));
-  js_mkprop_fast(js, observable_ctor, "prototype", 9, observable_proto);
+  js_setprop_readonly_nonconfigurable(js, observable_ctor, "prototype", 9, observable_proto);
   js_set_function_name(js, observable_ctor, "Observable", sizeof("Observable") - 1);
-  js_set(js, observable_ctor, "of", Ant_Function_Create(js_observable_of));
-  js_set(js, observable_ctor, "from", Ant_Function_Create(js_observable_from));
+  defmethod(js, observable_ctor, "of", 2, Ant_Function_Create(js_observable_of));
+  defmethod(js, observable_ctor, "from", 4, Ant_Function_Create(js_observable_from));
   
   ant_value_t Observable = js_obj_to_func(js, observable_ctor);
-  js_set(js, observable_proto, "constructor", Observable);
+  defhidden(js, observable_proto, "constructor", 11, Observable);
   js_set_global_builtin(js, "Observable", Observable);
 }

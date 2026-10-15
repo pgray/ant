@@ -20,6 +20,7 @@ static bool jit_op_inline_side_effect(sv_op_t op) {
 // TODO: opcode.h
 static bool jit_op_inline_restarts_callee_on_guard_failure(sv_op_t op) {
   switch (op) {
+    case OP_CHECK_CTOR:
     case OP_GET_GLOBAL:
     case OP_GET_ELEM:
     case OP_BAND:
@@ -41,7 +42,10 @@ static bool jit_op_inline_after_effect(sv_op_t op) {
     case OP_RETURN_UNDEF:
     case OP_POP:
     case OP_DUP:
+    case OP_DUP2:
     case OP_NIP:
+    case OP_INSERT2:
+    case OP_INSERT3:
     case OP_GET_LOCAL:
     case OP_GET_LOCAL8:
     case OP_PUT_LOCAL:
@@ -76,6 +80,42 @@ static bool jit_op_inline_after_effect(sv_op_t op) {
     default:
       return false;
   }
+}
+
+static bool jit_inline_receiver_is_this(const sv_func_t *f, int off) {
+  uint8_t marks[JIT_INLINE_MAX_BYTECODE + 1];
+  int sp = 0;
+  for (int o = 0; o < off;) {
+    const uint8_t *ip = f->code + o;
+    sv_op_t op = (sv_op_t)*ip;
+    if (sv_op_flags[op] & (SV_OPF_JIT_BRANCH32 | SV_OPF_JIT_BRANCH8)) return false;
+    int pops, pushes;
+    if (!sv_op_stack_effect(f, ip, &pops, &pushes) || pops > sp ||
+        sp - pops + pushes > JIT_INLINE_MAX_BYTECODE) return false;
+    switch (op) {
+      case OP_THIS:
+        marks[sp++] = 1;
+        break;
+      case OP_DUP:
+        marks[sp] = marks[sp - 1];
+        sp++;
+        break;
+      case OP_INSERT2: {
+        uint8_t val = marks[sp - 1];
+        marks[sp - 1] = marks[sp - 2];
+        marks[sp - 2] = val;
+        marks[sp++] = val;
+        break;
+      }
+      default:
+        sp -= pops;
+        memset(marks + sp, 0, (size_t)pushes);
+        sp += pushes;
+        break;
+    }
+    o += sv_op_size[op];
+  }
+  return sp >= 2 && marks[sp - 2];
 }
 
 static bool jit_inline_note_instruction(const sv_func_t *f, int off, int size, uint8_t *boundaries) {
@@ -775,6 +815,13 @@ void jit_emit_inline_body(
         break;
       }
 
+      case OP_CHECK_CTOR:
+        MIR_append_insn(ctx, jit_func,
+                        MIR_new_insn(ctx, MIR_BEQ, MIR_new_label_op(ctx, slow),
+                                     MIR_new_reg_op(ctx, r_inl_new_target),
+                                     MIR_new_uint_op(ctx, mkval(kTypeUndefined, 0))));
+        break;
+
       case OP_SET_LOCAL_UNDEF: {
         uint16_t idx = sv_get_u16(ip + 1);
         ANT_ASSERT(idx < inl_n_locals, "invalid inline local initialization");
@@ -937,7 +984,7 @@ void jit_emit_inline_body(
         ANT_ASSERT(isp >= 2, "invalid inline stack depth");
         INL_FLUSH_ALL();
         char tn[32];
-        snprintf(tn, sizeof(tn), "inl%d_ins2t", id);
+        snprintf(tn, sizeof(tn), "inl%d_ins2t_%d", id, inl_bc_off);
         MIR_reg_t r_t = MIR_new_func_reg(ctx, jit_func->u.func, MIR_JSVAL, tn);
         MIR_reg_t r_a = inl_vs[isp - 1];
         MIR_reg_t r_obj = inl_vs[isp - 2];
@@ -964,7 +1011,7 @@ void jit_emit_inline_body(
         ANT_ASSERT(isp >= 3, "invalid inline stack depth");
         INL_FLUSH_ALL();
         char tn[32];
-        snprintf(tn, sizeof(tn), "inl%d_ins3t", id);
+        snprintf(tn, sizeof(tn), "inl%d_ins3t_%d", id, inl_bc_off);
         MIR_reg_t r_t = MIR_new_func_reg(ctx, jit_func->u.func, MIR_JSVAL, tn);
         MIR_reg_t r_a = inl_vs[isp - 1];
         MIR_reg_t r_prop = inl_vs[isp - 2];
@@ -1653,7 +1700,8 @@ void jit_emit_inline_body(
                            pf_name_off, pf_ic_idx, pf_atom,
                            r_js, pf_obj, pf_val, pf_slow, r_ic_epoch,
                            ext->shape_transition_proto, ext->imp_shape_transition,
-                           ext->remember_obj_proto, ext->imp_remember_obj);
+                           ext->remember_obj_proto, ext->imp_remember_obj,
+                           ext->fresh_this && jit_inline_receiver_is_this(callee, inl_bc_off));
         if (pf_fast) {
           MIR_append_insn(ctx, jit_func,
                           MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, pf_ok)));
@@ -2009,6 +2057,7 @@ void jit_emit_inline_body(
             int reader_id = (*ext->next_inline_id)++;
             jit_inline_ext_t reader_ext = *ext;
             reader_ext.reader_only = true;
+            reader_ext.fresh_this = false;
             jit_emit_inline_body(ctx, jit_func, js, reader, nc_args, nc_argc, NULL, NULL,
                 nc_dst, dv_generic, dv_done, r_bool, p_d_slot, reader_id, p_reg_site,
                 r_dv_cl, r_dv_this, inl_undef, r_dv_sup, r_vm, r_js, r_ic_epoch,

@@ -691,10 +691,9 @@ static ant_value_t util_types_is_proxy(ant_params_t) {
 }
 
 static ant_value_t util_types_is_regexp(ant_params_t) {
-  ant_value_t regexp_proto;
   if (nargs < 1 || !is_object_type(args[0])) return js_false;
-  regexp_proto = js->builtins.regexp_proto;
-  return js_bool(util_has_proto_in_chain(js, args[0], regexp_proto));
+  ant_object_t *obj = js_obj_ptr(js_as_obj(args[0]));
+  return js_bool(obj && obj->flags.regexp_brand);
 }
 
 static ant_value_t util_types_is_date(ant_params_t) {
