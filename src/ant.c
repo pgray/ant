@@ -2105,9 +2105,11 @@ static js_cstr_t js_cstr_impl(
   char *stack_buf, size_t stack_size, bool quote_strings, int max_depth
 ) {
   ant_stringify_ctx_t ctx;
-  ant_stringify_ctx_t *prev = ant_stringify_enter(js, &ctx, max_depth);
+  ant_stringify_enter(js, &ctx, max_depth);
+  
   js_cstr_t out = js_cstr_render(js, value, stack_buf, stack_size, quote_strings);
-  ant_stringify_leave(js, prev);
+  Ant_List_Remove(&ctx);
+  
   return out;
 }
 
@@ -2216,9 +2218,11 @@ static const char *js_str_render(ant_t *js, ant_value_t value) {
 
 const char *js_str(ant_t *js, ant_value_t value) {
   ant_stringify_ctx_t ctx;
-  ant_stringify_ctx_t *prev = ant_stringify_enter(js, &ctx, ANT_INSPECT_MAX_DEPTH);
+  ant_stringify_enter(js, &ctx, ANT_INSPECT_MAX_DEPTH);
+  
   const char *out = js_str_render(js, value);
-  ant_stringify_leave(js, prev);
+  Ant_List_Remove(&ctx);
+  
   return out;
 }
 
@@ -21504,8 +21508,9 @@ static ant_t *isolate_init(void *buf, size_t len) {
   memset(buf, 0, len);
   
   js = (ant_t *)buf;
-  js->stringify = &js->stringify_root;
   js->stringify_root.max_depth = ANT_INSPECT_MAX_DEPTH;
+  Ant_List_Insert(&js->stringify, &js->stringify_root);
+  
   js->exception = js_mkundef();
   js->exception_oom = js_mkundef();
   js_init_intern_cache(js);

@@ -23,6 +23,7 @@
 
 #include "common.h"
 #include "builder.h"
+#include "stringify.h"
 #include "gc/roots.h"
 #include "errors.h"
 #include "output.h"
@@ -793,11 +794,11 @@ bool io_print_error_props(ant_t *js, ant_output_stream_t *out, ant_value_t err) 
   }
 
   ant_stringify_ctx_t ctx;
-  ant_stringify_ctx_t *prev = ant_stringify_enter(js, &ctx, ANT_INSPECT_MAX_DEPTH);
+  ant_stringify_enter(js, &ctx, ANT_INSPECT_MAX_DEPTH);
   ctx.stack[ctx.depth++] = err;
 
   bool ok = js_inspect_object_body(&builder, err);
-  ant_stringify_leave(js, prev);
+  Ant_List_Remove(&ctx);
   
   if (ok) print_value_colored_to_output(builder.buf, out, io_no_color);
 
