@@ -1315,7 +1315,7 @@ static size_t strobj_inspect(ant_t *js, ant_value_t obj, char *buf, size_t len, 
   if (vtype(tag) == kTypeString) {
     ant_offset_t tag_len = 0;
     const char *tag_str = (const char *)(uintptr_t)vstr(js, tag, &tag_len);
-    ok = js_inspect_tagged_header(&builder, tag_str, (size_t)tag_len);
+    ok = js_inspect_tagged_header(&builder, obj, tag_str, (size_t)tag_len);
   } else ok = js_inspect_plain_header(&builder, obj);
   
   if (ok) ok = js_inspect_object_body(&builder, obj);
@@ -1324,8 +1324,7 @@ static size_t strobj_inspect(ant_t *js, ant_value_t obj, char *buf, size_t len, 
 }
 
 static size_t strregexp(ant_t *js, ant_value_t obj, char *buf, size_t len) {
-  ant_prop_loc_t source_loc = lkp(js, obj, "source", 6);
-  ant_value_t source = source_loc.obj ? js_prop_load(source_loc) : js_mkundef();
+  ant_value_t source = regexp_source_value(js, obj);
   ant_value_t flags = get_slot(obj, SLOT_REGEXP_FLAGS_STRING);
 
   size_t source_len = 0, flags_len = 0;
@@ -21883,14 +21882,14 @@ static ant_t *isolate_init(void *buf, size_t len) {
   ant_value_t number_parse_int = defmethod(js, number_ctor_obj, "parseInt", 8, Ant_Function_CreateWithArity(builtin_parseInt, 2));
   ant_value_t number_parse_float = defmethod(js, number_ctor_obj, "parseFloat", 10, Ant_Function_CreateWithArity(builtin_parseFloat, 1));
   
-  js_setprop(js, number_ctor_obj, js_mkstr(js, "MAX_VALUE", 9), tov(1.7976931348623157e+308));
-  js_setprop(js, number_ctor_obj, js_mkstr(js, "MIN_VALUE", 9), tov(5e-324));
-  js_setprop(js, number_ctor_obj, js_mkstr(js, "MAX_SAFE_INTEGER", 16), tov(9007199254740991.0));
-  js_setprop(js, number_ctor_obj, js_mkstr(js, "MIN_SAFE_INTEGER", 16), tov(-9007199254740991.0));
-  js_setprop(js, number_ctor_obj, js_mkstr(js, "POSITIVE_INFINITY", 17), tov(JS_INF));
-  js_setprop(js, number_ctor_obj, js_mkstr(js, "NEGATIVE_INFINITY", 17), tov(JS_NEG_INF));
-  js_setprop(js, number_ctor_obj, js_mkstr(js, "NaN", 3), tov(JS_NAN));
-  js_setprop(js, number_ctor_obj, js_mkstr(js, "EPSILON", 7), tov(2.220446049250313e-16));
+  js_setprop_readonly_nonconfigurable(js, number_ctor_obj, "MAX_VALUE", 9, tov(1.7976931348623157e+308));
+  js_setprop_readonly_nonconfigurable(js, number_ctor_obj, "MIN_VALUE", 9, tov(5e-324));
+  js_setprop_readonly_nonconfigurable(js, number_ctor_obj, "MAX_SAFE_INTEGER", 16, tov(9007199254740991.0));
+  js_setprop_readonly_nonconfigurable(js, number_ctor_obj, "MIN_SAFE_INTEGER", 16, tov(-9007199254740991.0));
+  js_setprop_readonly_nonconfigurable(js, number_ctor_obj, "POSITIVE_INFINITY", 17, tov(JS_INF));
+  js_setprop_readonly_nonconfigurable(js, number_ctor_obj, "NEGATIVE_INFINITY", 17, tov(JS_NEG_INF));
+  js_setprop_readonly_nonconfigurable(js, number_ctor_obj, "NaN", 3, tov(JS_NAN));
+  js_setprop_readonly_nonconfigurable(js, number_ctor_obj, "EPSILON", 7, tov(2.220446049250313e-16));
   
   js_setprop_readonly_nonconfigurable(js, number_ctor_obj, "prototype", 9, number_proto);
   js_set_function_name(js, number_ctor_obj, "Number", sizeof("Number") - 1);
