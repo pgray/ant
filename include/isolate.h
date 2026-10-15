@@ -57,6 +57,18 @@ typedef struct {
   const char *interned;
 } ant_intern_memo_entry_t;
 
+typedef struct {
+  ant_value_t stack[MAX_STRINGIFY_DEPTH];
+  int depth;
+  int indent;
+  int max_depth;
+
+  ant_value_t multiref_objs[MAX_MULTIREF_OBJS];
+  int multiref_ids[MAX_MULTIREF_OBJS];
+  int multiref_count;
+  int multiref_next_id;
+} ant_stringify_ctx_t;
+
 struct ant_isolate_t {
   sv_vm_t *vm;
   void *jit_ctx;
@@ -175,17 +187,8 @@ struct ant_isolate_t {
   ant_value_t exception;
   ant_value_t exception_oom;
 
-  struct {
-    ant_value_t stack[MAX_STRINGIFY_DEPTH];
-    int depth;
-    int indent;
-    int max_depth;
-
-    ant_value_t multiref_objs[MAX_MULTIREF_OBJS];
-    int multiref_ids[MAX_MULTIREF_OBJS];
-    int multiref_count;
-    int multiref_next_id;
-  } stringify;
+  ant_stringify_ctx_t *stringify;
+  ant_stringify_ctx_t stringify_root;
 
   struct {
     void *base;
@@ -494,6 +497,23 @@ struct ant_isolate_t {
   ant_value_t primordial_values[ANT_PRIMORDIAL_COUNT];
   ant_intern_memo_entry_t intern_memo[INTERN_MEMO_SIZE];
 };
+
+static inline ant_stringify_ctx_t *ant_stringify_enter(ant_t *js, ant_stringify_ctx_t *ctx, int max_depth) {
+  ctx->depth = 0;
+  ctx->indent = 0;
+  ctx->max_depth = max_depth;
+  ctx->multiref_count = 0;
+  ctx->multiref_next_id = 0;
+  
+  ant_stringify_ctx_t *prev = js->stringify;
+  js->stringify = ctx;
+  
+  return prev;
+}
+
+static inline void ant_stringify_leave(ant_t *js, ant_stringify_ctx_t *prev) {
+  js->stringify = prev;
+}
 
 static inline void ant_ic_epoch_bump(ant_t *js) {
   if (++js->ic.epoch == 0) js->ic.epoch = 1;

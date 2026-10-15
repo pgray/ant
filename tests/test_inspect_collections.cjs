@@ -51,6 +51,16 @@ assert.strictEqual(inspect({ a: { b: 1 } }, { depth: 0 }).replace(/\s+/g, ' '), 
 let dag = { v: 1 };
 for (let i = 0; i < 16; i++) dag = { l: dag, r: dag };
 assert.ok(inspect(dag).length < 1024);
+
+const nestedInner = { x: { y: { z: { w: 1 } } } };
+nestedInner.self = nestedInner;
+const nestedCustom = { [Symbol.inspect]() { return 'C<' + flat(nestedInner) + '>'; } };
+const nestedOuter = { a: { b: { c: { d: 1 } } }, custom: nestedCustom };
+nestedOuter.loop = nestedOuter;
+assert.strictEqual(
+  inspect(nestedOuter, { depth: 5 }).replace(/\s+/g, ' '),
+  '<ref *1> { a: { b: { c: { d: 1 } } }, custom: C<<ref *1> { x: { y: { z: [Object] } }, self: [Circular *1] }>, loop: [Circular *1] }'
+);
 const viaProto = {};
 viaProto.child = Object.create(viaProto);
 assert.strictEqual(flat(viaProto), '{ child: {} }');

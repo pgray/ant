@@ -387,12 +387,12 @@ static bool js_inspect_property_prefix(js_inspect_builder_t *builder) {
   if (builder->bare_mode) return js_inspect_append(builder, "\n ", 2);
   if (!builder->first && !js_inspect_append(builder, builder->inline_mode ? ", " : ",\n", 2)) return false;
   builder->first = false;
-  return builder->inline_mode || js_inspect_append_indent(builder, builder->js->stringify.indent);
+  return builder->inline_mode || js_inspect_append_indent(builder, builder->js->stringify->indent);
 }
 
 static void js_inspect_begin_body(js_inspect_builder_t *builder) {
   if (!builder->bare_mode && !builder->inline_mode && !builder->did_indent) {
-    builder->js->stringify.indent++;
+    builder->js->stringify->indent++;
     builder->did_indent = true;
   }
 }
@@ -529,7 +529,7 @@ bool js_inspect_close(js_inspect_builder_t *builder) {
   if (builder->closed) return true;
 
   if (builder->did_indent) {
-    builder->js->stringify.indent--;
+    builder->js->stringify->indent--;
     builder->did_indent = false;
   }
 
@@ -537,7 +537,7 @@ bool js_inspect_close(js_inspect_builder_t *builder) {
     if (!js_inspect_append(builder, " }", 2)) return false;
   } else {
     if (!builder->first && !js_inspect_append(builder, "\n", 1)) return false;
-    if (!js_inspect_append_indent(builder, builder->js->stringify.indent)) return false;
+    if (!js_inspect_append_indent(builder, builder->js->stringify->indent)) return false;
     if (!js_inspect_append(builder, "}", 1)) return false;
   }
 
@@ -674,7 +674,7 @@ static bool js_inspect_append_error_stack(js_inspect_builder_t *builder, ant_val
     skip = name_len;
   }
 
-  int indent = js->stringify.indent;
+  int indent = js->stringify->indent;
   for (const char *p = stack + skip, *end = stack + stack_len; p < end;) {
     const char *nl = memchr(p, '\n', (size_t)(end - p));
     size_t run = nl ? (size_t)(nl - p) + 1 : (size_t)(end - p);
@@ -725,7 +725,7 @@ bool js_inspect_error(js_inspect_builder_t *builder, ant_value_t obj) {
   builder->error_stack_len = 0;
 
   if (ok && builder->first) {
-    if (builder->did_indent) js->stringify.indent--;
+    if (builder->did_indent) js->stringify->indent--;
     builder->did_indent = false;
     builder->closed = true;
     builder->n = mark;

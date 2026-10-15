@@ -792,12 +792,13 @@ bool io_print_error_props(ant_t *js, ant_output_stream_t *out, ant_value_t err) 
     builder.error_stack = js_getstr(js, stack, &builder.error_stack_len);
   }
 
-  typeof(js->stringify) saved_stringify = js->stringify;
-  js->stringify = (typeof(js->stringify)){0};
-  js->stringify.stack[js->stringify.depth++] = err;
+  ant_stringify_ctx_t ctx;
+  ant_stringify_ctx_t *prev = ant_stringify_enter(js, &ctx, ANT_INSPECT_MAX_DEPTH);
+  ctx.stack[ctx.depth++] = err;
 
   bool ok = js_inspect_object_body(&builder, err);
-  js->stringify = saved_stringify;
+  ant_stringify_leave(js, prev);
+  
   if (ok) print_value_colored_to_output(builder.buf, out, io_no_color);
 
   js_inspect_builder_dispose(&builder);
