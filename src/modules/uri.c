@@ -3,9 +3,9 @@
 #include <string.h>
 
 #include "ant.h"
+#include "ascii.h"
 #include "errors.h"
 #include "utf8.h"
-#include "utils.h"
 #include "internal.h"
 #include "modules/uri.h"
 
@@ -64,8 +64,8 @@ static int decode_escape_sequence(const char *str, size_t len, size_t *pos, unsi
   if (*pos + 2 >= len) return -1;
   if (str[*pos] != '%') return -1;
   
-  int high = hex_digit(str[*pos + 1]);
-  int low = hex_digit(str[*pos + 2]);
+  int high = ant_ascii_hex_value((unsigned char)str[*pos + 1]);
+  int low = ant_ascii_hex_value((unsigned char)str[*pos + 2]);
   if (high < 0 || low < 0) return -1;
   
   *out_byte = (unsigned char)((high << 4) | low);
@@ -253,8 +253,8 @@ ant_value_t js_decodeURI(ant_params_t) {
     
     if (i + 2 >= len) goto malformed;
     
-    int high = hex_digit(str[i + 1]);
-    int low = hex_digit(str[i + 2]);
+    int high = ant_ascii_hex_value((unsigned char)str[i + 1]);
+    int low = ant_ascii_hex_value((unsigned char)str[i + 2]);
     if (high < 0 || low < 0) goto malformed;
     
     unsigned char first_byte = (unsigned char)((high << 4) | low);
@@ -341,8 +341,8 @@ static ant_value_t js_unescape(ant_params_t) {
   
   while (i < len) {
     if (str[i] == '%' && i + 2 < len) {
-      int high = hex_digit(str[i + 1]);
-      int low = hex_digit(str[i + 2]);
+      int high = ant_ascii_hex_value((unsigned char)str[i + 1]);
+      int low = ant_ascii_hex_value((unsigned char)str[i + 2]);
       if (high >= 0 && low >= 0) {
         out[out_len++] = (char)((high << 4) | low);
         i += 3;

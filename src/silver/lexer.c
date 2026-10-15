@@ -1,5 +1,6 @@
 #include "silver/lexer.h"
 
+#include "ascii.h"
 #include "internal.h"
 #include "escape.h"
 #include "tokens.h"
@@ -463,7 +464,7 @@ static int parse_unicode_escape(const char *buf, ant_offset_t len, ant_offset_t 
     ant_offset_t i = pos + 3;
     uint32_t cp = 0;
     int ndigits = 0;
-    while (i < len && is_xdigit((unsigned char)buf[i])) {
+    while (i < len && ant_ascii_is_xdigit((unsigned char)buf[i])) {
       cp = (cp << 4) | ((unsigned char)buf[i] <= '9' ? buf[i] - '0' : ((unsigned char)buf[i] | 0x20) - 'a' + 10);
       i++;
       ndigits++;
@@ -477,7 +478,7 @@ static int parse_unicode_escape(const char *buf, ant_offset_t len, ant_offset_t 
   uint32_t cp = 0;
   for (int i = 0; i < 4; i++) {
     int c = (unsigned char)buf[pos + 2 + i];
-    if (!is_xdigit(c)) return 0;
+    if (!ant_ascii_is_xdigit(c)) return 0;
     cp <<= 4;
     cp |= (c <= '9') ? (c - '0') : ((c | 0x20) - 'a' + 10);
   }
@@ -885,14 +886,11 @@ static inline bool is_expr_ws(char c) {
 }
 
 static inline bool is_ident_ascii_start(char c) {
-  return 
-    (c == '_' || c == '$' ||
-    (c >= 'a' && c <= 'z') ||
-    (c >= 'A' && c <= 'Z'));
+  return c == '_' || c == '$' || ant_ascii_is_alpha(c);
 }
 
 static inline bool is_ident_ascii_continue(char c) {
-  return is_ident_ascii_start(c) || (c >= '0' && c <= '9');
+  return is_ident_ascii_start(c) || ant_ascii_is_digit(c);
 }
 
 static inline ant_offset_t skip_regex_literal(const char *buf, ant_offset_t rem, ant_offset_t start) {

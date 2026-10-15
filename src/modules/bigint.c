@@ -4,10 +4,10 @@
 #include <string.h>
 
 #include "ant.h"
+#include "ascii.h"
 #include "internal.h"
 #include "errors.h"
 #include "gc/roots.h"
-#include "utils.h"
 #include "silver/lexer.h"
 
 static constexpr size_t BIGINT_LIMB_SIZE = 32;
@@ -1049,7 +1049,7 @@ static ant_value_t bigint_from_string_digits(
       continue;
     }
 
-    int digit = hex_digit(ch);
+    int digit = ant_ascii_hex_value((unsigned char)ch);
     if (digit < 0 || (uint32_t)digit >= base) {
       free(limbs);
       return js_mkerr(js, "Cannot convert string to BigInt");

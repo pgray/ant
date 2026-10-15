@@ -174,7 +174,7 @@ if (!Object.prototype.hasOwnProperty.call(inheritedSlice, 1) || inheritedSlice[1
 
 const util = require('node:util');
 const inspected = util.inspect((function () { return arguments; })(1, 'a'));
-if (inspected !== "[Arguments] [ 1, 'a' ]") throw new Error('inspect: ' + inspected);
+if (inspected !== "[Arguments] { '0': 1, '1': 'a' }") throw new Error('inspect: ' + inspected);
 if (!util.types.isArgumentsObject((function () { delete arguments.callee; return arguments; })()))
   throw new Error('isArgumentsObject depends on callee');
 if (util.types.isArgumentsObject([1])) throw new Error('isArgumentsObject accepts arrays');

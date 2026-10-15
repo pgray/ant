@@ -9,14 +9,6 @@ static inline uint8_t unhex(uint8_t c) {
   return (c & 0xF) + (c >> 6) * 9;
 }
 
-static inline bool is_xdigit(int c) {
-  return (unsigned)c < 256 && (
-    (c >= '0' && c <= '9') ||
-    (c >= 'a' && c <= 'f') ||
-    (c >= 'A' && c <= 'F')
-  );
-}
-
 static inline bool is_octal_escape(const uint8_t *in, size_t pos) {
   uint8_t c = in[pos + 1];
   return c >= '0' && c <= '7' && !(c == '0' && !(in[pos + 2] >= '0' && in[pos + 2] <= '7'));

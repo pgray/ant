@@ -910,15 +910,9 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_get_array_length(
   if (!nenv || !nenv->js || !result) return napi_set_last(env, napi_invalid_arg, "invalid argument");
 
   ant_value_t v = (ant_value_t)value;
-  if (vtype(v) == kTypeArray) {
-    *result = (uint32_t)js_arr_len(nenv->js, v);
-    return napi_set_last(env, napi_ok, NULL);
-  }
-
-  ant_value_t len = js_get(nenv->js, v, "length");
-  if (is_err(len) || Ant_Exception_Pending(nenv->js)) return napi_check_pending_from_result(env, len);
-  if (vtype(len) != kTypeNumber) return napi_set_last(env, napi_array_expected, "array expected");
-  *result = (uint32_t)js_getnum(len);
+  if (!js_is_array(v)) return napi_set_last(env, napi_array_expected, "array expected");
+  *result = (uint32_t)js_arr_len(nenv->js, v);
+  
   return napi_set_last(env, napi_ok, NULL);
 }
 

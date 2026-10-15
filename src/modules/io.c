@@ -21,6 +21,7 @@
 #include <unistd.h>
 #endif
 
+#include "ascii.h"
 #include "common.h"
 #include "builder.h"
 #include "stringify.h"
@@ -90,10 +91,6 @@ void io_set_sandbox_terminal(uint32_t capabilities) {
 #define JSON_REF      "\x1b[90m"
 #define JSON_WHITE    "\x1b[97m"
 #define JSON_PROPERTY "\x1b[35m"
-
-static inline bool io_is_digit_ascii(char c) {
-  return c >= '0' && c <= '9';
-}
 
 static inline bool io_is_hex_byte(const char *p) {
   return
@@ -239,21 +236,21 @@ static int io_iso_utc_token_len(const char *p) {
 
   if (*p == '+' || *p == '-') {
     i++;
-    for (int d = 0; d < 6; d++, i++) if (!io_is_digit_ascii(p[i])) return 0;
-  } else for (int d = 0; d < 4; d++, i++) if (!io_is_digit_ascii(p[i])) return 0;
+    for (int d = 0; d < 6; d++, i++) if (!ant_ascii_is_digit(p[i])) return 0;
+  } else for (int d = 0; d < 4; d++, i++) if (!ant_ascii_is_digit(p[i])) return 0;
 
   if (p[i++] != '-') return 0;
-  if (!io_is_digit_ascii(p[i++]) || !io_is_digit_ascii(p[i++])) return 0;
+  if (!ant_ascii_is_digit(p[i++]) || !ant_ascii_is_digit(p[i++])) return 0;
   if (p[i++] != '-') return 0;
-  if (!io_is_digit_ascii(p[i++]) || !io_is_digit_ascii(p[i++])) return 0;
+  if (!ant_ascii_is_digit(p[i++]) || !ant_ascii_is_digit(p[i++])) return 0;
   if (p[i++] != 'T') return 0;
-  if (!io_is_digit_ascii(p[i++]) || !io_is_digit_ascii(p[i++])) return 0;
+  if (!ant_ascii_is_digit(p[i++]) || !ant_ascii_is_digit(p[i++])) return 0;
   if (p[i++] != ':') return 0;
-  if (!io_is_digit_ascii(p[i++]) || !io_is_digit_ascii(p[i++])) return 0;
+  if (!ant_ascii_is_digit(p[i++]) || !ant_ascii_is_digit(p[i++])) return 0;
   if (p[i++] != ':') return 0;
-  if (!io_is_digit_ascii(p[i++]) || !io_is_digit_ascii(p[i++])) return 0;
+  if (!ant_ascii_is_digit(p[i++]) || !ant_ascii_is_digit(p[i++])) return 0;
   if (p[i++] != '.') return 0;
-  if (!io_is_digit_ascii(p[i++]) || !io_is_digit_ascii(p[i++]) || !io_is_digit_ascii(p[i++])) return 0;
+  if (!ant_ascii_is_digit(p[i++]) || !ant_ascii_is_digit(p[i++]) || !ant_ascii_is_digit(p[i++])) return 0;
   if (p[i++] != 'Z') return 0;
 
   char boundary = p[i];

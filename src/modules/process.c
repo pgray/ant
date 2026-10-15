@@ -1031,9 +1031,27 @@ static ant_value_t process_uptime(ant_params_t) {
 static ant_value_t process_hrtime(ant_params_t) {
   uint64_t now = uv_hrtime();
   
-  if (nargs > 0 && vtype(args[0]) == kTypeArray) {
+  if (nargs > 0 && vtype(args[0]) != kTypeUndefined) {
+    bool time_is_array = false;
+    
+    ant_value_t checked = js_is_array_value_checked(js, args[0], &time_is_array);
+    if (is_err(checked)) return checked;
+    
+    if (!time_is_array) 
+      return Ant_Error_CreateInvalidArgType(js, "time", "an instance of Array", args[0]);
+    
+    ant_value_t time_len = js_get(js, args[0], "length");
+    if (is_err(time_len)) return time_len;
+    
+    if (vtype(time_len) != kTypeNumber || js_getnum(time_len) != 2) {
+      char message[96];
+      snprintf(message, sizeof(message), "The value of \"time\" is out of range. It must be 2. Received %s", js_str(js, time_len));
+      return js_mkerr_code(js, JS_ERR_RANGE, "ERR_OUT_OF_RANGE", message);
+    }
+    
     ant_value_t prev_sec = js_get(js, args[0], "0");
     ant_value_t prev_nsec = js_get(js, args[0], "1");
+    
     if (vtype(prev_sec) == kTypeNumber && vtype(prev_nsec) == kTypeNumber) {
       uint64_t prev = (uint64_t)js_getnum(prev_sec) * 1000000000ULL + (uint64_t)js_getnum(prev_nsec);
       now = now - prev;
@@ -1298,7 +1316,7 @@ static ant_value_t process_setegid(ant_params_t) {
 }
 
 static ant_value_t process_setgroups(ant_params_t) {
-  if (nargs < 1 || vtype(args[0]) != kTypeArray) {
+  if (nargs < 1 || !js_is_array(args[0])) {
     return js_mkerr(js, "process.setgroups requires an array");
   }
   
@@ -1463,13 +1481,6 @@ static void load_dotenv_file(void) {
   fclose(fp);
 }
 
-static ant_value_t process_invalid_arg_type(ant_t *js, const char *name, const char *expected, ant_value_t value) {
-  char received[160], message[256];
-  js_describe_received(js, value, received, sizeof(received));
-  snprintf(message, sizeof(message), "The \"%s\" argument must be of type %s. %s", name, expected, received);
-  return js_mkerr_code(js, JS_ERR_TYPE, "ERR_INVALID_ARG_TYPE", message);
-}
-
 static ant_value_t process_set_exit_code(ant_t *js, ant_process_state_t *ps, ant_value_t code) {
   if (vtype(code) == kTypeUndefined || vtype(code) == kTypeNull) {
     ps->has_exit_code = false;
@@ -1485,7 +1496,7 @@ static ant_value_t process_set_exit_code(ant_t *js, ant_process_state_t *ps, ant
     ? tod(js_to_numeric(js, code)) : JS_NAN;
   
   if (isnan(n) && type != kTypeNumber) 
-    return process_invalid_arg_type(js, "code", "number", code);
+    return Ant_Error_CreateInvalidArgType(js, "code", "of type number", code);
 
   if (!isfinite(n) || n != trunc(n) || fabs(n) > 9007199254740991.0) {
     char buf[64], message[160];
@@ -1881,7 +1892,8 @@ static void process_listener_change(
 
 static ant_value_t process_get_builtin_module(ant_params_t) {
   ant_value_t id = nargs > 0 ? args[0] : js_mkundef();
-  if (vtype(id) != kTypeString) return process_invalid_arg_type(js, "id", "string", id);
+  if (vtype(id) != kTypeString) 
+    return Ant_Error_CreateInvalidArgType(js, "id", "of type string", id);
 
   size_t len = 0;
   const char *name = js_getstr(js, id, &len);
@@ -1889,6 +1901,7 @@ static ant_value_t process_get_builtin_module(ant_params_t) {
 
   bool found = false;
   ant_value_t ns = js_esm_load_node_builtin(js, name, len, &found);
+  
   return found ? esm_require_unwrap(js, ns) : js_mkundef();
 }
 

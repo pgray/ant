@@ -1,4 +1,5 @@
 #include "watch.h"
+#include "ascii.h"
 #include "messages.h"
 #include "utils.h"
 #include "esm/loader.h"
@@ -283,7 +284,7 @@ static char *watch_read_file(const char *path, size_t *out_len) {
 }
 
 static bool watch_is_ident_char(unsigned char ch) {
-  return isalnum(ch) || ch == '_' || ch == '$';
+  return ant_ascii_is_alnum(ch) || ch == '_' || ch == '$';
 }
 
 static bool watch_word_equals(const char *src, size_t start, size_t end, const char *word) {

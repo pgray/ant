@@ -1450,11 +1450,8 @@ ant_value_t jit_helper_get_length_at(ant_t *js, ant_value_t obj, sv_func_t *func
 }
 
 ant_value_t jit_helper_get_length_inline(ant_t *js, ant_value_t obj) {
-  if (vtype(obj) == kTypeArray && !js_obj_ptr(obj)->flags.arguments_object)
-    return tov((double)(uint32_t)js_arr_len(js, obj));
-
-  if (vtype(obj) == kTypeString)
-    return tov((double)str_utf16_len(js, obj));
+  if (js_is_array(obj)) return tov((double)(uint32_t)js_arr_len(js, obj));
+  if (vtype(obj) == kTypeString) return tov((double)str_utf16_len(js, obj));
 
   ant_value_t out = js_mkundef();
   if (js->intern.length &&

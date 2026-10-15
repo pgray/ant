@@ -43,6 +43,20 @@ const plainProxy = new Proxy({ q: 1 }, { getOwnPropertyDescriptor: () => ({ valu
 assert.strictEqual(Object.prototype.hasOwnProperty.call(plainProxy, 'q'), true);
 assert.throws(() => gopd({ value: 1, configurable: false }, writableFixed), TypeError);
 
+const orderSym = Symbol('s');
+const defined = [];
+const logging = new Proxy({}, { defineProperty(t, k, d) { defined.push(String(k)); return Reflect.defineProperty(t, k, d); } });
+Object.defineProperties(logging, { [orderSym]: { value: 1 }, a: { value: 2 }, b: { value: 3 } });
+assert.deepStrictEqual(defined, ['a', 'b', 'Symbol(s)']);
+const partial = Object.preventExtensions(Object.defineProperty({}, 'a', { value: 0 }));
+assert.throws(() => Object.defineProperties(partial, { [orderSym]: { value: 1 }, a: { value: 2 } }), TypeError);
+assert.strictEqual(Object.getOwnPropertySymbols(partial).length, 0);
+const plainOrder = Object.defineProperties({}, { [orderSym]: { value: 1, enumerable: true }, a: { value: 2, enumerable: true } });
+assert.deepStrictEqual(Reflect.ownKeys(plainOrder), ['a', orderSym]);
+const frozenA = Object.defineProperty({}, 'a', { value: 0 });
+assert.throws(() => Object.defineProperties(frozenA, { [orderSym]: { value: 1 }, a: { value: 2 } }), TypeError);
+assert.strictEqual(Object.getOwnPropertySymbols(frozenA).length, 0);
+
 assert.throws(() => new Error(Symbol('x')), TypeError);
 assert.throws(() => new TypeError(Symbol('x')), TypeError);
 assert.throws(() => new AggregateError([], Symbol('x')), TypeError);

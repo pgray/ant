@@ -5,7 +5,7 @@
 #include "errors.h"
 #include "internal.h"
 #include "utils.h"
-#include "escape.h"
+#include "ascii.h"
 #include "descriptors.h"
 #include "ptr.h"
 #include "gc/roots.h"
@@ -656,7 +656,7 @@ static void js_to_pcre2_pattern_append(
     if (next == 'u' && si + 2 < src_len && src[si + 2] == '{') {
       size_t brace_start = si + 3;
       size_t brace_end = brace_start;
-      while (brace_end < src_len && src[brace_end] != '}' && is_xdigit(src[brace_end])) brace_end++;
+      while (brace_end < src_len && src[brace_end] != '}' && ant_ascii_is_xdigit(src[brace_end])) brace_end++;
       if (brace_end < src_len && src[brace_end] == '}' && brace_end > brace_start) {
         OUT('\\'); OUT('x'); OUT('{');
         for (size_t k = brace_start; k < brace_end; k++) OUT(src[k]);
@@ -667,8 +667,8 @@ static void js_to_pcre2_pattern_append(
     }
 
     if (next == 'u' && si + 5 < src_len &&
-        is_xdigit(src[si+2]) && is_xdigit(src[si+3]) &&
-        is_xdigit(src[si+4]) && is_xdigit(src[si+5])) {
+        ant_ascii_is_xdigit(src[si+2]) && ant_ascii_is_xdigit(src[si+3]) &&
+        ant_ascii_is_xdigit(src[si+4]) && ant_ascii_is_xdigit(src[si+5])) {
       OUT('\\'); OUT('x'); OUT('{');
       OUT(src[si+2]); OUT(src[si+3]); OUT(src[si+4]); OUT(src[si+5]);
       OUT('}');
@@ -683,7 +683,7 @@ static void js_to_pcre2_pattern_append(
     }
 
     if (next == 'x' && si + 3 < src_len &&
-        is_xdigit(src[si+2]) && is_xdigit(src[si+3])) {
+        ant_ascii_is_xdigit(src[si+2]) && ant_ascii_is_xdigit(src[si+3])) {
       OUT('\\'); OUT('x'); OUT(src[si+2]); OUT(src[si+3]);
       si += 3;
       continue;

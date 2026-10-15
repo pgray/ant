@@ -4,21 +4,14 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <string.h>
+#include "ascii.h"
 
 static inline bool js_regex_is_space(unsigned char c) {
   return c == ' ' || c == '\t' || c == '\n' || c == '\r';
 }
 
-static inline bool js_regex_is_digit(unsigned char c) {
-  return c >= '0' && c <= '9';
-}
-
-static inline bool js_regex_is_alpha(unsigned char c) {
-  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
-}
-
 static inline bool js_regex_is_ident_char(unsigned char c) {
-  return js_regex_is_alpha(c) || js_regex_is_digit(c) || c == '_' || c == '$';
+  return ant_ascii_is_alnum(c) || c == '_' || c == '$';
 }
 
 static inline bool js_regex_word_eq(const char *word, size_t len, const char *lit, size_t lit_len) {
@@ -48,7 +41,7 @@ static inline bool js_regex_word_allows_start(const char *word, size_t len) {
 
 static inline bool js_regex_prev_forbids_start(unsigned char prev) {
   return
-    js_regex_is_digit(prev) ||
+    ant_ascii_is_digit(prev) ||
     prev == ')' || prev == ']' || prev == '}' ||
     prev == '"' || prev == '\'' || prev == '`' || prev == '.';
 }
@@ -129,7 +122,7 @@ static inline bool js_scan_regex_literal(
     if (ch != '/') continue;
 
     i++;
-    while (i < len && js_regex_is_alpha((unsigned char)code[i])) i++;
+    while (i < len && ant_ascii_is_alpha((unsigned char)code[i])) i++;
 
     if (out_end) *out_end = i;
     return true;

@@ -107,10 +107,7 @@ descriptor_entry_t *lookup_descriptor(ant_t *js, ant_value_t obj, const char *ke
   if (!js || !is_canonical_desc_obj(obj)) return NULL;
 
   ant_object_t *ptr = js_obj_ptr(obj);
-  if (
-    klen == 6 && memcmp(key, "length", 6) == 0 && ptr && 
-    ptr->type_tag == kTypeArray && !ptr->flags.arguments_object
-  ) {
+  if (klen == 6 && memcmp(key, "length", 6) == 0 && ant_object_is_array(ptr)) {
     if (ptr->flags.frozen) return &arr_length_readonly_desc;
     descriptor_entry_t *own = ptr->flags.is_exotic ? registry_lookup_desc(js, obj, key, klen) : NULL;
     return own ? own : &arr_length_desc;

@@ -7,6 +7,7 @@
 #include <math.h>
 
 #include "ant.h"
+#include "ascii.h"
 #include "ptr.h"
 #include "utf8.h"
 #include "utils.h"
@@ -60,15 +61,6 @@ TypedArrayData *buffer_get_typedarray_data(ant_value_t value) {
 static inline TypedArrayData *typedarray_live(ant_value_t value) {
   TypedArrayData *ta = buffer_get_typedarray_data(value);
   return Ant_Buffer_ViewIsLive(ta) ? ta : NULL;
-}
-
-static __attribute__((noinline, cold)) ant_value_t buffer_arg_type_error(
-  ant_t *js, const char *name, const char *expected, ant_value_t received
-) {
-  char got[160], message[320];
-  js_describe_received(js, received, got, sizeof(got));
-  snprintf(message, sizeof(message), "The \"%s\" argument must be %s. %s", name, expected, got);
-  return js_mkerr_code(js, JS_ERR_TYPE, "ERR_INVALID_ARG_TYPE", message);
 }
 
 static __attribute__((noinline, cold)) ant_value_t typedarray_this_error(ant_t *js, ant_value_t value) {
@@ -1172,7 +1164,7 @@ static ant_value_t create_typed_array_for_length(
 }
 
 static bool typedarray_dense_number_source(ant_value_t source) {
-  if (vtype(source) != kTypeArray) return false;
+  if (!js_is_array(source)) return false;
   ant_object_t *obj = js_obj_ptr(js_as_obj(source));
   if (!obj->flags.fast_array || obj->flags.is_exotic ||
       obj->u.array.len > obj->u.array.cap || obj->u.array.len >= 0x10000000) return false;
@@ -2097,13 +2089,6 @@ fail:
   return NULL;
 }
 
-static int hex_nibble(unsigned char ch) {
-  if (ch >= '0' && ch <= '9') return ch - '0';
-  if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
-  if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
-  return -1;
-}
-
 static uint8_t *hex_decode_node_prefix(const char *data, size_t len, size_t *out_len) {
   size_t max_len = len / 2;
   uint8_t *decoded = malloc(max_len == 0 ? 1 : max_len);
@@ -2111,8 +2096,8 @@ static uint8_t *hex_decode_node_prefix(const char *data, size_t len, size_t *out
 
   size_t count = 0;
   for (size_t i = 0; i + 1 < len; i += 2) {
-    int hi = hex_nibble((unsigned char)data[i]);
-    int lo = hex_nibble((unsigned char)data[i + 1]);
+    int hi = ant_ascii_hex_value((unsigned char)data[i]);
+    int lo = ant_ascii_hex_value((unsigned char)data[i + 1]);
     if (hi < 0 || lo < 0) break;
     decoded[count++] = (uint8_t)((hi << 4) | lo);
   }
@@ -3531,7 +3516,7 @@ static __attribute__((noinline, cold)) ant_value_t buffer_bounds_error(ant_t *js
 
 static ant_value_t buffer_access_ptr(ant_t *js, ant_value_t offset_value, size_t width, uint8_t **ptr, size_t *offset) {
   if (vtype(offset_value) == kTypeUndefined) offset_value = js_mknum(0);
-  if (vtype(offset_value) != kTypeNumber) return buffer_arg_type_error(js, "offset", "of type number", offset_value);
+  if (vtype(offset_value) != kTypeNumber) return Ant_Error_CreateInvalidArgType(js, "offset", "of type number", offset_value);
   
   ant_value_t receiver = js_getthis(js);
   TypedArrayData *ta = buffer_get_typedarray_data(receiver);
@@ -3597,7 +3582,7 @@ typedef enum {
 } buffer_num_endian_t;
 
 static ant_value_t buffer_num_width(ant_t *js, ant_value_t value, size_t *width) {
-  if (vtype(value) != kTypeNumber) return buffer_arg_type_error(js, "byteLength", "of type number", value);
+  if (vtype(value) != kTypeNumber) return Ant_Error_CreateInvalidArgType(js, "byteLength", "of type number", value);
   double n = js_getnum(value);
   if (floor(n) != n) return buffer_out_of_range(js, "byteLength", "an integer", value);
   if (n < 1 || n > 6) return buffer_out_of_range(js, "byteLength", ">= 1 and <= 6", value);
@@ -3919,7 +3904,7 @@ static ant_value_t js_buffer_byteLength(ant_params_t) {
 // Buffer.concat(list, totalLength)
 static ant_value_t js_buffer_concat(ant_params_t) {
   ant_value_t list = nargs > 0 ? args[0] : js_mkundef();
-  if (vtype(list) != kTypeArray) return buffer_arg_type_error(js, "list", "an instance of Array", list);
+  if (!js_is_array(list)) return Ant_Error_CreateInvalidArgType(js, "list", "an instance of Array", list);
 
   ant_offset_t count = js_arr_len(js, list);
   size_t total_length = 0;
@@ -3931,7 +3916,7 @@ static ant_value_t js_buffer_concat(ant_params_t) {
     if (!ta || ta->type != TYPED_ARRAY_UINT8) {
       char name[32];
       snprintf(name, sizeof(name), "list[%u]", (unsigned)i);
-      return buffer_arg_type_error(js, name, "an instance of Buffer or Uint8Array", item);
+      return Ant_Error_CreateInvalidArgType(js, name, "an instance of Buffer or Uint8Array", item);
     }
     
     if (Ant_Buffer_ViewIsLive(ta)) total_length += ta->byte_length;

@@ -982,9 +982,9 @@ static inline ant_object_t *array_obj_ptr(ant_value_t obj) {
   return (ptr && ptr->type_tag == kTypeArray) ? ptr : NULL;
 }
 
-static inline ant_object_t *array_length_obj_ptr(ant_value_t obj) {
+static inline ant_object_t *real_array_obj_ptr(ant_value_t obj) {
   ant_object_t *ptr = array_obj_ptr(obj);
-  return (ptr && !ptr->flags.arguments_object) ? ptr : NULL;
+  return ant_object_is_array(ptr) ? ptr : NULL;
 }
 
 static inline bool array_dense_storage(const ant_object_t *ptr) {
@@ -1001,11 +1001,6 @@ static inline bool array_dense_read(const ant_object_t *ptr, ant_offset_t idx, a
   if (is_empty_slot(value)) return false;
   *out = value;
   return true;
-}
-
-static inline bool is_arguments_object(ant_value_t obj) {
-  ant_object_t *ptr = array_obj_ptr(obj);
-  return ptr && ptr->flags.arguments_object;
 }
 
 static inline bool array_may_have_holes(ant_value_t obj) {
@@ -1065,7 +1060,7 @@ static ant_offset_t to_length_offset(double d) {
 }
 
 static ant_value_t array_like_length_checked(ant_t *js, ant_value_t obj, ant_offset_t *out) {
-  ant_object_t *ptr = array_length_obj_ptr(obj);
+  ant_object_t *ptr = real_array_obj_ptr(obj);
   *out = ptr ? (ant_offset_t)ptr->u.array.len : 0;
   if (ptr) return js_mkundef();
 
@@ -1082,7 +1077,7 @@ static ant_value_t array_like_length_checked(ant_t *js, ant_value_t obj, ant_off
 }
 
 static ant_offset_t array_like_length(ant_t *js, ant_value_t obj) {
-  ant_object_t *ptr = array_length_obj_ptr(obj);
+  ant_object_t *ptr = real_array_obj_ptr(obj);
   
   if (ptr) return (ant_offset_t)ptr->u.array.len;
   if (!is_object_type(obj)) return 0;
@@ -1191,17 +1186,23 @@ static size_t strarr_body(ant_t *js, ant_value_t obj, char *buf, size_t len) {
     n += (size_t) snprintf(buf + n, REMAIN(n, len), "(%u) ", (unsigned) length);
   }
   
-  if (length == 0) return n + cpy(buf + n, REMAIN(n, len), "[]", 2);
+  char open = arguments ? '{' : '[';
+  char close = arguments ? '}' : ']';
+  if (length == 0 && !(arguments && stringify_has_shown_props(obj)))
+    return n + (size_t) snprintf(buf + n, REMAIN(n, len), "%c%c", open, close);
   
-  n += cpy(buf + n, REMAIN(n, len), inline_mode ? "[ " : "[\n", 2);
+  n += (size_t) snprintf(buf + n, REMAIN(n, len), inline_mode ? "%c " : "%c\n", open);
   if (!inline_mode) js->stringify->indent++;
   
   bool printed_first = false;
   for (ant_offset_t i = 0; i < iter_len; i++) {
+    bool found = arr_has(js, obj, i);
+    if (arguments && !found) continue;
     if (printed_first) n += cpy(buf + n, REMAIN(n, len), inline_mode ? ", " : ",\n", 2);
     if (!inline_mode) n += add_indent(buf + n, REMAIN(n, len), js->stringify->indent);
 
-    ant_value_t val = arr_get(js, obj, i); bool found = arr_has(js, obj, i);
+    if (arguments) n += (size_t) snprintf(buf + n, REMAIN(n, len), "'%u': ", (unsigned) i);
+    ant_value_t val = arr_get(js, obj, i);
     n += found ? tostr(js, val, buf + n, REMAIN(n, len)) : cpy(buf + n, REMAIN(n, len), "undefined", 9);
     printed_first = true;
   }
@@ -1222,7 +1223,10 @@ static size_t strarr_body(ant_t *js, ant_value_t obj, char *buf, size_t len) {
       if (!inline_mode) n += add_indent(buf + n, REMAIN(n, len), js->stringify->indent);
       
       ant_value_t val = (i < ptr->prop_count) ? ant_object_prop_get_unchecked(ptr, i) : js_mkundef();
-      if (is_array_index(key, klen)) n += tostr(js, val, buf + n, REMAIN(n, len)); else {
+      if (arguments && is_array_index(key, klen)) {
+        n += (size_t) snprintf(buf + n, REMAIN(n, len), "'%.*s': ", (int)klen, key);
+        n += tostr(js, val, buf + n, REMAIN(n, len));
+      } else if (is_array_index(key, klen)) n += tostr(js, val, buf + n, REMAIN(n, len)); else {
         n += cpy(buf + n, REMAIN(n, len), key, klen);
         n += cpy(buf + n, REMAIN(n, len), ": ", 2);
         n += tostr(js, val, buf + n, REMAIN(n, len));
@@ -1238,7 +1242,7 @@ static size_t strarr_body(ant_t *js, ant_value_t obj, char *buf, size_t len) {
     n += add_indent(buf + n, REMAIN(n, len), js->stringify->indent);
   }
   
-  return n + cpy(buf + n, REMAIN(n, len), inline_mode ? " ]" : "]", inline_mode ? 2 : 1);
+  return n + (size_t) snprintf(buf + n, REMAIN(n, len), inline_mode ? " %c" : "%c", close);
 }
 
 static size_t strarr(ant_t *js, ant_value_t obj, char *buf, size_t len) {
@@ -2597,7 +2601,7 @@ void js_arguments_link_upvalue(ant_t *js, sv_frame_t *frame, sv_upvalue_t *uv) {
 void js_arguments_upvalue_written(ant_t *js, sv_upvalue_t *uv, ant_value_t value) {
   ant_object_t *owner = (ant_object_t *)(js->obj_arena.base + (size_t)uv->args_owner * js->obj_arena.elem_size);
   if (!fixed_arena_contains(&js->obj_arena, owner) || owner->mark_epoch == ANT_GC_DEAD) return;
-  if (owner->type_tag != kTypeArray || !owner->flags.arguments_object) return;
+  if (!ant_object_is_arguments(owner)) return;
 
   ant_value_t obj = js_obj_from_ptr(owner);
   ant_arguments_state_t *state = js_arguments_state(obj);
@@ -3241,7 +3245,7 @@ ant_value_t js_arr_spread_into(ant_t *js, ant_value_t dst, ant_value_t src) {
   
   ant_offset_t base = get_array_length(js, dst);
   ant_offset_t doff = get_dense_buf(dst);
-  if (doff && array_length_obj_ptr(dst) && dense_capacity(doff) < base + len)
+  if (doff && real_array_obj_ptr(dst) && dense_capacity(doff) < base + len)
     doff = dense_grow(js, dst, base + len);
   
   for (ant_offset_t i = 0; i < len; i++) {
@@ -3892,7 +3896,7 @@ bool same_ctor_identity(ant_t *js, ant_value_t a, ant_value_t b) {
 static ant_value_t array_constructor_from_receiver(ant_t *js, ant_value_t receiver) {
   if (!is_object_type(receiver)) return js_mkundef();
   
-  ant_object_t *plain = array_length_obj_ptr(receiver);
+  ant_object_t *plain = real_array_obj_ptr(receiver);
   if (plain && plain->proto == js->sym.array_proto && !js->array_species_protector_invalid)
     return js->sym.array_ctor;
   
@@ -3901,7 +3905,7 @@ static ant_value_t array_constructor_from_receiver(ant_t *js, ant_value_t receiv
     species_source = proxy_read_target(js, species_source);
   }
   
-  bool receiver_is_array = array_length_obj_ptr(species_source) != NULL;
+  bool receiver_is_array = real_array_obj_ptr(species_source) != NULL;
   if (!receiver_is_array) {
     ant_value_t array_proto = js->sym.array_proto;
     if (is_object_type(array_proto) && is_object_type(species_source))
@@ -3983,7 +3987,7 @@ static __attribute__((noinline)) bool array_length_readonly_slow(ant_t *js, ant_
 }
 
 static inline bool array_length_readonly(ant_t *js, ant_value_t arr) {
-  ant_object_t *ptr = array_length_obj_ptr(arr);
+  ant_object_t *ptr = real_array_obj_ptr(arr);
   if (__builtin_expect(!ptr || !(ptr->flags.raw & (ANT_OBJECT_FLAG_FROZEN | ANT_OBJECT_FLAG_EXOTIC)), 1)) return false;
   return array_length_readonly_slow(js, arr);
 }
@@ -4261,7 +4265,7 @@ bool lookup_prop_meta(
   ant_object_t *cur_ptr = js_obj_ptr(cur_obj);
   if (!cur_ptr) return false;
   if (key_kind == PROP_META_STRING && key && is_length_key(key, klen) &&
-      cur_ptr->type_tag == kTypeArray && !cur_ptr->flags.arguments_object) {
+      ant_object_is_array(cur_ptr)) {
     out->has_getter = false;
     out->has_setter = false;
     out->writable = true;
@@ -4314,7 +4318,7 @@ bool js_try_get_own_data_prop(ant_t *js, ant_value_t obj, const char *key, size_
   
   if (ptr && ptr->flags.is_exotic && is_proxy(as_obj)) return false;
 
-  if (ptr && ptr->shape && !(array_length_obj_ptr(as_obj) && is_length_key(key, key_len))) {
+  if (ptr && ptr->shape && !(real_array_obj_ptr(as_obj) && is_length_key(key, key_len))) {
     const char *interned = intern_find(key, key_len);
     int32_t slot = interned ? ant_shape_lookup_interned(ptr->shape, interned) : -1;
     
@@ -4337,7 +4341,7 @@ bool js_try_get_own_data_prop(ant_t *js, ant_value_t obj, const char *key, size_
     return true;
   }
 
-  if (array_length_obj_ptr(as_obj) && is_length_key(key, (ant_offset_t)key_len)) {
+  if (real_array_obj_ptr(as_obj) && is_length_key(key, (ant_offset_t)key_len)) {
     *out = tov((double)get_array_length(js, as_obj));
     return true;
   }
@@ -4436,7 +4440,7 @@ static inline ant_value_t exotic_own_get(ant_t *js, ant_value_t obj, const ant_o
 
 static bool array_own_value(ant_t *js, ant_value_t obj, const char *key, size_t len, ant_value_t *out) {
   if (!array_obj_ptr(obj)) return false;
-  if (array_length_obj_ptr(obj) && is_length_key(key, len)) {
+  if (real_array_obj_ptr(obj) && is_length_key(key, len)) {
     *out = tov((double)get_array_length(js, obj));
     return true;
   }
@@ -4568,7 +4572,7 @@ static ant_value_t setprop_impl(ant_t *js, ant_value_t obj, ant_value_t k, ant_v
     if (result != JS_SETPROP_ARRAY_NOT_HANDLED) return result;
   }
 
-  ant_object_t *len_obj = array_length_obj_ptr(obj);
+  ant_object_t *len_obj = real_array_obj_ptr(obj);
   if (len_obj && is_length_key(key, klen)) {
     ant_value_t err = validate_array_length(js, v);
     if (is_err(err)) return err;
@@ -6388,11 +6392,11 @@ ant_value_t js_delete_prop_ordinary(ant_t *js, ant_value_t obj, const char *key,
     bool own = 
       lkp(js, obj, key, len).obj || 
       arr_own_dense_element(js, original_obj, key, len, NULL) ||
-      (array_length_obj_ptr(original_obj) && is_length_key(key, len));
+      (real_array_obj_ptr(original_obj) && is_length_key(key, len));
     return js_bool(!own);
   }
 
-  if (array_length_obj_ptr(original_obj) && is_length_key(key, len)) return js_false;
+  if (real_array_obj_ptr(original_obj) && is_length_key(key, len)) return js_false;
 
   if (array_obj_ptr(original_obj)) {
     ant_offset_t doff = get_dense_buf(original_obj);
@@ -6880,7 +6884,7 @@ ant_value_t js_arg_list_from(ant_t *js, ant_value_t array_like, js_arg_list_t *l
   ant_offset_t len = 0;
   ant_value_t result = js_mkundef();
   
-  if (array_length_obj_ptr(array_like)) len = get_array_length(js, array_like);
+  if (real_array_obj_ptr(array_like)) len = get_array_length(js, array_like);
   else result = proxy_aware_length(js, array_like, &len);
   if (is_err(result)) goto fail;
 
@@ -7489,7 +7493,7 @@ static ant_value_t builtin_Error(ant_params_t) {
   return is_err(installed) ? installed : this_val;
 }
 
-ant_value_t Ant_Error_CreateConstructor(ant_t *js, const char *name, ant_value_t *out_proto) {
+ant_value_t Ant_Error_CreateConstructorEx(ant_t *js, const char *name, ant_value_t cfunc, ant_value_t *out_proto) {
   size_t name_len = strlen(name);
   ant_value_t error_ctor = js->builtins.error_ctor;
   
@@ -7503,7 +7507,7 @@ ant_value_t Ant_Error_CreateConstructor(ant_t *js, const char *name, ant_value_t
   ant_value_t ctor = mkobj(js, 0);
   GC_ROOT_PIN(js, ctor);
   set_proto(js, ctor, error_ctor);
-  set_slot(ctor, SLOT_CFUNC, Ant_Function_CreateWithArity(builtin_Error, 1));
+  set_slot(ctor, SLOT_CFUNC, cfunc);
   js_setprop_readonly_nonconfigurable(js, ctor, "prototype", 9, proto);
   js_set_function_name(js, ctor, name, name_len);
   
@@ -7513,6 +7517,10 @@ ant_value_t Ant_Error_CreateConstructor(ant_t *js, const char *name, ant_value_t
   
   if (out_proto) *out_proto = proto;
   return ctor_func;
+}
+
+ant_value_t Ant_Error_CreateConstructor(ant_t *js, const char *name, ant_value_t *out_proto) {
+  return Ant_Error_CreateConstructorEx(js, name, Ant_Function_CreateWithArity(builtin_Error, 1), out_proto);
 }
 
 static ant_value_t builtin_Error_toString(ant_params_t) {
@@ -9549,7 +9557,7 @@ static ant_value_t legacy_lookup_accessor(ant_t *js, ant_value_t this_val, ant_v
     if (vtype(key_val) == kTypeSymbol) {
       if (lkp_sym(cur, sym_off).obj) return js_mkundef();
     } else {
-      if (array_length_obj_ptr(cur) && is_length_key(key_str, key_len)) return js_mkundef();
+      if (real_array_obj_ptr(cur) && is_length_key(key_str, key_len)) return js_mkundef();
       if (array_obj_ptr(cur) && is_array_index(key_str, key_len)) {
         unsigned long idx = 0;
         if (
@@ -9661,7 +9669,7 @@ static ant_value_t object_has_own_key(ant_t *js, ant_value_t obj, property_key_v
   }
 
   if (key->index_like && array_obj_ptr(as_obj)) {
-    if (array_length_obj_ptr(as_obj) && is_length_key(key_str, key_len)) return mkval(kTypeBool, 1);
+    if (real_array_obj_ptr(as_obj) && is_length_key(key_str, key_len)) return mkval(kTypeBool, 1);
     if (arr_own_dense_element(js, as_obj, key_str, key_len, NULL)) return mkval(kTypeBool, 1);
   }
 
@@ -9924,6 +9932,40 @@ static const struct { const char *name; size_t len; } define_desc_field_names[DE
   { "set", 3 },
 };
 
+static void describe_value_text(ant_t *js, ant_value_t value, char *buf, size_t cap) {
+  uint8_t t = vtype(value);
+  if (t == kTypeArray) {
+    snprintf(buf, cap, "%s", js_is_arguments(value) ? "[object Arguments]" : "[object Array]");
+    return;
+  }
+  if (is_object_type(value) && t != kTypeFunction) {
+    ant_offset_t len = 0;
+    const char *name = get_class_name(js, value, &len, NULL);
+    snprintf(buf, cap, "#<%.*s>", name ? (int)len : 6, name ? name : "Object");
+    return;
+  }
+  char stack_buf[96];
+  js_cstr_t text = js_to_cstr(js, value, stack_buf, sizeof(stack_buf));
+  snprintf(buf, cap, "%.*s", (int)text.len, text.ptr ? text.ptr : "");
+  if (text.needs_free) free((void *)text.ptr);
+}
+
+static __attribute__((noinline, cold)) ant_value_t descriptor_value_error(ant_t *js, const char *prefix, ant_value_t value) {
+  char text[128];
+  describe_value_text(js, value, text, sizeof(text));
+  return js_mkerr(js, "%s%s", prefix, text);
+}
+
+static ant_value_t define_desc_check(ant_t *js, ant_value_t descriptor, const define_desc_raw_t *raw) {
+  if (raw->has[DESC_GET] && define_desc_accessor_invalid(raw->val[DESC_GET]))
+    return descriptor_value_error(js, "Getter must be a function: ", raw->val[DESC_GET]);
+  if (raw->has[DESC_SET] && define_desc_accessor_invalid(raw->val[DESC_SET]))
+    return descriptor_value_error(js, "Setter must be a function: ", raw->val[DESC_SET]);
+  if ((raw->has[DESC_VALUE] || raw->has[DESC_WRITABLE]) && (raw->has[DESC_GET] || raw->has[DESC_SET]))
+    return descriptor_value_error(js, "Invalid property descriptor. Cannot both specify accessors and a value or writable attribute, ", descriptor);
+  return js_mkundef();
+}
+
 static ant_value_t define_desc_read(ant_t *js, ant_value_t descriptor, define_desc_raw_t *raw) {
   const __typeof__(define_desc_field_names[0]) *fields = define_desc_field_names;
 
@@ -9945,13 +9987,11 @@ static ant_value_t define_desc_read(ant_t *js, ant_value_t descriptor, define_de
     } 
     
     else if (!define_desc_field(js, descriptor, fields[f].name, fields[f].len, &raw->has[f], &raw->val[f], &err)) return err;
-    if (f == DESC_GET && raw->has[f] && define_desc_accessor_invalid(raw->val[f])) return js_mkerr(js, "Getter must be a function");
+    if (f == DESC_GET && raw->has[f] && define_desc_accessor_invalid(raw->val[f]))
+      return descriptor_value_error(js, "Getter must be a function: ", raw->val[f]);
   }
 
-  if (raw->has[DESC_GET] && define_desc_accessor_invalid(raw->val[DESC_GET])) return js_mkerr(js, "Getter must be a function");
-  if (raw->has[DESC_SET] && define_desc_accessor_invalid(raw->val[DESC_SET])) return js_mkerr(js, "Setter must be a function");
-  
-  return js_mkundef();
+  return define_desc_check(js, descriptor, raw);
 }
 
 static void array_materialize_dense_for_define(ant_t *js, ant_value_t obj, const char *key, size_t klen) {
@@ -10015,7 +10055,7 @@ static ant_value_t object_define_property_keyed(
   ant_value_t prop = key->js_key;
 
   if (vtype(descriptor) == kTypeBuiltin) descriptor = js_cfunc_promote(js, descriptor);
-  if (!is_object_type(descriptor)) return js_mkerr(js, "Property descriptor must be an object");
+  if (!is_object_type(descriptor)) return descriptor_value_error(js, "Property description must be an object: ", descriptor);
   
   ant_value_t as_obj = js_as_obj(obj);
   if (is_proxy(as_obj)) {
@@ -10073,7 +10113,7 @@ static ant_value_t object_define_property_keyed(
   }
 
   if ((has_value || has_writable) && (has_get || has_set))
-    return js_mkerr(js, "Invalid property descriptor. Cannot both specify accessors and a value or writable attribute");
+    return descriptor_value_error(js, "Invalid property descriptor. Cannot both specify accessors and a value or writable attribute, ", descriptor);
 
   define_desc_fields_t desc_fields = {
     .accessor = has_get || has_set, .has_value = has_value,
@@ -10105,7 +10145,7 @@ static ant_value_t object_define_property_keyed(
 
   ant_object_t *arr_ptr = 
     (!sym_key && is_length_key(prop_str, prop_len))
-    ? array_length_obj_ptr(as_obj) : NULL;
+    ? real_array_obj_ptr(as_obj) : NULL;
     
   if (arr_ptr) {
     if (has_get || has_set) return js_mkerr(js, "Invalid property descriptor. Cannot use accessors for array length");
@@ -10149,7 +10189,7 @@ static ant_value_t object_define_property_keyed(
   
   unsigned long define_idx = 0;
   if (
-    !sym_key && array_length_obj_ptr(as_obj) &&
+    !sym_key && real_array_obj_ptr(as_obj) &&
     parse_array_index(prop_str, (size_t)prop_len, ((ant_offset_t)UINT32_MAX), &define_idx) &&
     (ant_offset_t)define_idx >= get_array_length(js, as_obj) && array_length_readonly(js, as_obj)
   ) return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot define property %lu, object is not extensible", define_idx);
@@ -10406,7 +10446,7 @@ static ant_value_t object_define_property_reporting(
   define_desc_fields_t fields = {0};
   ant_value_t result = object_define_property_keyed(js, obj, &key, descriptor, &fields);
   
-  if (!is_err(result) && !key.is_symbol && is_arguments_object(obj))
+  if (!is_err(result) && !key.is_symbol && js_is_arguments(obj))
     js_arguments_after_define(js, obj, key.bytes, key.length, &fields);
   
   property_key_view_dispose(&key);
@@ -10429,14 +10469,12 @@ static ant_value_t builtin_object_defineProperty(ant_params_t) {
 
 static ant_value_t define_desc_snapshot(ant_t *js, ant_value_t descriptor) {
   if (vtype(descriptor) == kTypeBuiltin) descriptor = js_cfunc_promote(js, descriptor);
-  if (!is_object_type(descriptor)) return js_mkerr(js, "Property descriptor must be an object");
+  if (!is_object_type(descriptor)) return descriptor_value_error(js, "Property description must be an object: ", descriptor);
   
   define_desc_raw_t raw = {0};
   ant_value_t err = define_desc_read(js, descriptor, &raw);
   
   if (is_err(err)) return err;
-  if ((raw.has[DESC_VALUE] || raw.has[DESC_WRITABLE]) && (raw.has[DESC_GET] || raw.has[DESC_SET]))
-    return js_mkerr(js, "Invalid property descriptor. Cannot both specify accessors and a value or writable attribute");
   
   GC_ROOT_SAVE(mark, js);
   for (int f = 0; f < DESC_FIELD_COUNT; f++) GC_ROOT_PIN(js, raw.val[f]);
@@ -10504,108 +10542,142 @@ ant_value_t js_define_property(ant_t *js, ant_value_t obj, ant_value_t prop, ant
     : object_define_property(js, obj, prop, descriptor);
 }
 
-static ant_value_t builtin_object_getOwnPropertySymbols(ant_params_t);
-
-static ant_value_t object_define_symbol_properties(ant_t *js, ant_value_t obj, ant_value_t props) {
-  GC_ROOT_SAVE(mark, js);
-  GC_ROOT_PIN(js, obj);
-  GC_ROOT_PIN(js, props);
-  
-  ant_value_t symbols = builtin_object_getOwnPropertySymbols(js, &props, 1, js_mkundef());
-  GC_ROOT_PIN(js, symbols);
-  ant_offset_t count = is_err(symbols) ? 0 : js_arr_len(js, symbols);
-  ant_value_t result = is_err(symbols) ? symbols : obj;
-  
-  for (ant_offset_t i = 0; i < count && !is_err(result); i++) {
-    ant_value_t sym = js_arr_get(js, symbols, i);
-    prop_meta_t meta;
-    if (!lookup_symbol_prop_meta(js, props, (ant_offset_t)vdata(sym), &meta) || !meta.enumerable) continue;
-    ant_value_t descriptor = js_get_sym(js, props, sym);
-    result = is_err(descriptor) ? descriptor : object_define_property(js, obj, sym, descriptor);
+static ant_value_t object_define_properties_from_slots(
+  ant_t *js, ant_value_t obj, ant_object_t *ptr, uint32_t count, bool symbols
+) {
+  for (uint32_t i = 0; i < count && i < ant_shape_count(ptr->shape); i++) {
+    const ant_shape_prop_t *prop = ant_shape_prop_at(ptr->shape, i);
+    if (!prop || !(ant_shape_get_attrs(ptr->shape, i) & ANT_PROP_ATTR_ENUMERABLE)) continue;
+    if ((prop->type == ANT_SHAPE_KEY_SYMBOL) != symbols) continue;
+    ant_value_t key = symbols
+      ? mkval(kTypeSymbol, prop->key.sym_off)
+      : js_mkstr(js, prop->key.interned, intern_length(prop->key.interned));
+    ant_value_t result = object_define_property(js, obj, key, ant_object_prop_get_unchecked(ptr, i));
+    if (is_err(result)) return result;
   }
+  return obj;
+}
+
+static ant_value_t object_define_properties_from_data(ant_t *js, ant_value_t obj, ant_value_t props, bool *handled) {
+  *handled = false;
   
-  GC_ROOT_RESTORE(js, mark);
-  return is_err(result) ? result : obj;
+  if (vtype(props) != kTypeObject || is_proxy(props) || is_proxy(js_as_obj(obj))) return js_mkundef();
+  ant_object_t *ptr = js_obj_ptr(props);
+  
+  if (!ptr || !ptr->shape || ptr->flags.is_exotic || ant_object_extra_count(ptr) != 0) return js_mkundef();
+  if (ant_shape_may_have_index_keys(ptr->shape)) return js_mkundef();
+
+  uint32_t count = ant_shape_count(ptr->shape);
+  for (uint32_t i = 0; i < count; i++) {
+    const ant_shape_prop_t *prop = ant_shape_prop_at(ptr->shape, i);
+    if (!prop || i >= ptr->prop_count) return js_mkundef();
+    if (prop->has_getter || prop->has_setter) return js_mkundef();
+  }
+
+  for (uint32_t i = 0; i < count; i++) {
+    if (!(ant_shape_get_attrs(ptr->shape, i) & ANT_PROP_ATTR_ENUMERABLE)) continue;
+    ant_value_t desc = ant_object_prop_get_unchecked(ptr, i);
+    if (vtype(desc) == kTypeBuiltin) return js_mkundef();
+    
+    if (!is_object_type(desc)) {
+      *handled = true;
+      return descriptor_value_error(js, "Property description must be an object: ", desc);
+    }
+    
+    define_desc_raw_t raw = {0};
+    if (!define_desc_read_plain(js, desc, &raw)) return js_mkundef();
+    
+    ant_value_t err = define_desc_check(js, desc, &raw);
+    if (is_err(err)) {
+      *handled = true;
+      return err;
+    }
+  }
+
+  *handled = true;
+  
+  ant_value_t result = object_define_properties_from_slots(js, obj, ptr, count, false);
+  return is_err(result) ? result : object_define_properties_from_slots(js, obj, ptr, count, true);
+}
+
+static ant_value_t object_define_properties_get(ant_t *js, ant_value_t source, bool proxied, ant_value_t key) {
+  if (proxied) return proxy_get_val(js, source, key);
+  if (vtype(key) == kTypeSymbol) return js_get_sym(js, source, key);
+  
+  ant_offset_t key_len = 0;
+  ant_offset_t key_off = vstr(js, key, &key_len);
+  
+  return js_getprop_fallback_len(js, source, (const char *)(uintptr_t)key_off, (size_t)key_len);
 }
 
 static ant_value_t object_define_properties(ant_t *js, ant_value_t obj, ant_value_t props) {
   uint8_t pt = vtype(props);
-
   if (pt == kTypeUndefined || pt == kTypeNull)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert undefined or null to object");
 
   if (pt == kTypeString) {
-    ant_offset_t str_len = 0;
-    ant_offset_t str_off = vstr(js, props, &str_len);
-    if (str_len == 0) return obj;
-    return js_mkerr_typed(js, JS_ERR_TYPE, "Property description must be an object: %.1s", (const char *)(uintptr_t)str_off);
-  }
+    props = builtin_Object(js, &props, 1, js_mkundef());
+    if (is_err(props)) return props;
+  } else if (pt == kTypeBuiltin) props = js_cfunc_promote(js, props);
+  else if (!is_object_type(props)) return obj;
 
-  if (pt != kTypeObject && pt != kTypeArray && pt != kTypeFunction) return obj;
+  GC_ROOT_SAVE(root_mark, js);
+  GC_ROOT_PIN(js, obj);
+  GC_ROOT_PIN(js, props);
 
-  if (is_proxy(props)) {
-    GC_ROOT_SAVE(root_mark, js);
-    GC_ROOT_PIN(js, obj);
-    GC_ROOT_PIN(js, props);
-
-    ant_value_t keys = proxy_enum(js, props, OBJ_ENUM_KEYS);
-    GC_ROOT_PIN(js, keys);
-    if (is_err(keys)) {
-      GC_ROOT_RESTORE(js, root_mark);
-      return keys;
-    }
-
-    ant_offset_t key_count = js_arr_len(js, keys);
-    for (ant_offset_t i = 0; i < key_count; i++) {
-      GC_ROOT_SAVE(iter_mark, js);
-      ant_value_t prop_key = js_arr_get(js, keys, i);
-      GC_ROOT_PIN(js, prop_key);
-
-      ant_value_t descriptor = proxy_get_val(js, props, prop_key);
-      GC_ROOT_PIN(js, descriptor);
-      if (is_err(descriptor)) {
-        GC_ROOT_RESTORE(js, iter_mark);
-        GC_ROOT_RESTORE(js, root_mark);
-        return descriptor;
-      }
-
-      ant_value_t result = object_define_property(js, obj, prop_key, descriptor);
-      if (is_err(result)) {
-        GC_ROOT_RESTORE(js, iter_mark);
-        GC_ROOT_RESTORE(js, root_mark);
-        return result;
-      }
-      GC_ROOT_RESTORE(js, iter_mark);
-    }
-
+  bool handled = false;
+  ant_value_t result = object_define_properties_from_data(js, obj, props, &handled);
+  if (handled) {
     GC_ROOT_RESTORE(js, root_mark);
-    return obj;
+    return result;
   }
 
-  if (pt == kTypeArray) {
-    ant_offset_t arr_len = js_arr_len(js, props);
-    for (ant_offset_t i = 0; i < arr_len; i++) {
-      if (!arr_has(js, props, i)) continue;
-      ant_value_t result = object_define_property(js, obj, js_mknum((double)i), js_arr_get(js, props, i));
-      if (is_err(result)) return result;
+  ant_value_t source = js_as_obj(props);
+  bool proxied = is_proxy(source);
+  
+  ant_value_t keys = proxied ? proxy_enum(js, source, OBJ_ENUM_KEYS) : js_own_property_keys(js, props, true, true);
+  GC_ROOT_PIN(js, keys);
+  
+  ant_value_t descriptors = is_err(keys) ? keys : mkarr(js);
+  GC_ROOT_PIN(js, descriptors);
+  
+  if (is_err(descriptors)) {
+    GC_ROOT_RESTORE(js, root_mark);
+    return descriptors;
+  }
+
+  ant_offset_t key_count = js_arr_len(js, keys);
+  for (ant_offset_t i = 0; i < key_count; i++) {
+    ant_value_t desc = object_define_properties_get(js, source, proxied, js_arr_get(js, keys, i));
+    if (vtype(desc) == kTypeBuiltin) desc = js_cfunc_promote(js, desc);
+    if (!is_err(desc) && !is_object_type(desc))
+      desc = descriptor_value_error(js, "Property description must be an object: ", desc);
+    if (is_err(desc)) {
+      GC_ROOT_RESTORE(js, root_mark);
+      return desc;
     }
+    js_arr_push(js, descriptors, desc);
   }
 
-  ant_iter_t iter = js_prop_iter_begin(js, props);
-  const char *key = NULL;
-  size_t key_len = 0;
-  ant_value_t descriptor = js_mkundef();
+  for (ant_offset_t i = 0; i < key_count; i++) {
+    ant_value_t desc = define_desc_snapshot(js, js_arr_get(js, descriptors, i));
+    if (is_err(desc)) {
+      GC_ROOT_RESTORE(js, root_mark);
+      return desc;
+    }
+    arr_set(js, descriptors, i, desc);
+  }
 
-  while (js_prop_iter_next(&iter, &key, &key_len, &descriptor)) {
-    ant_value_t result = object_define_property(js, obj, js_mkstr(js, key, key_len), descriptor);
+  for (ant_offset_t i = 0; i < key_count; i++) {
+    result = object_define_property(js, obj, js_arr_get(js, keys, i), js_arr_get(js, descriptors, i));
     if (is_err(result)) {
-      js_prop_iter_end(&iter);
+      GC_ROOT_RESTORE(js, root_mark);
       return result;
     }
   }
-  
-  js_prop_iter_end(&iter);
-  return object_define_symbol_properties(js, obj, props);
+
+  GC_ROOT_RESTORE(js, root_mark);
+  return obj;
 }
 
 static ant_value_t builtin_object_defineProperties(ant_params_t) {
@@ -11496,7 +11568,7 @@ ant_value_t builtin_object_freeze(ant_params_t) {
   ant_object_t *ptr = js_obj_ptr(as_obj);
   if (!ptr || !ptr->shape) return obj;
   if (!js_obj_ensure_unique_shape(ptr)) return js_mkerr(js, "oom");
-  if (is_arguments_object(obj)) js_arguments_unmap_all(js, obj);
+  if (js_is_arguments(obj)) js_arguments_unmap_all(js, obj);
 
   uint32_t count = ant_shape_count(ptr->shape);
   for (uint32_t i = 0; i < count; i++) {
@@ -11784,7 +11856,7 @@ static ant_value_t object_get_own_property_descriptor_keyed(
   }
 
   bool is_arr_obj = array_obj_ptr(as_obj) != NULL;
-  bool is_arr_length = !is_sym && array_length_obj_ptr(as_obj) && is_length_key(key_str, key_len);
+  bool is_arr_length = !is_sym && real_array_obj_ptr(as_obj) && is_length_key(key_str, key_len);
   bool has_arr_index = false;
   ant_value_t arr_index_val = js_mkundef();
   
@@ -12179,7 +12251,7 @@ static ant_value_t object_property_is_enumerable_key(
   const char *key_str = key->bytes;
   size_t key_len = key->length;
   
-  if (array_length_obj_ptr(as_obj) && is_length_key(key_str, key_len)) return mkval(kTypeBool, 0);
+  if (real_array_obj_ptr(as_obj) && is_length_key(key_str, key_len)) return mkval(kTypeBool, 0);
   if (is_arr_obj) {
     unsigned long idx;
     if (parse_array_index(key_str, key_len, get_array_length(js, as_obj), &idx))
@@ -12338,7 +12410,7 @@ static ant_value_t builtin_object_toString(ant_params_t) {
   }
   
   ant_value_t err = js_mkundef();
-  object_tag_t tag = is_arguments_object(obj) ? OBJECT_TAG_ARGUMENTS
+  object_tag_t tag = js_is_arguments(obj) ? OBJECT_TAG_ARGUMENTS
     : t == kTypeObject ? object_object_tag(js, obj, js_obj_ptr(obj), &err)
     : t <= kTypeSourceCode ? (object_tag_t)object_type_tags[t] : OBJECT_TAG_OBJECT;
   
@@ -12558,7 +12630,7 @@ static ant_value_t builtin_array_push(ant_params_t) {
     return tov((double) len);
   }
   
-  if (is_arguments_object(arr)) return arguments_push(js, arr, args, nargs);
+  if (js_is_arguments(arr)) return arguments_push(js, arr, args, nargs);
   PROXY_AWARE_LENGTH_OR_RETURN(arr, len);
 
   ant_object_t *target = js_obj_ptr(js_as_obj(arr));
@@ -12811,7 +12883,7 @@ static ant_value_t builtin_array_pop(ant_params_t) {
     return result;
   }
   
-  if (is_arguments_object(arr)) return arguments_pop(js, arr);
+  if (js_is_arguments(arr)) return arguments_pop(js, arr);
 
   ant_offset_t doff = get_dense_buf(arr);
   if (doff) {
@@ -13205,7 +13277,7 @@ static inline ant_offset_t array_includes_start_index(ant_native_params_t, ant_o
 }
 
 static ant_value_t array_includes_length_value(ant_t *js, ant_value_t arr) {
-  if (array_length_obj_ptr(arr) && !is_proxy(arr)) return tov((double)get_array_length(js, arr));
+  if (real_array_obj_ptr(arr) && !is_proxy(arr)) return tov((double)get_array_length(js, arr));
   if (is_proxy(arr)) return proxy_get(js, arr, "length", 6);
   return js_getprop_fallback_len(js, arr, "length", 6);
 }
@@ -13415,7 +13487,7 @@ ant_value_t js_array_includes_call(ant_t *js, ant_value_t arr, ant_value_t *args
     (nargs > 0) ? args[0] : js_mkundef()
   );
 
-  if (array_length_obj_ptr(arr) && !is_proxy(arr)) {
+  if (real_array_obj_ptr(arr) && !is_proxy(arr)) {
     ant_offset_t len = get_array_length(js, arr);
     if (len == 0) return mkval(kTypeBool, 0);
     
@@ -13698,7 +13770,7 @@ static inline ant_value_t flat_should_spread(ant_t *js, ant_value_t val, int dep
   *out = false;
   if (depth <= 0) return js_mkundef();
 
-  if (array_length_obj_ptr(val)) {
+  if (real_array_obj_ptr(val)) {
     *out = true;
     return js_mkundef();
   }
@@ -13707,7 +13779,7 @@ static inline ant_value_t flat_should_spread(ant_t *js, ant_value_t val, int dep
 }
 
 static inline ant_value_t flat_helper(ant_t *js, ant_value_t arr, ant_value_t result, bool fresh, ant_offset_t *result_idx, int depth) {
-  bool input_is_array = array_length_obj_ptr(arr) != NULL;
+  bool input_is_array = real_array_obj_ptr(arr) != NULL;
   ant_offset_t len = input_is_array ? get_array_length(js, arr) : 0;
   
   if (!input_is_array) {
@@ -13810,10 +13882,10 @@ static ant_value_t builtin_array_concat(ant_params_t) {
     bool spreadable = false;
     
     if (vtype(arg) == kTypeArray || vtype(arg) == kTypeObject) {
-      bool array_default_spreadable = array_length_obj_ptr(arg) != NULL;
+      bool array_default_spreadable = real_array_obj_ptr(arg) != NULL;
       if (!array_default_spreadable && is_proxy(arg)) {
         ant_value_t target = proxy_read_target(js, arg);
-        array_default_spreadable = array_length_obj_ptr(target) != NULL;
+        array_default_spreadable = real_array_obj_ptr(target) != NULL;
       }
       
       ant_value_t spread_val = js_get_sym(js, arg, js->sym.isConcatSpreadable_sym);
@@ -13829,7 +13901,7 @@ static ant_value_t builtin_array_concat(ant_params_t) {
       
       ant_object_t *src = array_dense_source(js, arg);
       if (src && (arg_len > src->u.array.len || arg_len > src->u.array.cap)) src = NULL;
-      ant_offset_t rdoff = array_length_obj_ptr(result) && (intrinsic || array_result_extensible(result)) ? get_dense_buf(result) : 0;
+      ant_offset_t rdoff = real_array_obj_ptr(result) && (intrinsic || array_result_extensible(result)) ? get_dense_buf(result) : 0;
       if (rdoff && src && dense_capacity(rdoff) < result_idx + arg_len)
         rdoff = dense_grow(js, result, result_idx + arg_len);
       
@@ -13859,7 +13931,7 @@ static ant_value_t builtin_array_concat(ant_params_t) {
     }
   }
   
-  if (array_length_obj_ptr(result)) {
+  if (real_array_obj_ptr(result)) {
     if (get_array_length(js, result) < result_idx) {
       array_mark_may_have_holes(result);
       array_len_set(js, result, result_idx);
@@ -13924,7 +13996,7 @@ static ant_value_t builtin_array_fill(ant_params_t) {
     return array_string_wrapper_write_error(js, key);
   }
   
-  ant_object_t *dense = array_length_obj_ptr(arr);
+  ant_object_t *dense = real_array_obj_ptr(arr);
   if (
     !is_proxy(arr) && array_dense_covers(dense, end) &&
     dense->flags.extensible && !dense->flags.sealed && !dense->flags.frozen
@@ -14018,7 +14090,7 @@ static ant_value_t builtin_array_flatMap(ant_params_t) {
   ant_value_t callback = require_callback(js, args, nargs, "flatMap");
   if (is_err(callback)) return callback;
   ant_value_t this_arg = (nargs >= 2) ? args[1] : js_mkundef();
-  bool input_is_array = array_length_obj_ptr(arr) != NULL;
+  bool input_is_array = real_array_obj_ptr(arr) != NULL;
   ant_offset_t len = input_is_array ? get_array_length(js, arr) : 0;
   if (!input_is_array) {
     ant_value_t len_result = proxy_aware_length(js, arr, &len);
@@ -14176,7 +14248,7 @@ static ant_value_t builtin_array_shift(ant_params_t) {
   if (is_err(arr)) return arr;
   ant_offset_t string_len;
   if (array_string_wrapper_length(js, arr, &string_len)) return array_string_wrapper_write_error(js, "length");
-  if (is_arguments_object(arr)) return arguments_shift(js, arr);
+  if (js_is_arguments(arr)) return arguments_shift(js, arr);
 
   PROXY_AWARE_LENGTH_OR_RETURN(arr, len);
   if (len == 0) return array_length_readonly(js, arr) ? array_shift_generic(js, arr) : js_mkundef();
@@ -14236,7 +14308,7 @@ static ant_value_t builtin_array_unshift(ant_params_t) {
   ant_offset_t string_len;
   if (array_string_wrapper_length(js, arr, &string_len)) return array_string_wrapper_write_error(js, "length");
   if (array_length_readonly(js, arr)) return array_length_readonly_error(js);
-  if (is_arguments_object(arr)) return arguments_unshift(js, arr, args, nargs);
+  if (js_is_arguments(arr)) return arguments_unshift(js, arr, args, nargs);
 
   PROXY_AWARE_LENGTH_OR_RETURN(arr, len);
 
@@ -14365,7 +14437,7 @@ static inline int sort_string_cmp(ant_t *js, ant_value_t a, ant_value_t b) {
 }
 
 static inline bool array_sort_writes_dense(ant_value_t arr, ant_offset_t len) {
-  ant_object_t *ptr = array_length_obj_ptr(arr);
+  ant_object_t *ptr = real_array_obj_ptr(arr);
   return
     !is_proxy(arr) && array_dense_storage(ptr) &&
     ptr->u.array.len == len && ptr->u.array.cap >= len && ptr->flags.extensible && !ptr->flags.sealed;
@@ -14603,7 +14675,7 @@ static ant_value_t builtin_array_splice(ant_params_t) {
   if (is_err(removed)) return removed;
 
   ant_offset_t doff = get_dense_buf(arr);
-  if (doff && !is_proxy(arr) && !is_arguments_object(arr)) {
+  if (doff && !is_proxy(arr) && !js_is_arguments(arr)) {
     ant_offset_t d_len = dense_iterable_length(js, arr);
     const uint16_t mutable_mask =
       ANT_OBJECT_FLAG_EXTENSIBLE | ANT_OBJECT_FLAG_FROZEN | ANT_OBJECT_FLAG_SEALED | ANT_OBJECT_FLAG_EXOTIC;
@@ -15074,7 +15146,7 @@ static ant_value_t builtin_array_toLocaleString(ant_params_t) {
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, arr);
   
-  bool input_is_array = array_length_obj_ptr(arr) != NULL;
+  bool input_is_array = real_array_obj_ptr(arr) != NULL;
   ant_offset_t len = input_is_array ? get_array_length(js, arr) : 0;
   
   if (!input_is_array) {
@@ -15358,7 +15430,7 @@ static ant_value_t builtin_Array_from(ant_params_t) {
   } else if (vtype(src) == kTypeArray) {
     bool default_iter = js_array_iteration_default(js, src);
 
-    if (default_iter && !is_callable(mapFn) && array_length_obj_ptr(result) && get_array_length(js, result) == 0) {
+    if (default_iter && !is_callable(mapFn) && real_array_obj_ptr(result) && get_array_length(js, result) == 0) {
       ant_value_t copied = js_arr_spread_into(js, result, src);
       if (is_err(copied)) return copied;
     } else if (default_iter) {
@@ -19703,7 +19775,7 @@ static inline bool try_array_key_membership(
   ant_offset_t name_len,
   ant_value_t *result
 ) {
-  if (is_length_key(name, name_len) && array_length_obj_ptr(array)) {
+  if (is_length_key(name, name_len) && real_array_obj_ptr(array)) {
     *result = js_true;
     return true;
   }
@@ -20288,7 +20360,7 @@ bool is_array_value(ant_value_t value) {
     if (!data || data->revoked) return false;
     value = data->target;
   }
-  return array_length_obj_ptr(value) != NULL;
+  return real_array_obj_ptr(value) != NULL;
 }
 
 ant_value_t js_is_array_value_checked(ant_t *js, ant_value_t value, bool *out) {
@@ -20298,7 +20370,7 @@ ant_value_t js_is_array_value_checked(ant_t *js, ant_value_t value, bool *out) {
       return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot perform IsArray on a revoked proxy");
     value = data->target;
   }
-  *out = array_length_obj_ptr(value) != NULL;
+  *out = real_array_obj_ptr(value) != NULL;
   return js_mkundef();
 }
 
@@ -20800,7 +20872,7 @@ static ant_value_t proxy_has(ant_t *js, ant_value_t proxy, const char *key, size
   key_buf[len] = '\0';
   
   if (vtype(target) == kTypeArray) {
-    if (is_length_key(key_buf, len) && array_length_obj_ptr(target)) return js_true;
+    if (is_length_key(key_buf, len) && real_array_obj_ptr(target)) return js_true;
     unsigned long idx = 0;
     if (parse_array_index(key_buf, len, get_array_length(js, target), &idx))
       return js_bool(arr_has(js, target, (ant_offset_t)idx));
@@ -23066,7 +23138,7 @@ static bool js_try_get_len(ant_t *js, ant_value_t obj, const char *key, size_t k
   }
   
   if (array_obj_ptr(obj)) {
-    if (array_length_obj_ptr(obj) && is_length_key(key, key_len)) {
+    if (real_array_obj_ptr(obj) && is_length_key(key, key_len)) {
       *out = tov((double)get_array_length(js, obj));
       return true;
     }

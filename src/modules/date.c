@@ -15,6 +15,7 @@
 #endif
 
 #include "ant.h"
+#include "ascii.h"
 #include "internal.h"
 #include "errors.h"
 #include "silver/call.h"
@@ -58,11 +59,6 @@ static inline void date_fields_set(date_fields_t *f, date_field_index_t index, d
 
 static inline int date_min_int(int a, int b) {
   return (a < b) ? a : b;
-}
-
-static inline int to_upper_ascii(int c) {
-  if (c >= 'a' && c <= 'z') return c - ('a' - 'A');
-  return c;
 }
 
 static inline bool date_is_primitive(ant_value_t v) {
@@ -513,7 +509,7 @@ static bool string_match(const uint8_t *sp, int *pp, const char *s) {
   int p = *pp;
   
   while (*s != '\0') {
-    if (to_upper_ascii(sp[p]) != to_upper_ascii(*s++)) return false;
+    if (ant_ascii_to_upper(sp[p]) != ant_ascii_to_upper(*s++)) return false;
     p++;
   }
   
@@ -523,11 +519,9 @@ static bool string_match(const uint8_t *sp, int *pp, const char *s) {
 
 static int find_abbrev(const uint8_t *sp, int p, const char *list, int count) {
   int n; int i;
-  for (n = 0; n < count; n++) {
-    for (i = 0;; i++) {
-      if (to_upper_ascii(sp[p + i]) != to_upper_ascii(list[n * 3 + i])) break;
-      if (i == 2) return n;
-    }
+  for (n = 0; n < count; n++) for (i = 0;; i++) {
+    if (ant_ascii_to_upper(sp[p + i]) != ant_ascii_to_upper(list[n * 3 + i])) break;
+    if (i == 2) return n;
   }
   return -1;
 }

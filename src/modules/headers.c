@@ -4,6 +4,7 @@
 #include <stdio.h>
 
 #include "ant.h"
+#include "ascii.h"
 #include "builder.h"
 #include "ptr.h"
 #include "errors.h"
@@ -95,27 +96,9 @@ bool headers_is_headers(ant_value_t obj) {
   return js_check_brand(obj, BRAND_HEADERS);
 }
 
-static bool is_token_char(unsigned char c) {
-  if ((c >= '0' && c <= '9') ||
-      (c >= 'A' && c <= 'Z') ||
-      (c >= 'a' && c <= 'z')) return true;
-  switch (c) {
-  case '!': case '#': case '$': case '%': case '&': case '\'':
-  case '*': case '+': case '-': case '.': case '^': case '_':
-  case '`': case '|': case '~':
-    return true;
-  default:
-    return false;
-  }
-}
-
-static inline char ascii_lower(unsigned char c) {
-  return (c >= 'A' && c <= 'Z') ? (char)(c + ('a' - 'A')) : (char)c;
-}
-
 static bool ascii_case_equal(const char *a, const char *b) {
   while (*a && *b) {
-    if (ascii_lower((unsigned char)*a) != ascii_lower((unsigned char)*b)) return false;
+    if (ant_ascii_to_lower((unsigned char)*a) != ant_ascii_to_lower((unsigned char)*b)) return false;
     a++;
     b++;
   }
@@ -125,7 +108,7 @@ static bool ascii_case_equal(const char *a, const char *b) {
 static bool is_valid_name_n(const char *s, size_t len) {
   if (!s || len == 0) return false;
   for (size_t i = 0; i < len; i++)
-    if (!is_token_char((unsigned char)s[i])) return false;
+    if (!ant_ascii_is_tchar((unsigned char)s[i])) return false;
   return true;
 }
 
@@ -171,7 +154,7 @@ headers_data_t *headers_data_take_http_headers(ant_http_header_t **headers) {
     char *value_start = entry->value;
 
     for (size_t i = 0; i < name_len; i++)
-      entry->name[i] = ascii_lower((unsigned char)entry->name[i]);
+      entry->name[i] = (char)ant_ascii_to_lower((unsigned char)entry->name[i]);
     while (value_len > 0 && (*value_start == ' ' || *value_start == '\t')) {
       value_start++;
       value_len--;
@@ -218,7 +201,7 @@ static const char *lowercase_name_view(
   *owned = malloc(len + 1);
   if (!*owned) return NULL;
   for (size_t i = 0; i < len; i++)
-    (*owned)[i] = ascii_lower((unsigned char)name[i]);
+    (*owned)[i] = (char)ant_ascii_to_lower((unsigned char)name[i]);
   (*owned)[len] = '\0';
   return *owned;
 }
@@ -253,7 +236,7 @@ static bool list_append_parts(
   e->next = NULL;
   for (size_t i = 0; i < name_len; i++) {
     unsigned char c = (unsigned char)name[i];
-    e->name[i] = lowercase_name ? ascii_lower(c) : (char)c;
+    e->name[i] = lowercase_name ? (char)ant_ascii_to_lower(c) : (char)c;
   }
   e->name[name_len] = '\0';
   memcpy(e->value, value, value_len);

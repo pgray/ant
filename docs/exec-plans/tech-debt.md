@@ -140,12 +140,6 @@ scheduled.
   - Proposed fix: Add a real `compile_pool` scratch allocator after the `compile_ctx` extraction. Pool the resizable arrays for `locals`, `local_lookup_heads`, `code`, `constants`, `atoms`, `upval_descs`, `loops`, `srcpos`, and potentially `slot_types`. Keep `line_table` separate or make it poolable scratch, since it is derived from the current source buffer rather than a semantic cache.
   - Status: backlog
 
-- Area: Shared helper utilities
-  - Issue: Small helper logic such as ASCII character classification, casing, and similar utility code is duplicated across multiple runtime and support modules with local one-off implementations.
-  - Impact: Repeated copies drift over time, make bug fixes harder to apply consistently, and add noise when adding or reviewing new modules.
-  - Proposed fix: Audit duplicated helper patterns across `src/` and `include/`, identify the stable cross-cutting utilities, and centralize them in a small shared header or utility module with repo-wide call sites migrated incrementally.
-  - Status: backlog
-
 - Area: `src/modules/intl.c`
   - Issue: `Intl` is now present and passes the current compat-table target, but several behaviors are still simplified compatibility implementations rather than fuller ECMA-402 semantics.
   - Impact: `Intl.Collator`, `Intl.NumberFormat`, `Intl.DateTimeFormat`, and `Intl.Segmenter` can still diverge from web or Node behavior for anything beyond the currently covered compat surface.

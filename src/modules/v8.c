@@ -8,6 +8,7 @@
 #include "errors.h"
 #include "internal.h"
 #include "modules/buffer.h"
+#include "silver/call.h"
 
 // serialize / deserialize
 //
@@ -61,6 +62,13 @@ static bool enc_u32(enc_t *e, uint32_t v) {
   return true;
 }
 
+static void enc_u32_at(enc_t *e, size_t at, uint32_t v) {
+  e->data[at] = (uint8_t)(v);
+  e->data[at + 1] = (uint8_t)(v >> 8);
+  e->data[at + 2] = (uint8_t)(v >> 16);
+  e->data[at + 3] = (uint8_t)(v >> 24);
+}
+
 static bool enc_bytes(enc_t *e, const void *src, size_t n) {
   if (!enc_grow(e, n)) return false;
   memcpy(e->data + e->len, src, n);
@@ -68,84 +76,132 @@ static bool enc_bytes(enc_t *e, const void *src, size_t n) {
   return true;
 }
 
-static bool ser_val(ant_t *js, enc_t *e, ant_value_t val, int depth) {
-  if (depth > 64) return false;
+typedef enum {
+  SER_OK = 0,
+  SER_OOM,
+  SER_TOO_DEEP,
+  SER_UNCLONEABLE,
+} ser_status_t;
+
+#define SER_TRY(expr) do { if (!(expr)) return SER_OOM; } while (0)
+
+static ser_status_t ser_val(ant_t *js, enc_t *e, ant_value_t val, ant_value_t *bad);
+
+static ser_status_t ser_object(ant_t *js, enc_t *e, ant_value_t obj, ant_value_t *bad) {
+  SER_TRY(enc_u8(e, 'O'));
+  size_t count_at = e->len;
+  SER_TRY(enc_u32(e, 0));
+
+  uint32_t count = 0;
+  ser_status_t st = SER_OK;
+  const char *k; size_t klen; ant_value_t v;
+  ant_iter_t it = js_prop_iter_begin(js, obj);
+
+  while (st == SER_OK && js_prop_iter_next(&it, &k, &klen, &v)) {
+    st = enc_u32(e, (uint32_t)klen) && enc_bytes(e, k, klen) ? ser_val(js, e, v, bad) : SER_OOM;
+    count++;
+  }
+  
+  js_prop_iter_end(&it);
+  enc_u32_at(e, count_at, count);
+  
+  return st;
+}
+
+static ser_status_t ser_val(ant_t *js, enc_t *e, ant_value_t val, ant_value_t *bad) {
+  if (sv_check_c_stack_overflow(js)) return SER_TOO_DEEP;
   uint8_t t = vtype(val);
 
-  if (t == kTypeUndefined) return enc_u8(e, 'U');
-  if (t == kTypeNull)  return enc_u8(e, 'N');
-  if (t == kTypeBool)  return enc_u8(e, (val == js_true) ? 'T' : 'F');
+  if (t == kTypeUndefined) return enc_u8(e, 'U') ? SER_OK : SER_OOM;
+  if (t == kTypeNull) return enc_u8(e, 'N') ? SER_OK : SER_OOM;
+  if (t == kTypeBool) return enc_u8(e, (val == js_true) ? 'T' : 'F') ? SER_OK : SER_OOM;
 
   if (t == kTypeNumber) {
     double d = js_getnum(val);
-    if (isnan(d)) return enc_u8(e, 'Z');
-    if (!enc_u8(e, 'D')) return false;
-    return enc_bytes(e, &d, 8);
+    if (isnan(d)) return enc_u8(e, 'Z') ? SER_OK : SER_OOM;
+    SER_TRY(enc_u8(e, 'D'));
+    return enc_bytes(e, &d, 8) ? SER_OK : SER_OOM;
   }
 
   if (t == kTypeString) {
     size_t slen;
     const char *s = js_getstr(js, val, &slen);
     if (!s) { s = ""; slen = 0; }
-    if (!enc_u8(e, 'S'))          return false;
-    if (!enc_u32(e, (uint32_t)slen)) return false;
-    return enc_bytes(e, s, slen);
+    SER_TRY(enc_u8(e, 'S'));
+    SER_TRY(enc_u32(e, (uint32_t)slen));
+    return enc_bytes(e, s, slen) ? SER_OK : SER_OOM;
   }
 
-  if (t == kTypeArray) {
+  if (js_is_array(val)) {
     ant_offset_t n = js_arr_len(js, val);
-    if (!enc_u8(e, 'A'))           return false;
-    if (!enc_u32(e, (uint32_t)n))  return false;
+    SER_TRY(enc_u8(e, 'A'));
+    SER_TRY(enc_u32(e, (uint32_t)n));
     for (ant_offset_t i = 0; i < n; i++) {
-      if (!ser_val(js, e, js_arr_get(js, val, i), depth + 1)) return false;
+      ser_status_t st = ser_val(js, e, js_arr_get(js, val, i), bad);
+      if (st != SER_OK) return st;
     }
-    return true;
+    
+    return SER_OK;
   }
 
-  if (t == kTypeObject) {
-    uint32_t count = 0;
-    ant_iter_t it = js_prop_iter_begin(js, val);
-    const char *k; size_t klen; ant_value_t v;
-    while (js_prop_iter_next(&it, &k, &klen, &v)) count++;
-    js_prop_iter_end(&it);
+  if (t == kTypeObject) return ser_object(js, e, val, bad);
 
-    if (!enc_u8(e, 'O'))       return false;
-    if (!enc_u32(e, count))    return false;
-
-    it = js_prop_iter_begin(js, val);
-    while (js_prop_iter_next(&it, &k, &klen, &v)) {
-      if (!enc_u32(e, (uint32_t)klen) || !enc_bytes(e, k, klen)) {
-        js_prop_iter_end(&it);
-        return false;
-      }
-      if (!ser_val(js, e, v, depth + 1)) {
-        js_prop_iter_end(&it);
-        return false;
-      }
-    }
-    js_prop_iter_end(&it);
-    return true;
+  if (t == kTypeSymbol || t == kTypeFunction || t == kTypeBuiltin || js_is_arguments(val)) {
+    *bad = val;
+    return SER_UNCLONEABLE;
   }
 
-  return enc_u8(e, 'U');
+  return enc_u8(e, 'U') ? SER_OK : SER_OOM;
+}
+
+#undef SER_TRY
+
+static ant_value_t v8_serialize_error(ant_t *js, ser_status_t st, ant_value_t bad) {
+  if (st == SER_TOO_DEEP) 
+    return js_mkerr_typed(js, JS_ERR_RANGE, "Maximum call stack size exceeded");
+  
+  if (st != SER_UNCLONEABLE) 
+    return js_mkerr(js, "serialize: out of memory");
+  
+  if (js_is_arguments(bad)) 
+    return js_mkerr_typed(js, JS_ERR_GENERIC, "#<Object> could not be cloned.");
+  
+  if (vtype(bad) == kTypeSymbol) 
+    return js_mkerr_typed(js, JS_ERR_GENERIC, "%s could not be cloned.", js_str(js, bad));
+
+  ant_value_t str = js_tostring_val(js, bad);
+  if (is_err(str)) return str;
+  
+  size_t len = 0;
+  const char *text = js_getstr(js, str, &len);
+  
+  return js_mkerr_typed(js, JS_ERR_GENERIC, "%.*s could not be cloned.", (int)len, text ? text : "");
 }
 
 static ant_value_t v8_serialize(ant_params_t) {
   if (nargs < 1) return js_mkerr(js, "serialize: value required");
 
   enc_t e = {0};
-  if (!enc_u8(&e, SER_MAGIC_0) || !enc_u8(&e, SER_MAGIC_1)) goto oom;
-  if (!ser_val(js, &e, args[0], 0)) goto oom;
+  ant_value_t bad = js_mkundef();
+  ser_status_t st = SER_OOM;
+  
+  if (!enc_u8(&e, SER_MAGIC_0) || !enc_u8(&e, SER_MAGIC_1)) goto fail;
+  st = ser_val(js, &e, args[0], &bad);
+  if (st != SER_OK) goto fail;
 
   ArrayBufferData *ab = create_array_buffer_data(js, e.len);
-  if (!ab) goto oom;
+  if (!ab) {
+    st = SER_OOM;
+    goto fail;
+  }
+  
   memcpy(ab->data, e.data, e.len);
   free(e.data);
   return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, e.len, js->builtins.buffer_proto);
 
-oom:
+fail:
   free(e.data);
-  return js_mkerr(js, "serialize: out of memory");
+  return v8_serialize_error(js, st, bad);
 }
 
 typedef struct {
@@ -170,8 +226,8 @@ static bool dec_u32(dec_t *d, uint32_t *out) {
   return true;
 }
 
-static ant_value_t des_val(ant_t *js, dec_t *d, int depth) {
-  if (depth > 64) return js_mkerr(js, "deserialize: maximum depth exceeded");
+static ant_value_t des_val(ant_t *js, dec_t *d) {
+  if (sv_check_c_stack_overflow(js)) return js_mkerr_typed(js, JS_ERR_RANGE, "Maximum call stack size exceeded");
   
   uint8_t tag;
   if (!dec_u8(d, &tag)) return js_mkundef();
@@ -201,7 +257,7 @@ static ant_value_t des_val(ant_t *js, dec_t *d, int depth) {
       if (!dec_u32(d, &n)) return js_mkundef();
       ant_value_t arr = js_mkarr(js);
       for (uint32_t i = 0; i < n; i++) {
-        ant_value_t elem = des_val(js, d, depth + 1);
+        ant_value_t elem = des_val(js, d);
         if (is_err(elem)) return elem;
         js_arr_push(js, arr, elem);
       }
@@ -214,19 +270,17 @@ static ant_value_t des_val(ant_t *js, dec_t *d, int depth) {
       char kbuf[4096];
       for (uint32_t i = 0; i < n; i++) {
         uint32_t klen;
-        if (!dec_u32(d, &klen) || klen >= sizeof(kbuf) || d->pos + klen > d->len)
-          break;
+        if (!dec_u32(d, &klen) || klen >= sizeof(kbuf) || d->pos + klen > d->len) break;
         memcpy(kbuf, d->data + d->pos, klen);
         kbuf[klen] = '\0';
         d->pos += klen;
-        ant_value_t v = des_val(js, d, depth + 1);
+        ant_value_t v = des_val(js, d);
         if (is_err(v)) return v;
         js_set(js, obj, kbuf, v);
       }
       return obj;
     }
-    default:
-      return js_mkundef();
+    default: return js_mkundef();
   }
 }
 
@@ -241,7 +295,7 @@ static ant_value_t v8_deserialize(ant_params_t) {
     return js_mkerr(js, "deserialize: invalid or incompatible buffer");
 
   dec_t d = { .data = data, .len = len, .pos = 2 };
-  return des_val(js, &d, 0);
+  return des_val(js, &d);
 }
 
 static ant_value_t v8_get_heap_statistics(ant_params_t) {

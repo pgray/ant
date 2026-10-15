@@ -7,6 +7,7 @@
 #include <time.h>
 
 #include "ant.h"
+#include "ascii.h"
 #include "errors.h"
 #include "internal.h"
 
@@ -26,123 +27,173 @@ static ant_value_t intl_create_instance(ant_t *js, ant_value_t fallback_proto, a
   return obj;
 }
 
-// TODO: docs/exec-plans/tech-debt.md
-static inline bool intl_ascii_is_alpha(char c) {
-  return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+static bool intl_ascii_all(const char *s, size_t len, bool (*pred)(int)) {
+  if (len == 0) return false;
+  for (size_t i = 0; i < len; i++) if (!pred((unsigned char)s[i])) return false;
+  return true;
 }
 
-static inline bool intl_ascii_is_digit(char c) {
-  return c >= '0' && c <= '9';
-}
+typedef struct {
+  const char *tag;
+  size_t len;
+  size_t pos;
+} intl_subtags_t;
 
-static inline bool intl_ascii_is_alnum(char c) {
-  return intl_ascii_is_alpha(c) || intl_ascii_is_digit(c);
-}
-
-static inline char intl_ascii_lower(char c) {
-  return (c >= 'A' && c <= 'Z') ? (char)(c + ('a' - 'A')) : c;
-}
-
-static bool intl_ascii_all(const char *s, size_t len, bool (*pred)(char)) {
-  if (!s || len == 0) return false;
-  for (size_t i = 0; i < len; i++) if (!pred(s[i])) return false;
+static bool intl_subtag_next(intl_subtags_t *it, const char **subtag, size_t *subtag_len) {
+  if (it->pos > it->len) return false;
+  const char *start = it->tag + it->pos;
+  const char *dash = memchr(start, '-', it->len - it->pos);
+  
+  *subtag = start;
+  *subtag_len = dash ? (size_t)(dash - start) : it->len - it->pos;
+  it->pos += *subtag_len + 1;
+  
   return true;
 }
 
 static bool intl_is_valid_language_tag(const char *tag, size_t len) {
-  if (!tag || len == 0) return false;
+  if (!tag) return false;
 
-  size_t start = 0;
-  size_t end = 0;
-  while (end < len && tag[end] != '-') end++;
+  intl_subtags_t it = { tag, len, 0 };
+  const char *sub;
+  size_t n;
 
-  size_t first_len = end - start;
-  if (first_len < 2 || first_len > 8) return false;
-  if (!intl_ascii_all(tag, first_len, intl_ascii_is_alpha)) return false;
+  if (!intl_subtag_next(&it, &sub, &n)) return false;
+  if (n < 2 || n > 8 || !intl_ascii_all(sub, n, ant_ascii_is_alpha)) return false;
 
-  bool need_extension_subtag = false;
-  bool in_private_use = false;
-  bool saw_private_use_subtag = false;
+  bool need_extension = false;
+  bool private_use = false;
+  bool saw_private_use = false;
 
-  while (end < len) {
-    start = end + 1;
-    if (start >= len) return false;
-    
-    end = start;
-    while (end < len && tag[end] != '-') end++;
-    
-    size_t subtag_len = end - start;
-    if (subtag_len == 0 || subtag_len > 8) return false;
-    
-    const char *subtag = tag + start;
-    if (!intl_ascii_all(subtag, subtag_len, intl_ascii_is_alnum)) return false;
-    
-    if (in_private_use) {
-      saw_private_use_subtag = true;
-      continue;
-    }
-    
-    if (need_extension_subtag) {
-      if (subtag_len < 2) return false;
-      need_extension_subtag = false;
-      continue;
-    }
-
-    if (subtag_len == 1) {
-      char singleton = intl_ascii_lower(subtag[0]);
-      if (singleton == 'x') in_private_use = true;
-      else need_extension_subtag = true;
+  while (intl_subtag_next(&it, &sub, &n)) {
+    if (n == 0 || n > 8 || !intl_ascii_all(sub, n, ant_ascii_is_alnum)) return false;
+    if (private_use) saw_private_use = true;
+    else if (need_extension) {
+      if (n < 2) return false;
+      need_extension = false;
+    } else if (n == 1) {
+      if (ant_ascii_to_lower(sub[0]) == 'x') private_use = true;
+      else need_extension = true;
     }
   }
 
-  if (need_extension_subtag) return false;
-  if (in_private_use && !saw_private_use_subtag) return false;
-  
-  return true;
+  return !need_extension && (!private_use || saw_private_use);
 }
 
 static ant_value_t intl_default_locale(ant_t *js) {
   return js_mkstr(js, "en-US", 5);
 }
 
-static ant_value_t intl_validate_locale_string(ant_t *js, ant_value_t locale) {
+static ant_value_t intl_canonicalize_tag(ant_t *js, ant_value_t locale) {
   size_t len = 0;
   const char *tag = js_getstr(js, locale, &len);
   if (!intl_is_valid_language_tag(tag, len))
-    return js_mkerr_typed(js, JS_ERR_RANGE, "Invalid language tag");
+    return js_mkerr_typed(js, JS_ERR_RANGE, "Invalid language tag: %.*s", (int)len, tag ? tag : "");
 
-  return locale;
+  char stack_buf[64];
+  char *out = len <= sizeof(stack_buf) ? stack_buf : malloc(len);
+  if (!out) return js_mkerr(js, "oom");
+
+  intl_subtags_t it = { tag, len, 0 };
+  const char *sub;
+  size_t n;
+  bool first = true;
+  bool after_singleton = false;
+
+  while (intl_subtag_next(&it, &sub, &n)) {
+    char *dst = out + (sub - tag);
+    bool cased = !first && !after_singleton && intl_ascii_all(sub, n, ant_ascii_is_alpha);
+    for (size_t i = 0; i < n; i++) {
+      bool upper = cased && (n == 2 || (n == 4 && i == 0));
+      dst[i] = (char)(upper ? ant_ascii_to_upper(sub[i]) : ant_ascii_to_lower(sub[i]));
+    }
+    if (it.pos <= len) dst[n] = '-';
+    if (!first && n == 1) after_singleton = true;
+    first = false;
+  }
+
+  ant_value_t result = js_mkstr(js, out, len);
+  if (out != stack_buf) free(out);
+  return result;
 }
 
 static ant_value_t intl_locale_from_list_entry(ant_t *js, ant_value_t input) {
   if (vtype(input) != kTypeString && !is_object_type(input))
-    return js_mkerr_typed(js, JS_ERR_TYPE, "Language ID should be string or object");
+    return js_mkerr_typed(js, JS_ERR_TYPE, "Language ID should be string or object.");
 
   ant_value_t locale = js_tostring_val(js, input);
   if (is_err(locale)) return locale;
-  return intl_validate_locale_string(js, locale);
+  return intl_canonicalize_tag(js, locale);
+}
+
+static bool intl_list_has_tag(ant_t *js, ant_value_t list, ant_value_t tag) {
+  size_t tag_len = 0;
+  const char *tag_str = js_getstr(js, tag, &tag_len);
+  ant_offset_t count = js_arr_len(js, list);
+  
+  for (ant_offset_t i = 0; i < count; i++) {
+    size_t prev_len = 0;
+    const char *prev = js_getstr(js, js_arr_get(js, list, i), &prev_len);
+    if (prev_len == tag_len && memcmp(prev, tag_str, tag_len) == 0) return true;
+  }
+  
+  return false;
+}
+
+static ant_value_t intl_canonical_locale_list_fill(ant_t *js, ant_value_t out, ant_value_t locales) {
+  if (vtype(locales) == kTypeString) {
+    ant_value_t tag = intl_canonicalize_tag(js, locales);
+    if (is_err(tag)) return tag;
+    js_arr_push(js, out, tag);
+    return out;
+  }
+  if (!is_object_type(locales)) return out;
+
+  ant_value_t len_val = js_get(js, locales, "length");
+  if (is_err(len_val)) return len_val;
+  double len = vtype(len_val) == kTypeUndefined ? 0 : js_to_number(js, len_val);
+
+  for (double k = 0; k < len; k++) {
+    ant_value_t present = do_in(js, js_mknum(k), locales);
+    if (is_err(present)) return present;
+    if (present != js_true) continue;
+
+    char idx[32];
+    snprintf(idx, sizeof(idx), "%.0f", k);
+    ant_value_t tag = intl_locale_from_list_entry(js, js_get(js, locales, idx));
+    if (is_err(tag)) return tag;
+    if (!intl_list_has_tag(js, out, tag)) js_arr_push(js, out, tag);
+  }
+
+  return out;
+}
+
+static ant_value_t intl_canonical_locale_list(ant_t *js, ant_value_t locales) {
+  if (vtype(locales) == kTypeNull)
+    return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert undefined or null to object");
+
+  ant_value_t out = js_mkarr(js);
+  if (is_err(out) || vtype(locales) == kTypeUndefined) return out;
+
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, out);
+  ant_value_t result = intl_canonical_locale_list_fill(js, out, locales);
+  GC_ROOT_RESTORE(js, mark);
+  
+  return is_err(result) ? result : out;
+}
+
+static ant_value_t intl_get_canonical_locales(ant_params_t) {
+  return intl_canonical_locale_list(js, nargs > 0 ? args[0] : js_mkundef());
 }
 
 static ant_value_t intl_resolve_locale(ant_t *js, ant_value_t input) {
   if (vtype(input) == kTypeUndefined) return intl_default_locale(js);
-  if (vtype(input) == kTypeNull)
-    return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert undefined or null to object");
+  if (vtype(input) == kTypeString) return intl_canonicalize_tag(js, input);
 
-  if (vtype(input) == kTypeString) return intl_validate_locale_string(js, input);
-
-  if (vtype(input) == kTypeArray) {
-    if (js_arr_len(js, input) == 0) return intl_default_locale(js);
-    return intl_locale_from_list_entry(js, js_get(js, input, "0"));
-  }
-
-  if (is_object_type(input)) {
-    ant_value_t length = js_get(js, input, "length");
-    if (vtype(length) == kTypeUndefined) return intl_default_locale(js);
-    if (!(js_to_number(js, length) > 0)) return intl_default_locale(js);
-    return intl_locale_from_list_entry(js, js_get(js, input, "0"));
-  }
-
-  return intl_default_locale(js);
+  ant_value_t list = intl_canonical_locale_list(js, input);
+  if (is_err(list)) return list;
+  return js_arr_len(js, list) > 0 ? js_arr_get(js, list, 0) : intl_default_locale(js);
 }
 
 static ant_value_t intl_get_option_string(ant_t *js, ant_value_t options, const char *key, const char *fallback) {
@@ -178,10 +229,6 @@ static ant_value_t intl_collator_compare(ant_params_t) {
   return js_mknum(0);
 }
 
-static inline bool intl_ascii_is_digit_byte(char c) {
-  return c >= '0' && c <= '9';
-}
-
 static ant_value_t intl_collator_compare_numeric(ant_params_t) {
   ant_value_t left = js_tostring_val(js, nargs > 0 ? args[0] : js_mkstr(js, "", 0));
   if (is_err(left)) return left;
@@ -203,7 +250,7 @@ static ant_value_t intl_collator_compare_numeric(ant_params_t) {
     char lc = left_str[i];
     char rc = right_str[j];
 
-    if (intl_ascii_is_digit_byte(lc) && intl_ascii_is_digit_byte(rc)) {
+    if (ant_ascii_is_digit(lc) && ant_ascii_is_digit(rc)) {
       size_t left_run = i;
       size_t right_run = j;
       while (left_run < left_len && left_str[left_run] == '0') left_run++;
@@ -211,8 +258,8 @@ static ant_value_t intl_collator_compare_numeric(ant_params_t) {
 
       size_t left_end = left_run;
       size_t right_end = right_run;
-      while (left_end < left_len && intl_ascii_is_digit_byte(left_str[left_end])) left_end++;
-      while (right_end < right_len && intl_ascii_is_digit_byte(right_str[right_end])) right_end++;
+      while (left_end < left_len && ant_ascii_is_digit(left_str[left_end])) left_end++;
+      while (right_end < right_len && ant_ascii_is_digit(right_str[right_end])) right_end++;
 
       size_t left_digits = left_end - left_run;
       size_t right_digits = right_end - right_run;
@@ -221,8 +268,8 @@ static ant_value_t intl_collator_compare_numeric(ant_params_t) {
       int cmp = left_digits > 0 ? memcmp(left_str + left_run, right_str + right_run, left_digits) : 0;
       if (cmp != 0) return js_mknum(cmp < 0 ? -1 : 1);
 
-      while (i < left_end && intl_ascii_is_digit_byte(left_str[i])) i++;
-      while (j < right_end && intl_ascii_is_digit_byte(right_str[j])) j++;
+      while (i < left_end && ant_ascii_is_digit(left_str[i])) i++;
+      while (j < right_end && ant_ascii_is_digit(right_str[j])) j++;
       continue;
     }
 
@@ -393,11 +440,7 @@ static bool intl_ascii_is_word_byte(const char *segment, size_t len) {
   if (len != 1) return true;
 
   unsigned char c = (unsigned char)segment[0];
-  return
-    (c >= '0' && c <= '9') ||
-    (c >= 'A' && c <= 'Z') ||
-    (c >= 'a' && c <= 'z') ||
-    c == '_';
+  return ant_ascii_is_alnum(c) || c == '_';
 }
 
 static const char *intl_segmenter_granularity(ant_t *js, ant_value_t segmenter, size_t *len) {
@@ -464,11 +507,11 @@ static ant_value_t intl_collator_constructor(ant_params_t) {
   if (is_err(locale)) return locale;
 
   ant_value_t obj = intl_create_instance(js, js->builtins.intl_collator_proto, call_new_target);
-  js_set(js, obj, "locale", locale);
+  defhidden(js, obj, "locale", 6, locale);
 
   if (nargs > 1 && vtype(args[1]) == kTypeObject && js_truthy(js, js_get(js, args[1], "numeric"))) {
-    js_set(js, obj, "compare", Ant_Function_Create(intl_collator_compare_numeric));
-    js_set(js, obj, "numeric", js_true);
+    defhidden(js, obj, "compare", 7, Ant_Function_Create(intl_collator_compare_numeric));
+    defhidden(js, obj, "numeric", 7, js_true);
   }
   
   return obj;
@@ -479,7 +522,7 @@ static ant_value_t intl_numberformat_constructor(ant_params_t) {
   if (is_err(locale)) return locale;
 
   ant_value_t obj = intl_create_instance(js, js->builtins.intl_numberformat_proto, call_new_target);
-  js_set(js, obj, "locale", locale);
+  defhidden(js, obj, "locale", 6, locale);
   
   return obj;
 }
@@ -495,8 +538,8 @@ static ant_value_t intl_dtf_constructor(ant_params_t) {
   if (is_err(time_zone)) return time_zone;
 
   ant_value_t obj = intl_create_instance(js, js->builtins.intl_datetimeformat_proto, call_new_target);
-  js_set(js, obj, "locale", locale);
-  js_set(js, obj, "timeZone", time_zone);
+  defhidden(js, obj, "locale", 6, locale);
+  defhidden(js, obj, "timeZone", 8, time_zone);
   
   return obj;
 }
@@ -512,8 +555,8 @@ static ant_value_t intl_segmenter_constructor(ant_params_t) {
   if (is_err(granularity)) return granularity;
 
   ant_value_t obj = intl_create_instance(js, js->builtins.intl_segmenter_proto, call_new_target);
-  js_set(js, obj, "locale", locale);
-  js_set(js, obj, "granularity", granularity);
+  defhidden(js, obj, "locale", 6, locale);
+  defhidden(js, obj, "granularity", 11, granularity);
   
   return obj;
 }
@@ -553,6 +596,11 @@ void init_intl_module(ant_t *js) {
   js_set_tostringtag(js, js->builtins.intl_segmenter_proto, js_mkstr(js, "Intl.Segmenter", 14));
   ant_value_t segmenter_ctor = Ant_Function_CreateIntrinsicConstructor(js, intl_segmenter_constructor, js->builtins.intl_segmenter_proto, "Segmenter", 0);
   defhidden(js, intl, "Segmenter", 9, segmenter_ctor);
+
+  ant_value_t locale_ctors[] = { collator_ctor, numberformat_ctor, dtf_ctor, segmenter_ctor };
+  for (size_t i = 0; i < sizeof(locale_ctors) / sizeof(locale_ctors[0]); i++)
+    defmethod(js, locale_ctors[i], "supportedLocalesOf", 18, Ant_Function_CreateWithArity(intl_get_canonical_locales, 1));
+  defmethod(js, intl, "getCanonicalLocales", 19, Ant_Function_CreateWithArity(intl_get_canonical_locales, 1));
 
   js_set_global_builtin(js, "Intl", intl);
 }

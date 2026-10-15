@@ -8,12 +8,28 @@
 #include "modules/assert.h"
 #include "silver/call.h"
 
-static ant_value_t assertion_error(ant_t *js, const char *msg, ant_value_t msg_val) {
-  if (vtype(msg_val) == kTypeString) {
-    char *s = js_getstr(js, msg_val, NULL);
-    if (s) return js_mkerr(js, "%s", s);
-  }
-  return js_mkerr(js, "%s", msg);
+static ant_value_t assertion_error_make(ant_t *js, const char *msg, ant_value_t msg_val, bool generated) {
+  const char *text = vtype(msg_val) == kTypeString ? js_getstr(js, msg_val, NULL) : NULL;
+  ant_value_t err = Ant_Error_Create(js, JS_ERR_GENERIC, text ? text : msg);
+  if (vtype(err) != kTypeObject) return err;
+
+  GC_ROOT_SAVE(root_mark, js);
+  GC_ROOT_PIN(js, err);
+  if (is_object_type(js->builtins.assertion_error_proto)) js_set_proto_init(err, js->builtins.assertion_error_proto);
+  js_set(js, err, "generatedMessage", js_bool(generated && text == NULL));
+  js_set(js, err, "code", js_mkstr(js, "ERR_ASSERTION", 13));
+  GC_ROOT_RESTORE(js, root_mark);
+
+  return err;
+}
+
+static ant_value_t assertion_error_ex(ant_t *js, const char *msg, ant_value_t msg_val, bool generated) {
+  ant_value_t err = assertion_error_make(js, msg, msg_val, generated);
+  return is_err(err) ? err : js_throw(js, err);
+}
+
+static inline ant_value_t assertion_error(ant_t *js, const char *msg, ant_value_t msg_val) {
+  return assertion_error_ex(js, msg, msg_val, true);
 }
 
 // assert(value, message) / assert.ok
@@ -25,11 +41,7 @@ static ant_value_t assert_ok(ant_params_t) {
 
 // assert.fail(message)
 static ant_value_t assert_fail(ant_params_t) {
-  if (nargs >= 1 && vtype(args[0]) == kTypeString) {
-    char *msg = js_getstr(js, args[0], NULL);
-    if (msg) return js_mkerr(js, "%s", msg);
-  }
-  return js_mkerr(js, "Assertion failed");
+  return assertion_error(js, "Failed", nargs >= 1 ? args[0] : js_mkundef());
 }
 
 // assert.ifError(value)
@@ -38,8 +50,14 @@ static ant_value_t assert_if_error(ant_params_t) {
   uint8_t t = vtype(args[0]);
   if (t == kTypeNull || t == kTypeUndefined) return js_mkundef();
   if (is_err(args[0])) return args[0];
-  char *msg = js_getstr(js, args[0], NULL);
-  return js_mkerr(js, "ifError got unwanted exception: %s", msg ? msg : "(unknown)");
+
+  char buf[512];
+  ant_value_t msg = is_object_type(args[0]) ? js_get(js, args[0], "message") : js_mkundef();
+  if (is_err(msg)) return msg;
+  if (vtype(msg) == kTypeString) snprintf(buf, sizeof(buf), "ifError got unwanted exception: %s", js_getstr(js, msg, NULL));
+  else if (t == kTypeString) snprintf(buf, sizeof(buf), "ifError got unwanted exception: '%s'", js_getstr(js, args[0], NULL));
+  else snprintf(buf, sizeof(buf), "ifError got unwanted exception: %s", js_str(js, args[0]));
+  return assertion_error_ex(js, buf, js_mkundef(), false);
 }
 
 // TODO: make into global helper
@@ -61,6 +79,7 @@ static bool values_loose_equal(ant_t *js, ant_value_t a, ant_value_t b) {
 static bool deep_equal_impl(ant_t *js, ant_value_t a, ant_value_t b, bool strict, int depth) {
   if (depth > 64) return false;
   uint8_t ta = vtype(a), tb = vtype(b);
+  if (js_is_arguments(a) != js_is_arguments(b)) return false;
 
   if (ta == kTypeArray && tb == kTypeArray) {
     ant_offset_t la = js_arr_len(js, a), lb = js_arr_len(js, b);
@@ -204,7 +223,7 @@ static ant_value_t assert_throws(ant_params_t) {
 
   ant_value_t result = sv_vm_call(js->vm, js, fn, js_mkundef(), NULL, 0, NULL, js_mkundef());
   if (!is_err(result))
-    result = assertion_error(js, "Missing expected exception", message);
+    result = assertion_error_ex(js, "Missing expected exception.", message, false);
   else {
     thrown = js_take_thrown(js, result);
     result = assert_exception_matches(js, thrown, expected, message);
@@ -218,9 +237,27 @@ static ant_value_t assert_does_not_throw(ant_params_t) {
     return js_mkerr(js, "assert.doesNotThrow: first argument must be a function");
 
   ant_value_t result = sv_vm_call(js->vm, js, args[0], js_mkundef(), NULL, 0, NULL, js_mkundef());
-  if (is_err(result)) return js_mkerr(js, "Got unwanted exception: %s", js_str(js, result));
+  if (!is_err(result)) return js_mkundef();
 
-  return js_mkundef();
+  GC_ROOT_SAVE(mark, js);
+  ant_value_t thrown = js_take_thrown(js, result);
+  
+  GC_ROOT_PIN(js, thrown);
+  ant_value_t msg = is_object_type(thrown) ? js_get(js, thrown, "message") : js_mkundef();
+  
+  if (is_err(msg)) {
+    GC_ROOT_RESTORE(js, mark);
+    return msg;
+  }
+  
+  char buf[512];
+  snprintf(
+    buf, sizeof(buf), "Got unwanted exception.\nActual message: \"%s\"",
+    vtype(msg) == kTypeString ? js_getstr(js, msg, NULL) : js_str(js, thrown)
+  );
+  
+  GC_ROOT_RESTORE(js, mark);
+  return assertion_error_ex(js, buf, js_mkundef(), false);
 }
 
 static ant_value_t assert_rejection_settle(
@@ -317,16 +354,33 @@ static ant_value_t assert_does_not_match(ant_params_t) {
 }
 
 static ant_value_t assert_assertion_error_ctor(ant_params_t) {
-  ant_value_t self = js_getthis(js);
-  js_set(js, self, "name", js_mkstr(js, "AssertionError", 14));
-  if (nargs >= 1 && vtype(args[0]) == kTypeObject) {
-    const char *fields[] = {"message", "actual", "expected", "operator"};
-    for (int i = 0; i < 4; i++) {
-      ant_value_t v = js_get(js, args[0], fields[i]);
-      if (vtype(v) != kTypeUndefined) js_set(js, self, fields[i], v);
-    }
+  ant_value_t options = nargs >= 1 && vtype(args[0]) == kTypeObject ? args[0] : js_mkundef();
+  ant_value_t message = is_object_type(options) ? js_get(js, options, "message") : js_mkundef();
+  if (is_err(message)) return message;
+
+  ant_value_t err = assertion_error_make(js, "Failed", message, true);
+  if (is_err(err) || !is_object_type(options)) return err;
+
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, err);
+  
+  if (is_object_type(call_new_target)) {
+    ant_value_t proto = js_get(js, call_new_target, "prototype");
+    if (is_object_type(proto)) js_set_proto_init(err, proto);
   }
-  return js_mkundef();
+  
+  static const char *const fields[] = {"actual", "expected", "operator"};
+  for (size_t i = 0; i < sizeof(fields) / sizeof(fields[0]); i++) {
+    ant_value_t v = js_get(js, options, fields[i]);
+    if (is_err(v)) {
+      GC_ROOT_RESTORE(js, mark);
+      return v;
+    }
+    js_set(js, err, fields[i], v);
+  }
+  
+  GC_ROOT_RESTORE(js, mark);
+  return err;
 }
 
 ant_value_t assert_library(ant_t *js) {
@@ -353,18 +407,12 @@ ant_value_t assert_library(ant_t *js) {
   js_set(js, assert_obj, "match", Ant_Function_CreateWithArity(assert_match, 2));
   js_set(js, assert_obj, "doesNotMatch", Ant_Function_CreateWithArity(assert_does_not_match, 2));
 
-  ant_value_t ae_ctor = js_mkobj(js);
-  ant_value_t ae_proto = js_mkobj(js);
+  ant_value_t ae_fn = Ant_Error_CreateConstructorEx(
+    js, "AssertionError", Ant_Function_CreateWithArity(assert_assertion_error_ctor, 1), 
+    &js->builtins.assertion_error_proto
+  );
   
-  js_set(js, ae_proto, "name", js_mkstr(js, "AssertionError", 14));
-  js_set_slot(ae_ctor, SLOT_CFUNC, Ant_Function_CreateWithArity(assert_assertion_error_ctor, 1));
-  js_mkprop_fast(js, ae_ctor, "prototype", 9, ae_proto);
-  js_set_function_name(js, ae_ctor, "AssertionError", 14);
-  
-  ant_value_t ae_fn = js_obj_to_func(js, ae_ctor);
-  js_set(js, ae_proto, "constructor", ae_fn);
   js_set(js, assert_obj, "AssertionError", ae_fn);
-
   ant_value_t lib = js_obj_to_func(js, assert_obj);
   js_set(js, lib, "default", lib);
   

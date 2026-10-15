@@ -17,6 +17,7 @@
 #pragma GCC diagnostic pop
 
 #include "ant.h"
+#include "ascii.h"
 #include "ptr.h"
 #include "gc.h"
 #include "utf8.h"
@@ -368,13 +369,6 @@ static crypto_text_encoding_t crypto_parse_encoding(const char *str, size_t len)
   return CRYPTO_TEXT_UTF8;
 }
 
-static uint8_t crypto_hex_nibble(char ch) {
-  if (ch >= '0' && ch <= '9') return (uint8_t)(ch - '0');
-  if (ch >= 'a' && ch <= 'f') return (uint8_t)(10 + ch - 'a');
-  if (ch >= 'A' && ch <= 'F') return (uint8_t)(10 + ch - 'A');
-  return 0xFFu;
-}
-
 static uint8_t *crypto_decode_hex(const char *str, size_t len, size_t *out_len) {
   if ((len & 1u) != 0) return NULL;
 
@@ -382,12 +376,14 @@ static uint8_t *crypto_decode_hex(const char *str, size_t len, size_t *out_len) 
   if (!buf) return NULL;
 
   for (size_t i = 0; i < len; i += 2u) {
-    uint8_t hi = crypto_hex_nibble(str[i]);
-    uint8_t lo = crypto_hex_nibble(str[i + 1u]);
-    if (hi == 0xFFu || lo == 0xFFu) {
+    int hi = ant_ascii_hex_value((unsigned char)str[i]);
+    int lo = ant_ascii_hex_value((unsigned char)str[i + 1u]);
+    
+    if (hi < 0 || lo < 0) {
       free(buf);
       return NULL;
     }
+    
     buf[i / 2u] = (uint8_t)((hi << 4u) | lo);
   }
 

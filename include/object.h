@@ -289,6 +289,22 @@ enum {
   ANT_ARGUMENTS_SLOT_ITERATOR = 2,
 };
 
+static inline bool ant_object_is_array(const ant_object_t *obj) {
+  return obj && obj->type_tag == kTypeArray && !obj->flags.arguments_object;
+}
+
+static inline bool ant_object_is_arguments(const ant_object_t *obj) {
+  return obj && obj->type_tag == kTypeArray && obj->flags.arguments_object;
+}
+
+static inline bool js_is_array(ant_value_t v) {
+  return vtype(v) == kTypeArray && !((const ant_object_t *)vptr(v))->flags.arguments_object;
+}
+
+static inline bool js_is_arguments(ant_value_t v) {
+  return vtype(v) == kTypeArray && ((const ant_object_t *)vptr(v))->flags.arguments_object;
+}
+
 static inline void ant_object_guard_absence(ant_object_t *obj) {
   if (obj) obj->flags.guards_absence = 1;
 }

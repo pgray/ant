@@ -156,6 +156,9 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
     return clone;
   }
 
+  if (js_is_arguments(val))
+    return js_throw(js, make_dom_exception(js, "#<Object> could not be cloned.", "DataCloneError"));
+
   if (t == kTypeArray) {
     ant_value_t clone = js_mkarr(js);
     sc_add(seen, val, clone);

@@ -1008,11 +1008,7 @@ static char **parse_args_array(ant_t *js, ant_value_t arr, int *count) {
   return args;
 }
 
-static ant_value_t child_process_command_value(
-  ant_t *js,
-  ant_value_t file,
-  ant_value_t argv
-) {
+static ant_value_t child_process_command_value(ant_t *js, ant_value_t file, ant_value_t argv) {
   size_t file_len = 0;
   char *file_text;
   ant_offset_t argc;
@@ -1022,7 +1018,7 @@ static ant_value_t child_process_command_value(
 
   if (vtype(file) != kTypeString) return js_mkundef();
   file_text = js_getstr(js, file, &file_len);
-  argc = vtype(argv) == kTypeArray ? js_arr_len(js, argv) : 0;
+  argc = js_is_array(argv) ? js_arr_len(js, argv) : 0;
   total = file_len;
 
   for (ant_offset_t i = 0; i < argc; i++) {
@@ -1068,7 +1064,7 @@ static void free_args_array(char **args, int count) {
 
 static ant_value_t child_process_options_arg(ant_value_t *args, int nargs) {
   if (nargs >= 3 && is_special_object(args[2])) return args[2];
-  if (nargs >= 2 && vtype(args[1]) != kTypeArray && is_special_object(args[1])) return args[1];
+  if (nargs >= 2 && !js_is_array(args[1]) && is_special_object(args[1])) return args[1];
   return js_mkundef();
 }
 
@@ -1172,7 +1168,7 @@ static ant_value_t builtin_spawn(ant_params_t) {
   bool detached = false;
   ant_value_t options_arg = child_process_options_arg(args, nargs);
   
-  if (nargs >= 2 && vtype(args[1]) == kTypeArray) spawn_args = parse_args_array(js, args[1], &spawn_argc);
+  if (nargs >= 2 && js_is_array(args[1])) spawn_args = parse_args_array(js, args[1], &spawn_argc);
   if (spawn_argc < 0) {
     free(cmd_str);
     return Ant_Exception_Current(js);
@@ -1690,7 +1686,7 @@ static ant_value_t builtin_execFile(ant_params_t) {
   }
 
   if (nargs >= 2) {
-    if (vtype(args[1]) == kTypeArray) {
+    if (js_is_array(args[1])) {
       argv = args[1];
       if (nargs >= 3 && is_special_object(args[2])) options = args[2];
     } else if (is_special_object(args[1])) options = args[1];
@@ -1781,7 +1777,7 @@ static ant_value_t spawn_sync_impl(ant_native_params_t, bool force_shell) {
   bool use_shell = force_shell;
   ant_value_t options_arg = child_process_options_arg(args, nargs);
 
-  if (nargs >= 2 && vtype(args[1]) == kTypeArray) spawn_args = parse_args_array(js, args[1], &spawn_argc);
+  if (nargs >= 2 && js_is_array(args[1])) spawn_args = parse_args_array(js, args[1], &spawn_argc);
   if (spawn_argc < 0) {
     free(cmd_str);
     return Ant_Exception_Current(js);
@@ -2407,7 +2403,7 @@ static ant_value_t spawn_sync_impl(ant_native_params_t, bool force_shell) {
   res.command = strndup(command, command_len);
   if (!res.command) return js_mkerr(js, "Out of memory");
 
-  if (nargs >= 2 && vtype(args[1]) == kTypeArray)
+  if (nargs >= 2 && js_is_array(args[1]))
     res.args = parse_args_array(js, args[1], &res.arg_count);
   if (res.arg_count < 0) {
     free(res.command);
@@ -2584,7 +2580,7 @@ static ant_value_t builtin_execFileSync(ant_params_t) {
   if (vtype(args[0]) != kTypeString) return js_mkerr(js, "File must be a string");
 
   if (nargs >= 2) {
-    if (vtype(args[1]) == kTypeArray) {
+    if (js_is_array(args[1])) {
       argv = args[1];
       if (nargs >= 3 && is_special_object(args[2])) options = args[2];
     } else if (is_special_object(args[1])) options = args[1];

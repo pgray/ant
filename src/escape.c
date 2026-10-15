@@ -1,5 +1,6 @@
 #include "utf8.h"
 #include "escape.h"
+#include "ascii.h"
 
 static inline size_t decode_hex_escape(const uint8_t *in, size_t pos, uint8_t *out, size_t *out_pos) {
   uint32_t cp = (unhex(in[pos + 2]) << 4U) | unhex(in[pos + 3]);
@@ -27,7 +28,7 @@ static size_t decode_unicode_braced(const uint8_t *in, size_t pos, size_t end, u
   uint32_t cp = 0;
   size_t i = pos + 3;
   
-  while (i < end && is_xdigit(in[i])) { cp = (cp << 4) | unhex(in[i]); i++; }
+  while (i < end && ant_ascii_is_xdigit(in[i])) { cp = (cp << 4) | unhex(in[i]); i++; }
   if (i < end && in[i] == '}') {
     *out_pos += utf8_encode(cp, (char *)&out[*out_pos]);
     return i - pos - 1;
@@ -44,8 +45,8 @@ static size_t decode_unicode_fixed(const uint8_t *in, size_t pos, size_t end, ui
 
   if (cp >= 0xD800 && cp <= 0xDBFF && pos + 11 < end &&
       in[pos + 6] == '\\' && in[pos + 7] == 'u' &&
-      is_xdigit(in[pos + 8]) && is_xdigit(in[pos + 9]) &&
-      is_xdigit(in[pos + 10]) && is_xdigit(in[pos + 11])) {
+      ant_ascii_is_xdigit(in[pos + 8]) && ant_ascii_is_xdigit(in[pos + 9]) &&
+      ant_ascii_is_xdigit(in[pos + 10]) && ant_ascii_is_xdigit(in[pos + 11])) {
     uint32_t lo =
       (unhex(in[pos + 8]) << 12U) | (unhex(in[pos + 9]) << 8U) |
       (unhex(in[pos + 10]) << 4U)  |  unhex(in[pos + 11]);
@@ -79,7 +80,7 @@ size_t decode_escape(const uint8_t *in, size_t pos, size_t end, uint8_t *out, si
       advance = decode_octal_escape(in, pos, out, out_pos);
       break;
     case 'x':
-      if (pos + 3 < end && is_xdigit(in[pos + 2]) && is_xdigit(in[pos + 3])) {
+      if (pos + 3 < end && ant_ascii_is_xdigit(in[pos + 2]) && ant_ascii_is_xdigit(in[pos + 3])) {
         advance = decode_hex_escape(in, pos, out, out_pos);
       } else out[(*out_pos)++] = c;
       break;
@@ -87,8 +88,8 @@ size_t decode_escape(const uint8_t *in, size_t pos, size_t end, uint8_t *out, si
       if (pos + 2 < end && in[pos + 2] == '{') {
         advance = decode_unicode_braced(in, pos, end, out, out_pos);
       } else if (
-        pos + 5 < end && is_xdigit(in[pos + 2]) && is_xdigit(in[pos + 3]) &&
-        is_xdigit(in[pos + 4]) && is_xdigit(in[pos + 5])
+        pos + 5 < end && ant_ascii_is_xdigit(in[pos + 2]) && ant_ascii_is_xdigit(in[pos + 3]) &&
+        ant_ascii_is_xdigit(in[pos + 4]) && ant_ascii_is_xdigit(in[pos + 5])
       ) advance = decode_unicode_fixed(in, pos, end, out, out_pos);
       else out[(*out_pos)++] = c;
       break;

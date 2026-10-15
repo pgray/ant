@@ -1238,6 +1238,44 @@ ant_value_t json_parse_value(ant_t *js, ant_value_t value) {
   return js_json_parse(js, args, 1, js_mkundef());
 }
 
+static bool json_set_replacer(ant_t *js, json_cycle_ctx *ctx, ant_value_t replacer, ant_value_t *error_out) {
+  if (is_callable(replacer)) {
+    ctx->replacer_func = replacer;
+    if (json_ctx_pin_value(ctx, replacer)) return true;
+    *error_out = ctx->error;
+    return false;
+  }
+  
+  if (!is_object_type(replacer)) return true;
+
+  bool replacer_is_array = false;
+  ant_value_t checked = js_is_array_value_checked(js, replacer, &replacer_is_array);
+  
+  if (is_err(checked)) {
+    *error_out = checked;
+    return false;
+  }
+  
+  if (!replacer_is_array) return true;
+  ant_value_t len_val = js_get(js, replacer, "length");
+  
+  if (is_err(len_val)) {
+    json_capture_error(ctx, len_val);
+    *error_out = js_throw(js, ctx->error);
+    return false;
+  }
+  
+  if (vtype(len_val) != kTypeNumber) return true;
+
+  ctx->replacer_arr = replacer;
+  ctx->replacer_arr_len = (int)js_getnum(len_val);
+  
+  if (json_ctx_pin_value(ctx, replacer)) return true;
+  *error_out = ctx->error;
+  
+  return false;
+}
+
 static bool json_set_indent(ant_t *js, json_cycle_ctx *ctx, ant_value_t *args, int nargs) {
   ctx->indent_len = 0;
   if (nargs < 3) return true;
@@ -1337,35 +1375,7 @@ ant_value_t js_json_stringify(ant_params_t) {
     goto cleanup;
   }
   
-  // TODO: reduce nesting
-  if (nargs >= 2) {
-    ant_value_t replacer = args[1];
-    if (is_callable(replacer)) {
-      ctx.replacer_func = replacer;
-      if (!json_ctx_pin_value(&ctx, replacer)) {
-        result = ctx.error;
-        goto cleanup;
-      }
-    }
-
-    else if (is_special_object(replacer)) {
-      ant_value_t len_val = js_get(js, replacer, "length");
-      if (is_err(len_val)) {
-        json_capture_error(&ctx, len_val);
-        result = js_throw(js, ctx.error);
-        goto cleanup;
-      }
-
-      if (vtype(len_val) == kTypeNumber) {
-        ctx.replacer_arr = replacer;
-        ctx.replacer_arr_len = (int)js_getnum(len_val);
-        if (!json_ctx_pin_value(&ctx, replacer)) {
-          result = ctx.error;
-          goto cleanup;
-        }
-      }
-    }
-  }
+  if (nargs >= 2 && !json_set_replacer(js, &ctx, args[1], &result)) goto cleanup;
   
   if (!json_set_indent(js, &ctx, args, nargs)) {
     ant_value_t error = ctx.error;

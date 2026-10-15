@@ -20,11 +20,10 @@ uint16_t double_to_half(double value);
 
 char hex_char(int v);
 void hex_encode(const uint8_t *src, size_t len, char *dst);
+
+int is_typescript_file(const char *filename);
 char *resolve_js_file(const char *filename);
 char *resolve_typescript_source_fallback(const char *filename);
-
-int hex_digit(char c);
-int is_typescript_file(const char *filename);
 
 typedef enum {
   ANT_TS_SOURCE_AUTO = 0,

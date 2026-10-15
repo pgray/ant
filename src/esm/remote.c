@@ -1,9 +1,10 @@
 #include "utils.h"
 #include "base64.h"
 #include "escape.h"
+#include "ascii.h"
 #include "esm/remote.h"
 #include "reactor.h"
-#include "internal.h"
+#include "isolate.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -53,7 +54,7 @@ static char *esm_percent_decode(const char *src, size_t src_len, size_t *out_len
   size_t j = 0;
   for (size_t i = 0; i < src_len; i++) {
     if (src[i] == '%' && i + 2 < src_len &&
-        is_xdigit(src[i + 1]) && is_xdigit(src[i + 2])) {
+        ant_ascii_is_xdigit(src[i + 1]) && ant_ascii_is_xdigit(src[i + 2])) {
       out[j++] = (char)((unhex(src[i + 1]) << 4) | unhex(src[i + 2]));
       i += 2;
     } else out[j++] = src[i];

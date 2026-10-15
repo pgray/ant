@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "ant.h"
+#include "ascii.h"
 #include "errors.h"
 #include "builder.h"
 #include "internal.h"
@@ -621,8 +622,14 @@ static bool util_is_boxed_primitive(ant_value_t value, uint8_t *type_out) {
   return true;
 }
 
+static ant_value_t util_is_array(ant_params_t) {
+  bool result = false;
+  ant_value_t checked = js_is_array_value_checked(js, nargs > 0 ? args[0] : js_mkundef(), &result);
+  return is_err(checked) ? checked : js_bool(result);
+}
+
 static bool util_is_arguments_object_value(ant_value_t value) {
-  return vtype(value) == kTypeArray && js_get_slot(value, SLOT_ARGUMENTS_OBJECT) == js_true;
+  return js_is_arguments(value);
 }
 
 static ant_value_t util_types_is_any_array_buffer(ant_params_t) {
@@ -916,14 +923,11 @@ static inline bool util_env_is_inline_ws(char ch) {
 }
 
 static inline bool util_env_is_ident_start(char ch) {
-  return 
-    (ch >= 'A' && ch <= 'Z') ||
-    (ch >= 'a' && ch <= 'z') ||
-    ch == '_';
+  return ant_ascii_is_alpha(ch) || ch == '_';
 }
 
 static inline bool util_env_is_ident_continue(char ch) {
-  return util_env_is_ident_start(ch) || (ch >= '0' && ch <= '9');
+  return util_env_is_ident_start(ch) || ant_ascii_is_digit(ch);
 }
 
 static void util_env_skip_inline_ws(const char *src, size_t len, size_t *cursor) {
@@ -1121,7 +1125,7 @@ static ant_value_t util_style_text(ant_params_t) {
     const char *name = js_getstr(js, args[0], NULL);
     const util_style_entry_t *e = name ? util_find_style(name) : NULL;
     if (e) picked[picked_n++] = e;
-  } else if (vtype(args[0]) == kTypeArray) {
+  } else if (js_is_array(args[0])) {
     ant_offset_t len = js_arr_len(js, args[0]);
     for (ant_offset_t i = 0; i < len && picked_n < (int)(sizeof(picked) / sizeof(picked[0])); i++) {
       ant_value_t item = js_arr_get(js, args[0], i);
@@ -1426,6 +1430,7 @@ ant_value_t util_library(ant_t *js) {
   
   js_set(js, lib, "formatWithOptions", Ant_Function_CreateWithArity(util_format_with_options, 1));
   js_set(js, lib, "isDeepStrictEqual", Ant_Function_CreateWithArity(util_is_deep_strict_equal, 3));
+  js_set(js, lib, "isArray", Ant_Function_CreateWithArity(util_is_array, 1));
   js_set(js, lib, "stripVTControlCharacters", Ant_Function_CreateWithArity(util_strip_vt_control_characters, 1));
   
   js_set(js, lib, "TextDecoder", js_get(js, js->global, "TextDecoder"));

@@ -403,7 +403,7 @@ static int sandbox_for_each_string(
     return cb(js, str, udata);
   }
 
-  if (vtype(value) == kTypeArray) {
+  if (js_is_array(value)) {
     ant_offset_t len = js_arr_len(js, value);
     for (ant_offset_t i = 0; i < len; i++) {
       ant_value_t item = js_arr_get(js, value, i);
@@ -1095,7 +1095,7 @@ static ant_value_t sandbox_run(ant_params_t) {
 
   // TODO: reduce nesting split into helpers
   if (nargs >= 2 && vtype(args[1]) != kTypeUndefined && vtype(args[1]) != kTypeNull) {
-    if (vtype(args[1]) == kTypeArray) {
+    if (js_is_array(args[1])) {
       ant_offset_t len = js_arr_len(js, args[1]);
       if (len > INT32_MAX) return sandbox_rejected(js, js_mkerr_typed(js, JS_ERR_RANGE, "argv is too large"));
       argv = calloc((size_t)len + 1, sizeof(*argv));

@@ -842,7 +842,7 @@ static inline ant_value_t sv_prop_get_at(
 
   if (is_length_key(interned, len)) {
     ant_object_t *arr_ptr = sv_array_obj_ptr(obj);
-    if (arr_ptr && !arr_ptr->flags.arguments_object) return tov((double)js_arr_len(js, js_as_obj(obj)));
+    if (ant_object_is_array(arr_ptr)) return tov((double)js_arr_len(js, js_as_obj(obj)));
   }
 
   if (t == kTypeObject || t == kTypeArray || t == kTypeFunction || t == kTypePromise) {

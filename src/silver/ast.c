@@ -2,6 +2,7 @@
 #include "silver/lexer.h"
 #include "silver/directives.h"
 
+#include "ascii.h"
 #include "escape.h"
 #include "debug.h"
 #include "errors.h"
@@ -559,9 +560,32 @@ static void push_arrow_params_from_expr(P, sv_ast_t *fn, sv_ast_t *expr) {
   sv_ast_list_push(JS, &fn->args, expr);
 }
 
+static bool template_hex_run(const uint8_t *p, size_t avail, size_t n) {
+  if (avail < n) return false;
+  for (size_t k = 0; k < n; k++) if (!ant_ascii_is_xdigit(p[k])) return false;
+  return true;
+}
+
+static bool template_escape_is_cookable(const uint8_t *p, size_t avail, uint8_t c) {
+  if (c >= '1' && c <= '9') return false;
+  if (c == '0') return !(avail > 0 && ant_ascii_is_digit(p[0]));
+  if (c == 'x') return template_hex_run(p, avail, 2);
+  if (c != 'u') return true;
+  if (avail == 0 || p[0] != '{') return template_hex_run(p, avail, 4);
+
+  uint32_t cp = 0;
+  size_t j = 1;
+  for (; j < avail && ant_ascii_is_xdigit(p[j]); j++) {
+    cp = (cp << 4) | unhex(p[j]);
+    if (cp > 0x10FFFF) return false;
+  }
+  return j > 1 && j < avail && p[j] == '}';
+}
+
 static sv_tpl_cooked_t decode_template_segment(P, const uint8_t *in, size_t start, size_t end) {
   sv_tpl_cooked_t outv = { .str = NULL, .len = 0, .ok = true, .valid_cooked = true };
   size_t raw_len = (end > start) ? (end - start) : 0;
+  
   if (raw_len == 0) {
     outv.str = "";
     return outv;
@@ -581,36 +605,23 @@ static sv_tpl_cooked_t decode_template_segment(P, const uint8_t *in, size_t star
       if (i + 1 < end && in[i + 1] == '\n') i++;
       continue;
     }
+    
     if (in[i] != '\\' || i + 1 >= end) {
       out[out_len++] = in[i];
       continue;
     }
-    uint8_t c = in[i + 1];
-    if (c >= '1' && c <= '9') { outv.valid_cooked = false; return outv; }
-    if (c == '0' && i + 2 < end && in[i + 2] >= '0' && in[i + 2] <= '9') {
-      outv.valid_cooked = false; return outv;
+    
+    if (!template_escape_is_cookable(in + i + 2, end - i - 2, in[i + 1])) {
+      outv.valid_cooked = false;
+      return outv;
     }
-    if (c == 'x' && !(i + 3 < end && is_xdigit(in[i + 2]) && is_xdigit(in[i + 3]))) {
-      outv.valid_cooked = false; return outv;
-    }
-    if (c == 'u') {
-      if (i + 2 < end && in[i + 2] == '{') {
-        uint32_t cp = 0; size_t j = i + 3;
-        while (j < end && is_xdigit(in[j])) { cp = (cp << 4) | unhex(in[j]); j++; }
-        if (!(j < end && in[j] == '}' && j > i + 3 && cp <= 0x10FFFF)) {
-          outv.valid_cooked = false; return outv;
-        }
-      } else if (
-        !(i + 5 < end && is_xdigit(in[i + 2]) 
-        && is_xdigit(in[i + 3]) 
-        && is_xdigit(in[i + 4]) 
-        && is_xdigit(in[i + 5]))) { outv.valid_cooked = false; return outv; }
-    }
+    
     i += 1 + decode_escape(in, i, end, out, &out_len, '`');
   }
 
   outv.str = (const char *)out;
   outv.len = (uint32_t)out_len;
+  
   return outv;
 }
 

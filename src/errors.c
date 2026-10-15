@@ -399,3 +399,12 @@ void js_describe_received(ant_t *js, ant_value_t value, char *out, size_t out_le
   if (received.needs_free) free((void *)received.ptr);
 }
 
+__attribute__((noinline, cold)) ant_value_t Ant_Error_CreateInvalidArgType(
+  ant_t *js, const char *name, const char *expected, ant_value_t received
+) {
+  char got[160], message[320];
+  js_describe_received(js, received, got, sizeof(got));
+  snprintf(message, sizeof(message), "The \"%s\" argument must be %s. %s", name, expected, got);
+  return js_mkerr_code(js, JS_ERR_TYPE, "ERR_INVALID_ARG_TYPE", message);
+}
+

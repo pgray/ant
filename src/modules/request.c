@@ -5,6 +5,7 @@
 #include <stdio.h>
 
 #include "ant.h"
+#include "ascii.h"
 #include "builder.h"
 #include "ptr.h"
 #include "errors.h"
@@ -283,16 +284,10 @@ static request_data_t *data_dup(const request_data_t *src) {
   return d;
 }
 
-static bool is_token_char(unsigned char c) {
-  if (c == 0 || c > 127) return false;
-  static const char *delimiters = "(),/:;<=>?@[\\]{}\"";
-  return c > 32 && !strchr(delimiters, (char)c);
-}
-
 static bool is_valid_method(const char *m) {
   if (!m || !*m) return false;
   for (const unsigned char *p = (const unsigned char *)m; *p; p++)
-    if (!is_token_char(*p)) return false;
+    if (!ant_ascii_is_tchar(*p)) return false;
   return true;
 }
 
