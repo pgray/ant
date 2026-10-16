@@ -30,6 +30,16 @@ void jit_setup_prototypes(jit_compile_t *c, MIR_type_t ret_type) {
                                        MIR_JSVAL, "val",
                                        MIR_JSVAL, "token");
 
+  c->private_def_proto = MIR_new_proto(c->ctx, "private_def_proto",
+                                       1, &private_put_ret,
+                                       6,
+                                       MIR_T_I64, "vm",
+                                       MIR_T_I64, "js",
+                                       MIR_JSVAL, "obj",
+                                       MIR_JSVAL, "token",
+                                       MIR_JSVAL, "val",
+                                       MIR_T_I32, "kind");
+
   MIR_type_t call_ret = MIR_JSVAL;
   c->call_proto = MIR_new_proto(c->ctx, "call_proto",
                                 1, &call_ret,
@@ -739,6 +749,7 @@ void jit_setup_prototypes(jit_compile_t *c, MIR_type_t ret_type) {
   c->imp_put_elem = MIR_new_import(c->ctx, c->func->is_strict ? "jit_helper_put_elem_strict" : "jit_helper_put_elem");
   c->imp_get_private = MIR_new_import(c->ctx, "jit_helper_get_private");
   c->imp_put_private = MIR_new_import(c->ctx, "jit_helper_put_private");
+  c->imp_def_private = MIR_new_import(c->ctx, "jit_helper_def_private");
   c->imp_put_global = MIR_new_import(c->ctx, "jit_helper_put_global");
   c->imp_object = MIR_new_import(c->ctx, "jit_helper_object");
   c->imp_object_template = MIR_new_import(c->ctx, "jit_helper_object_template");

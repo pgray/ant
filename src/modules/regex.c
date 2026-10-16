@@ -1030,9 +1030,8 @@ ant_value_t is_regexp_like(ant_t *js, ant_value_t value) {
 ant_value_t reject_regexp_arg(ant_t *js, ant_value_t value, const char *method_name) {
   ant_value_t is_re = is_regexp_like(js, value);
   if (is_err(is_re)) return is_re;
-  if (js_truthy(js, is_re)) {
-    return js_mkerr_typed(js, JS_ERR_TYPE, "First argument to %s must not be a RegExp", method_name);
-  }
+  if (js_truthy(js, is_re))
+    return js_mkerr_typed(js, JS_ERR_TYPE, "First argument to String.prototype.%s must not be a regular expression", method_name);
   return js_mkundef();
 }
 

@@ -15957,7 +15957,8 @@ static ant_value_t string_to_integer_or_infinity(
 
   if (vtype(value) == kTypeSymbol || vtype(value) == kTypeBigInt) {
     ant_value_t err = js_mkerr_typed(
-      js, JS_ERR_TYPE, "Cannot convert value to a number");
+      js, JS_ERR_TYPE, "Cannot convert a %s value to a number", 
+      vtype(value) == kTypeSymbol ? "Symbol" : "BigInt");
     GC_ROOT_RESTORE(js, root_mark);
     return err;
   }
@@ -16623,38 +16624,28 @@ static ant_value_t builtin_string_slice(ant_params_t) {
 }
 
 static ant_value_t builtin_string_includes(ant_params_t) {
+  if (vtype(js->this_val) == kTypeNull || vtype(js->this_val) == kTypeUndefined)
+    return js_mkerr_typed(js, JS_ERR_TYPE, "String.prototype.includes called on null or undefined");
+
   ant_value_t str = to_string_val(js, js->this_val);
-  if (vtype(str) != kTypeString) return js_mkerr(js, "includes called on non-string");
-  if (nargs == 0) return mkval(kTypeBool, 0);
-  ant_value_t search = args[0];
+  if (is_err(str)) return str;
   
-  if (is_object_type(search)) {
-    ant_value_t maybe_err = reject_regexp_arg(js, search, "includes");
+  if (vtype(str) != kTypeString) 
+    return js_mkerr(js, "includes called on non-string");
+
+  if (nargs > 0 && is_object_type(args[0])) {
+    ant_value_t maybe_err = reject_regexp_arg(js, args[0], "includes");
     if (is_err(maybe_err)) return maybe_err;
   }
-  search = js_tostring_val(js, search);
-  if (is_err(search)) return search;
+
+  GC_ROOT_SAVE(root_mark, js);
+  GC_ROOT_PIN(js, str);
   
-  ant_offset_t str_len, str_off = vstr(js, str, &str_len);
-  ant_offset_t search_len, search_off = vstr(js, search, &search_len);
-  const char *str_ptr = (char *)(uintptr_t)(str_off);
-  const char *search_ptr = (char *)(uintptr_t)(search_off);
+  ant_value_t index = js_string_intrinsic_call(js, ANT_STRING_INTRINSIC_INDEX_OF, str, args, nargs);
+  GC_ROOT_RESTORE(js, root_mark);
   
-  ant_offset_t start = 0;
-  if (nargs >= 2) {
-    double pos = tod(args[1]);
-    if (isnan(pos) || pos < 0) pos = 0;
-    if (pos > D(str_len)) return mkval(kTypeBool, 0);
-    start = (ant_offset_t) pos;
-  }
-  
-  if (search_len == 0) return mkval(kTypeBool, 1);
-  if (start + search_len > str_len) return mkval(kTypeBool, 0);
-  for (ant_offset_t i = start; i <= str_len - search_len; i++) {
-    if (memcmp(str_ptr + i, search_ptr, search_len) == 0) return mkval(kTypeBool, 1);
-  }
-  
-  return mkval(kTypeBool, 0);
+  if (is_err(index)) return index;
+  return js_bool(vtype(index) == kTypeNumber && js_getnum(index) >= 0);
 }
 
 static inline ant_offset_t string_clamped_position(ant_t *js, ant_value_t value, ant_offset_t len) {

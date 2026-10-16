@@ -328,6 +328,11 @@ ant_value_t jit_helper_put_private(
   ant_value_t obj, ant_value_t val, ant_value_t token
 );
 
+ant_value_t jit_helper_def_private(
+  sv_vm_t *vm, ant_t *js,
+  ant_value_t obj, ant_value_t token, ant_value_t val, int32_t kind
+);
+
 ant_value_t jit_helper_put_elem(
   sv_vm_t *vm, ant_t *js,
   ant_value_t obj, ant_value_t key, ant_value_t val

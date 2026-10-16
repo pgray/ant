@@ -27,6 +27,7 @@ typedef struct jit_compile {
   MIR_item_t helper2_proto;
   MIR_item_t copy_props_proto;
   MIR_item_t private_put_proto;
+  MIR_item_t private_def_proto;
   MIR_item_t call_proto;
   MIR_item_t cfunc_proto;
   MIR_item_t native_finish_proto;
@@ -180,6 +181,7 @@ typedef struct jit_compile {
   MIR_item_t imp_put_elem;
   MIR_item_t imp_get_private;
   MIR_item_t imp_put_private;
+  MIR_item_t imp_def_private;
   MIR_item_t imp_put_global;
   MIR_item_t imp_object;
   MIR_item_t imp_object_template;

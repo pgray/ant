@@ -236,7 +236,7 @@ static inline bool sv_tfb_specialization_ready(uint8_t feedback) {
 static inline bool sv_tfb_is_word32_number(ant_value_t value) {
   if (vtype(value) != kTypeNumber) return false;
   double number = tod(value);
-  return isfinite(number) && number >= (double)INT32_MIN && number <= (double)UINT32_MAX;
+  return fabs(number) < 0x1p63;
 }
 
 static inline bool sv_tfb_still_sampling(uint8_t old) {

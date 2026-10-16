@@ -98,6 +98,15 @@ void jit_emit_literals(jit_compile_t *c) {
       break;
     }
 
+    case OP_GLOBAL: {
+      MIR_reg_t dst = vstack_push(&c->vs);
+      MIR_append_insn(c->ctx, c->jit_func,
+                      MIR_new_insn(c->ctx, MIR_MOV,
+                                   MIR_new_reg_op(c->ctx, dst),
+                                   MIR_new_mem_op(c->ctx, MIR_JSVAL, (MIR_disp_t)offsetof(ant_t, global), c->r_js, 0, 1)));
+      break;
+    }
+
     case OP_SPECIAL_OBJ: {
       uint8_t which = sv_get_u8(c->ip + 1);
       MIR_reg_t dst = vstack_push(&c->vs);

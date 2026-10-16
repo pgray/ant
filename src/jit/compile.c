@@ -342,6 +342,7 @@ static sv_jit_func_t jit_compile_tier(ant_t *js, sv_func_t *func, sv_closure_t *
       case OP_TRUE:
       case OP_FALSE:
       case OP_THIS:
+      case OP_GLOBAL:
       case OP_SPECIAL_OBJ:
       case OP_OBJECT:
       case OP_ARRAY:
@@ -493,6 +494,7 @@ static sv_jit_func_t jit_compile_tier(ant_t *js, sv_func_t *func, sv_closure_t *
       case OP_PUT_ELEM:
       case OP_GET_PRIVATE:
       case OP_PUT_PRIVATE:
+      case OP_DEF_PRIVATE:
       case OP_GET_LENGTH:
       case OP_DELETE:
       case OP_SET_PROTO:

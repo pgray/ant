@@ -1362,6 +1362,28 @@ void jit_emit_properties(jit_compile_t *c) {
       break;
     }
 
+    case OP_DEF_PRIVATE: {
+      vstack_ensure_boxed(&c->vs, c->vs.sp - 1, c->ctx, c->jit_func, c->r_d_slot);
+      vstack_ensure_boxed(&c->vs, c->vs.sp - 2, c->ctx, c->jit_func, c->r_d_slot);
+      vstack_ensure_boxed(&c->vs, c->vs.sp - 3, c->ctx, c->jit_func, c->r_d_slot);
+      MIR_reg_t val = vstack_pop(&c->vs);
+      MIR_reg_t token = vstack_pop(&c->vs);
+      MIR_reg_t obj = vstack_top(&c->vs);
+      MIR_append_insn(c->ctx, c->jit_func,
+                      MIR_new_call_insn(c->ctx, 9,
+                                        MIR_new_ref_op(c->ctx, c->private_def_proto),
+                                        MIR_new_ref_op(c->ctx, c->imp_def_private),
+                                        MIR_new_reg_op(c->ctx, c->r_err_tmp),
+                                        MIR_new_reg_op(c->ctx, c->r_vm),
+                                        MIR_new_reg_op(c->ctx, c->r_js),
+                                        MIR_new_reg_op(c->ctx, obj),
+                                        MIR_new_reg_op(c->ctx, token),
+                                        MIR_new_reg_op(c->ctx, val),
+                                        MIR_new_int_op(c->ctx, sv_get_u8(c->ip + 1))));
+      jit_emit_throw_if_error(c, c->r_err_tmp);
+      break;
+    }
+
     case OP_SET_PROTO: {
       vstack_ensure_boxed(&c->vs, c->vs.sp - 1, c->ctx, c->jit_func, c->r_d_slot);
       MIR_reg_t proto = vstack_pop(&c->vs);

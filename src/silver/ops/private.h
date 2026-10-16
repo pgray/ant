@@ -273,12 +273,9 @@ static inline ant_value_t sv_op_put_private(sv_vm_t *vm, ant_t *js) {
   return js_mkundef();
 }
 
-static inline ant_value_t sv_op_def_private(sv_vm_t *vm, ant_t *js, uint8_t *ip) {
-  uint8_t def_kind = sv_get_u8(ip + 1);
-  ant_value_t val = vm->stack[--vm->sp];
-  ant_value_t token = vm->stack[--vm->sp];
-  ant_value_t obj = vm->stack[vm->sp - 1];
-
+static inline ant_value_t sv_private_define(
+  ant_t *js, ant_value_t obj, ant_value_t token, ant_value_t val, uint8_t def_kind
+) {
   if (!is_object_type(obj)) return sv_private_missing(js);
   ant_private_entry_t *existing = sv_private_find_entry(obj, token);
 
@@ -313,6 +310,12 @@ static inline ant_value_t sv_op_def_private(sv_vm_t *vm, ant_t *js, uint8_t *ip)
     val, js_mkundef(), js_mkundef());
     
   return entry ? js_mkundef() : js_mkerr(js, "oom");
+}
+
+static inline ant_value_t sv_op_def_private(sv_vm_t *vm, ant_t *js, uint8_t *ip) {
+  ant_value_t val = vm->stack[--vm->sp];
+  ant_value_t token = vm->stack[--vm->sp];
+  return sv_private_define(js, vm->stack[vm->sp - 1], token, val, sv_get_u8(ip + 1));
 }
 
 static inline ant_value_t sv_op_has_private(sv_vm_t *vm, ant_t *js) {
