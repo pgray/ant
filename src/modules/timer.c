@@ -380,6 +380,11 @@ static void timer_callback(uv_timer_t *handle) {
   process_microtasks(js);
 }
 
+static void timer_start(ant_t *js, timer_entry_t *entry, uint64_t timeout, uint64_t repeat) {
+  uv_update_time(js->loop);
+  uv_timer_start(&entry->handle, timer_callback, timeout, repeat);
+}
+
 static ant_value_t js_timer_refresh(ant_params_t) {
   ant_value_t this_obj = js_getthis(js);
   
@@ -394,27 +399,21 @@ static ant_value_t js_timer_refresh(ant_params_t) {
         return js_mkerr(js, "failed to allocate timer args");
       timer_entry_hold_young(js, entry);
     }
+    
     entry->active = 1;
     js->timers.active_timer_count++;
-    if (uv_has_ref((const uv_handle_t *)&entry->handle))
-      js->timers.active_refed_timer_count++;
+    
+    if (uv_has_ref((const uv_handle_t *)&entry->handle)) js->timers.active_refed_timer_count++;
   }
 
-  uv_timer_start(
-    &entry->handle,
-    timer_callback,
-    entry->timeout_ms,
-    entry->is_interval ? entry->timeout_ms : 0
-  );
-  
+  timer_start(js, entry, entry->timeout_ms, entry->is_interval ? entry->timeout_ms : 0);
   return this_obj;
 }
 
 // setTimeout(callback, delay, ...args)
 static ant_value_t js_set_timeout(ant_params_t) {
-  if (nargs < 1) {
+  if (nargs < 1)
     return js_mkerr(js, "setTimeout requires at least 1 argument (callback)");
-  }
   
   ant_value_t callback = args[0];
   double delay_ms = nargs > 1 ? js_getnum(args[1]) : 0;
@@ -441,16 +440,15 @@ static ant_value_t js_set_timeout(ant_params_t) {
   add_timer_entry(js, entry);
   js->timers.active_timer_count++;
   js->timers.active_refed_timer_count++;
-  uv_timer_start(&entry->handle, timer_callback, ms, 0);
+  timer_start(js, entry, ms, 0);
 
   return timer_make_object(js, entry, delay_ms, timer_args);
 }
 
 // setInterval(callback, delay, ...args)
 static ant_value_t js_set_interval(ant_params_t) {
-  if (nargs < 1) {
+  if (nargs < 1)
     return js_mkerr(js, "setInterval requires at least 1 argument (callback)");
-  }
   
   ant_value_t callback = args[0];
   double delay_ms = nargs > 1 ? js_getnum(args[1]) : 0;
@@ -477,7 +475,7 @@ static ant_value_t js_set_interval(ant_params_t) {
   add_timer_entry(js, entry);
   js->timers.active_timer_count++;
   js->timers.active_refed_timer_count++;
-  uv_timer_start(&entry->handle, timer_callback, ms, ms);
+  timer_start(js, entry, ms, ms);
 
   return timer_make_object(js, entry, delay_ms, timer_args);
 }
