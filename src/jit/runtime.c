@@ -132,6 +132,8 @@ void jit_load_externals_once(sv_jit_ctx_t *jc) {
   LOAD_EXT(jit_helper_get_private);
   LOAD_EXT(jit_helper_put_private);
   LOAD_EXT(jit_helper_def_private);
+  LOAD_EXT(jit_helper_spread);
+  LOAD_EXT(js_arr_push);
   LOAD_EXT(jit_helper_put_global);
   LOAD_EXT(jit_helper_object);
   LOAD_EXT(jit_helper_object_template);

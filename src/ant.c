@@ -12789,9 +12789,12 @@ void js_arr_push(ant_t *js, ant_value_t arr, ant_value_t val) {
   ant_value_t len_result = proxy_aware_length(js, arr, &len);
   if (is_err(len_result)) return;
   
-  char idxstr[16];
-  size_t idxlen = uint_to_str(idxstr, sizeof(idxstr), (unsigned)len);
-  js_mkprop_fast(js, arr, idxstr, idxlen, val);
+  if (!is_empty_slot(val)) {
+    char idxstr[16];
+    size_t idxlen = uint_to_str(idxstr, sizeof(idxstr), (unsigned)len);
+    js_mkprop_fast(js, arr, idxstr, idxlen, val);
+  }
+  
   array_len_set(js, arr, len + 1);
 }
 

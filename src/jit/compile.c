@@ -346,6 +346,7 @@ static sv_jit_func_t jit_compile_tier(ant_t *js, sv_func_t *func, sv_closure_t *
       case OP_SPECIAL_OBJ:
       case OP_OBJECT:
       case OP_ARRAY:
+      case OP_EMPTY:
       case OP_REGEXP:
         jit_emit_literals(c);
         break;
@@ -499,6 +500,8 @@ static sv_jit_func_t jit_compile_tier(ant_t *js, sv_func_t *func, sv_closure_t *
       case OP_DELETE:
       case OP_SET_PROTO:
       case OP_COPY_DATA_PROPS:
+      case OP_SPREAD:
+      case OP_APPEND:
         jit_emit_properties(c);
         break;
       case OP_GET_UPVAL:

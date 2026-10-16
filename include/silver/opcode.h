@@ -257,7 +257,7 @@ OP_DEF(  SET_NAME,          5,   1,   1, atom)      /* set .name on function */
 OP_DEF(  SET_NAME_COMP,     1,   2,   2, none)      /* set .name from computed key */
 OP_DEF(  SET_PROTO,         1,   2,   1, none)      /* obj proto -> obj */
 OP_DEF(  SET_HOME_OBJ,      1,   2,   2, none)      /* func home -> func home */
-OP_DEF(  APPEND,            1,   3,   2, none)      /* append to array, update length */
+OP_DEF(  APPEND,            1,   2,   1, none)      /* arr val -> arr */
 OP_DEF(  COPY_DATA_PROPS,   3,   2,   2, npop)      /* dst src excluded... -> dst src (CopyDataProperties) */
 
 OP_DEF(  DEFINE_CLASS,      14,  2,   2, atom_u8)   /* parent ctor -> ctor proto */
@@ -316,6 +316,7 @@ OP_FLAG(THIS                  , SV_OPF_JIT_ELIGIBLE | SV_OPF_JIT_INLINEABLE)
 OP_FLAG(GLOBAL                , SV_OPF_JIT_ELIGIBLE)
 OP_FLAG(OBJECT                , SV_OPF_JIT_ELIGIBLE | SV_OPF_JIT_INLINEABLE)
 OP_FLAG(ARRAY                 , SV_OPF_JIT_ELIGIBLE | SV_OPF_JIT_NEEDS_ARGS_BUF)
+OP_FLAG(EMPTY                 , SV_OPF_JIT_ELIGIBLE)
 OP_FLAG(REGEXP                , SV_OPF_JIT_ELIGIBLE)
 OP_FLAG(CLOSURE               , SV_OPF_JIT_ELIGIBLE | SV_OPF_JIT_NEEDS_CLOSE_UPVAL)
 
@@ -482,6 +483,8 @@ OP_FLAG(DEFINE_METHOD_COMP    , SV_OPF_JIT_ELIGIBLE)
 OP_FLAG(SET_NAME              , SV_OPF_JIT_ELIGIBLE)
 OP_FLAG(SET_PROTO             , SV_OPF_JIT_ELIGIBLE)
 OP_FLAG(COPY_DATA_PROPS       , SV_OPF_JIT_ELIGIBLE | SV_OPF_JIT_NEEDS_ARGS_BUF)
+OP_FLAG(SPREAD                , SV_OPF_JIT_ELIGIBLE)
+OP_FLAG(APPEND                , SV_OPF_JIT_ELIGIBLE)
 OP_FLAG(TO_PROPKEY            , SV_OPF_JIT_ELIGIBLE)
 OP_FLAG(IS_UNDEF              , SV_OPF_JIT_ELIGIBLE | SV_OPF_JIT_INLINEABLE)
 OP_FLAG(IS_NULL               , SV_OPF_JIT_ELIGIBLE | SV_OPF_JIT_INLINEABLE)

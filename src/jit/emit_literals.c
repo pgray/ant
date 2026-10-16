@@ -79,6 +79,9 @@ void jit_emit_literals(jit_compile_t *c) {
     case OP_UNDEF:
       mir_load_imm(c->ctx, c->jit_func, vstack_push_const(&c->vs, mkval(kTypeUndefined, 0)), mkval(kTypeUndefined, 0));
       break;
+    case OP_EMPTY:
+      mir_load_imm(c->ctx, c->jit_func, vstack_push(&c->vs), T_EMPTY);
+      break;
     case OP_NULL:
       mir_load_imm(c->ctx, c->jit_func, vstack_push_const(&c->vs, mkval(kTypeNull, 0)), mkval(kTypeNull, 0));
       break;

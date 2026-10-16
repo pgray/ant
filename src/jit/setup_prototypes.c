@@ -403,6 +403,11 @@ void jit_setup_prototypes(jit_compile_t *c, MIR_type_t ret_type) {
                                         MIR_T_I64, "arr",
                                         MIR_T_I64, "idx",
                                         MIR_T_I64, "val");
+  c->arr_push_proto = MIR_new_proto(c->ctx, "arr_push_proto",
+                                    0, NULL, 3,
+                                    MIR_T_I64, "js",
+                                    MIR_JSVAL, "arr",
+                                    MIR_JSVAL, "val");
   c->param_counters_off_proto = MIR_new_proto(c->ctx, "param_counters_off_proto",
                                               0, NULL, 2, MIR_T_P, "func", MIR_T_I64, "params");
 
@@ -750,6 +755,8 @@ void jit_setup_prototypes(jit_compile_t *c, MIR_type_t ret_type) {
   c->imp_get_private = MIR_new_import(c->ctx, "jit_helper_get_private");
   c->imp_put_private = MIR_new_import(c->ctx, "jit_helper_put_private");
   c->imp_def_private = MIR_new_import(c->ctx, "jit_helper_def_private");
+  c->imp_spread = MIR_new_import(c->ctx, "jit_helper_spread");
+  c->imp_arr_push = MIR_new_import(c->ctx, "js_arr_push");
   c->imp_put_global = MIR_new_import(c->ctx, "jit_helper_put_global");
   c->imp_object = MIR_new_import(c->ctx, "jit_helper_object");
   c->imp_object_template = MIR_new_import(c->ctx, "jit_helper_object_template");

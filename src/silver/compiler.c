@@ -3834,13 +3834,9 @@ static bool call_has_spread_arg(const sv_ast_t *node) {
 }
 
 static void compile_push_arg_to_array(sv_compiler_t *c, sv_ast_t *arg) {
-  emit_op(c, OP_DUP);
-  emit_op(c, OP_DUP);
-  emit_atom_op(c, OP_GET_FIELD, "push", 4);
-  compile_expr(c, arg);
-  emit_op(c, OP_CALL_METHOD);
-  emit_u16(c, 1);
-  emit_op(c, OP_POP);
+  if (arg && arg->type == N_EMPTY) emit_op(c, OP_EMPTY);
+  else compile_expr(c, arg);
+  emit_op(c, OP_APPEND);
 }
 
 static void compile_concat_spread_to_array(sv_compiler_t *c, sv_ast_t *spread_arg) {

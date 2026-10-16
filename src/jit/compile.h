@@ -69,6 +69,7 @@ typedef struct jit_compile {
   MIR_item_t close_upval_proto;
   MIR_item_t upval_barrier_proto;
   MIR_item_t elem_barrier_proto;
+  MIR_item_t arr_push_proto;
   MIR_item_t param_counters_off_proto;
   MIR_item_t adopt_open_upvalues_proto;
   MIR_item_t take_open_upvalues_proto;
@@ -182,6 +183,8 @@ typedef struct jit_compile {
   MIR_item_t imp_get_private;
   MIR_item_t imp_put_private;
   MIR_item_t imp_def_private;
+  MIR_item_t imp_spread;
+  MIR_item_t imp_arr_push;
   MIR_item_t imp_put_global;
   MIR_item_t imp_object;
   MIR_item_t imp_object_template;

@@ -167,9 +167,8 @@ static inline void sv_op_set_home_obj(sv_vm_t *vm, ant_t *js) {
 }
 
 static inline void sv_op_append(sv_vm_t *vm, ant_t *js) {
-  ant_value_t val = vm->stack[--vm->sp];
-  ant_value_t arr = vm->stack[vm->sp - 2];
-  js_arr_push(js, arr, val);
+  js_arr_push(js, vm->stack[vm->sp - 2], vm->stack[vm->sp - 1]);
+  vm->sp--;
 }
 
 static inline ant_value_t sv_op_copy_data_props(sv_vm_t *vm, ant_t *js, uint8_t *ip) {
@@ -185,28 +184,21 @@ static inline ant_value_t sv_op_copy_data_props(sv_vm_t *vm, ant_t *js, uint8_t 
   return result;
 }
 
-static inline ant_value_t sv_op_spread(sv_vm_t *vm, ant_t *js) {
-  if (vm->sp < 2) return js_mkerr(js, "invalid spread state");
-
-  ant_value_t iterable = vm->stack[vm->sp - 1];
-  ant_value_t arr = vm->stack[vm->sp - 2];
-  
-  if (vtype(arr) != kTypeArray) {
-    vm->sp--;
-    return js_mkerr(js, "spread target is not an array");
-  }
+static inline ant_value_t sv_spread_into(sv_vm_t *vm, ant_t *js, ant_value_t arr, ant_value_t iterable) {
+  if (vtype(arr) != kTypeArray) return js_mkerr(js, "spread target is not an array");
 
   if (vtype(iterable) == kTypeArray && js_array_iteration_default(js, iterable)) {
     ant_value_t spread = js_arr_spread_into(js, arr, iterable);
-    vm->sp--;
     return is_err(spread) ? spread : tov(0);
   }
+
+  GC_ROOT_SAVE(root_mark, js);
 
   if (vtype(iterable) == kTypeString) {
     if (str_is_heap_rope(iterable) || str_is_heap_builder(iterable)) {
       iterable = str_materialize(js, iterable);
-      if (is_err(iterable)) { vm->sp--; return iterable; }
-      vm->stack[vm->sp - 1] = iterable;
+      if (is_err(iterable)) { GC_ROOT_RESTORE(js, root_mark); return iterable; }
+      GC_ROOT_PIN(js, iterable);
     }
     
     ant_offset_t slen = str_len_fast(js, iterable);
@@ -221,33 +213,31 @@ static inline ant_value_t sv_op_spread(sv_vm_t *vm, ant_t *js) {
       i += cb_len;
     }
     
-    vm->sp--;
+    GC_ROOT_RESTORE(js, root_mark);
     return tov(0);
   }
 
   ant_value_t iter_fn = js_get_sym(js, iterable, js->sym.iterator_sym);
   uint8_t ft = vtype(iter_fn);
   if (ft != kTypeFunction && ft != kTypeBuiltin) {
-    vm->sp--;
+    GC_ROOT_RESTORE(js, root_mark);
     return js_mkerr(js, "not iterable");
   }
 
   ant_value_t iterator = sv_vm_call(vm, js, iter_fn, iterable, NULL, 0, NULL, js_mkundef());
-  if (is_err(iterator)) { 
-    vm->sp--;
+  if (is_err(iterator)) {
+    GC_ROOT_RESTORE(js, root_mark);
     return iterator;
   }
   
   if (!is_object_type(iterator)) {
-    vm->sp--;
+    GC_ROOT_RESTORE(js, root_mark);
     return js_mkerr(js, "not iterable");
   }
-  
-  vm->stack[vm->sp - 1] = iterator;
 
   ant_value_t status = tov(0);
   ant_value_t result = js_mkundef();
-  GC_ROOT_SAVE(root_mark, js);
+  GC_ROOT_PIN(js, iterator);
   GC_ROOT_PIN(js, result);
 
   for (;;) {
@@ -277,8 +267,13 @@ static inline ant_value_t sv_op_spread(sv_vm_t *vm, ant_t *js) {
   }
 
   GC_ROOT_RESTORE(js, root_mark);
+  return status;
+}
+
+static inline ant_value_t sv_op_spread(sv_vm_t *vm, ant_t *js) {
+  if (vm->sp < 2) return js_mkerr(js, "invalid spread state");
+  ant_value_t status = sv_spread_into(vm, js, vm->stack[vm->sp - 2], vm->stack[vm->sp - 1]);
   vm->sp--;
-  
   return status;
 }
 

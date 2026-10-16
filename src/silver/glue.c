@@ -1551,6 +1551,15 @@ ant_value_t jit_helper_put_private(
   return sv_private_put_value(vm, js, obj, val, token);
 }
 
+ant_value_t jit_helper_spread(sv_vm_t *vm, ant_t *js, ant_value_t arr, ant_value_t iterable) {
+  GC_ROOT_SAVE(root_mark, js);
+  GC_ROOT_PIN(js, arr);
+  GC_ROOT_PIN(js, iterable);
+  ant_value_t status = sv_spread_into(vm, js, arr, iterable);
+  GC_ROOT_RESTORE(js, root_mark);
+  return status;
+}
+
 ant_value_t jit_helper_def_private(
   sv_vm_t *vm, ant_t *js,
   ant_value_t obj, ant_value_t token, ant_value_t val, int32_t kind
