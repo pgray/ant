@@ -12,6 +12,7 @@
 
 #include "silver/call.h"
 #include "ant.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "inspector.h"
 #include "internal.h"
@@ -209,7 +210,7 @@ static void server_runtime_finalize(ant_t *js, ant_object_t *obj) {
 static ant_value_t server_mk_listen_error(ant_t *js, int status, const server_runtime_t *server) {
   const char *code = uv_err_name(status);
   const char *message = uv_strerror(status);
-  ant_value_t props = js_mkobj(js);
+  ant_value_t props = Ant_Object_CreateBare(js);
 
   if (!code) code = "UNKNOWN";
   if (!message) message = "unknown error";
@@ -669,7 +670,7 @@ static ant_value_t server_event_source(ant_params_t) {
   response = response_create_fetched(js, 200, "OK", NULL, 0, headers, NULL, 0, stream, "text/event-stream");
   if (is_err(response)) { free(state); return response; }
 
-  obj = js_mkobj(js);
+  obj = Ant_Object_CreateBare(js);
   state->obj = obj;
   state->response_obj = response;
   state->stream_obj = stream;
@@ -784,7 +785,7 @@ static ant_value_t server_upgrade_websocket(ant_params_t) {
   if (is_err(response)) return response;
   response_set_websocket(response, socket);
 
-  result = js_mkobj(js);
+  result = Ant_Object_CreateBare(js);
   js_set(js, result, "socket", socket);
   js_set(js, result, "response", response);
   
@@ -810,7 +811,7 @@ static void server_queue_abort_signal(ant_t *js, ant_value_t signal, ant_value_t
   ant_value_t payload = 0;
 
   if (!abort_signal_is_signal(signal) || abort_signal_is_aborted(signal)) return;
-  payload = js_mkobj(js);
+  payload = Ant_Object_CreateBare(js);
   if (is_err(payload)) return;
 
   js_set(js, payload, "signal", signal);
@@ -1414,7 +1415,7 @@ static ant_value_t server_request_ip(ant_params_t) {
   req = server_find_request(server, args[0]);
   if (!req || !req->conn || !ant_conn_has_remote_addr(req->conn)) return js_mknull();
 
-  out = js_mkobj(js);
+  out = Ant_Object_CreateBare(js);
   js_set(js, out, "address", js_mkstr(js, ant_conn_remote_addr(req->conn), strlen(ant_conn_remote_addr(req->conn))));
   js_set(js, out, "port", js_mknum(ant_conn_remote_port(req->conn)));
   return out;
@@ -2016,7 +2017,7 @@ ant_value_t server_start_from_export(ant_t *js, ant_value_t default_export) {
   uv_signal_start(&server->sigint_handle, server_signal_cb, SIGINT);
   uv_signal_start(&server->sigterm_handle, server_signal_cb, SIGTERM);
 
-  server->server_ctx = js_mkobj(js);
+  server->server_ctx = Ant_Object_CreateBare(js);
   js_set_native(server->server_ctx, server, SERVER_RUNTIME_NATIVE_TAG);
   js_set_finalizer(server->server_ctx, server_runtime_finalize);
   server_runtime_link(server);

@@ -14,6 +14,7 @@
 #endif
 
 #include "ant.h"
+#include "cfunc.h"
 #include "crash.h"
 #include "gc/roots.h"
 #include "ptr.h"
@@ -681,7 +682,7 @@ static ant_value_t ant_c_make_function(
     return js_mkerr(js, "Ant.unsafe.c() failed to prepare the entry call interface");
   }
 
-  ant_value_t obj = js_newobj(js);
+  ant_value_t obj = Ant_Object_Create(js);
   if (is_err(obj)) {
     ant_c_function_destroy(function);
     return obj;
@@ -881,7 +882,7 @@ static ant_value_t js_unsafe_c(ant_params_t) {
   }
 
   if (nargs == 1 && is_object_type(args[0])) {
-    ant_value_t tag = js_newobj(js);
+    ant_value_t tag = Ant_Object_Create(js);
     if (is_err(tag)) return tag;
 
     GC_ROOT_SAVE(root_mark, js);

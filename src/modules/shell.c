@@ -7,6 +7,7 @@
 #include <sys/stat.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "debug.h"
 #include "gc/roots.h"
 #include "internal.h"
@@ -98,7 +99,7 @@ static ant_value_t sh_result(
   int exit_code
 ) {
   GC_ROOT_SAVE(root_mark, js);
-  ant_value_t result = js_mkobj(js);
+  ant_value_t result = Ant_Object_CreateBare(js);
 
   GC_ROOT_PIN(js, result);
   ant_value_t stdout_value = sh_make_byte_array(
@@ -432,7 +433,7 @@ static ant_value_t sh_runtime_begin(ant_params_t) {
   memcpy(builder->plan.cwd, cwd, cwd_len);
   builder->plan.cwd[cwd_len] = '\0';
 
-  ant_value_t holder = js_mkobj(js);
+  ant_value_t holder = Ant_Object_CreateBare(js);
   if (is_err(holder)) {
     sh_process_builder_dispose(builder);
     return holder;
@@ -478,7 +479,7 @@ static ant_value_t sh_process_builder_add_builtin(
   GC_ROOT_PIN(js, context);
   ant_value_t stage_context = context;
   if (command_count > 1) {
-    stage_context = js_mkobj(js);
+    stage_context = Ant_Object_CreateBare(js);
     if (is_err(stage_context)) {
       GC_ROOT_RESTORE(js, root_mark);
       return stage_context;
@@ -737,7 +738,7 @@ static ant_value_t sh_runtime_context(ant_params_t) {
   }
 
   GC_ROOT_SAVE(root_mark, js);
-  ant_value_t context = js_mkobj(js);
+  ant_value_t context = Ant_Object_CreateBare(js);
   if (is_err(context)) {
     free(cwd);
     GC_ROOT_RESTORE(js, root_mark);
@@ -767,7 +768,7 @@ static ant_value_t sh_runtime_context(ant_params_t) {
 }
 
 ant_value_t shell_ops_library(ant_t *js) {
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
 
   js_set(js, lib, "begin", Ant_Function_Create(sh_runtime_begin));
   js_set(js, lib, "arg", Ant_Function_Create(sh_runtime_arg));

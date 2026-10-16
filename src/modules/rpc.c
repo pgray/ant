@@ -10,6 +10,7 @@
 #include <uv.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "internal.h"
 #include "descriptors.h"
@@ -1299,7 +1300,7 @@ static void rpc_init_constructors(ant_t *js) {
 
   ant_value_t object_proto = js->sym.object_proto;
 
-  js->builtins.rpc_server_proto = js_mkobj(js);
+  js->builtins.rpc_server_proto = Ant_Object_CreateBare(js);
   if (is_object_type(object_proto)) js_set_proto_init(js->builtins.rpc_server_proto, object_proto);
   js_set(js, js->builtins.rpc_server_proto, "register", Ant_Function_Create(rpc_server_register));
   js_set(js, js->builtins.rpc_server_proto, "unregister", Ant_Function_Create(rpc_server_unregister));
@@ -1309,7 +1310,7 @@ static void rpc_init_constructors(ant_t *js) {
   js_set_tostringtag(js, js->builtins.rpc_server_proto, js_mkstr(js, "RpcServer", 9));
   js->builtins.rpc_server_ctor = Ant_Function_CreateConstructor(js, rpc_server_ctor, js->builtins.rpc_server_proto, "RpcServer", 0);
 
-  js->builtins.rpc_client_proto = js_mkobj(js);
+  js->builtins.rpc_client_proto = Ant_Object_CreateBare(js);
   if (is_object_type(object_proto)) js_set_proto_init(js->builtins.rpc_client_proto, object_proto);
   js_set(js, js->builtins.rpc_client_proto, "connect", Ant_Function_Create(rpc_client_connect));
   js_set(js, js->builtins.rpc_client_proto, "call", Ant_Function_Create(rpc_client_call));
@@ -1321,7 +1322,7 @@ static void rpc_init_constructors(ant_t *js) {
 
 ant_value_t rpc_library(ant_t *js) {
   rpc_init_constructors(js);
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
   js_set(js, lib, "RpcServer", js->builtins.rpc_server_ctor);
   js_set(js, lib, "RpcClient", js->builtins.rpc_client_ctor);
   js_set(js, lib, "default", lib);

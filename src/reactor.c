@@ -9,6 +9,7 @@
 #include "modules/child_process.h"
 #include "modules/readline.h"
 #include "modules/process.h"
+#include "modules/performance.h"
 
 static inline work_flags_t get_pending_work(ant_t *js) {
   work_flags_t flags = 0;
@@ -62,6 +63,7 @@ static bool reactor_idle_gc(ant_t *js) {
 }
 
 void js_run_event_loop(ant_t *js) {
+  Ant_Performance_MarkLoopStart(js);
 drain:
   while (event_loop_alive(js)) {
     process_report_uncaught_exception_if_pending(js);

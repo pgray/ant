@@ -12,6 +12,7 @@
 #endif
 
 #include "ant.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "internal.h"
 #include "silver/call.h"
@@ -132,10 +133,10 @@ static void reject_lock_callback(ant_t *js, const char *name, ant_value_t promis
 
 static ant_value_t make_lock_handler(ant_t *js, ant_value_t cfunc, ant_value_t lock_name, ant_value_t outer_promise) {
   GC_ROOT_SAVE(root_mark, js);
-  ant_value_t fn_obj = js_mkobj(js);
+  ant_value_t fn_obj = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, fn_obj);
   
-  ant_value_t data_obj = js_mkobj(js);
+  ant_value_t data_obj = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, data_obj);
 
   js_set(js, data_obj, "lockName", lock_name);
@@ -187,7 +188,7 @@ static ant_value_t lock_catch_handler(ant_params_t) {
 }
 
 static void execute_lock_callback(ant_t *js, const char *name, lock_mode_t mode, ant_value_t callback, ant_value_t outer_promise) {
-  ant_value_t lock_obj = js_mkobj(js);
+  ant_value_t lock_obj = Ant_Object_CreateBare(js);
   js_set(js, lock_obj, "name", js_mkstr(js, name, strlen(name)));
   js_set(js, lock_obj, "mode", js_mkstr(js, mode == LOCK_MODE_EXCLUSIVE ? "exclusive" : "shared", mode == LOCK_MODE_EXCLUSIVE ? 9 : 6));
   js_set_tostringtag(js, lock_obj, js_mkstr(js, "Lock", 4));
@@ -369,13 +370,13 @@ static ant_value_t locks_request(ant_params_t) {
 }
 
 static ant_value_t locks_query(ant_params_t) {
-  ant_value_t result = js_mkobj(js);
+  ant_value_t result = Ant_Object_CreateBare(js);
   ant_value_t held_arr = js_mkarr(js);
   ant_value_t pending_arr = js_mkarr(js);
   
   lock_entry_t *entry, *tmp;
   HASH_ITER(hh, locks, entry, tmp) {
-    ant_value_t lock_info = js_mkobj(js);
+    ant_value_t lock_info = Ant_Object_CreateBare(js);
     js_set(js, lock_info, "name", js_mkstr(js, entry->name, strlen(entry->name)));
     js_set(js, lock_info, "mode", js_mkstr(js, entry->mode == LOCK_MODE_EXCLUSIVE
       ? "exclusive" : "shared", entry->mode == LOCK_MODE_EXCLUSIVE ? 9 : 6));
@@ -384,7 +385,7 @@ static ant_value_t locks_query(ant_params_t) {
   
   lock_request_t *req = pending_requests;
   while (req) {
-    ant_value_t req_info = js_mkobj(js);
+    ant_value_t req_info = Ant_Object_CreateBare(js);
     js_set(js, req_info, "name", js_mkstr(js, req->name, strlen(req->name)));
     js_set(js, req_info, "mode", js_mkstr(js, req->mode == LOCK_MODE_EXCLUSIVE
       ? "exclusive" : "shared", req->mode == LOCK_MODE_EXCLUSIVE ? 9 : 6));
@@ -402,7 +403,7 @@ static ant_value_t locks_query(ant_params_t) {
 }
 
 void init_navigator_module(ant_t *js) {
-  ant_value_t navigator_obj = js_newobj(js);
+  ant_value_t navigator_obj = Ant_Object_Create(js);
   
   js_set(js, navigator_obj, "hardwareConcurrency", js_mknum((double)get_hardware_concurrency()));
   js_set(js, navigator_obj, "language", js_mkstr(js, "en-US", 5));
@@ -418,7 +419,7 @@ void init_navigator_module(ant_t *js) {
   snprintf(user_agent, sizeof(user_agent), "Ant/%s", ANT_VERSION);
   js_set(js, navigator_obj, "userAgent", js_mkstr(js, user_agent, strlen(user_agent)));
   
-  ant_value_t locks_obj = js_newobj(js);
+  ant_value_t locks_obj = Ant_Object_Create(js);
   js_set(js, locks_obj, "request", Ant_Function_Create(locks_request));
   js_set(js, locks_obj, "query", Ant_Function_Create(locks_query));
   js_set_tostringtag(js, locks_obj, js_mkstr(js, "LockManager", 11));

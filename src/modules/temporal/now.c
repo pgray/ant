@@ -277,7 +277,7 @@ static ant_value_t temporal_now_time_zone_id(ant_params_t) {
 }
 
 void temporal_init_now(ant_t *js, ant_value_t temporal) {
-  ant_value_t now = js_mkobj(js); js_set_proto_init(now, js->sym.object_proto);
+  ant_value_t now = Ant_Object_CreateBare(js); js_set_proto_init(now, js->sym.object_proto);
   TEMPORAL_METHOD(js, now, "instant", temporal_now_instant, 0);
   TEMPORAL_METHOD(js, now, "plainDateISO", temporal_now_plain_date_iso, 0);
   TEMPORAL_METHOD(js, now, "plainDateTimeISO", temporal_now_plain_datetime_iso, 0);

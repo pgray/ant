@@ -9,6 +9,7 @@
 #include <tlsuv/tls_engine.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "list.h"
 #include "internal.h"
 #include "ptr.h"
@@ -465,7 +466,7 @@ static void tls_init_context_proto(ant_t *js) {
   if (js->builtins.tls_context_proto && js->builtins.tls_context_ctor) return;
 
   if (!js->builtins.tls_context_proto) {
-    js->builtins.tls_context_proto = js_mkobj(js);
+    js->builtins.tls_context_proto = Ant_Object_CreateBare(js);
     js_set(js, js->builtins.tls_context_proto, "close", Ant_Function_Create(js_tls_context_close));
     js_set_tostringtag(js, js->builtins.tls_context_proto, js_mkstr(js, "SecureContext", 13));
   }
@@ -780,7 +781,7 @@ static ant_value_t js_tls_socket_setTimeout(ant_params_t) {
 
 static ant_value_t js_tls_socket_address(ant_params_t) {
   ant_tls_socket_t *socket = tls_require_socket(js, js_getthis(js));
-  ant_value_t out = js_mkobj(js);
+  ant_value_t out = Ant_Object_CreateBare(js);
   if (!socket) return Ant_Exception_Current(js);
   js_set(js, out, "address", js_mkundef());
   js_set(js, out, "port", js_mkundef());
@@ -833,7 +834,7 @@ static ant_value_t js_tls_socket_getSession(ant_params_t) {
 }
 
 static ant_value_t js_tls_socket_getPeerCertificate(ant_params_t) {
-  return js_mkobj(js);
+  return Ant_Object_CreateBare(js);
 }
 
 static ant_value_t js_tls_socket_renegotiate(ant_params_t) {
@@ -860,7 +861,7 @@ static ant_value_t js_tls_socket_ctor(ant_params_t) {
     return existing;
   }
 
-  obj = js_mkobj(js);
+  obj = Ant_Object_CreateBare(js);
   proto = js_instance_proto_from_new_target(js, js->builtins.tls_socket_proto, call_new_target);
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
   stream_init_duplex_object(js, obj, js_mkundef());
@@ -892,7 +893,7 @@ void tls_init_socket_proto(ant_t *js) {
       net_socket_proto = ee_proto;
     }
 
-    js->builtins.tls_socket_proto = js_mkobj(js);
+    js->builtins.tls_socket_proto = Ant_Object_CreateBare(js);
     if (is_object_type(net_socket_proto)) js_set_proto_init(js->builtins.tls_socket_proto, net_socket_proto);
     js_set(js, js->builtins.tls_socket_proto, "read", Ant_Function_Create(js_tls_socket_read));
     js_set(js, js->builtins.tls_socket_proto, "unshift", Ant_Function_Create(js_tls_socket_unshift));
@@ -1025,7 +1026,7 @@ static ant_value_t js_tls_create_context(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "TLS certificate requires a private key");
   }
 
-  obj = js_mkobj(js);
+  obj = Ant_Object_CreateBare(js);
   js_set_proto_init(obj, js->builtins.tls_context_proto);
   wrap->obj = obj;
   
@@ -1111,7 +1112,7 @@ static ant_value_t tls_normalize_connect_options(
   ant_value_t *callback_out
 ) {
   int argc = nargs;
-  ant_value_t options = js_mkobj(js);
+  ant_value_t options = Ant_Object_CreateBare(js);
 
   if (callback_out) *callback_out = js_mkundef();
   if (argc > 0 && is_callable(args[argc - 1])) {
@@ -1190,7 +1191,7 @@ static ant_value_t js_tls_connect_options(ant_t *js, ant_value_t options, ant_va
     return js_mkerr_typed(js, JS_ERR_TYPE, "Failed to configure TLS ALPN protocols");
   }
 
-  obj = js_mkobj(js);
+  obj = Ant_Object_CreateBare(js);
   js_set_proto_init(obj, js->builtins.tls_socket_proto);
   socket->obj = obj;
   js_set_native(obj, socket, TLS_SOCKET_NATIVE_TAG);
@@ -1242,7 +1243,7 @@ static ant_value_t js_tls_get_ciphers(ant_params_t) {
 }
 
 static ant_value_t tls_build_library(ant_t *js) {
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
   ant_value_t version = js_mkstr(js, "unknown", 7);
   ant_value_t connect = Ant_Function_Create(js_tls_connect);
   ant_value_t create_secure_context = Ant_Function_Create(js_tls_create_context);

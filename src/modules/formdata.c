@@ -5,6 +5,7 @@
 #include <time.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ptr.h"
 #include "errors.h"
 #include "internal.h"
@@ -133,7 +134,7 @@ ant_value_t formdata_create_empty(ant_t *js) {
   fd_data_t *d = fd_data_new();
   if (!d) return js_mkerr(js, "out of memory");
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_proto_init(obj, js->builtins.formdata_proto);
   js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_FORMDATA));
   js_set_native(obj, d, FORMDATA_NATIVE_TAG);
@@ -417,7 +418,7 @@ static ant_value_t make_formdata_iter(ant_t *js, ant_value_t fd_obj, int kind) {
   if (!st) return js_mkerr(js, "out of memory");
   st->kind = kind;
 
-  ant_value_t iter = js_mkobj(js);
+  ant_value_t iter = Ant_Object_CreateBare(js);
   js_set_proto_init(iter, js->builtins.formdata_iter_proto);
   js_set_native(iter, st, FORMDATA_ITER_NATIVE_TAG);
   js_set_slot_wb(js, iter, SLOT_DATA, fd_obj);
@@ -446,7 +447,7 @@ static ant_value_t js_formdata_ctor(ant_params_t) {
   fd_data_t *d = fd_data_new();
   if (!d) return js_mkerr(js, "out of memory");
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.formdata_proto, call_new_target);
   
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
@@ -461,7 +462,7 @@ static ant_value_t js_formdata_ctor(ant_params_t) {
 }
 
 void init_formdata_module(ant_t *js) {
-  js->builtins.formdata_proto = js_mkobj(js);
+  js->builtins.formdata_proto = Ant_Object_CreateBare(js);
 
   js_set(js, js->builtins.formdata_proto, "append",  Ant_Function_Create(js_formdata_append));
   js_set(js, js->builtins.formdata_proto, "set",     Ant_Function_Create(js_formdata_set));
@@ -478,7 +479,7 @@ void init_formdata_module(ant_t *js) {
   js_set_tostringtag(js, js->builtins.formdata_proto, js_mkstr(js, "FormData", 8));
   js_set_global_builtin(js, "FormData", Ant_Function_CreateIntrinsicConstructor(js, js_formdata_ctor, js->builtins.formdata_proto, "FormData", 0));
 
-  js->builtins.formdata_iter_proto = js_mkobj(js);
+  js->builtins.formdata_iter_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.formdata_iter_proto, js->sym.iterator_proto);
   js_set(js, js->builtins.formdata_iter_proto, "next", Ant_Function_Create(formdata_iter_next));
   js_set_descriptor(js, js->builtins.formdata_iter_proto, "next", 4, JS_DESC_W | JS_DESC_E | JS_DESC_C);

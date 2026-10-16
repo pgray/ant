@@ -1,6 +1,7 @@
 #include <string.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ptr.h"
 #include "errors.h"
 #include "internal.h"
@@ -391,7 +392,7 @@ ant_value_t readable_stream_pipe_to(
   pst->prevent_cancel = prevent_cancel;
 
   ant_value_t promise = js_mkpromise(js);
-  ant_value_t state = js_mkobj(js);
+  ant_value_t state = Ant_Object_CreateBare(js);
   js_set_native(state, pst, PIPE_STATE_NATIVE_TAG);
   js_set_slot(state, SLOT_ENTRIES, source);
   js_set_slot(state, SLOT_CTOR, dest);
@@ -736,7 +737,7 @@ static ant_value_t js_rs_tee(ant_params_t) {
   tee_state_t *st = calloc(1, sizeof(tee_state_t));
   if (!st) return js_mkerr(js, "out of memory");
 
-  ant_value_t state = js_mkobj(js);
+  ant_value_t state = Ant_Object_CreateBare(js);
   js_set_native(state, st, TEE_STATE_NATIVE_TAG);
   js_set_slot(state, SLOT_ENTRIES, js->this_val);
   js_set_slot(state, SLOT_AUX, reader);
@@ -749,12 +750,12 @@ static ant_value_t js_rs_tee(ant_params_t) {
   ant_value_t pull1 = js_heavy_mkfun(js, tee_branch_pull, state);
   ant_value_t pull2 = js_heavy_mkfun(js, tee_branch_pull, state);
 
-  ant_value_t cancel1_wrap = js_mkobj(js);
+  ant_value_t cancel1_wrap = Ant_Object_CreateBare(js);
   js_set_slot(cancel1_wrap, SLOT_DATA, state);
   js_set_slot(cancel1_wrap, SLOT_ENTRIES, js_mknum(1));
   ant_value_t cancel1 = js_heavy_mkfun(js, tee_branch_cancel, cancel1_wrap);
 
-  ant_value_t cancel2_wrap = js_mkobj(js);
+  ant_value_t cancel2_wrap = Ant_Object_CreateBare(js);
   js_set_slot(cancel2_wrap, SLOT_DATA, state);
   js_set_slot(cancel2_wrap, SLOT_ENTRIES, js_mknum(2));
   ant_value_t cancel2 = js_heavy_mkfun(js, tee_branch_cancel, cancel2_wrap);

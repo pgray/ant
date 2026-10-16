@@ -26,6 +26,7 @@ extern char **environ;
 #endif
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ptr.h"
 #include "internal.h"
 #include "descriptors.h"
@@ -74,14 +75,14 @@ static bool wt_is_worker_mode(void) {
 static ant_value_t wt_get_or_create_env_store(ant_t *js) {
   ant_value_t store = js_get_slot(js->global, SLOT_WT_ENV_STORE);
   if (!is_object_type(store)) {
-    store = js_mkobj(js);
+    store = Ant_Object_CreateBare(js);
     js_set_slot(js->global, SLOT_WT_ENV_STORE, store);
   }
   return store;
 }
 
 static void wt_init_env_store(ant_t *js, bool is_worker) {
-  ant_value_t store = js_mkobj(js);
+  ant_value_t store = Ant_Object_CreateBare(js);
   if (is_worker) {
     const char *raw = getenv(WT_ENV_STORE_JSON);
     if (raw && raw[0]) {
@@ -106,12 +107,12 @@ static bool wt_is_message_port(ant_t *js, ant_value_t obj) {
 
 static ant_value_t wt_get_message_port_proto(ant_t *js) {
   ant_value_t proto = js_get_slot(js->global, SLOT_WT_PORT_PROTO);
-  if (!is_object_type(proto)) proto = js_mkobj(js);
+  if (!is_object_type(proto)) proto = Ant_Object_CreateBare(js);
   return proto;
 }
 
 static ant_value_t wt_make_message_port(ant_t *js) {
-  ant_value_t port = js_mkobj(js);
+  ant_value_t port = Ant_Object_CreateBare(js);
   js_set_proto_init(port, wt_get_message_port_proto(js));
   js_set_slot(port, SLOT_WT_PORT_TAG, js_true);
   js_set_slot(port, SLOT_WT_PORT_QUEUE, js_mkarr(js));
@@ -214,7 +215,7 @@ static void wt_port_drain(ant_t *js, ant_value_t port) {
 
     ant_value_t onmessage = js_get(js, port, "onmessage");
     if (is_callable(onmessage)) {
-      ant_value_t event_obj = js_mkobj(js);
+      ant_value_t event_obj = Ant_Object_CreateBare(js);
       js_set(js, event_obj, "data", msg);
       wt_port_call_listener(js, port, onmessage, event_obj);
     }
@@ -908,7 +909,7 @@ static ant_value_t worker_threads_receive_message_on_port(ant_params_t) {
   ant_value_t msg = js_mkundef();
   if (!wt_port_queue_dequeue(js, args[0], &msg)) return js_mkundef();
 
-  ant_value_t out = js_mkobj(js);
+  ant_value_t out = Ant_Object_CreateBare(js);
   js_set(js, out, "message", msg);
   return out;
 }
@@ -979,7 +980,7 @@ void gc_mark_worker_threads(ant_t *js, gc_mark_fn mark) {
 }
 
 ant_value_t worker_threads_library(ant_t *js) {
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
   bool is_worker = wt_is_worker_mode();
 
   wt_init_env_store(js, is_worker);
@@ -988,8 +989,8 @@ ant_value_t worker_threads_library(ant_t *js) {
   js_set(js, lib, "threadId", js_mknum((double)(is_worker ? js->runtime.pid : 0)));
   js_set(js, lib, "SHARE_ENV", js_mksym(js, "SHARE_ENV"));
 
-  ant_value_t message_port_ctor_obj = js_mkobj(js);
-  ant_value_t message_port_proto = js_mkobj(js);
+  ant_value_t message_port_ctor_obj = Ant_Object_CreateBare(js);
+  ant_value_t message_port_proto = Ant_Object_CreateBare(js);
   js_set(js, message_port_proto, "postMessage", Ant_Function_Create(worker_threads_message_port_post_message));
   js_set(js, message_port_proto, "on", Ant_Function_Create(worker_threads_message_port_on));
   js_set(js, message_port_proto, "once", Ant_Function_Create(worker_threads_message_port_once));
@@ -1005,8 +1006,8 @@ ant_value_t worker_threads_library(ant_t *js) {
   js_set(js, lib, "MessagePort", js_obj_to_func(js, message_port_ctor_obj));
   js_set_slot(js->global, SLOT_WT_PORT_PROTO, message_port_proto);
 
-  ant_value_t message_channel_ctor_obj = js_mkobj(js);
-  ant_value_t message_channel_proto = js_mkobj(js);
+  ant_value_t message_channel_ctor_obj = Ant_Object_CreateBare(js);
+  ant_value_t message_channel_proto = Ant_Object_CreateBare(js);
   js_set_tostringtag(js, message_channel_proto, js_mkstr(js, "MessageChannel", 14));
   js_set_slot(message_channel_ctor_obj, SLOT_CFUNC, Ant_Function_Create(worker_threads_message_channel_ctor));
   js_mkprop_fast(js, message_channel_ctor_obj, "prototype", 9, message_channel_proto);
@@ -1014,7 +1015,7 @@ ant_value_t worker_threads_library(ant_t *js) {
   js_set(js, lib, "MessageChannel", js_obj_to_func(js, message_channel_ctor_obj));
 
   if (is_worker) {
-    ant_value_t parent_port = js_mkobj(js);
+    ant_value_t parent_port = Ant_Object_CreateBare(js);
     js_set(js, parent_port, "postMessage", Ant_Function_Create(worker_threads_parent_post_message));
     js_set(js, parent_port, "unref", Ant_Function_Create(worker_threads_parent_unref));
     js_set(js, parent_port, "ref", Ant_Function_Create(worker_threads_parent_unref));
@@ -1035,8 +1036,8 @@ ant_value_t worker_threads_library(ant_t *js) {
     js_set(js, lib, "workerData", js_mkundef());
   }
 
-  ant_value_t worker_ctor_obj = js_mkobj(js);
-  ant_value_t worker_proto = js_mkobj(js);
+  ant_value_t worker_ctor_obj = Ant_Object_CreateBare(js);
+  ant_value_t worker_proto = Ant_Object_CreateBare(js);
 
   js_set(js, worker_proto, "on", Ant_Function_Create(worker_threads_worker_on));
   js_set(js, worker_proto, "once", Ant_Function_Create(worker_threads_worker_once));

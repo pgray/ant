@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ascii.h"
 #include "errors.h"
 #include "builder.h"
@@ -207,7 +208,7 @@ static ant_value_t util_parse_args(ant_params_t) {
 
   ant_value_t options_obj = js_get(js, config, "options");
   if (is_err(options_obj)) return options_obj;
-  if (!is_object_type(options_obj)) options_obj = js_mkobj(js);
+  if (!is_object_type(options_obj)) options_obj = Ant_Object_CreateBare(js);
 
   ant_value_t strict_value = js_get(js, config, "strict");
   if (is_err(strict_value)) return strict_value;
@@ -288,16 +289,9 @@ option_error:
     js_prop_iter_end(&iter);
   }
 
-  ant_value_t values = js_mkobj(js);
+  ant_value_t values = Ant_Object_CreateBare(js);
   ant_value_t positionals = js_mkarr(js);
-  ant_value_t out = js_newobj(js);
-
-  for (size_t i = 0; i < option_count; i++) {
-    if (vtype(options[i].default_value) == kTypeUndefined) continue;
-    if (util_set_named_value(js, values, options[i].name, options[i].default_value, options[i].multiple)) continue;
-    util_free_parse_options(options, option_count);
-    return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : js_mkerr(js, "parseArgs failed to set default");
-  }
+  ant_value_t out = Ant_Object_Create(js);
 
   ant_offset_t arg_len = js_arr_len(js, args_list);
   bool stop_parsing = false;
@@ -420,6 +414,12 @@ option_error:
       return js_mkerr_typed(js, JS_ERR_TYPE, "Unexpected positional argument '%s'", arg);
     }
     js_arr_push(js, positionals, arg_val);
+  }
+
+  for (size_t i = 0; i < option_count; i++) {
+    if (vtype(options[i].default_value) == kTypeUndefined) continue;
+    if (vtype(js_get(js, values, options[i].name)) != kTypeUndefined) continue;
+    js_set(js, values, options[i].name, options[i].default_value);
   }
   
   util_free_parse_options(options, option_count);
@@ -820,7 +820,7 @@ static ant_value_t util_types_is_module_namespace_object(ant_params_t) {
 }
 
 ant_value_t util_types_library(ant_t *js) {
-  ant_value_t types = js_mkobj(js);
+  ant_value_t types = Ant_Object_CreateBare(js);
 
   js_set(js, types, "isAnyArrayBuffer", Ant_Function_Create(util_types_is_any_array_buffer));
   js_set(js, types, "isArrayBuffer", Ant_Function_Create(util_types_is_array_buffer));
@@ -1068,7 +1068,7 @@ done:
 }
 
 static ant_value_t util_parse_env(ant_params_t) {
-  ant_value_t out = js_mkobj(js);
+  ant_value_t out = Ant_Object_CreateBare(js);
   if (nargs < 1) return out;
 
   char cbuf[512];
@@ -1212,7 +1212,7 @@ static ant_value_t util_promisified_call(ant_params_t) {
   if (!is_callable(original)) return js_mkerr(js, "promisified target is not callable");
 
   ant_value_t promise = js_mkpromise(js);
-  ant_value_t ctx = js_mkobj(js);
+  ant_value_t ctx = Ant_Object_CreateBare(js);
   js_set_slot(ctx, SLOT_DATA, promise);
   js_set_slot(ctx, SLOT_SETTLED, js_false);
   ant_value_t cb = js_heavy_mkfun(js, util_promisify_callback, ctx);
@@ -1319,7 +1319,7 @@ static ant_value_t util_callbackified_call(ant_params_t) {
     return is_err(cb_result) ? cb_result : js_mkundef();
   }
 
-  ant_value_t state = js_mkobj(js);
+  ant_value_t state = Ant_Object_CreateBare(js);
   js_set_slot(state, SLOT_DATA, callback);
   ant_value_t success = js_heavy_mkfun(js, util_callbackify_success, state);
   ant_value_t error = js_heavy_mkfun(js, util_callbackify_error, state);
@@ -1351,7 +1351,7 @@ static ant_value_t util_deprecate(ant_params_t) {
     return js_mkerr(js, "deprecate(fn, msg) requires a function");
   }
 
-  ant_value_t ctx = js_mkobj(js);
+  ant_value_t ctx = Ant_Object_CreateBare(js);
   js_set_slot(ctx, SLOT_DATA, args[0]);
   js_set_slot(ctx, SLOT_SETTLED, js_false);
   if (nargs >= 2) js_set(js, ctx, "msg", args[1]);
@@ -1424,7 +1424,7 @@ static ant_value_t util_is_deep_strict_equal(ant_params_t) {
 }
 
 ant_value_t util_library(ant_t *js) {
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
   ant_value_t types = util_get_types_object(js);
   
   ant_value_t promisify = Ant_Function_CreateWithData(js, util_promisify, "promisify", 1, js_mkundef());

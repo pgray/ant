@@ -217,7 +217,7 @@ static inline ant_value_t sv_eval_capture_env(
   ant_value_t parent = sv_frame_eval_env(js, frame);
   GC_ROOT_SAVE(mark, js);
   GC_ROOT_PIN(js, parent);
-  ant_value_t env = js_mkobj(js);
+  ant_value_t env = Ant_Object_CreateBare(js);
   if (is_err(env)) { GC_ROOT_RESTORE(js, mark); return env; }
   GC_ROOT_PIN(js, env);
   js_set_proto_wb(js, env, parent);
@@ -238,7 +238,7 @@ static inline ant_value_t sv_eval_capture_env(
 }
 
 static inline ant_value_t sv_eval_init_variable_env(sv_vm_t *vm, ant_t *js, sv_frame_t *frame) {
-  ant_value_t env = js_mkobj(js);
+  ant_value_t env = Ant_Object_CreateBare(js);
   if (is_err(env)) return env;
   GC_ROOT_SAVE(mark, js);
   GC_ROOT_PIN(js, env);

@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ptr.h"
 #include "utf8.h"
 #include "base64.h"
@@ -226,7 +227,7 @@ ant_value_t string_decoder_create(ant_t *js, ant_value_t encoding, ant_value_t n
   sd_state_t *st = sd_state_new(sd_encoding_from_value(js, encoding));
   if (!st) return js_mkerr(js, "out of memory");
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.string_decoder_proto, new_target);
   sd_attach(obj, proto, st);
 
@@ -274,7 +275,7 @@ static ant_value_t js_sd_ctor(ant_params_t) {
 }
 
 ant_value_t string_decoder_library(ant_t *js) {
-  js->builtins.string_decoder_proto = js_mkobj(js);
+  js->builtins.string_decoder_proto = Ant_Object_CreateBare(js);
   
   js_set_getter_desc(js, js->builtins.string_decoder_proto, "encoding", 8, Ant_Function_Create(js_sd_get_encoding), JS_DESC_C);
   js_set(js, js->builtins.string_decoder_proto, "write", Ant_Function_CreateWithArity(js_sd_write, 1));
@@ -282,7 +283,7 @@ ant_value_t string_decoder_library(ant_t *js) {
   js_set_tostringtag(js, js->builtins.string_decoder_proto, js_mkstr(js, "StringDecoder", 13));
 
   ant_value_t ctor = Ant_Function_CreateConstructor(js, js_sd_ctor, js->builtins.string_decoder_proto, "StringDecoder", 1);
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
   js_set(js, lib, "StringDecoder", ctor);
   
   return lib;

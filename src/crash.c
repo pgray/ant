@@ -12,6 +12,7 @@
 
 #include "ant.h"
 #include "crash.h"
+#include "cfunc.h"
 #include "internal.h"
 #include "reactor.h"
 #include "utils.h"
@@ -904,10 +905,10 @@ int ant_crash_run_internal_report(ant_t *js) {
   char url[512] = "";
   crash_report_url(url, sizeof(url));
 
-  ant_value_t headers = js_mkobj(js);
+  ant_value_t headers = Ant_Object_CreateBare(js);
   js_set(js, headers, "content-type", js_mkstr(js, "application/json", 16));
 
-  ant_value_t init = js_mkobj(js);
+  ant_value_t init = Ant_Object_CreateBare(js);
   js_set(js, init, "headers", headers);
   js_set(js, init, "method", js_mkstr(js, "POST", 4));
   js_set(js, init, "body", js_mkstr(js, report_payload, report_payload_len));

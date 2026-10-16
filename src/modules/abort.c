@@ -4,6 +4,7 @@
 #include <uv.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "list.h"
 #include "loop.h"
 #include "common.h"
@@ -74,7 +75,7 @@ static ant_value_t make_new_signal(ant_t *js) {
   if (!data) return js_mkerr(js, "AbortSignal: out of memory");
   *data = (abort_signal_data_t){ .aborted = js_false, .reason = js_mkundef() };
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_native(obj, data, ABORT_SIGNAL_NATIVE_TAG);
   js_set_finalizer(obj, abort_signal_finalize);
   js_set_proto_init(obj, js->builtins.signal_proto);
@@ -323,7 +324,7 @@ static const ant_native_getter_t controller_signal_getter = {
 };
 
 void init_abort_module(ant_t *js) {
-  ant_value_t signal_proto = js_mkobj(js);
+  ant_value_t signal_proto = Ant_Object_CreateBare(js);
   js->builtins.signal_proto = signal_proto;
   js_set_proto_init(signal_proto, js->builtins.eventtarget_proto);
 
@@ -343,7 +344,7 @@ void init_abort_module(ant_t *js) {
   js_define_methods(js, signal_fn, signal_statics, countof(signal_statics), ANT_PROP_ATTR_METHOD);
   js_set_proto(js, signal_fn, js->builtins.eventtarget_ctor);
 
-  ant_value_t ctrl_proto = js_mkobj(js);
+  ant_value_t ctrl_proto = Ant_Object_CreateBare(js);
   js_set_getter_desc(js, ctrl_proto, "signal", 6, js_mkfun_meta(&controller_signal_getter.meta), JS_DESC_E | JS_DESC_C);
   js_set(js, ctrl_proto, "abort", Ant_Function_Create(abort_controller_abort));
   defmethod_sym(js, ctrl_proto, js->sym.inspect_sym, Ant_Function_Create(abort_controller_inspect));

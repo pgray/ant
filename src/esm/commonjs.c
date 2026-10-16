@@ -1,4 +1,5 @@
 #include "esm/commonjs.h"
+#include "cfunc.h"
 #include "esm/loader.h"
 #include "loader_internal.h"
 #include "modules/module.h"
@@ -19,7 +20,7 @@ ant_value_t esm_require_cache(ant_t *js) {
   if (is_object_type(js->modules.cjs.constructor))
     return js_get(js, js->modules.cjs.constructor, "_cache");
   if (!is_object_type(js->modules.cjs.cache)) {
-    js->modules.cjs.cache = js_mkobj(js);
+    js->modules.cjs.cache = Ant_Object_CreateBare(js);
     js_set_proto_init(js->modules.cjs.cache, js_mknull());
   }
   return js->modules.cjs.cache;
@@ -88,7 +89,7 @@ ant_value_t esm_init_cjs_module(ant_t *js, ant_value_t obj, const char *id, ant_
   js_set(js, obj, "path", js_mkstr(js, directory, strlen(directory)));
   free(directory);
   js_set(js, obj, "filename", js_mknull());
-  ant_value_t exports = js_mkobj(js);
+  ant_value_t exports = Ant_Object_CreateBare(js);
   js_set_proto_init(exports, js->sym.object_proto);
   js_set(js, obj, "exports", exports);
   js_set(js, obj, "loaded", js_false);
@@ -103,7 +104,7 @@ ant_value_t esm_create_cjs_module(ant_t *js, const char *filename, ant_value_t p
   GC_ROOT_SAVE(mark, js);
   GC_ROOT_PIN(js, parent);
   ant_value_t ctor = module_library(js);
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, obj);
   js_set_proto_wb(js, obj, js_get(js, ctor, "prototype"));
   ant_value_t result = esm_init_cjs_module(js, obj, filename, parent);
@@ -124,7 +125,7 @@ ant_value_t esm_create_cjs_module(ant_t *js, const char *filename, ant_value_t p
 ant_value_t esm_require_namespace(ant_t *js, ant_value_t exports) {
   GC_ROOT_SAVE(mark, js);
   GC_ROOT_PIN(js, exports);
-  ant_value_t ns = js_mkobj(js);
+  ant_value_t ns = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, ns);
   js_set_slot_wb(js, ns, SLOT_DEFAULT, exports);
   js_set(js, ns, "default", exports);

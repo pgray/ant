@@ -37,7 +37,7 @@ static void legacy_url_set(ant_t *js, ant_value_t obj, const char *name, url_sli
 }
 
 static ant_value_t legacy_url_object(ant_t *js, const legacy_url_t *u) {
-  ant_value_t obj = js_newobj(js);
+  ant_value_t obj = Ant_Object_Create(js);
 
   legacy_url_set(js, obj, "protocol", u->protocol);
   js_set(js, obj, "slashes", u->slashes ? js_true : js_mknull());
@@ -186,7 +186,7 @@ static void legacy_query_add(
 }
 
 static ant_value_t legacy_query_object(ant_t *js, const char *query, size_t len) {
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   size_t start = 0;
 
   for (size_t i = 0; i <= len; i++) {
@@ -301,7 +301,7 @@ ant_value_t legacy_url_parse_impl(
       else if (has_search)
         js_set(js, obj, "query", js_mkstr(js, url.search.ptr + 1, url.search.len - 1));
       else if (parse_query)
-        js_set(js, obj, "query", js_mkobj(js));
+        js_set(js, obj, "query", Ant_Object_CreateBare(js));
 
       legacy_parse_scratch_free(&scratch);
       return obj;
@@ -436,7 +436,7 @@ ant_value_t legacy_url_parse_impl(
         if (!ascii.data || !ascii.length) {
           ada_free_owned_string(ascii);
           legacy_parse_scratch_free(&scratch);
-          ant_value_t props = js_mkobj(js);
+          ant_value_t props = Ant_Object_CreateBare(js);
           js_set(js, props, "code", js_mkstr(js, "ERR_INVALID_URL", 15));
           js_set(js, props, "input", js_mkstr(js, input, input_len));
           return js_mkerr_props(js, JS_ERR_TYPE, props, "Invalid URL");
@@ -568,7 +568,7 @@ ant_value_t legacy_url_parse_impl(
   if (url.search.ptr) js_set(js, obj, "query", legacy_query_object(js, url.query.ptr, url.query.len));
   else {
     js_set(js, obj, "search", js_mknull());
-    js_set(js, obj, "query", js_mkobj(js));
+    js_set(js, obj, "query", Ant_Object_CreateBare(js));
   }}
 
   legacy_parse_scratch_free(&scratch);

@@ -56,7 +56,7 @@ static ant_value_t napi_dlopen_common(ant_t *js, ant_value_t module_obj, const c
   ant_value_t exports = js_get(js, module_obj, "exports");
 
   if (!is_object_type(exports)) {
-    exports = js_mkobj(js);
+    exports = Ant_Object_CreateBare(js);
     js_set(js, module_obj, "exports", exports);
   }
 

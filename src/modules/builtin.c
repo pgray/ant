@@ -15,6 +15,7 @@
 #endif
 
 #include "ant.h"
+#include "cfunc.h"
 #include "gc.h"
 #include "crash.h"
 #include "errors.h"
@@ -77,7 +78,7 @@ static ant_value_t js_raw_typeof(ant_params_t) {
 
 static ant_value_t js_raw_gc_mark_profile(ant_params_t) {
   gc_func_mark_profile_t p = gc_func_mark_profile_get(js);
-  ant_value_t out = js_newobj(js);
+  ant_value_t out = Ant_Object_Create(js);
   
   js_set(js, out, "enabled", js_bool(p.enabled));
   js_set(js, out, "collections", js_mknum((double)p.collections));
@@ -142,56 +143,56 @@ static ant_value_t js_serve(ant_params_t) {
 
 // Ant.stats()
 static ant_value_t js_stats_fn(ant_params_t) {
-  ant_value_t result = js_newobj(js);
+  ant_value_t result = Ant_Object_Create(js);
   
   ant_pool_stats_t rope_s = js_rope_pool_stats(js);
   ant_pool_stats_t sym_s = js_pool_stats(&js->pool.symbol);
   ant_pool_stats_t bigint_s = js_class_pool_stats(&js->pool.bigint);
   ant_string_pool_stats_t string_s = js_string_pool_stats(&js->pool.string);
 
-  ant_value_t pools = js_newobj(js);
-  ant_value_t rope_obj = js_newobj(js);
+  ant_value_t pools = Ant_Object_Create(js);
+  ant_value_t rope_obj = Ant_Object_Create(js);
   js_set(js, rope_obj, "used", js_mknum((double)rope_s.used));
   js_set(js, rope_obj, "capacity", js_mknum((double)rope_s.capacity));
   js_set(js, rope_obj, "blocks", js_mknum((double)rope_s.blocks));
   js_set(js, pools, "rope", rope_obj);
 
-  ant_value_t sym_obj = js_newobj(js);
+  ant_value_t sym_obj = Ant_Object_Create(js);
   js_set(js, sym_obj, "used", js_mknum((double)sym_s.used));
   js_set(js, sym_obj, "capacity", js_mknum((double)sym_s.capacity));
   js_set(js, sym_obj, "blocks", js_mknum((double)sym_s.blocks));
   js_set(js, pools, "symbol", sym_obj);
 
-  ant_value_t bigint_obj = js_newobj(js);
+  ant_value_t bigint_obj = Ant_Object_Create(js);
   js_set(js, bigint_obj, "used", js_mknum((double)bigint_s.used));
   js_set(js, bigint_obj, "capacity", js_mknum((double)bigint_s.capacity));
   js_set(js, bigint_obj, "blocks", js_mknum((double)bigint_s.blocks));
   js_set(js, pools, "bigint", bigint_obj);
 
-  ant_value_t string_obj = js_newobj(js);
+  ant_value_t string_obj = Ant_Object_Create(js);
   js_set(js, string_obj, "used", js_mknum((double)string_s.total.used));
   js_set(js, string_obj, "capacity", js_mknum((double)string_s.total.capacity));
   js_set(js, string_obj, "blocks", js_mknum((double)string_s.total.blocks));
 
-  ant_value_t string_pooled_obj = js_newobj(js);
+  ant_value_t string_pooled_obj = Ant_Object_Create(js);
   js_set(js, string_pooled_obj, "used", js_mknum((double)string_s.pooled.used));
   js_set(js, string_pooled_obj, "capacity", js_mknum((double)string_s.pooled.capacity));
   js_set(js, string_pooled_obj, "blocks", js_mknum((double)string_s.pooled.blocks));
   js_set(js, string_obj, "pooled", string_pooled_obj);
 
-  ant_value_t string_large_live_obj = js_newobj(js);
+  ant_value_t string_large_live_obj = Ant_Object_Create(js);
   js_set(js, string_large_live_obj, "used", js_mknum((double)string_s.large_live.used));
   js_set(js, string_large_live_obj, "capacity", js_mknum((double)string_s.large_live.capacity));
   js_set(js, string_large_live_obj, "blocks", js_mknum((double)string_s.large_live.blocks));
   js_set(js, string_obj, "largeLive", string_large_live_obj);
 
-  ant_value_t string_large_reusable_obj = js_newobj(js);
+  ant_value_t string_large_reusable_obj = Ant_Object_Create(js);
   js_set(js, string_large_reusable_obj, "used", js_mknum((double)string_s.large_reusable.used));
   js_set(js, string_large_reusable_obj, "capacity", js_mknum((double)string_s.large_reusable.capacity));
   js_set(js, string_large_reusable_obj, "blocks", js_mknum((double)string_s.large_reusable.blocks));
   js_set(js, string_obj, "largeReusable", string_large_reusable_obj);
 
-  ant_value_t string_large_quarantine_obj = js_newobj(js);
+  ant_value_t string_large_quarantine_obj = Ant_Object_Create(js);
   js_set(js, string_large_quarantine_obj, "used", js_mknum((double)string_s.large_quarantine.used));
   js_set(js, string_large_quarantine_obj, "capacity", js_mknum((double)string_s.large_quarantine.capacity));
   js_set(js, string_large_quarantine_obj, "blocks", js_mknum((double)string_s.large_quarantine.blocks));
@@ -238,7 +239,7 @@ static ant_value_t js_stats_fn(ant_params_t) {
     }
   }
 
-  ant_value_t alloc = js_newobj(js);
+  ant_value_t alloc = Ant_Object_Create(js);
   js_set(js, alloc, "objectCount", js_mknum((double)obj_count));
   js_set(js, alloc, "objects", js_mknum((double)obj_bytes));
   js_set(js, alloc, "overflow", js_mknum((double)overflow_bytes));
@@ -265,7 +266,7 @@ static ant_value_t js_stats_fn(ant_params_t) {
   size_t parse_mem = parse_arena_get_memory(js);
   size_t external_total = buffer_mem + code_mem + parse_mem;
   
-  ant_value_t ext = js_newobj(js);
+  ant_value_t ext = Ant_Object_Create(js);
   js_set(js, ext, "buffers", js_mknum((double)buffer_mem));
   js_set(js, ext, "code", js_mknum((double)code_mem));
   js_set(js, ext, "parse", js_mknum((double)parse_mem));
@@ -273,7 +274,7 @@ static ant_value_t js_stats_fn(ant_params_t) {
   js_set(js, result, "external", ext);
   
   js_intern_stats_t intern_stats = js_intern_stats();
-  ant_value_t intern = js_newobj(js);
+  ant_value_t intern = Ant_Object_Create(js);
   
   js_set(js, intern, "count", js_mknum((double)intern_stats.count));
   js_set(js, intern, "bytes", js_mknum((double)intern_stats.bytes));
@@ -281,7 +282,7 @@ static ant_value_t js_stats_fn(ant_params_t) {
   
   sv_vm_t *vm = js->vm;
   if (vm) {
-    ant_value_t vmobj = js_newobj(js);
+    ant_value_t vmobj = Ant_Object_Create(js);
     js_set(js, vmobj, "stackSize", js_mknum((double)vm->stack_size));
     js_set(js, vmobj, "stackUsed", js_mknum((double)vm->sp));
     js_set(js, vmobj, "maxFrames", js_mknum((double)vm->max_frames));
@@ -294,7 +295,7 @@ static ant_value_t js_stats_fn(ant_params_t) {
     uintptr_t base = (uintptr_t)js->cstk.base;
     uintptr_t curr = (uintptr_t)&marker;
     size_t used = (base > curr) ? (base - curr) : (curr - base);
-    ant_value_t cstk = js_newobj(js);
+    ant_value_t cstk = Ant_Object_Create(js);
     js_set(js, cstk, "used", js_mknum((double)used));
     js_set(js, cstk, "limit", js_mknum((double)js->cstk.limit));
     js_set(js, result, "cstack", cstk);
@@ -451,11 +452,11 @@ void init_builtin_module(ant_t *js) {
   js_set(js, hl_fn, "tags", Ant_Function_Create(js_highlight_tags));
   js_set(js, ant_obj, "highlight", hl_fn);
 
-  ant_value_t unsafe_obj = js_newobj(js);
+  ant_value_t unsafe_obj = Ant_Object_Create(js);
   init_cjit_module(js, unsafe_obj);
   js_set(js, ant_obj, "unsafe", unsafe_obj);
 
-  ant_value_t raw_obj = js_newobj(js);
+  ant_value_t raw_obj = Ant_Object_Create(js);
   js_set_getter_desc(js, js_as_obj(raw_obj), "stack", 5, Ant_Function_Create(js_raw_stack), JS_DESC_C);
   js_set(js, raw_obj, "typeof", Ant_Function_Create(js_raw_typeof));
   js_set(js, raw_obj, "gcMarkProfile", Ant_Function_Create(js_raw_gc_mark_profile));

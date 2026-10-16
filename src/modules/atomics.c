@@ -9,6 +9,7 @@
 #include <uv.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "internal.h"
 
@@ -955,7 +956,7 @@ static ant_value_t js_atomics_waitAsync(ant_params_t) {
     else if (timeout_ms < 0) timeout_ms = 0;
   }
   
-  ant_value_t result_obj = js_mkobj(js);
+  ant_value_t result_obj = Ant_Object_CreateBare(js);
   if (current_value != expected_value) {
     js_set(js, result_obj, "async", js_false);
     js_set(js, result_obj, "value", js_mkstr(js, "not-equal", 9));
@@ -1026,7 +1027,7 @@ static ant_value_t js_atomics_pause(ant_params_t) {
 }
 
 void init_atomics_module(ant_t *js) {
-  ant_value_t atomics = js_newobj(js);
+  ant_value_t atomics = Ant_Object_Create(js);
   
   defmethod(js, atomics, "add", 3, Ant_Function_CreateWithArity(js_atomics_add, 3));
   defmethod(js, atomics, "and", 3, Ant_Function_CreateWithArity(js_atomics_and, 3));

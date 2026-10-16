@@ -18,13 +18,13 @@ int main(void) {
   // Exact heap edges must retain children without help from C-stack copies.
   js_setstackbase(js, NULL);
   GC_ROOT_SAVE(roots, js);
-  ant_value_t root = js_mkobj(js);
+  ant_value_t root = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, root);
   ant_value_t array = js_mkarr(js);
   js_set(js, root, "children", array);
   ant_value_t children[32];
   for (unsigned i = 0; i < 32; i++) {
-    children[i] = js_mkobj(js);
+    children[i] = Ant_Object_CreateBare(js);
     js_set(js, children[i], "parent", root);
     js_arr_push(js, array, children[i]);
   }
@@ -34,7 +34,7 @@ int main(void) {
     assert(gc_obj_is_marked(js, js_obj_ptr(children[i])));
 
   // The old array's remembered edge must still retain a newly allocated child.
-  ant_value_t young = js_mkobj(js);
+  ant_value_t young = Ant_Object_CreateBare(js);
   js_arr_push(js, array, young);
   gc_run_minor(js);
   assert(gc_obj_is_marked(js, js_obj_ptr(young)));
@@ -42,8 +42,8 @@ int main(void) {
   assert(gc_obj_is_marked(js, js_obj_ptr(young)));
 
   // Raw and tagged conservative candidates still take the validated path.
-  ant_value_t raw_root = js_mkobj(js), tagged_root = js_mkobj(js);
-  ant_value_t raw_child = js_mkobj(js), tagged_child = js_mkobj(js);
+  ant_value_t raw_root = Ant_Object_CreateBare(js), tagged_root = Ant_Object_CreateBare(js);
+  ant_value_t raw_child = Ant_Object_CreateBare(js), tagged_child = Ant_Object_CreateBare(js);
   js_set(js, raw_root, "child", raw_child);
   js_set(js, tagged_root, "child", tagged_child);
   conservative_words[0] = (uintptr_t)js_obj_ptr(raw_root);

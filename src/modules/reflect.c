@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "internal.h"
 #include "silver/call.h"
@@ -135,7 +136,7 @@ static ant_value_t reflect_construct(ant_params_t) {
       return proto;
     }
 
-    ant_value_t new_obj = js_mkobj(js);
+    ant_value_t new_obj = Ant_Object_CreateBare(js);
     if (is_object_type(proto)) js_set_proto_init(new_obj, proto);
 
     ant_value_t ctor_this = new_obj;
@@ -244,7 +245,7 @@ static ant_value_t reflect_prevent_extensions(ant_params_t) {
 }
 
 void init_reflect_module(ant_t *js) {
-  ant_value_t reflect_obj = js_newobj(js);
+  ant_value_t reflect_obj = Ant_Object_Create(js);
   
   defmethod(js, reflect_obj, "get", 3, Ant_Function_CreateWithArity(reflect_get, 2));
   defmethod(js, reflect_obj, "set", 3, Ant_Function_CreateWithArity(reflect_set, 3));

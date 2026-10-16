@@ -91,7 +91,7 @@ static ant_value_t http_metadata_make_methods(ant_t *js) {
 }
 
 static ant_value_t http_metadata_make_status_codes(ant_t *js) {
-  ant_value_t status_codes = js_mkobj(js);
+  ant_value_t status_codes = Ant_Object_CreateBare(js);
   
   size_t count = sizeof(http_status_codes) / sizeof(http_status_codes[0]);
   char code_buf[16];
@@ -111,7 +111,7 @@ static ant_value_t http_metadata_make_status_codes(ant_t *js) {
 }
 
 ant_value_t internal_http_metadata_library(ant_t *js) {
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
 
   js_set(js, lib, "METHODS", http_metadata_make_methods(js));
   js_set(js, lib, "STATUS_CODES", http_metadata_make_status_codes(js));

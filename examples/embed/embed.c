@@ -11,6 +11,7 @@
  */
 
 #include <ant.h>
+#include <cfunc.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -90,7 +91,7 @@ static ant_value_t my_create_point(ant_params_t) {
     return js_mkerr(js, "createPoint() expects two numbers");
   }
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   js_set(js, obj, "x", args[0]);
   js_set(js, obj, "y", args[1]);
 
@@ -136,7 +137,7 @@ static void example_objects_arrays(void) {
 
   ant_value_t global = js_glob(js);
 
-  ant_value_t config = js_mkobj(js);
+  ant_value_t config = Ant_Object_CreateBare(js);
   js_set(js, config, "debug", js_true);
   js_set(js, config, "version", js_mknum(1.0));
   js_set(js, config, "name", js_mkstr(js, "MyApp", 5));
@@ -209,7 +210,7 @@ static void example_call_js_from_c(void) {
     "    return last + ', ' + first;"
     "}";
 
-  ant_value_t ns = js_mkobj(js);
+  ant_value_t ns = Ant_Object_CreateBare(js);
   
   ant_value_t eval_result = js_esm_eval_module_source(
     js, "embed_call_js_from_c.mjs", 
@@ -291,7 +292,7 @@ static void example_this_context(void) {
 
 
 
-  ant_value_t person = js_mkobj(js);
+  ant_value_t person = Ant_Object_CreateBare(js);
   js_set(js, person, "firstName", js_mkstr(js, "Jane", 4));
   js_set(js, person, "lastName", js_mkstr(js, "Smith", 5));
   js_set(js, person, "getFullName", Ant_Function_Create(method_get_full_name));
@@ -319,7 +320,7 @@ static void example_stateful_session(void) {
     "export function increment() { return ++counter; }"
     "export function getCount() { return counter; }";
 
-  ant_value_t ns = js_mkobj(js);
+  ant_value_t ns = Ant_Object_CreateBare(js);
   ant_value_t eval_result = js_esm_eval_module_source(
     js, "embed_stateful_session.mjs", code, strlen(code), ns
   );
@@ -380,7 +381,7 @@ static void example_async_event_loop(void) {
     ""
     "results.push('sync');";
 
-  ant_value_t ns = js_mkobj(js);
+  ant_value_t ns = Ant_Object_CreateBare(js);
   ant_value_t result = js_esm_eval_module_source(
     js, "embed_async_event_loop.mjs", code, strlen(code), ns
   );
@@ -444,7 +445,7 @@ static void example_global_this(void) {
   js_set(js, global, "myString", js_mkstr(js, "hello from C", 12));
   js_set(js, global, "myBool", js_true);
 
-  ant_value_t myObj = js_mkobj(js);
+  ant_value_t myObj = Ant_Object_CreateBare(js);
   js_set(js, myObj, "a", js_mknum(1));
   js_set(js, myObj, "b", js_mknum(2));
   js_set(js, global, "myObject", myObj);

@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ptr.h"
 #include "errors.h"
 #include "internal.h"
@@ -644,7 +645,7 @@ ant_value_t js_rs_reader_ctor(ant_params_t) {
   ant_value_t closed = js_mkpromise(js);
   promise_mark_handled(closed);
   
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.reader_proto, call_new_target);
   
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
@@ -737,7 +738,7 @@ static ant_value_t js_rs_values(ant_params_t) {
   ant_value_t reader = js_rs_get_reader(js, NULL, 0, js_mkundef());
   if (is_err(reader)) return reader;
 
-  ant_value_t iterator = js_mkobj(js);
+  ant_value_t iterator = Ant_Object_CreateBare(js);
   js_set_proto_init(iterator, js->builtins.rs_async_iter_proto);
   js_set_slot(iterator, SLOT_DATA, reader);
   
@@ -782,7 +783,7 @@ static ant_value_t setup_default_controller(
   if (!ctrl) return js_mkerr(js, "out of memory");
   ctrl->strategy_hwm = hwm;
 
-  ant_value_t ctrl_obj = js_mkobj(js);
+  ant_value_t ctrl_obj = Ant_Object_CreateBare(js);
   js_set_proto_init(ctrl_obj, js->builtins.controller_proto);
   js_set_slot(ctrl_obj, SLOT_BRAND, js_mknum(BRAND_READABLE_STREAM_CONTROLLER));
   js_set_native(ctrl_obj, ctrl, RS_CONTROLLER_NATIVE_TAG);
@@ -854,7 +855,7 @@ static ant_value_t js_rs_ctor(ant_params_t) {
   if (!st) return js_mkerr(js, "out of memory");
   st->state = RS_STATE_READABLE;
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.rs_proto, call_new_target);
   
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
@@ -927,7 +928,7 @@ ant_value_t rs_create_stream(ant_t *js, ant_value_t pull_fn, ant_value_t cancel_
   if (!st) return js_mkerr(js, "out of memory");
   st->state = RS_STATE_READABLE;
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_proto_init(obj, js->builtins.rs_proto);
   js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_READABLE_STREAM));
   js_set_native(obj, st, RS_STREAM_NATIVE_TAG);
@@ -952,7 +953,7 @@ static ant_value_t js_rs_controller_ctor(ant_params_t) {
 void init_readable_stream_module(ant_t *js) {
   ant_value_t g = js_glob(js);
 
-  js->builtins.controller_proto = js_mkobj(js);
+  js->builtins.controller_proto = Ant_Object_CreateBare(js);
   js_set_getter_desc(js, js->builtins.controller_proto, "desiredSize", 11, Ant_Function_Create(js_rs_controller_get_desired_size), JS_DESC_C);
   js_set(js, js->builtins.controller_proto, "close", Ant_Function_Create(js_rs_controller_close));
   js_set_descriptor(js, js->builtins.controller_proto, "close", 5, JS_DESC_W | JS_DESC_C);
@@ -966,7 +967,7 @@ void init_readable_stream_module(ant_t *js) {
   js_set(js, g, "ReadableStreamDefaultController", ctrl_ctor);
   js_set_descriptor(js, g, "ReadableStreamDefaultController", 31, JS_DESC_W | JS_DESC_C);
 
-  js->builtins.reader_proto = js_mkobj(js);
+  js->builtins.reader_proto = Ant_Object_CreateBare(js);
   js_set_getter_desc(js, js->builtins.reader_proto, "closed", 6, Ant_Function_Create(js_rs_reader_get_closed), JS_DESC_C);
   js_set(js, js->builtins.reader_proto, "read", Ant_Function_Create(js_rs_reader_read));
   js_set_descriptor(js, js->builtins.reader_proto, "read", 4, JS_DESC_W | JS_DESC_C);
@@ -980,12 +981,12 @@ void init_readable_stream_module(ant_t *js) {
   js_set(js, g, "ReadableStreamDefaultReader", reader_ctor);
   js_set_descriptor(js, g, "ReadableStreamDefaultReader", 27, JS_DESC_W | JS_DESC_C);
 
-  js->builtins.rs_async_iter_proto = js_mkobj(js);
+  js->builtins.rs_async_iter_proto = Ant_Object_CreateBare(js);
   defmethod(js, js->builtins.rs_async_iter_proto, "next", 4, Ant_Function_Create(js_rs_async_iter_next));
   defmethod(js, js->builtins.rs_async_iter_proto, "return", 6, Ant_Function_Create(js_rs_async_iter_return));
   defmethod_sym(js, js->builtins.rs_async_iter_proto, js->sym.asyncIterator_sym, Ant_Function_Create(sym_this_cb));
 
-  js->builtins.rs_proto = js_mkobj(js);
+  js->builtins.rs_proto = Ant_Object_CreateBare(js);
   js_set_getter_desc(js, js->builtins.rs_proto, "locked", 6, Ant_Function_Create(js_rs_get_locked), JS_DESC_C);
   js_set(js, js->builtins.rs_proto, "cancel", Ant_Function_Create(js_rs_cancel));
   js_set_descriptor(js, js->builtins.rs_proto, "cancel", 6, JS_DESC_W | JS_DESC_C);

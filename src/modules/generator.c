@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ptr.h"
 #include "errors.h"
 #include "internal.h"

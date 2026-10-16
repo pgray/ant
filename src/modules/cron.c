@@ -30,6 +30,7 @@ extern char **environ;
 #endif
 
 #include "ant.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "internal.h"
 #include "ptr.h"
@@ -780,7 +781,7 @@ static bool cron_relative_ms(
 }
 
 static ant_value_t cron_make_date(ant_t *js, int64_t epoch_ms) {
-  ant_value_t object = js_mkobj(js);
+  ant_value_t object = Ant_Object_CreateBare(js);
   ant_value_t prototype = js->builtins.date_proto;
   if (is_object_type(prototype)) js_set_proto_init(object, prototype);
   js_set_slot(object, SLOT_DATA, js_mknum((double)epoch_ms));
@@ -937,7 +938,7 @@ handler_failed:
         &job->timer, cron_timer_callback, keepalive_interval, keepalive_interval
       );
     }
-    ant_value_t state = js_mkobj(js);
+    ant_value_t state = Ant_Object_CreateBare(js);
     js_set_slot(state, SLOT_DATA, job->object);
     js_set_slot(state, SLOT_AUX, result);
     ant_value_t fulfilled = js_heavy_mkfun(js, cron_handler_fulfilled, state);
@@ -957,7 +958,7 @@ handler_failed:
 
 static bool cron_schedule_job(cron_job_t *job, ant_value_t *error) {
   if (!job || job->stopped || job->closing) return true;
-  ant_value_t options = js_mkobj(job->js);
+  ant_value_t options = Ant_Object_CreateBare(job->js);
   js_set(job->js, options, "tz", js_mkstr(job->js, job->time_zone, strlen(job->time_zone)));
   cron_zone_t zone;
   if (!cron_resolve_zone(job->js, options, &zone, NULL, error)) return false;
@@ -1102,7 +1103,7 @@ static ant_value_t cron_create_job(
   job->timer.data = job;
   cron_add_job(job);
 
-  ant_value_t object = js_mkobj(js);
+  ant_value_t object = Ant_Object_CreateBare(js);
   js_set_proto_init(object, js->builtins.cron_proto);
   js_set_native(object, job, CRON_JOB_NATIVE_TAG);
   if (js_get_native(object, CRON_JOB_NATIVE_TAG) != job) {
@@ -2505,7 +2506,7 @@ static ant_value_t cron_call(ant_params_t) {
 }
 
 void init_cron_module(ant_t *js) {
-  js->builtins.cron_proto = js_mkobj(js);
+  js->builtins.cron_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.cron_proto, js->sym.object_proto);
   gc_register_root(&js->builtins.cron_proto);
 
@@ -2601,7 +2602,7 @@ int cron_run_scheduled_export(
     return EXIT_FAILURE;
   }
 
-  ant_value_t controller = js_mkobj(js);
+  ant_value_t controller = Ant_Object_CreateBare(js);
   js_set(js, controller, "cron", js_mkstr(js, expression, strlen(expression)));
   js_set(js, controller, "type", js_mkstr(js, "scheduled", 9));
   js_set(js, controller, "scheduledTime", js_mknum((double)scheduled_time));

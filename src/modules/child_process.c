@@ -25,6 +25,7 @@
 #endif
 
 #include "ant.h"
+#include "cfunc.h"
 #include "list.h"
 #include "ptr.h"
 #include "errors.h"
@@ -276,7 +277,7 @@ static void check_completion(child_process_t *cp) {
     emit_event(cp, "close", close_args, 2);
     
     if (vtype(cp->promise) != kTypeUndefined) {
-      ant_value_t result = js_mkobj(cp->js);
+      ant_value_t result = Ant_Object_CreateBare(cp->js);
       js_set(cp->js, result, "stdout", stdout_val);
       js_set(cp->js, result, "stderr", stderr_val);
       js_set(cp->js, result, "exitCode", exit_code_val);
@@ -705,7 +706,7 @@ static ant_value_t child_end(ant_params_t) {
 }
 
 static ant_value_t child_process_ctor(ant_params_t) {
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   if (is_object_type(js->builtins.child_process_proto)) js_set_proto_init(obj, js->builtins.child_process_proto);
 
   js_set(js, obj, "pid", js_mkundef());
@@ -724,7 +725,7 @@ static void child_process_init_constructor(ant_t *js) {
   if (js->builtins.child_process_ctor && js->builtins.child_process_proto) return;
   ant_value_t ee_proto = eventemitter_prototype(js);
 
-  js->builtins.child_process_proto = js_mkobj(js);
+  js->builtins.child_process_proto = Ant_Object_CreateBare(js);
   if (is_object_type(ee_proto)) js_set_proto_init(js->builtins.child_process_proto, ee_proto);
   js_set(js, js->builtins.child_process_proto, "kill", Ant_Function_CreateWithArity(child_kill, 1));
   js_set(js, js->builtins.child_process_proto, "ref", Ant_Function_Create(child_ref));
@@ -850,14 +851,14 @@ static ant_value_t child_stream__final(ant_params_t) {
 static void child_stream_init_protos(ant_t *js) {
   if (js->builtins.child_readable_proto && js->builtins.child_writable_proto) return;
 
-  js->builtins.child_readable_proto = js_mkobj(js);
+  js->builtins.child_readable_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.child_readable_proto, stream_readable_prototype(js));
   js_set(js, js->builtins.child_readable_proto, "ref", Ant_Function_Create(child_stream_ref));
   js_set(js, js->builtins.child_readable_proto, "unref", Ant_Function_Create(child_stream_unref));
   js_set(js, js->builtins.child_readable_proto, "_destroy", Ant_Function_Create(child_stream__destroy));
   js_set(js, js->builtins.child_readable_proto, "_read", Ant_Function_Create(child_stream__read));
 
-  js->builtins.child_writable_proto = js_mkobj(js);
+  js->builtins.child_writable_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.child_writable_proto, stream_writable_prototype(js));
   js_set(js, js->builtins.child_writable_proto, "ref", Ant_Function_Create(child_stream_ref));
   js_set(js, js->builtins.child_writable_proto, "unref", Ant_Function_Create(child_stream_unref));
@@ -868,7 +869,7 @@ static void child_stream_init_protos(ant_t *js) {
 
 static ant_value_t create_child_stream_object(ant_t *js, child_process_t *cp, child_stream_kind_t kind) {
   bool writable = kind == CHILD_STREAM_STDIN;
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   child_stream_ctx_t *ctx = calloc(1, sizeof(child_stream_ctx_t));
   if (!ctx) return js_mkerr(js, "Out of memory");
   
@@ -913,7 +914,7 @@ static void abort_child_object_creation(child_process_t *cp) {
 }
 
 static ant_value_t create_child_object(ant_t *js, child_process_t *cp) {
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   cp->child_obj = obj;
 
   if (is_object_type(js->builtins.child_process_proto))
@@ -1420,7 +1421,7 @@ static ant_value_t builtin_exec(ant_params_t) {
     js_set(js, cp->child_obj, "pid", js_mkundef());
 
     if (is_callable(callback)) {
-      ant_value_t ctx = js_mkobj(js);
+      ant_value_t ctx = Ant_Object_CreateBare(js);
       js_set(js, ctx, "callback", callback);
       js_set(js, ctx, "child", cp->child_obj);
       js_set(js, ctx, "command", args[0]);
@@ -1448,7 +1449,7 @@ static ant_value_t builtin_exec(ant_params_t) {
   if (is_err(child_obj)) return child_obj;
 
   if (is_callable(callback)) {
-    ant_value_t ctx = js_mkobj(js);
+    ant_value_t ctx = Ant_Object_CreateBare(js);
     js_set(js, ctx, "callback", callback);
     js_set(js, ctx, "child", cp->child_obj);
     js_set(js, ctx, "command", args[0]);
@@ -1596,7 +1597,7 @@ static ant_value_t exec_file_promisify_callback(ant_params_t) {
     return js_mkundef();
   }
 
-  ant_value_t result = js_newobj(js);
+  ant_value_t result = Ant_Object_Create(js);
   js_set(js, result, "stdout", stdout_val);
   js_set(js, result, "stderr", stderr_val);
   js_resolve_promise(js, promise, result);
@@ -1609,7 +1610,7 @@ static ant_value_t exec_callback_promisified_call(ant_params_t) {
   if (!is_callable(original)) return js_mkerr(js, "exec promisify target is not callable");
 
   ant_value_t promise = js_mkpromise(js);
-  ant_value_t state = js_mkobj(js);
+  ant_value_t state = Ant_Object_CreateBare(js);
   
   js_set_slot(state, SLOT_DATA, promise);
   js_set_slot(state, SLOT_SETTLED, js_false);
@@ -1684,7 +1685,7 @@ static ant_value_t builtin_execFile(ant_params_t) {
     if (spawned) spawned->collect_output = true;
   }
 
-  ant_value_t ctx = js_mkobj(js);
+  ant_value_t ctx = Ant_Object_CreateBare(js);
   js_set(js, ctx, "callback", callback);
   js_set(js, ctx, "child", child);
   js_set(js, ctx, "command", child_process_command_value(js, args[0], argv));
@@ -1908,7 +1909,7 @@ static ant_value_t spawn_sync_impl(ant_native_params_t, bool force_shell) {
     return stderr_val;
   }
 
-  ant_value_t result = js_newobj(js);
+  ant_value_t result = Ant_Object_Create(js);
   js_set(js, result, "stdout", stdout_val);
   js_set(js, result, "stderr", stderr_val);
   js_set(js, result, "status", js_mknum((double)exit_code));
@@ -2345,7 +2346,7 @@ static ant_value_t sync_build_spawn_error(
     js_set(js, error, "spawnargs", spawnargs);
   }
 
-  ant_value_t result = js_newobj(js);
+  ant_value_t result = Ant_Object_Create(js);
   js_set(js, result, "error", error);
   js_set(js, result, "status", js_mknull());
   js_set(js, result, "signal", js_mknull());
@@ -2365,7 +2366,7 @@ static ant_value_t sync_build_result(
   ant_value_t stderr_val = sync_make_output(js, err->buf, err->len, opts->encode_as_string);
   if (is_err(stderr_val)) return stderr_val;
 
-  ant_value_t result = js_newobj(js);
+  ant_value_t result = Ant_Object_Create(js);
   js_set(js, result, "stdout", stdout_val);
   js_set(js, result, "stderr", stderr_val);
   js_set(js, result, "pid", js_mknum((double)pid));
@@ -2661,7 +2662,7 @@ static ant_value_t builtin_fork(ant_params_t) {
   }
   
   spawn_args[1] = args_arr;
-  spawn_args[2] = js_mkobj(js);
+  spawn_args[2] = Ant_Object_CreateBare(js);
 
   if (bundled) uv_os_setenv(ANT_INTERNAL_RUN_ENV, path_str);
   ant_value_t result = builtin_spawn(js, spawn_args, 3, js_mkundef());
@@ -2672,7 +2673,7 @@ static ant_value_t builtin_fork(ant_params_t) {
 }
 
 ant_value_t child_process_library(ant_t *js) {
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
   
   ant_value_t exec_fn = Ant_Function_CreateWithData(js, builtin_exec, "exec", 3, js_mkundef());
   ant_value_t exec_file_fn = Ant_Function_CreateWithData(js, builtin_execFile, "execFile", 4, js_mkundef());

@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ptr.h"
 #include "errors.h"
 #include "internal.h"
@@ -180,13 +181,13 @@ static ant_value_t js_tes_ctor(ant_params_t) {
   tes_state_t *st = calloc(1, sizeof(tes_state_t));
   if (!st) return js_mkerr(js, "out of memory");
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.tes_proto, call_new_target);
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
   js_set_native(obj, st, TES_NATIVE_TAG);
   js_set_finalizer(obj, tes_state_finalize);
 
-  ant_value_t transformer = js_mkobj(js);
+  ant_value_t transformer = Ant_Object_CreateBare(js);
   ant_value_t transform_fn = js_heavy_mkfun_native(js, tes_transform, st, TES_NATIVE_TAG);
   ant_value_t flush_fn = js_heavy_mkfun_native(js, tes_flush, st, TES_NATIVE_TAG);
   js_set(js, transformer, "transform", transform_fn);
@@ -348,13 +349,13 @@ static ant_value_t js_tds_ctor(ant_params_t) {
   td_state_t *st = td_state_new(enc, fatal, ignore_bom);
   if (!st) return js_mkerr(js, "out of memory");
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.tds_proto, call_new_target);
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
   js_set_native(obj, st, TDS_NATIVE_TAG);
   js_set_finalizer(obj, tds_state_finalize);
 
-  ant_value_t transformer = js_mkobj(js);
+  ant_value_t transformer = Ant_Object_CreateBare(js);
   ant_value_t transform_fn = js_heavy_mkfun_native(js, tds_transform, st, TDS_NATIVE_TAG);
   ant_value_t flush_fn = js_heavy_mkfun_native(js, tds_flush, st, TDS_NATIVE_TAG);
   
@@ -375,7 +376,7 @@ static ant_value_t js_tds_ctor(ant_params_t) {
 void init_codec_stream_module(ant_t *js) {
   ant_value_t g = js_glob(js);
 
-  js->builtins.tes_proto = js_mkobj(js);
+  js->builtins.tes_proto = Ant_Object_CreateBare(js);
   js_set_getter_desc(js, js->builtins.tes_proto, "encoding", 8, Ant_Function_Create(js_tes_get_encoding), JS_DESC_C);
   js_set_getter_desc(js, js->builtins.tes_proto, "readable", 8, Ant_Function_Create(js_tes_get_readable), JS_DESC_C);
   js_set_getter_desc(js, js->builtins.tes_proto, "writable", 8, Ant_Function_Create(js_tes_get_writable), JS_DESC_C);
@@ -385,7 +386,7 @@ void init_codec_stream_module(ant_t *js) {
   js_set(js, g, "TextEncoderStream", tes_ctor);
   js_set_descriptor(js, g, "TextEncoderStream", 17, JS_DESC_W | JS_DESC_C);
 
-  js->builtins.tds_proto = js_mkobj(js);
+  js->builtins.tds_proto = Ant_Object_CreateBare(js);
   js_set_getter_desc(js, js->builtins.tds_proto, "encoding",  8, Ant_Function_Create(js_tds_get_encoding),  JS_DESC_C);
   js_set_getter_desc(js, js->builtins.tds_proto, "fatal",     5, Ant_Function_Create(js_tds_get_fatal),     JS_DESC_C);
   js_set_getter_desc(js, js->builtins.tds_proto, "ignoreBOM", 9, Ant_Function_Create(js_tds_get_ignore_bom), JS_DESC_C);

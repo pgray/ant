@@ -749,7 +749,7 @@ static ant_value_t process_plan_make_result(
   int exit_code, int signal, bool exited
 ) {
   GC_ROOT_SAVE(root_mark, js);
-  ant_value_t result = js_mkobj(js);
+  ant_value_t result = Ant_Object_CreateBare(js);
   if (is_err(result)) {
     GC_ROOT_RESTORE(js, root_mark);
     return result;

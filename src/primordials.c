@@ -50,7 +50,7 @@ ant_value_t primordial_library(ant_t *js) {
   if (!is_undefined(js->primordials)) return js->primordials;
 
   GC_ROOT_SAVE(mark, js);
-  ant_value_t result = js_mkobj(js);
+  ant_value_t result = Ant_Object_CreateBare(js);
   
   GC_ROOT_PIN(js, result);
   ant_value_t captured = js_mkundef();

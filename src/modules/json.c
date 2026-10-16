@@ -5,6 +5,7 @@
 #include <yyjson.h>
 
 #include "gc/roots.h"
+#include "cfunc.h"
 #include "utf8.h"
 #include "numbers.h"
 #include "hash.h"
@@ -402,7 +403,7 @@ static ant_value_t yyjson_to_jsval(
   }
   
   case YYJSON_TYPE_OBJ: {
-    ant_value_t obj = js_newobj(js);
+    ant_value_t obj = Ant_Object_Create(js);
     if (is_err(obj)) return obj;
     if (!json_temp_pin(roots, obj)) return json_parse_oom(js);
 
@@ -802,7 +803,7 @@ static ant_value_t json_apply_replacer(
 }
 
 static inline ant_value_t json_create_root_holder(ant_t *js, ant_value_t value, json_cycle_ctx *ctx) {
-  ant_value_t holder = js_mkobj(js);
+  ant_value_t holder = Ant_Object_CreateBare(js);
   if (is_err(holder)) return holder;
   if (!json_ctx_pin_value(ctx, holder)) return js_mkundef();
   js_set(js, holder, "", value);
@@ -1216,7 +1217,7 @@ ant_value_t js_json_parse(ant_params_t) {
       gc_temp_root_scope_end(&temp_roots);
       return json_parse_oom(js);
     }
-    ant_value_t root = js_mkobj(js);
+    ant_value_t root = Ant_Object_CreateBare(js);
     if (is_err(root)) {
       gc_temp_root_scope_end(&temp_roots);
       return root;
@@ -1433,7 +1434,7 @@ ant_value_t json_stringify_value(ant_t *js, ant_value_t value) {
 }
 
 void init_json_module(ant_t *js) {
-  ant_value_t json_obj = js_newobj(js);
+  ant_value_t json_obj = Ant_Object_Create(js);
   
   defmethod(js, json_obj, "parse", 5, Ant_Function_CreateWithArity(js_json_parse, 2));
   defmethod(js, json_obj, "stringify", 9, Ant_Function_CreateWithArity(js_json_stringify, 3));

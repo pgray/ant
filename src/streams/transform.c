@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ptr.h"
 #include "errors.h"
 #include "internal.h"
@@ -326,7 +327,7 @@ static ant_value_t ts_ctrl_perform_transform(ant_t *js, ant_value_t ctrl_obj, an
     }
 
     ant_value_t res_fn = js_heavy_mkfun(js, ts_transform_resolve, p);
-    ant_value_t wrapper = js_mkobj(js);
+    ant_value_t wrapper = Ant_Object_CreateBare(js);
     js_set_slot(wrapper, SLOT_DATA, p);
     js_set_slot(wrapper, SLOT_ENTRIES, ts_obj);
     
@@ -386,7 +387,7 @@ static ant_value_t ts_run_cancel_algorithm(ant_t *js, ant_value_t ts_obj, ant_va
     return p;
   }
 
-  ant_value_t wrapper = js_mkobj(js);
+  ant_value_t wrapper = Ant_Object_CreateBare(js);
   js_set_slot(wrapper, SLOT_DATA, p);
   js_set_slot(wrapper, SLOT_ENTRIES, ts_obj);
   
@@ -514,7 +515,7 @@ static ant_value_t ts_sink_write_bp_resolve(ant_params_t) {
   ant_value_t fp = ts_ctrl_finish_promise(ctrl_obj);
   if (vtype(fp) == kTypePromise) {
     ant_value_t resolve_fn = js_heavy_mkfun(js, ts_transform_resolve, fp);
-    ant_value_t rej_wrapper = js_mkobj(js);
+    ant_value_t rej_wrapper = Ant_Object_CreateBare(js);
     js_set_slot(rej_wrapper, SLOT_DATA, fp);
     js_set_slot(rej_wrapper, SLOT_ENTRIES, ts_obj);
     ant_value_t reject_fn = js_heavy_mkfun(js, ts_transform_reject, rej_wrapper);
@@ -533,12 +534,12 @@ static ant_value_t ts_sink_write(ant_params_t) {
   js_set_slot_wb(js, ctrl_obj, SLOT_RS_PULL, finish_p);
 
   if (ts_get_backpressure(ts_obj)) {
-    ant_value_t wrapper = js_mkobj(js);
+    ant_value_t wrapper = Ant_Object_CreateBare(js);
     js_set_slot(wrapper, SLOT_DATA, ctrl_obj);
     js_set_slot(wrapper, SLOT_ENTRIES, chunk);
     js_set_slot(wrapper, SLOT_CTOR, ts_obj);
     ant_value_t res_fn = js_heavy_mkfun(js, ts_sink_write_bp_resolve, wrapper);
-    ant_value_t rej_wrapper = js_mkobj(js);
+    ant_value_t rej_wrapper = Ant_Object_CreateBare(js);
     js_set_slot(rej_wrapper, SLOT_DATA, finish_p);
     js_set_slot(rej_wrapper, SLOT_ENTRIES, ts_obj);
     ant_value_t rej_fn = js_heavy_mkfun(js, ts_transform_reject, rej_wrapper);
@@ -547,7 +548,7 @@ static ant_value_t ts_sink_write(ant_params_t) {
   } else {
     ant_value_t transform_p = ts_ctrl_perform_transform(js, ctrl_obj, chunk);
     ant_value_t resolve_fn = js_heavy_mkfun(js, ts_transform_resolve, finish_p);
-    ant_value_t rej_wrapper = js_mkobj(js);
+    ant_value_t rej_wrapper = Ant_Object_CreateBare(js);
     js_set_slot(rej_wrapper, SLOT_DATA, finish_p);
     js_set_slot(rej_wrapper, SLOT_ENTRIES, ts_obj);
     ant_value_t reject_fn = js_heavy_mkfun(js, ts_transform_reject, rej_wrapper);
@@ -569,7 +570,7 @@ static ant_value_t ts_sink_abort(ant_params_t) {
 
   ant_value_t p = js_mkpromise(js);
   ant_value_t base = ts_run_cancel_algorithm(js, ts_obj, cancel_fn, reason, true);
-  ant_value_t wrapper = js_mkobj(js);
+  ant_value_t wrapper = Ant_Object_CreateBare(js);
   js_set_slot(wrapper, SLOT_DATA, p);
   js_set_slot(wrapper, SLOT_ENTRIES, ts_obj);
   js_set_slot(wrapper, SLOT_AUX, reason);
@@ -628,7 +629,7 @@ static ant_value_t ts_sink_close(ant_params_t) {
 
   ant_value_t cancel_p = ts_cancel_promise(ts_obj);
   if (vtype(cancel_p) == kTypePromise) {
-    ant_value_t wrapper = js_mkobj(js);
+    ant_value_t wrapper = Ant_Object_CreateBare(js);
     js_set_slot(wrapper, SLOT_DATA, p);
     js_set_slot(wrapper, SLOT_ENTRIES, ts_obj);
     ant_value_t res_fn = js_heavy_mkfun(js, ts_close_cancel_resolve, wrapper);
@@ -652,7 +653,7 @@ static ant_value_t ts_sink_close(ant_params_t) {
       return p;
     }
 
-    ant_value_t wrapper = js_mkobj(js);
+    ant_value_t wrapper = Ant_Object_CreateBare(js);
     js_set_slot(wrapper, SLOT_DATA, p);
     js_set_slot(wrapper, SLOT_ENTRIES, ts_obj);
     ant_value_t res_fn = js_heavy_mkfun(js, ts_sink_close_resolve, wrapper);
@@ -704,7 +705,7 @@ static ant_value_t ts_source_cancel(ant_params_t) {
 
   ant_value_t p = js_mkpromise(js);
   ant_value_t base = ts_run_cancel_algorithm(js, ts_obj, cancel_fn, reason, false);
-  ant_value_t wrapper = js_mkobj(js);
+  ant_value_t wrapper = Ant_Object_CreateBare(js);
   js_set_slot(wrapper, SLOT_DATA, p);
   js_set_slot(wrapper, SLOT_ENTRIES, ts_obj);
   js_set_slot(wrapper, SLOT_AUX, reason);
@@ -898,13 +899,13 @@ ant_value_t js_ts_ctor(ant_params_t) {
     }
   }
 
-  ant_value_t ts_obj = js_mkobj(js);
+  ant_value_t ts_obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.ts_proto, call_new_target);
   if (is_object_type(proto)) js_set_proto_init(ts_obj, proto);
   js_set_slot(ts_obj, SLOT_BRAND, js_mknum(BRAND_TRANSFORM_STREAM));
   js_set_slot(ts_obj, SLOT_DATA, js_mknum(0));
 
-  ant_value_t ctrl_obj = js_mkobj(js);
+  ant_value_t ctrl_obj = Ant_Object_CreateBare(js);
   js_set_proto_init(ctrl_obj, js->builtins.ts_ctrl_proto);
   js_set_slot(ctrl_obj, SLOT_BRAND, js_mknum(BRAND_TRANSFORM_STREAM_CONTROLLER));
   js_set_slot(ctrl_obj, SLOT_DATA, ts_obj);
@@ -932,7 +933,7 @@ ant_value_t js_ts_ctor(ant_params_t) {
   if (!rst) return js_mkerr(js, "out of memory");
   rst->state = RS_STATE_READABLE;
 
-  ant_value_t rs_obj = js_mkobj(js);
+  ant_value_t rs_obj = Ant_Object_CreateBare(js);
   js_set_proto_init(rs_obj, js->builtins.rs_proto);
   js_set_slot(rs_obj, SLOT_BRAND, js_mknum(BRAND_READABLE_STREAM));
   js_set_native(rs_obj, rst, RS_STREAM_NATIVE_TAG);
@@ -942,7 +943,7 @@ ant_value_t js_ts_ctor(ant_params_t) {
   if (!rcc) { free(rst); return js_mkerr(js, "out of memory"); }
   rcc->strategy_hwm = readable_hwm;
 
-  ant_value_t rs_ctrl_obj = js_mkobj(js);
+  ant_value_t rs_ctrl_obj = Ant_Object_CreateBare(js);
   js_set_proto_init(rs_ctrl_obj, js->builtins.controller_proto);
   js_set_slot(rs_ctrl_obj, SLOT_BRAND, js_mknum(BRAND_READABLE_STREAM_CONTROLLER));
   js_set_native(rs_ctrl_obj, rcc, RS_CONTROLLER_NATIVE_TAG);
@@ -960,7 +961,7 @@ ant_value_t js_ts_ctor(ant_params_t) {
   if (!wst) return js_mkerr(js, "out of memory");
   wst->state = WS_STATE_WRITABLE;
 
-  ant_value_t ws_obj = js_mkobj(js);
+  ant_value_t ws_obj = Ant_Object_CreateBare(js);
   js_set_proto_init(ws_obj, js->builtins.ws_proto);
   js_set_slot(ws_obj, SLOT_BRAND, js_mknum(BRAND_WRITABLE_STREAM));
   js_set_native(ws_obj, wst, WS_STREAM_NATIVE_TAG);
@@ -978,7 +979,7 @@ ant_value_t js_ts_ctor(ant_params_t) {
   if (!wc) { free(wst); return js_mkerr(js, "out of memory"); }
   wc->strategy_hwm = writable_hwm;
 
-  ant_value_t ws_ctrl_obj = js_mkobj(js);
+  ant_value_t ws_ctrl_obj = Ant_Object_CreateBare(js);
   js_set_proto_init(ws_ctrl_obj, js->builtins.ws_controller_proto);
   js_set_slot(ws_ctrl_obj, SLOT_BRAND, js_mknum(BRAND_WRITABLE_STREAM_CONTROLLER));
   js_set_native(ws_ctrl_obj, wc, WS_CONTROLLER_NATIVE_TAG);
@@ -1029,7 +1030,7 @@ static ant_value_t js_ts_ctrl_ctor(ant_params_t) {
 void init_transform_stream_module(ant_t *js) {
   ant_value_t g = js_glob(js);
 
-  js->builtins.ts_ctrl_proto = js_mkobj(js);
+  js->builtins.ts_ctrl_proto = Ant_Object_CreateBare(js);
   js_set_getter_desc(js, js->builtins.ts_ctrl_proto, "desiredSize", 11, Ant_Function_Create(js_ts_ctrl_get_desired_size), JS_DESC_C);
   js_set(js, js->builtins.ts_ctrl_proto, "enqueue", Ant_Function_Create(js_ts_ctrl_enqueue));
   js_set_descriptor(js, js->builtins.ts_ctrl_proto, "enqueue", 7, JS_DESC_W | JS_DESC_C);
@@ -1043,7 +1044,7 @@ void init_transform_stream_module(ant_t *js) {
   js_set(js, g, "TransformStreamDefaultController", ctrl_ctor);
   js_set_descriptor(js, g, "TransformStreamDefaultController", 32, JS_DESC_W | JS_DESC_C);
 
-  js->builtins.ts_proto = js_mkobj(js);
+  js->builtins.ts_proto = Ant_Object_CreateBare(js);
   js_set_getter_desc(js, js->builtins.ts_proto, "readable", 8, Ant_Function_Create(js_ts_get_readable), JS_DESC_C);
   js_set_getter_desc(js, js->builtins.ts_proto, "writable", 8, Ant_Function_Create(js_ts_get_writable), JS_DESC_C);
   js_set_tostringtag(js, js->builtins.ts_proto, js_mkstr(js, "TransformStream", 15));

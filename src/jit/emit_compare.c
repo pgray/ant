@@ -1,4 +1,5 @@
 #include "compile.h"
+#include "cfunc.h"
 #include "silver/feedback.h"
 
 static void jit_emit_compare_bit(jit_compile_t *c, MIR_insn_code_t cmp, MIR_reg_t l, MIR_reg_t r, MIR_reg_t rd) {

@@ -15,6 +15,7 @@
 #pragma clang diagnostic pop
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ptr.h"
 #include "errors.h"
 #include "internal.h"
@@ -266,7 +267,7 @@ static wasm_extern_handle_t *wasm_extern_handle(ant_value_t value, wasm_extern_w
 }
 
 static ant_value_t wasm_make_error(ant_t *js, ant_value_t proto, const char *message) {
-  ant_value_t err = js_mkobj(js);
+  ant_value_t err = Ant_Object_CreateBare(js);
   if (is_err(err)) return err;
 
   GC_ROOT_SAVE(root_mark, js);
@@ -437,7 +438,7 @@ static ant_value_t wasm_wrap_module(ant_t *js, wasm_store_t *store, wasm_module_
   handle->store = store;
   handle->module = module;
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_proto_init(obj, js->builtins.wasm_module_proto);
   js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_WASM_MODULE));
   js_set_native(obj, handle, WASM_MODULE_NATIVE_TAG);
@@ -457,7 +458,7 @@ static void wasm_module_finalize(ant_t *js, ant_object_t *obj) {
 }
 
 static ant_value_t wasm_wrap_instance(ant_t *js, wasm_instance_handle_t *handle, ant_value_t module_ref) {
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_proto_init(obj, js->builtins.wasm_instance_proto);
   js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_WASM_INSTANCE));
   js_set_native(obj, handle, WASM_INSTANCE_NATIVE_TAG);
@@ -498,7 +499,7 @@ static ant_value_t wasm_wrap_extern_object(ant_t *js, wasm_extern_wrap_kind_t ki
     case WASM_EXTERN_WRAP_TABLE: handle->as.table = (wasm_table_t *)ptr; break;
   }
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_proto_init(obj, proto);
   js_set_slot(obj, SLOT_BRAND, js_mknum(brand));
   js_set_native(obj, handle, WASM_EXTERN_NATIVE_TAG);
@@ -627,7 +628,7 @@ static ant_value_t wasm_wrap_func(ant_t *js, wasm_func_t *func, ant_value_t owne
   handle->func = func;
   handle->own_func = own_func;
 
-  state = js_mkobj(js);
+  state = Ant_Object_CreateBare(js);
   js_set_native(state, handle, WASM_FUNC_STATE_TAG);
   
   if (is_object_type(owner)) js_set_slot_wb(js, state, SLOT_ENTRIES, owner);
@@ -763,7 +764,7 @@ static ant_value_t wasm_module_type_descriptors(ant_t *js, ant_value_t module_ob
       const wasm_name_t *name = wasm_importtype_name(entry);
       const wasm_externtype_t *type = wasm_importtype_type(entry);
 
-      ant_value_t item = js_newobj(js);
+      ant_value_t item = Ant_Object_Create(js);
       js_set(js, item, "module", js_mkstr(js, module_name->data, wasm_name_len(module_name)));
       js_set(js, item, "name", js_mkstr(js, name->data, wasm_name_len(name)));
       js_set(js, item, "kind", js_mkstr(js, wasm_extern_kind_name(wasm_externtype_kind(type)), strlen(wasm_extern_kind_name(wasm_externtype_kind(type)))));
@@ -778,7 +779,7 @@ static ant_value_t wasm_module_type_descriptors(ant_t *js, ant_value_t module_ob
       const wasm_name_t *name = wasm_exporttype_name(entry);
       const wasm_externtype_t *type = wasm_exporttype_type(entry);
       
-      ant_value_t item = js_newobj(js);
+      ant_value_t item = Ant_Object_Create(js);
       js_set(js, item, "name", js_mkstr(js, name->data, wasm_name_len(name)));
       js_set(js, item, "kind", js_mkstr(js, wasm_extern_kind_name(wasm_externtype_kind(type)), strlen(wasm_extern_kind_name(wasm_externtype_kind(type)))));
       js_arr_push(js, arr, item);
@@ -967,7 +968,7 @@ static ant_value_t wasm_instantiate_module(ant_t *js, ant_value_t module_obj, an
   wasm_instance_t *instance = NULL;
   ant_value_t import_error = js_mkundef();
   ant_value_t instance_obj = js_mkundef();
-  ant_value_t exports_obj = js_mkobj(js);
+  ant_value_t exports_obj = Ant_Object_CreateBare(js);
   *out_instance = js_mkundef();
 
   if (!module_handle) 
@@ -1781,7 +1782,7 @@ static ant_value_t js_wasm_table_ctor(ant_params_t) {
     store, true, table, js_mkundef()
   );
   if (vtype(result) == kTypeObject) {
-    ant_value_t entries = js_mkobj(js);
+    ant_value_t entries = Ant_Object_CreateBare(js);
     wasm_extern_handle_t *handle = wasm_extern_handle(result, WASM_EXTERN_WRAP_TABLE);
     if (!handle || is_err(entries)) {
       js_clear_native(result, WASM_EXTERN_NATIVE_TAG);
@@ -1848,7 +1849,7 @@ static ant_value_t js_wasm_compile(ant_params_t) {
 }
 
 static ant_value_t wasm_instantiate_result(ant_t *js, ant_value_t module, ant_value_t instance) {
-  ant_value_t result = js_newobj(js);
+  ant_value_t result = Ant_Object_Create(js);
   js_set(js, result, "module", module);
   js_set(js, result, "instance", instance);
   return result;
@@ -1914,7 +1915,7 @@ static bool wasm_is_tag(ant_value_t value) {
 }
 
 static ant_value_t wasm_make_tag(ant_t *js, ant_value_t proto, ant_value_t kinds, bool js_tag) {
-  ant_value_t tag = js_mkobj(js);
+  ant_value_t tag = Ant_Object_CreateBare(js);
   if (is_err(tag)) return tag;
   js_set_proto_init(tag, proto);
   js_set_slot(tag, SLOT_BRAND, js_mknum(BRAND_WASM_TAG));
@@ -2033,7 +2034,7 @@ static ant_value_t js_wasm_exception_ctor(ant_params_t) {
   GC_ROOT_PIN(js, stack);
 
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.wasm_exception_proto, call_new_target);
-  ant_value_t exception = js_mkobj(js);
+  ant_value_t exception = Ant_Object_CreateBare(js);
   if (!is_err(exception)) {
     js_set_proto_init(exception, proto);
     js_set_slot(exception, SLOT_BRAND, js_mknum(BRAND_WASM_EXCEPTION));
@@ -2203,7 +2204,7 @@ static ant_value_t wasm_streaming_start(ant_native_params_t, bool instantiate) {
   GC_ROOT_SAVE(mark, js);
   GC_ROOT_PIN(js, promise);
 
-  ant_value_t state = js_mkobj(js);
+  ant_value_t state = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, state);
   js_set_slot_wb(js, state, SLOT_DATA, promise);
   js_set_slot_wb(js, state, SLOT_AUX, instantiate && nargs > 1 ? args[1] : js_mkundef());
@@ -2246,7 +2247,7 @@ void gc_mark_wasm(ant_t *js, gc_mark_fn mark) {
 }
 
 static ant_value_t wasm_make_proto(ant_t *js, const char *tag) {
-  ant_value_t proto = js_newobj(js);
+  ant_value_t proto = Ant_Object_Create(js);
   js_set_tostringtag(js, proto, js_mkstr(js, tag, strlen(tag)));
   return proto;
 }
@@ -2254,7 +2255,7 @@ static ant_value_t wasm_make_proto(ant_t *js, const char *tag) {
 void init_wasm_module(ant_t *js) {
   if (!ensure_wasm_engine()) return;
 
-  ant_value_t ns = js_newobj(js);
+  ant_value_t ns = Ant_Object_Create(js);
   js_set_tostringtag(js, ns, ANT_STRING("WebAssembly"));
 
   js->builtins.wasm_module_proto = wasm_make_proto(js, "WebAssembly.Module");

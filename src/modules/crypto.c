@@ -17,6 +17,7 @@
 #pragma GCC diagnostic pop
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ascii.h"
 #include "ptr.h"
 #include "gc.h"
@@ -1058,7 +1059,7 @@ static ant_value_t crypto_read_key_format(ant_t *js, ant_value_t value, bool *ra
 static ant_value_t crypto_new_key_record(ant_t *js, unsigned index) {
   ant_value_t seed = js->mutable_roots.crypto_key_templates[index];
   if (vtype(seed) != kTypeObject) {
-    seed = js_mkobj(js);
+    seed = Ant_Object_CreateBare(js);
     if (is_err(seed)) return seed;
     GC_ROOT_SAVE(mark, js);
     GC_ROOT_PIN(js, seed);
@@ -1683,7 +1684,7 @@ static ant_value_t js_crypto_create_hash(ant_params_t) {
     return js_mkerr(js, "Failed to initialize hash");
   }
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   js_set(js, obj, "update", Ant_Function_Create(js_hash_update));
   js_set(js, obj, "digest", Ant_Function_Create(js_hash_digest));
   
@@ -1783,7 +1784,7 @@ static ant_value_t js_crypto_create_hmac(ant_params_t) {
   }
   if (owned) free(owned);
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   js_set(js, obj, "update", Ant_Function_Create(js_hmac_update));
   js_set(js, obj, "digest", Ant_Function_Create(js_hmac_digest));
   js_set_native(obj, state, CRYPTO_HMAC_NATIVE_TAG);
@@ -2047,7 +2048,7 @@ static ant_value_t crypto_create_cipheriv(ant_native_params_t, bool encrypt) {
     return js_mkerr(js, "Cipher initialization failed");
   }
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   js_set(js, obj, "update", Ant_Function_Create(js_cipher_update));
   js_set(js, obj, "final", Ant_Function_Create(js_cipher_final));
   js_set(js, obj, "setAAD", Ant_Function_Create(js_cipher_set_aad));
@@ -2220,8 +2221,8 @@ static ant_value_t js_crypto_scrypt(ant_params_t) {
 }
 
 static ant_value_t create_crypto_obj(ant_t *js) {
-  ant_value_t crypto_obj = js_newobj(js);
-  ant_value_t subtle_obj = js_newobj(js);
+  ant_value_t crypto_obj = Ant_Object_Create(js);
+  ant_value_t subtle_obj = Ant_Object_Create(js);
   
   js_set(js, crypto_obj, "random", Ant_Function_Create(js_crypto_random));
   js_set(js, crypto_obj, "randomBytes", Ant_Function_CreateWithArity(js_crypto_random_bytes, 2));
@@ -2256,7 +2257,7 @@ void init_crypto_module(ant_t *js) {
 }
 
 ant_value_t crypto_library(ant_t *js) {
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
   ant_value_t webcrypto = create_crypto_obj(js);
   
   js_set(js, lib, "webcrypto", webcrypto);

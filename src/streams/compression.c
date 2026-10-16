@@ -3,6 +3,7 @@
 #include <zlib.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ptr.h"
 #include "errors.h"
 #include "internal.h"
@@ -202,14 +203,14 @@ static ant_value_t js_cs_ctor(ant_params_t) {
     st->initialized = true;
   }
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.cs_proto, call_new_target);
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
   
   js_set_native(obj, fmt == ZFMT_BROTLI ? (void *)brotli : (void *)st, fmt == ZFMT_BROTLI ? CS_BROTLI_NATIVE_TAG : CS_Z_NATIVE_TAG);
   js_set_finalizer(obj, fmt == ZFMT_BROTLI ? brotli_state_finalize : zstate_finalize);
 
-  ant_value_t transformer = js_mkobj(js);
+  ant_value_t transformer = Ant_Object_CreateBare(js);
   
   ant_value_t transform_fn = js_heavy_mkfun_native(js, cs_transform, fmt == ZFMT_BROTLI 
     ? (void *)brotli : (void *)st, fmt == ZFMT_BROTLI
@@ -323,14 +324,14 @@ static ant_value_t js_ds_ctor(ant_params_t) {
     st->initialized = true;
   }
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.ds_proto, call_new_target);
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
   
   js_set_native(obj, fmt == ZFMT_BROTLI ? (void *)brotli : (void *)st, fmt == ZFMT_BROTLI ? DS_BROTLI_NATIVE_TAG : DS_Z_NATIVE_TAG);
   js_set_finalizer(obj, fmt == ZFMT_BROTLI ? brotli_state_finalize : zstate_inflate_finalize);
 
-  ant_value_t transformer = js_mkobj(js);
+  ant_value_t transformer = Ant_Object_CreateBare(js);
   
   ant_value_t transform_fn = js_heavy_mkfun_native(js, ds_transform, fmt == ZFMT_BROTLI 
     ? (void *)brotli : (void *)st, fmt == ZFMT_BROTLI 
@@ -363,7 +364,7 @@ static ant_value_t js_ds_ctor(ant_params_t) {
 void init_compression_stream_module(ant_t *js) {
   ant_value_t g = js_glob(js);
 
-  js->builtins.cs_proto = js_mkobj(js);
+  js->builtins.cs_proto = Ant_Object_CreateBare(js);
   js_set_getter_desc(js, js->builtins.cs_proto, "readable", 8, Ant_Function_Create(js_cs_get_readable), JS_DESC_C);
   js_set_getter_desc(js, js->builtins.cs_proto, "writable", 8, Ant_Function_Create(js_cs_get_writable), JS_DESC_C);
   js_set_tostringtag(js, js->builtins.cs_proto, js_mkstr(js, "CompressionStream", 17));
@@ -372,7 +373,7 @@ void init_compression_stream_module(ant_t *js) {
   js_set(js, g, "CompressionStream", cs_ctor);
   js_set_descriptor(js, g, "CompressionStream", 17, JS_DESC_W | JS_DESC_C);
 
-  js->builtins.ds_proto = js_mkobj(js);
+  js->builtins.ds_proto = Ant_Object_CreateBare(js);
   js_set_getter_desc(js, js->builtins.ds_proto, "readable", 8, Ant_Function_Create(js_ds_get_readable), JS_DESC_C);
   js_set_getter_desc(js, js->builtins.ds_proto, "writable", 8, Ant_Function_Create(js_ds_get_writable), JS_DESC_C);
   js_set_tostringtag(js, js->builtins.ds_proto, js_mkstr(js, "DecompressionStream", 19));

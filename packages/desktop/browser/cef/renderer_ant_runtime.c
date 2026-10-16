@@ -64,7 +64,7 @@ static ant_value_t Response(bool ok, ant_value_t value) {
     else if (is_err(value)) value = js_mkstr(js, "unknown error", 13);
   }
 
-  ant_value_t response = js_mkobj(js);
+  ant_value_t response = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, response);
   if (!is_err(response)) {
     js_set(js, response, "ok", js_bool(ok));
@@ -128,7 +128,7 @@ char *ant_renderer_runtime_describe(const char *specifier) {
       return CopyJson(Response(false, value));
     }
 
-    ant_value_t entry = js_mkobj(renderer_runtime);
+    ant_value_t entry = Ant_Object_CreateBare(renderer_runtime);
     js_set(renderer_runtime, entry, "name", key);
     js_set(renderer_runtime, entry, "callable", js_bool(is_callable(value)));
     if (!is_callable(value) && (vtype(value) == kTypeUndefined || vtype(value) == kTypeNull || vtype(value) == kTypeBool ||

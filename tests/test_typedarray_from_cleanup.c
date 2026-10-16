@@ -1,5 +1,6 @@
 // meson test -C build typedarray-from-cleanup
 #include "modules/iterator.h"
+#include "cfunc.h"
 #include "internal.h"
 #include "gc/roots.h"
 #include <assert.h>
@@ -43,7 +44,7 @@ static ant_value_t IteratorReturn(ant_params_t) {
   assert(!Ant_Exception_Pending(js));
   gc_run_minor(js);
   gc_run(js);
-  return fail_close ? js_throw(js, close_reason) : js_mkobj(js);
+  return fail_close ? js_throw(js, close_reason) : Ant_Object_CreateBare(js);
 }
 
 static ant_value_t ThrowingMapper(ant_params_t) {
@@ -100,9 +101,9 @@ int main(void) {
   init_iterator_module(js);
   init_buffer_module(js);
   GC_ROOT_SAVE(mark, js);
-  iterator = js_mkobj(js);
+  iterator = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, iterator);
-  original_reason = js_mkobj(js);
+  original_reason = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, original_reason);
   close_reason = js_mknull();
   js_set_sym(js, iterator, js->sym.iterator_sym, Ant_Function_Create(IteratorSelf));

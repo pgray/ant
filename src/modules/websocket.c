@@ -11,6 +11,7 @@
 #include <zlib.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ptr.h"
 #include "list.h"
 #include "loop.h"
@@ -447,7 +448,7 @@ static websocket_state_t *websocket_state_new(ant_t *js, ant_value_t obj) {
 }
 
 static ant_value_t websocket_create_object(ant_t *js) {
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   if (is_object_type(js->builtins.websocket_proto)) js_set_proto_init(obj, js->builtins.websocket_proto);
   js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_EVENTTARGET));
   js_set(js, obj, "bufferedAmount", js_mknum(0));
@@ -892,7 +893,7 @@ void init_websocket_module(ant_t *js) {
   ant_value_t event_proto = js->builtins.event_proto;
   ant_value_t eventtarget_proto = js->builtins.eventtarget_proto;
 
-  js->builtins.websocket_proto = js_mkobj(js);
+  js->builtins.websocket_proto = Ant_Object_CreateBare(js);
   if (is_object_type(eventtarget_proto)) js_set_proto_init(js->builtins.websocket_proto, eventtarget_proto);
   js_set(js, js->builtins.websocket_proto, "send", Ant_Function_Create(js_websocket_send));
   js_set(js, js->builtins.websocket_proto, "close", Ant_Function_Create(js_websocket_close));
@@ -923,14 +924,14 @@ void init_websocket_module(ant_t *js) {
   js_set(js, js->builtins.websocket_ctor, "CLOSED", js_mknum(WS_CLOSED));
   js_set_global_builtin(js, "WebSocket", js->builtins.websocket_ctor);
 
-  js->builtins.message_event_proto = js_mkobj(js);
+  js->builtins.message_event_proto = Ant_Object_CreateBare(js);
   if (is_object_type(event_proto)) js_set_proto_init(js->builtins.message_event_proto, event_proto);
   js_set_tostringtag(js, js->builtins.message_event_proto, js_mkstr(js, "MessageEvent", 12));
   Ant_Event_DefineFields(js, js->builtins.message_event_proto, ANT_EVENT_MESSAGE);
   ant_value_t message_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_message_event_ctor, js->builtins.message_event_proto, "MessageEvent", 1);
   js_set_global_builtin(js, "MessageEvent", message_ctor);
 
-  js->builtins.close_event_proto = js_mkobj(js);
+  js->builtins.close_event_proto = Ant_Object_CreateBare(js);
   if (is_object_type(event_proto)) js_set_proto_init(js->builtins.close_event_proto, event_proto);
   js_set_tostringtag(js, js->builtins.close_event_proto, js_mkstr(js, "CloseEvent", 10));
   Ant_Event_DefineFields(js, js->builtins.close_event_proto, ANT_EVENT_CLOSE);

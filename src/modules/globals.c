@@ -14,6 +14,7 @@
 #endif
 
 #include "ant.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "internal.h"
 #include "descriptors.h"
@@ -75,7 +76,7 @@ static ant_value_t make_global_location(ant_t *js, const char *href) {
     snprintf(host, host_len + 1, "%s%s%s", url.hostname, colon, url.port);
     snprintf(origin, origin_len + 1, "%s//%s", url.protocol, host);
 
-    location = js_newobj(js);
+    location = Ant_Object_Create(js);
     js->builtins.location_href = js_mkstr(js, url.href, strlen(url.href));
     js_set(js, location, "href", js->builtins.location_href);
     
@@ -128,7 +129,7 @@ ant_value_t js_report_error(ant_params_t) {
     if (href && *href) filename = href;
   }
 
-  ant_value_t event = js_mkobj(js);
+  ant_value_t event = Ant_Object_CreateBare(js);
   js_set(js, event, "type",     js_mkstr(js, "error", 5));
   js_set(js, event, "message",  js_mkstr(js, msg, strlen(msg)));
   js_set(js, event, "filename", js_mkstr(js, filename, strlen(filename)));

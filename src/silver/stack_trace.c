@@ -1,4 +1,5 @@
 #include "silver/stack_trace.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "error_render.h"
 #include "gc/roots.h"
@@ -419,7 +420,7 @@ ant_value_t js_error_record_capture(ant_t *js, const js_error_site_t *at) {
   rec->rendered_site = rendered;
   rec->file = file_str;
 
-  ant_value_t record = js_mkobj(js);
+  ant_value_t record = Ant_Object_CreateBare(js);
   if (vtype(record) == kTypeObject) {
     js_set_native(record, rec, ERROR_RECORD_NATIVE_TAG);
     js_set_finalizer(record, error_record_finalize);
@@ -633,7 +634,7 @@ static const ant_cfunc_meta_t callsite_methods[] = {
 static ant_value_t callsite_proto(ant_t *js) {
   if (vtype(js->builtins.callsite_proto) == kTypeObject) return js->builtins.callsite_proto;
   
-  ant_value_t proto = js_mkobj(js);
+  ant_value_t proto = Ant_Object_CreateBare(js);
   js->builtins.callsite_proto = proto;
   
   for (size_t i = 0; i < sizeof(callsite_methods) / sizeof(callsite_methods[0]); i++)
@@ -664,7 +665,7 @@ ant_value_t js_build_callsite_array(ant_t *js) {
     js_arr_push(js, data, js_mknum((double)view.col));
     js_arr_push(js, data, js_mkstr(js, view.name, strlen(view.name)));
 
-    site = js_mkobj(js);
+    site = Ant_Object_CreateBare(js);
     js_set_proto_init(site, proto);
     js_set_slot(site, SLOT_DATA, data);
     js_arr_push(js, arr, site);

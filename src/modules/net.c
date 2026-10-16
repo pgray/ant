@@ -13,6 +13,7 @@
 #endif
 
 #include "ant.h"
+#include "cfunc.h"
 #include "list.h"
 #include "ptr.h"
 #include "errors.h"
@@ -451,14 +452,14 @@ static ant_value_t net_socket_emit_connect_error(ant_params_t) {
 }
 
 static void net_socket_schedule_connect_error(ant_t *js, net_socket_t *socket, int status) {
-  ant_value_t state = js_mkobj(js);
+  ant_value_t state = Ant_Object_CreateBare(js);
   js_set(js, state, "socket", socket->obj);
   js_set(js, state, "status", js_mknum((double)status));
   queue_microtask(js, js_heavy_mkfun(js, net_socket_emit_connect_error, state));
 }
 
 static net_socket_t *net_socket_create(ant_t *js, bool allow_half_open, ant_value_t new_target) {
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.net_socket_proto, new_target);
   net_socket_t *socket = calloc(1, sizeof(*socket));
 
@@ -502,7 +503,7 @@ static void net_socket_attach_conn(net_socket_t *socket, ant_conn_t *conn) {
 }
 
 static net_server_t *net_server_create(ant_t *js, ant_value_t new_target) {
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.net_server_proto, new_target);
   net_server_t *server = calloc(1, sizeof(*server));
 
@@ -730,7 +731,7 @@ static ant_value_t js_net_socket_ctor(ant_params_t) {
 
 static ant_value_t js_net_socket_address(ant_params_t) {
   net_socket_t *socket = net_require_socket(js, js_getthis(js));
-  ant_value_t out = js_mkobj(js);
+  ant_value_t out = Ant_Object_CreateBare(js);
 
   if (!socket) return Ant_Exception_Current(js);
   if (!socket || !socket->conn || !ant_conn_has_local_addr(socket->conn)) return out;
@@ -1085,7 +1086,7 @@ static ant_value_t js_net_server_address(ant_params_t) {
       family = "IPv6";
     }
 
-    out = js_mkobj(js);
+    out = Ant_Object_CreateBare(js);
     js_set(js, out, "port", js_mknum((double)port));
     js_set(js, out, "family", js_mkstr(js, family, strlen(family)));
     js_set(js, out, "address", js_mkstr(js, addr_str, strlen(addr_str)));
@@ -1094,7 +1095,7 @@ static ant_value_t js_net_server_address(ant_params_t) {
   }
 
   struct in6_addr addr6;
-  out = js_mkobj(js);
+  out = Ant_Object_CreateBare(js);
   js_set(js, out, "port", js_mknum(server->port));
   
   if (server->host && inet_pton(AF_INET6, server->host, &addr6) == 1) {
@@ -1189,7 +1190,7 @@ static void net_init_constructors(ant_t *js) {
   ee_proto = js_get(js, ee_ctor, "prototype");
   duplex_proto = stream_duplex_prototype(js);
 
-  js->builtins.net_socket_proto = js_mkobj(js);
+  js->builtins.net_socket_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.net_socket_proto, is_object_type(duplex_proto) ? duplex_proto : ee_proto);
   js_set(js, js->builtins.net_socket_proto, "address", Ant_Function_Create(js_net_socket_address));
   js_set(js, js->builtins.net_socket_proto, "pause", Ant_Function_Create(js_net_socket_pause));
@@ -1207,7 +1208,7 @@ static void net_init_constructors(ant_t *js) {
   js_set_tostringtag(js, js->builtins.net_socket_proto, js_mkstr(js, "Socket", 6));
   js->builtins.net_socket_ctor = Ant_Function_CreateConstructor(js, js_net_socket_ctor, js->builtins.net_socket_proto, "Socket", 1);
 
-  js->builtins.net_server_proto = js_mkobj(js);
+  js->builtins.net_server_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.net_server_proto, ee_proto);
   js_set(js, js->builtins.net_server_proto, "listen", Ant_Function_Create(js_net_server_listen));
   js_set(js, js->builtins.net_server_proto, "close", Ant_Function_CreateWithArity(js_net_server_close, 1));
@@ -1220,7 +1221,7 @@ static void net_init_constructors(ant_t *js) {
 }
 
 ant_value_t net_library(ant_t *js) {
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
 
   net_init_constructors(js);
   js_set(js, lib, "Server", js->builtins.net_server_ctor);

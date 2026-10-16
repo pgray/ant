@@ -1,4 +1,5 @@
 #include "embedded_browser.h"
+#include "cfunc.h"
 #include "internal.h"
 
 #include "../platform.h"
@@ -229,12 +230,12 @@ ant_value_t DesktopBrowserWindowCtor(ant_params_t) {
   if (OptionBool(js, options, "fullscreen", NO)) { [window toggleFullScreen:nil]; }
 
   ant_value_t object = js_getthis(js);
-  if (!is_object_type(object)) object = js_newobj(js);
+  if (!is_object_type(object)) object = Ant_Object_Create(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, desktop->browser_window_proto, call_new_target);
   if (is_object_type(proto)) js_set_proto_init(object, proto);
   js_set(js, object, "_nativeId", js_mknum((double)identifier));
-  js_set(js, object, "_events", js_mkobj(js));
-  ant_value_t web_contents = js_mkobj(js);
+  js_set(js, object, "_events", Ant_Object_CreateBare(js));
+  ant_value_t web_contents = Ant_Object_CreateBare(js);
   js_set(js, web_contents, "_nativeId", js_mknum((double)identifier));
   js_set(js, web_contents, "openDevTools", Ant_Function_Create(DesktopWebContentsOpenDevTools));
   js_set(js, web_contents, "closeDevTools", Ant_Function_Create(DesktopWebContentsCloseDevTools));

@@ -1,6 +1,7 @@
 #include <float.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "internal.h"
 

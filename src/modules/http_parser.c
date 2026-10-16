@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "internal.h"
 
@@ -80,7 +81,7 @@ static ant_value_t js_http_parser_parse_request(ant_params_t) {
   if (result == ANT_HTTP1_PARSE_INCOMPLETE) return js_mknull();
   if (result == ANT_HTTP1_PARSE_ERROR) return http_parser_make_error(js, error_reason, error_code, parsed.consumed_len);
 
-  out = js_mkobj(js);
+  out = Ant_Object_CreateBare(js);
   body = http_parser_make_buffer(js, parsed.body, parsed.body_len);
   
   if (is_err(body)) {
@@ -112,7 +113,7 @@ static ant_value_t js_http_parser_parse_request(ant_params_t) {
 }
 
 ant_value_t internal_http_parser_library(ant_t *js) {
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
   js_set(js, lib, "parseRequest", Ant_Function_Create(js_http_parser_parse_request));
   return lib;
 }

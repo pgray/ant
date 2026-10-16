@@ -7,6 +7,7 @@
 #include <uv.h>
 
 #include "errors.h"
+#include "cfunc.h"
 #include "builder.h"
 #include "ptr.h"
 #include "internal.h"
@@ -672,7 +673,7 @@ static ant_value_t timers_promises_schedule(
   bool is_immediate
 ) {
   ant_value_t promise = js_mkpromise(js);
-  ant_value_t state = js_mkobj(js);
+  ant_value_t state = Ant_Object_CreateBare(js);
   ant_value_t callback = 0;
   ant_value_t handle = 0;
   ant_value_t args[2];
@@ -1090,7 +1091,7 @@ static void timers_define_common(ant_t *js, ant_value_t obj) {
 }
 
 static ant_value_t timer_make_template(ant_t *js, ant_value_t proto, ant_value_t repeat) {
-  ant_value_t template = js_mkobj(js);
+  ant_value_t template = Ant_Object_CreateBare(js);
   js_set_proto_init(template, proto);
   js_set(js, template, "delay", js_mknum(0));
   js_set(js, template, "repeat", repeat);
@@ -1103,8 +1104,8 @@ void init_timer_module(ant_t *js) {
   js->timers.next_timer_id = 1;
   js->timers.next_immediate_id = 1;
 
-  js->builtins.timeout_proto = js_mkobj(js);
-  js->builtins.interval_proto = js_mkobj(js);
+  js->builtins.timeout_proto = Ant_Object_CreateBare(js);
+  js->builtins.interval_proto = Ant_Object_CreateBare(js);
   gc_register_root(&js->builtins.timeout_proto);
   gc_register_root(&js->builtins.interval_proto);
 
@@ -1117,7 +1118,7 @@ void init_timer_module(ant_t *js) {
   js_set_sym(js, js->builtins.timeout_proto, js->sym.inspect_sym, Ant_Function_Create(timer_inspect));
   js_set_sym(js, js->builtins.timeout_proto, js->sym.toPrimitive_sym, Ant_Function_Create(timer_to_primitive));
 
-  js->builtins.immediate_proto = js_mkobj(js);
+  js->builtins.immediate_proto = Ant_Object_CreateBare(js);
   gc_register_root(&js->builtins.immediate_proto);
   js_set_proto_init(js->builtins.immediate_proto, js->sym.object_proto);
   js_set(js, js->builtins.immediate_proto, "ref", Ant_Function_Create(js_immediate_ref));
@@ -1127,7 +1128,7 @@ void init_timer_module(ant_t *js) {
   js_set_tostringtag(js, js->builtins.immediate_proto, js_mkstr(js, "Immediate", 9));
   js_set_sym(js, js->builtins.immediate_proto, js->sym.inspect_sym, Ant_Function_Create(timer_inspect));
 
-  js->builtins.immediate_template = js_mkobj(js);
+  js->builtins.immediate_template = Ant_Object_CreateBare(js);
   gc_register_root(&js->builtins.immediate_template);
   js_set_proto_init(js->builtins.immediate_template, js->builtins.immediate_proto);
   js_set(js, js->builtins.immediate_template, "callback", js_mkundef());
@@ -1151,7 +1152,7 @@ void init_timer_module(ant_t *js) {
 }
 
 ant_value_t timers_library(ant_t *js) {
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
 
   timers_define_common(js, lib);
   js_set_tostringtag(js, lib, js_mkstr(js, "timers", 6));
@@ -1161,8 +1162,8 @@ ant_value_t timers_library(ant_t *js) {
 
 // TODO: mostly stubbed
 ant_value_t timers_promises_library(ant_t *js) {
-  ant_value_t lib = js_mkobj(js);
-  ant_value_t scheduler = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
+  ant_value_t scheduler = Ant_Object_CreateBare(js);
 
   js_set(js, lib, "scheduler", scheduler);
   js_set(js, lib, "setTimeout", Ant_Function_CreateWithArity(js_timers_promises_setTimeout, 2));

@@ -7,6 +7,7 @@
 #include <time.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ascii.h"
 #include "errors.h"
 #include "internal.h"
@@ -22,7 +23,7 @@ typedef struct {
 } intl_dtf_fields_t;
 
 static ant_value_t intl_create_instance(ant_t *js, ant_value_t fallback_proto, ant_value_t new_target) {
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, fallback_proto, new_target);
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
   return obj;
@@ -226,7 +227,7 @@ static ant_value_t intl_collator_compare_numeric(ant_params_t) {
 }
 
 static ant_value_t intl_collator_resolved_options(ant_params_t) {
-  ant_value_t obj = js_newobj(js);
+  ant_value_t obj = Ant_Object_Create(js);
   ant_value_t this_obj = js_getthis(js);
   
   ant_value_t locale = is_object_type(this_obj) 
@@ -314,7 +315,7 @@ static ant_value_t intl_dtf_format(ant_params_t) {
 }
 
 static ant_value_t intl_dtf_resolved_options(ant_params_t) {
-  ant_value_t obj = js_newobj(js);
+  ant_value_t obj = Ant_Object_Create(js);
   ant_value_t this_obj = js_getthis(js);
   
   ant_value_t locale = is_object_type(this_obj) ? js_get(js, this_obj, "locale") : js_mkundef();
@@ -330,7 +331,7 @@ static ant_value_t intl_dtf_resolved_options(ant_params_t) {
 }
 
 static ant_value_t intl_dtf_make_part(ant_t *js, const char *type, const char *value) {
-  ant_value_t obj = js_newobj(js);
+  ant_value_t obj = Ant_Object_Create(js);
   js_set(js, obj, "type", js_mkstr(js, type, strlen(type)));
   js_set(js, obj, "value", js_mkstr(js, value, strlen(value)));
   return obj;
@@ -410,7 +411,7 @@ static ant_value_t intl_segmenter_segment(ant_params_t) {
 
   for (size_t offset = 0; offset < input_len;) {
     size_t segment_len = intl_utf8_segment_len(input_str + offset, input_len - offset);
-    ant_value_t record = js_newobj(js);
+    ant_value_t record = Ant_Object_Create(js);
     
     js_set(js, record, "segment", js_mkstr(js, input_str + offset, segment_len));
     js_set(js, record, "index", js_mknum((double)offset));
@@ -429,7 +430,7 @@ static ant_value_t intl_segmenter_segment(ant_params_t) {
 }
 
 static ant_value_t intl_segmenter_resolved_options(ant_params_t) {
-  ant_value_t obj = js_newobj(js);
+  ant_value_t obj = Ant_Object_Create(js);
   ant_value_t this_obj = js_getthis(js);
 
   size_t granularity_len = 0;
@@ -504,27 +505,27 @@ static ant_value_t intl_segmenter_constructor(ant_params_t) {
 }
 
 void init_intl_module(ant_t *js) {
-  ant_value_t intl = js_mkobj(js);
+  ant_value_t intl = Ant_Object_CreateBare(js);
   ant_value_t object_proto = js->sym.object_proto;
 
   if (is_object_type(object_proto)) js_set_proto_init(intl, object_proto);
   js_set_tostringtag(js, intl, js_mkstr(js, "Intl", 4));
 
-  js->builtins.intl_collator_proto = js_newobj(js);
+  js->builtins.intl_collator_proto = Ant_Object_Create(js);
   defmethod(js, js->builtins.intl_collator_proto, "compare", 7, Ant_Function_Create(intl_collator_compare));
   defmethod(js, js->builtins.intl_collator_proto, "resolvedOptions", 15, Ant_Function_Create(intl_collator_resolved_options));
   js_set_tostringtag(js, js->builtins.intl_collator_proto, js_mkstr(js, "Intl.Collator", 13));
   ant_value_t collator_ctor = Ant_Function_CreateIntrinsicConstructor(js, intl_collator_constructor, js->builtins.intl_collator_proto, "Collator", 0);
   defhidden(js, intl, "Collator", 8, collator_ctor);
 
-  js->builtins.intl_numberformat_proto = js_newobj(js);
+  js->builtins.intl_numberformat_proto = Ant_Object_Create(js);
   defmethod(js, js->builtins.intl_numberformat_proto, "format", 6, Ant_Function_Create(intl_numberformat_format));
   defmethod(js, js->builtins.intl_numberformat_proto, "resolvedOptions", 15, Ant_Function_Create(intl_numberformat_resolved_options));
   js_set_tostringtag(js, js->builtins.intl_numberformat_proto, js_mkstr(js, "Intl.NumberFormat", 17));
   ant_value_t numberformat_ctor = Ant_Function_CreateIntrinsicConstructor(js, intl_numberformat_constructor, js->builtins.intl_numberformat_proto, "NumberFormat", 0);
   defhidden(js, intl, "NumberFormat", 12, numberformat_ctor);
 
-  js->builtins.intl_datetimeformat_proto = js_newobj(js);
+  js->builtins.intl_datetimeformat_proto = Ant_Object_Create(js);
   defmethod(js, js->builtins.intl_datetimeformat_proto, "format", 6, Ant_Function_Create(intl_dtf_format));
   defmethod(js, js->builtins.intl_datetimeformat_proto, "resolvedOptions", 15, Ant_Function_Create(intl_dtf_resolved_options));
   defmethod(js, js->builtins.intl_datetimeformat_proto, "formatToParts", 13, Ant_Function_CreateWithArity(intl_dtf_format_to_parts, 1));
@@ -532,7 +533,7 @@ void init_intl_module(ant_t *js) {
   ant_value_t dtf_ctor = Ant_Function_CreateIntrinsicConstructor(js, intl_dtf_constructor, js->builtins.intl_datetimeformat_proto, "DateTimeFormat", 0);
   defhidden(js, intl, "DateTimeFormat", 14, dtf_ctor);
 
-  js->builtins.intl_segmenter_proto = js_newobj(js);
+  js->builtins.intl_segmenter_proto = Ant_Object_Create(js);
   defmethod(js, js->builtins.intl_segmenter_proto, "segment", 7, Ant_Function_CreateWithArity(intl_segmenter_segment, 1));
   defmethod(js, js->builtins.intl_segmenter_proto, "resolvedOptions", 15, Ant_Function_Create(intl_segmenter_resolved_options));
   js_set_tostringtag(js, js->builtins.intl_segmenter_proto, js_mkstr(js, "Intl.Segmenter", 14));

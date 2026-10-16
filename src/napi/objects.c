@@ -1,4 +1,5 @@
 #include "ptr.h"
+#include "cfunc.h"
 #include "silver/call.h"
 #include "napi_internal.h"
 
@@ -195,7 +196,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_create_external(
   entry->finalize_hint = finalize_hint;
   HASH_ADD(hh, g_napi_externals, id, sizeof(entry->id), entry);
 
-  ant_value_t obj = js_mkobj(nenv->js);
+  ant_value_t obj = Ant_Object_CreateBare(nenv->js);
   napi_slot_set_u64(nenv->js, obj, SLOT_NAPI_EXTERNAL_ID, entry->id);
   *result = NAPI_RETURN(nenv, obj);
 
@@ -293,7 +294,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_get_all_property_names(
 
   ant_t *js = nenv->js;
   ant_value_t out = js_mkarr(js);
-  ant_value_t seen = js_mkobj(js);
+  ant_value_t seen = Ant_Object_CreateBare(js);
   ant_value_t current = (ant_value_t)object;
 
   while (is_object_type(current)) {
@@ -667,7 +668,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_define_class(
   ant_value_t proto = js_get(nenv->js, ctor, "prototype");
   if (is_err(proto) || Ant_Exception_Pending(nenv->js)) return napi_check_pending_from_result(env, proto);
   if (!is_object_type(proto)) {
-    proto = js_mkobj(nenv->js);
+    proto = Ant_Object_CreateBare(nenv->js);
     js_set(nenv->js, ctor, "prototype", proto);
     if (Ant_Exception_Pending(nenv->js)) return napi_check_pending_from_result(env, js_mkundef());
   }
@@ -751,7 +752,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_new_instance(
   }
 
   ant_value_t ctor = (ant_value_t)constructor;
-  ant_value_t obj = js_mkobj(nenv->js);
+  ant_value_t obj = Ant_Object_CreateBare(nenv->js);
   ant_value_t proto = js_get(nenv->js, ctor, "prototype");
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
 

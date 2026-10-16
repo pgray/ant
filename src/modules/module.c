@@ -6,6 +6,7 @@
 #include <libgen.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "internal.h"
 #include "gc/roots.h"
@@ -122,12 +123,12 @@ static ant_value_t builtin_module_registerHooks(ant_params_t) {
   js_arr_push(js, js->modules.hooks, args[0]);
 
   GC_ROOT_SAVE(root_mark, js);
-  ant_value_t dereg_obj = js_mkobj(js);
+  ant_value_t dereg_obj = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, dereg_obj);
   js_set_slot(dereg_obj, SLOT_CFUNC, Ant_Function_Create(builtin_module_deregisterHooks));
   js_set_slot(dereg_obj, SLOT_DATA, args[0]);
 
-  ant_value_t out = js_mkobj(js);
+  ant_value_t out = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, out);
   js_set(js, out, "deregister", js_obj_to_func(js, dereg_obj));
 
@@ -147,7 +148,7 @@ ant_value_t module_library(ant_t *js) {
   if (is_object_type(js->modules.cjs.constructor)) return js->modules.cjs.constructor;
   ant_value_t cache = esm_require_cache(js);
   GC_ROOT_SAVE(root_mark, js);
-  ant_value_t proto = js_mkobj(js);
+  ant_value_t proto = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, proto);
   
   js_set_proto_init(proto, js->sym.object_proto);

@@ -187,9 +187,9 @@ int main(void) {
   js_setstackbase(js, &stack_base);
   check_shape_metadata_writes_need_one_owner(js);
   GC_ROOT_SAVE(roots, js);
-  ant_value_t old = js_mkobj(js);
+  ant_value_t old = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, old);
-  ant_value_t object = js_mkobj(js);
+  ant_value_t object = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, object);
   js_set_proto(js, object, js_mknull());
   js_set(js, old, "other", js_mknum(1));

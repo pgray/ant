@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include "types.h"
+#include "cfunc.h"
 
 #define EVENTS_DEFAULT_MAX_LISTENERS 10
 

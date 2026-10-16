@@ -16,6 +16,7 @@
 #include "silver/ast.h"
 #include "silver/compiler.h"
 
+#include "cfunc.h"
 #include "errors.h"
 #include "gc/modules.h"
 #include "internal.h"
@@ -480,7 +481,7 @@ static ant_value_t esm_default_export_or_namespace(ant_t *js, ant_value_t ns) {
 }
 
 static ant_value_t esm_make_namespace_object(ant_t *js) {
-  ant_value_t ns = js_mkobj(js);
+  ant_value_t ns = Ant_Object_CreateBare(js);
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, ns);
 
@@ -1687,7 +1688,7 @@ static ant_value_t esm_load_text(ant_t *js, const char *path) {
 }
 
 static ant_value_t esm_image_value(ant_t *js, const unsigned char *content, size_t size, const char *path) {
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t data_arr = js_mkarr(js);
 
   for (size_t i = 0; i < size; i++) {
@@ -2312,7 +2313,7 @@ static ant_value_t esm_module_not_found_error(
   const char *specifier
 ) {
   static const char code[] = "MODULE_NOT_FOUND";
-  ant_value_t props = js_mkobj(js);
+  ant_value_t props = Ant_Object_CreateBare(js);
   js_set(js, props, "code", js_mkstr(js, code, sizeof(code) - 1));
   
   return js_mkerr_props(

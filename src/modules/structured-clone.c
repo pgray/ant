@@ -3,6 +3,7 @@
 #include <uthash.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ptr.h"
 #include "errors.h"
 #include "internal.h"
@@ -187,7 +188,7 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
     return js_throw(js, make_dom_exception(js, "WeakMap/WeakSet could not be cloned", "DataCloneError"));
 
   if (obj_ptr->type_tag == kTypeMap) {
-    ant_value_t clone = js_mkobj(js);
+    ant_value_t clone = Ant_Object_CreateBare(js);
     js_obj_ptr(clone)->type_tag = kTypeMap;
 
     ant_value_t map_proto = js->builtins.map_proto;
@@ -218,7 +219,7 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
   }
 
   if (obj_ptr->type_tag == kTypeSet) {
-    ant_value_t clone = js_mkobj(js);
+    ant_value_t clone = Ant_Object_CreateBare(js);
     js_obj_ptr(clone)->type_tag = kTypeSet;
     
     ant_value_t set_proto = js->builtins.set_proto;
@@ -263,7 +264,7 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
     const char *name = get_str_prop(js, val, "name", 4, NULL);
     js_err_type_t type = sc_error_type(name);
     
-    ant_value_t clone = js_mkobj(js);
+    ant_value_t clone = Ant_Object_CreateBare(js);
     js_set_proto_init(clone, js->builtins.error_protos[type]);
     sc_add(seen, val, clone);
 
@@ -279,7 +280,7 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
   }
 
   if (is_date_instance(val)) {
-    ant_value_t clone = js_mkobj(js);
+    ant_value_t clone = Ant_Object_CreateBare(js);
     ant_value_t date_proto = js->builtins.date_proto;
     if (is_object_type(date_proto)) js_set_proto_init(clone, date_proto);
     
@@ -317,7 +318,7 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
     return clone;
   }
 
-  ant_value_t clone = js_newobj(js);
+  ant_value_t clone = Ant_Object_Create(js);
   sc_add(seen, val, clone);
 
   if (js_proxy_is_host(val)) {

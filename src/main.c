@@ -308,12 +308,12 @@ static void eval_code(
   
   ant_value_t result;
   if (input_mode == INPUT_MODE_MODULE) {
-    ant_value_t ns = js_mkobj(js);
+    ant_value_t ns = Ant_Object_CreateBare(js);
     result = is_err(ns) ? ns : js_esm_eval_module_source(js, tag, script, len, ns);
   } else if (input_mode == INPUT_MODE_SCRIPT) {
     result = js_eval_bytecode(js, script, len);
   } else {
-    ant_value_t ns = js_mkobj(js);
+    ant_value_t ns = Ant_Object_CreateBare(js);
     result = is_err(ns) ? ns : esm_load_commonjs_module(js, tag, script, len, ns, js_mkundef());
   }
   

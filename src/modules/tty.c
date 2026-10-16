@@ -27,6 +27,7 @@
 #endif
 
 #include "ant.h"
+#include "cfunc.h"
 #include "gc/roots.h"
 #include "descriptors.h"
 #include "errors.h"
@@ -845,7 +846,7 @@ static void tty_init_stream_constructors(ant_t *js) {
   if (js->builtins.tty_readstream_ctor && js->builtins.tty_writestream_ctor) return;
   stream_init_constructors(js);
 
-  js->builtins.tty_readstream_proto = js_mkobj(js);
+  js->builtins.tty_readstream_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.tty_readstream_proto, stream_readable_prototype(js));
   setup_readstream_proto(js, js->builtins.tty_readstream_proto);
   
@@ -855,7 +856,7 @@ static void tty_init_stream_constructors(ant_t *js) {
   gc_register_root(&js->builtins.tty_readstream_proto);
   gc_register_root(&js->builtins.tty_readstream_ctor);
 
-  js->builtins.tty_writestream_proto = js_mkobj(js);
+  js->builtins.tty_writestream_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.tty_writestream_proto, stream_writable_prototype(js));
   setup_writestream_proto(js, js->builtins.tty_writestream_proto);
   
@@ -923,7 +924,7 @@ void tty_set_sandbox_terminal(uint32_t capabilities, uint16_t rows, uint16_t col
 }
 
 ant_value_t tty_library(ant_t *js) {
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
   tty_init_stream_constructors(js);
 
   js_set(js, lib, "isatty", Ant_Function_CreateWithArity(tty_isatty, 1));

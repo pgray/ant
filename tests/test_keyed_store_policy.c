@@ -16,7 +16,7 @@ int main(void) {
   for (unsigned jit = 0; jit < 2; jit++) {
     for (unsigned symbols = 0; symbols < 2; symbols++) {
       GC_ROOT_SAVE(roots, js);
-      ant_value_t obj = js_mkobj(js);
+      ant_value_t obj = Ant_Object_CreateBare(js);
       ant_value_t key = js_mkundef();
       GC_ROOT_PIN(js, obj);
       GC_ROOT_PIN(js, key);

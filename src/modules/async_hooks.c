@@ -4,6 +4,7 @@
 #include <stdlib.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "internal.h"
 #include "silver/call.h"
 
@@ -109,7 +110,7 @@ static ant_value_t async_hook_disable(ant_params_t) {
 }
 
 static ant_value_t async_hooks_createHook(ant_params_t) {
-  ant_value_t hook = js_mkobj(js);
+  ant_value_t hook = Ant_Object_CreateBare(js);
   js_set(js, hook, "enable", Ant_Function_Create(async_hook_enable));
   js_set(js, hook, "disable", Ant_Function_Create(async_hook_disable));
   return hook;
@@ -124,14 +125,14 @@ static ant_value_t async_hooks_triggerAsyncId(ant_params_t) {
 }
 
 static ant_value_t async_hooks_executionAsyncResource(ant_params_t) {
-  return js_mkobj(js);
+  return Ant_Object_CreateBare(js);
 }
 
 ant_value_t async_hooks_library(ant_t *js) {
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
 
-  ant_value_t als_ctor = js_mkobj(js);
-  ant_value_t als_proto = js_mkobj(js);
+  ant_value_t als_ctor = Ant_Object_CreateBare(js);
+  ant_value_t als_proto = Ant_Object_CreateBare(js);
   js_set(js, als_proto, "run", Ant_Function_Create(async_local_storage_run));
   js_set(js, als_proto, "exit", Ant_Function_Create(async_local_storage_exit));
   js_set(js, als_proto, "enterWith", Ant_Function_Create(async_local_storage_enterWith));
@@ -142,8 +143,8 @@ ant_value_t async_hooks_library(ant_t *js) {
   js_set_function_name(js, als_ctor, "AsyncLocalStorage", sizeof("AsyncLocalStorage") - 1);
   js_set(js, lib, "AsyncLocalStorage", js_obj_to_func_ex(js, als_ctor, SV_CALL_IS_DEFAULT_CTOR));
 
-  ant_value_t resource_ctor = js_mkobj(js);
-  ant_value_t resource_proto = js_mkobj(js);
+  ant_value_t resource_ctor = Ant_Object_CreateBare(js);
+  ant_value_t resource_proto = Ant_Object_CreateBare(js);
   js_set(js, resource_proto, "runInAsyncScope", Ant_Function_CreateWithArity(async_resource_runInAsyncScope, 2));
   js_set(js, resource_proto, "emitDestroy", Ant_Function_Create(async_resource_emitDestroy));
   js_set(js, resource_proto, "asyncId", Ant_Function_Create(async_resource_asyncId));
@@ -158,7 +159,7 @@ ant_value_t async_hooks_library(ant_t *js) {
   js_set(js, lib, "executionAsyncId", Ant_Function_Create(async_hooks_executionAsyncId));
   js_set(js, lib, "triggerAsyncId", Ant_Function_Create(async_hooks_triggerAsyncId));
   js_set(js, lib, "executionAsyncResource", Ant_Function_Create(async_hooks_executionAsyncResource));
-  js_set(js, lib, "asyncWrapProviders", js_mkobj(js));
+  js_set(js, lib, "asyncWrapProviders", Ant_Object_CreateBare(js));
   js_set_tostringtag(js, lib, ANT_STRING("async_hooks"));
 
   return lib;

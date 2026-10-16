@@ -1,6 +1,7 @@
 #include <string.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "internal.h"
 #include "silver/call.h"
@@ -118,7 +119,7 @@ void init_symbol_module(ant_t *js) {
   #define ANT_SYMBOL(name, desc) js->sym.name##_sym = js_mksym_well_known(js, desc);
   #include "symbol_list.h"
 
-  ant_value_t proto = js_mkobj(js);
+  ant_value_t proto = Ant_Object_CreateBare(js);
   js->sym.symbol_proto = proto;
   js_set_proto_init(proto, js->sym.object_proto);
   
@@ -129,7 +130,7 @@ void init_symbol_module(ant_t *js) {
   mkprop(js, proto, js->sym.toStringTag_sym, ANT_STRING("Symbol"), ANT_PROP_ATTR_CONFIGURABLE);
   js_set_getter_desc(js, proto, "description", 11, Ant_Function_Create(builtin_Symbol_description), JS_DESC_C);
 
-  ant_value_t ctor = js_mkobj(js);
+  ant_value_t ctor = Ant_Object_CreateBare(js);
   js_set_slot(ctor, SLOT_CFUNC, Ant_Function_Create(builtin_Symbol));
   js_set_function_name(js, ctor, "Symbol", 6);
   

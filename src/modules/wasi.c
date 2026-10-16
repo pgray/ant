@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "internal.h"
 
@@ -154,7 +155,7 @@ static void wasi_bind_func_export(
   fenv->func = func;
 
   GC_ROOT_SAVE(root_mark, js);
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, obj);
   
   js_set_slot(obj, SLOT_CFUNC, Ant_Function_Create(wasi_exported_func_call));
@@ -180,7 +181,7 @@ static void wasi_bind_memory_export(
   if (!buffer) return;
 
   ant_value_t ab = create_arraybuffer_obj(js, buffer);
-  ant_value_t mem_obj = js_mkobj(js);
+  ant_value_t mem_obj = Ant_Object_CreateBare(js);
   js_set_slot_wb(js, mem_obj, SLOT_DATA, ab);
   js_set_slot_wb(js, mem_obj, SLOT_CTOR, instance_obj);
   js_set(js, exports_obj, name, mem_obj);
@@ -268,8 +269,8 @@ ant_value_t wasi_instantiate(
   handle->inst = inst;
   handle->exec_env = exec_env;
 
-  ant_value_t instance_obj = js_mkobj(js);
-  ant_value_t exports_obj = js_mkobj(js);
+  ant_value_t instance_obj = Ant_Object_CreateBare(js);
+  ant_value_t exports_obj = Ant_Object_CreateBare(js);
 
   js_set_native(instance_obj, handle, WASI_INSTANCE_TAG);
   js_set_slot_wb(js, instance_obj, SLOT_CTOR, module_obj);

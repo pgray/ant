@@ -7,6 +7,7 @@
 #include <ada_c.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ptr.h"
 #include "errors.h"
 #include "internal.h"
@@ -471,7 +472,7 @@ static void url_sync_usp(ant_t *js, ant_value_t url_obj, const char *query) {
 }
 
 static ant_value_t make_usp_for_url(ant_t *js, ant_value_t url_obj, const char *query) {
-  ant_value_t usp = js_mkobj(js);
+  ant_value_t usp = Ant_Object_CreateBare(js);
   js_set_proto_init(usp, js->builtins.usp_proto);
   js_set_slot(usp, SLOT_BRAND, js_mknum(BRAND_URLSEARCHPARAMS));
   js_set_slot_wb(js, usp, SLOT_DATA, url_obj);
@@ -705,7 +706,7 @@ static ant_value_t js_URL(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Failed to construct 'URL': Invalid URL.");
   }
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.url_proto, call_new_target);
   js_set_proto_init(obj, is_object_type(proto) ? proto : js->builtins.url_proto);
   js_set_native(obj, s, URL_NATIVE_TAG);
@@ -719,7 +720,7 @@ static ant_value_t js_URL(ant_params_t) {
 }
 
 ant_value_t make_url_obj(ant_t *js, url_state_t *s) {
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_proto_init(obj, js->builtins.url_proto);
   js_set_native(obj, s, URL_NATIVE_TAG);
   js_set_finalizer(obj, url_finalize);
@@ -1124,7 +1125,7 @@ static ant_value_t usp_iter_next(ant_params_t) {
 }
 
 static ant_value_t make_usp_iter(ant_t *js, ant_value_t usp, int kind) {
-  ant_value_t iter = js_mkobj(js);
+  ant_value_t iter = Ant_Object_CreateBare(js);
   js_set_proto_init(iter, js->builtins.usp_iter_proto);
   js_set_slot_wb(js, iter, SLOT_DATA, usp);
   js_set_slot(iter, SLOT_ITER_STATE, js_mknum((double)iter_state_pack(kind, 0)));
@@ -1148,7 +1149,7 @@ static ant_value_t js_URLSearchParams(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE,
     "Failed to construct 'URLSearchParams': Please use the 'new' operator.");
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_proto_init(obj, js->builtins.usp_proto);
   js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_URLSEARCHPARAMS));
   js_set_slot(obj, SLOT_DATA, js_mkundef());
@@ -1263,13 +1264,13 @@ static ant_value_t js_URLSearchParams(ant_params_t) {
 }
 
 void init_url_module(ant_t *js) {
-  js->builtins.usp_iter_proto = js_mkobj(js);
+  js->builtins.usp_iter_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.usp_iter_proto, js->sym.iterator_proto);
   js_set(js, js->builtins.usp_iter_proto, "next", Ant_Function_Create(usp_iter_next));
   js_set_descriptor(js, js->builtins.usp_iter_proto, "next", 4, JS_DESC_W | JS_DESC_E | JS_DESC_C);
   js_set_sym(js, js->builtins.usp_iter_proto, js->sym.iterator_sym, Ant_Function_Create(sym_this_cb));
 
-  js->builtins.usp_proto = js_mkobj(js);
+  js->builtins.usp_proto = Ant_Object_CreateBare(js);
   js_set(js, js->builtins.usp_proto, "get",      Ant_Function_CreateWithArity(usp_get, 1));
   js_set(js, js->builtins.usp_proto, "getAll",   Ant_Function_CreateWithArity(usp_getAll, 1));
   js_set(js, js->builtins.usp_proto, "has",      Ant_Function_CreateWithArity(usp_has, 1));
@@ -1291,7 +1292,7 @@ void init_url_module(ant_t *js) {
   ant_value_t usp_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_URLSearchParams, js->builtins.usp_proto, "URLSearchParams", 0);
   js_set_global_builtin(js, "URLSearchParams", usp_ctor);
 
-  js->builtins.url_proto = js_mkobj(js);
+  js->builtins.url_proto = Ant_Object_CreateBare(js);
   js_set_accessor_desc(js, js->builtins.url_proto, "href", 4, Ant_Function_Create(url_get_href), Ant_Function_Create(url_set_href), JS_DESC_E | JS_DESC_C);
   js_set_accessor_desc(js, js->builtins.url_proto, "protocol", 8, Ant_Function_Create(url_get_protocol), Ant_Function_Create(url_set_protocol), JS_DESC_E | JS_DESC_C);
   js_set_accessor_desc(js, js->builtins.url_proto, "username", 8,  Ant_Function_Create(url_get_username), Ant_Function_Create(url_set_username), JS_DESC_E | JS_DESC_C);
@@ -1470,7 +1471,7 @@ static bool url_fmt_protocol_needs_slashes(const char *protocol, size_t len) {
 
 static ant_value_t builtin_domainToASCII(ant_params_t) {
   if (nargs < 1) {
-    ant_value_t props = js_mkobj(js);
+    ant_value_t props = Ant_Object_CreateBare(js);
     js_set(js, props, "code", js_mkstr(js, "ERR_MISSING_ARGS", 16));
     return js_mkerr_props(js, JS_ERR_TYPE, props, "The \"domain\" argument must be specified");
   }
@@ -1631,7 +1632,7 @@ oom:
 }
 
 ant_value_t url_library(ant_t *js) {
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
   ant_value_t glob = js_glob(js);
   
   js_set(js, lib, "URL", js_get(js, glob, "URL"));

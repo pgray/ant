@@ -2,6 +2,7 @@
 #define SV_USING_H
 
 #include "silver/call.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "gc/roots.h"
 
@@ -23,7 +24,7 @@ static inline ant_value_t sv_make_suppressed_error_value(
   GC_ROOT_PIN(js, error);
   GC_ROOT_PIN(js, suppressed);
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, obj);
   if (is_err(obj)) {
     GC_ROOT_RESTORE(js, root_mark);
@@ -366,7 +367,7 @@ static inline ant_value_t sv_using_dispose_async(
   }
   
   sv_using_array_clear(entries);
-  ant_value_t state = js_mkobj(js);
+  ant_value_t state = Ant_Object_CreateBare(js);
   
   GC_ROOT_PIN(js, state);
   if (is_err(state)) {

@@ -5,6 +5,7 @@
 #include <stdio.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "builder.h"
 #include "ptr.h"
 #include "errors.h"
@@ -546,7 +547,7 @@ static ant_value_t consume_body_from_stream(
     return promise;
   }
 
-  ant_value_t state = js_mkobj(js);
+  ant_value_t state = Ant_Object_CreateBare(js);
   js_set(js, state, "promise", promise);
   js_set(js, state, "reader", reader);
   js_set(js, state, "chunks", js_mkarr(js));
@@ -877,7 +878,7 @@ static ant_value_t response_init_object(
 }
 
 static ant_value_t response_new(ant_t *js, bool immutable_headers) {
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_proto_init(obj, js->builtins.response_proto);
   return response_init_object(js, obj, immutable_headers);
 }
@@ -1149,7 +1150,7 @@ static bool response_inspect_set(
 
 static ant_value_t response_inspect(ant_params_t) {
   ant_value_t this_obj = js_getthis(js);
-  ant_value_t out = js_mkobj(js);
+  ant_value_t out = Ant_Object_CreateBare(js);
   ant_value_t err = 0;
 
   if (!response_inspect_set(js, out, "type", js_res_get_type(js, NULL, 0, js_mkundef()), &err)) return err;
@@ -1195,7 +1196,7 @@ static ant_value_t js_response_clone(ant_params_t) {
     headers_set_immutable(new_headers, headers_is_immutable(src_headers));
   }
 
-  obj = js_mkobj(js);
+  obj = Ant_Object_CreateBare(js);
   js_reserve_slots(obj, 3);
   js_set_proto_init(obj, js->builtins.response_proto);
   js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_RESPONSE));
@@ -1293,7 +1294,7 @@ void init_response_module(ant_t *js) {
   ant_value_t g = js_glob(js);
   ant_value_t ctor = 0;
 
-  js->builtins.response_proto = js_mkobj(js);
+  js->builtins.response_proto = Ant_Object_CreateBare(js);
 
   js_set(js, js->builtins.response_proto, "text", Ant_Function_Create(js_res_text));
   js_set(js, js->builtins.response_proto, "json", Ant_Function_Create(js_res_json));

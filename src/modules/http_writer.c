@@ -7,6 +7,7 @@
 #include <strings.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "internal.h"
 
@@ -243,7 +244,7 @@ static ant_value_t js_http_writer_write_head(ant_params_t) {
 }
 
 ant_value_t internal_http_writer_library(ant_t *js) {
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
 
   js_set(js, lib, "defaultStatusText", Ant_Function_Create(js_http_writer_default_status_text));
   js_set(js, lib, "writeHead", Ant_Function_Create(js_http_writer_write_head));

@@ -38,6 +38,7 @@
 #endif
 
 #include "ant.h"
+#include "cfunc.h"
 #include "gc.h"
 #include "errors.h"
 #include "internal.h"
@@ -353,7 +354,7 @@ enum { CPU_TIME_USER, CPU_TIME_NICE, CPU_TIME_SYS, CPU_TIME_IDLE, CPU_TIME_IRQ }
 static ant_value_t os_new_cpu_record(ant_t *js) {
   ant_value_t seed = js->mutable_roots.os_cpu_template;
   if (vtype(seed) != kTypeObject) {
-    seed = js_newobj(js);
+    seed = Ant_Object_Create(js);
     if (is_err(seed)) return seed;
     GC_ROOT_SAVE(mark, js);
     GC_ROOT_PIN(js, seed);
@@ -370,7 +371,7 @@ static ant_value_t os_new_cpu_record(ant_t *js) {
 static ant_value_t os_new_cpu_times(ant_t *js) {
   ant_value_t seed = js->mutable_roots.os_cpu_times_template;
   if (vtype(seed) != kTypeObject) {
-    seed = js_newobj(js);
+    seed = Ant_Object_Create(js);
     if (is_err(seed)) return seed;
     GC_ROOT_SAVE(mark, js);
     GC_ROOT_PIN(js, seed);
@@ -569,7 +570,7 @@ static ant_value_t os_loadavg(ant_params_t) {
 
 static ant_value_t os_networkInterfaces(ant_params_t) {
   (void)args; (void)nargs;
-  ant_value_t result = js_newobj(js);
+  ant_value_t result = Ant_Object_Create(js);
   
   ULONG bufLen = 15000;
   PIP_ADAPTER_ADDRESSES pAddresses = NULL;
@@ -610,7 +611,7 @@ static ant_value_t os_networkInterfaces(ant_params_t) {
     bool internal = (pCurrAddresses->IfType == IF_TYPE_SOFTWARE_LOOPBACK);
     
     for (pUnicast = pCurrAddresses->FirstUnicastAddress; pUnicast; pUnicast = pUnicast->Next) {
-      ant_value_t entry = js_newobj(js);
+      ant_value_t entry = Ant_Object_Create(js);
       js_set(js, entry, "mac", js_mkstr(js, mac_str, strlen(mac_str)));
       js_set(js, entry, "internal", js_bool(internal));
       
@@ -646,7 +647,7 @@ static ant_value_t os_networkInterfaces(ant_params_t) {
 
 static ant_value_t os_userInfo(ant_params_t) {
   (void)args; (void)nargs;
-  ant_value_t info = js_mkobj(js);
+  ant_value_t info = Ant_Object_CreateBare(js);
   
   js_set(js, info, "uid", js_mknum(-1));
   js_set(js, info, "gid", js_mknum(-1));
@@ -710,7 +711,7 @@ static void add_iface_entry(ant_t *js, ant_value_t iface_arr, struct ifaddrs *if
   char cidr[128];
   bool internal = (ifa->ifa_flags & IFF_LOOPBACK) != 0;
   
-  ant_value_t entry = js_newobj(js);
+  ant_value_t entry = Ant_Object_Create(js);
   js_set(js, entry, "mac", js_mkstr(js, "00:00:00:00:00:00", 17));
   js_set(js, entry, "internal", js_bool(internal));
   
@@ -789,7 +790,7 @@ static void apply_mac_to_iface(ant_t *js, ant_value_t result, const char *name, 
 
 static ant_value_t os_networkInterfaces(ant_params_t) {
   (void)args; (void)nargs;
-  ant_value_t result = js_newobj(js);
+  ant_value_t result = Ant_Object_Create(js);
   
   struct ifaddrs *addrs, *ifa;
   if (getifaddrs(&addrs) != 0) return result;
@@ -823,7 +824,7 @@ static ant_value_t os_networkInterfaces(ant_params_t) {
 
 static ant_value_t os_userInfo(ant_params_t) {
   (void)args; (void)nargs;
-  ant_value_t info = js_mkobj(js);
+  ant_value_t info = Ant_Object_CreateBare(js);
   
   uid_t uid = getuid();
   gid_t gid = getgid();
@@ -1081,7 +1082,7 @@ static void add_dlopen_constants(ant_t *js, ant_value_t dlopen_obj) {
 }
 
 ant_value_t os_library(ant_t *js) {
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
   
   js_set(js, lib, "EOL", js_mkstr(js, OS_EOL, strlen(OS_EOL)));
   js_set(js, lib, "devNull", js_mkstr(js, OS_DEVNULL, strlen(OS_DEVNULL)));
@@ -1107,11 +1108,11 @@ ant_value_t os_library(ant_t *js) {
   js_set(js, lib, "getPriority", Ant_Function_CreateWithArity(os_getPriority, 1));
   js_set(js, lib, "setPriority", Ant_Function_CreateWithArity(os_setPriority, 2));
   
-  ant_value_t constants = js_mkobj(js);
-  ant_value_t signals = js_mkobj(js);
-  ant_value_t errn = js_mkobj(js);
-  ant_value_t priority = js_mkobj(js);
-  ant_value_t dlopen_obj = js_mkobj(js);
+  ant_value_t constants = Ant_Object_CreateBare(js);
+  ant_value_t signals = Ant_Object_CreateBare(js);
+  ant_value_t errn = Ant_Object_CreateBare(js);
+  ant_value_t priority = Ant_Object_CreateBare(js);
+  ant_value_t dlopen_obj = Ant_Object_CreateBare(js);
   
   add_signal_constants(js, signals);
   add_errno_constants(js, errn);

@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ascii.h"
 #include "errors.h"
 #include "utf8.h"

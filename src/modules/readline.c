@@ -26,6 +26,7 @@
 #endif
 
 #include "ant.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "internal.h"
 #include "descriptors.h"
@@ -938,7 +939,7 @@ static ant_value_t rl_interface_get_cursor_pos(ant_params_t) {
   rl_interface_t *iface = get_interface(js, this_obj);
   
   if (!iface) {
-    ant_value_t result = js_mkobj(js);
+    ant_value_t result = Ant_Object_CreateBare(js);
     js_set(js, result, "rows", js_mknum(0));
     js_set(js, result, "cols", js_mknum(0));
     return result;
@@ -963,7 +964,7 @@ static ant_value_t rl_interface_get_cursor_pos(ant_params_t) {
   int rows = total_cols / cols;
   int col_pos = total_cols % cols;
   
-  ant_value_t result = js_mkobj(js);
+  ant_value_t result = Ant_Object_CreateBare(js);
   js_set(js, result, "rows", js_mknum((double)rows));
   js_set(js, result, "cols", js_mknum((double)col_pos));
   return result;
@@ -1189,7 +1190,7 @@ static ant_value_t rl_async_iter_return(ant_params_t) {
 static ant_value_t rl_get_async_iter_proto(ant_t *js) {
   if (is_object_type(js->builtins.rl_async_iter_proto)) return js->builtins.rl_async_iter_proto;
 
-  js->builtins.rl_async_iter_proto = js_mkobj(js);
+  js->builtins.rl_async_iter_proto = Ant_Object_CreateBare(js);
   js_set(js, js->builtins.rl_async_iter_proto, "next", Ant_Function_Create(rl_async_iter_next));
   js_set(js, js->builtins.rl_async_iter_proto, "return", Ant_Function_Create(rl_async_iter_return));
   js_set_sym(js, js->builtins.rl_async_iter_proto, js->sym.asyncIterator_sym, Ant_Function_Create(sym_this_cb));
@@ -1209,8 +1210,8 @@ static ant_value_t rl_interface_async_iterator(ant_params_t) {
   
   if (!iface) return js_mkerr(js, "Invalid Interface");
 
-  iterator = js_mkobj(js);
-  state = js_mkobj(js);
+  iterator = Ant_Object_CreateBare(js);
+  state = Ant_Object_CreateBare(js);
 
   js_set_proto_init(iterator, rl_get_async_iter_proto(js));
   js_set_slot_wb(js, iterator, SLOT_DATA, state);
@@ -1240,7 +1241,7 @@ static ant_value_t rl_interface_async_iterator(ant_params_t) {
 static ant_value_t rl_get_interface_proto(ant_t *js) {
   if (is_object_type(js->builtins.rl_interface_proto)) return js->builtins.rl_interface_proto;
 
-  js->builtins.rl_interface_proto = js_mkobj(js);
+  js->builtins.rl_interface_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.rl_interface_proto, eventemitter_prototype(js));
 
   js_set(js, js->builtins.rl_interface_proto, "close", Ant_Function_Create(rl_interface_close));
@@ -1355,7 +1356,7 @@ static ant_value_t rl_create_interface(ant_params_t) {
   } else rl_history_init(&iface->history, iface->history_size);
   HASH_ADD(hh, interfaces, id, sizeof(uint64_t), iface);
   
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_proto_init(obj, rl_get_interface_proto(js));
   iface->js_obj = obj;
   js_set(js, obj, "_rl_id", js_mknum((double)iface->id));
@@ -1375,7 +1376,7 @@ static ant_value_t rl_create_interface_promises(ant_params_t) {
 }
 
 ant_value_t readline_library(ant_t *js) {
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
 
   js_set(js, lib, "createInterface", Ant_Function_CreateWithArity(rl_create_interface, 4));
   js_set(js, lib, "clearLine", Ant_Function_CreateWithArity(rl_clear_line, 3));
@@ -1389,7 +1390,7 @@ ant_value_t readline_library(ant_t *js) {
 }
 
 ant_value_t readline_promises_library(ant_t *js) {
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
 
   js_set(js, lib, "createInterface", Ant_Function_Create(rl_create_interface_promises));
   js_set(js, lib, "clearLine", Ant_Function_CreateWithArity(rl_clear_line, 3));

@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ptr.h"
 #include "errors.h"
 #include "internal.h"
@@ -349,7 +350,7 @@ void writable_stream_finish_erroring(ant_t *js, ant_value_t stream_obj) {
       js_reject_promise(js, abort_promise, result);
       ws_reject_close_and_closed(js, stream_obj);
     } else {
-      ant_value_t wrapper = js_mkobj(js);
+      ant_value_t wrapper = Ant_Object_CreateBare(js);
       js_set_slot(wrapper, SLOT_DATA, abort_promise);
       js_set_slot(wrapper, SLOT_ENTRIES, stream_obj);
       ant_value_t res_fn = js_heavy_mkfun(js, ws_finish_erroring_abort_resolve, wrapper);
@@ -895,7 +896,7 @@ ant_value_t js_ws_writer_ctor(ant_params_t) {
   if (ws_is_writer(ws_stream_writer(stream_obj)))
     return js_mkerr_typed(js, JS_ERR_TYPE, "WritableStream is already locked to a writer");
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.ws_writer_proto, call_new_target);
   
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
@@ -985,7 +986,7 @@ static ant_value_t setup_ws_default_controller(
   if (!ctrl) return js_mkerr(js, "out of memory");
   ctrl->strategy_hwm = hwm;
 
-  ant_value_t ctrl_obj = js_mkobj(js);
+  ant_value_t ctrl_obj = Ant_Object_CreateBare(js);
   js_set_proto_init(ctrl_obj, js->builtins.ws_controller_proto);
   js_set_slot(ctrl_obj, SLOT_BRAND, js_mknum(BRAND_WRITABLE_STREAM_CONTROLLER));
   js_set_native(ctrl_obj, ctrl, WS_CONTROLLER_NATIVE_TAG);
@@ -1002,7 +1003,7 @@ static ant_value_t setup_ws_default_controller(
   ant_value_t ac = js_mkundef();
   if (is_callable(ac_ctor)) {
     ant_value_t ac_proto = js_get(js, ac_ctor, "prototype");
-    ac = js_mkobj(js);
+    ac = Ant_Object_CreateBare(js);
     if (is_object_type(ac_proto)) js_set_proto_init(ac, ac_proto);
     ant_value_t result = sv_vm_call(js->vm, js, ac_ctor, ac, NULL, 0, NULL, ac_ctor);
     if (is_err(result)) ac = js_mkundef();
@@ -1062,7 +1063,7 @@ static ant_value_t js_ws_ctor(ant_params_t) {
   if (!st) return js_mkerr(js, "out of memory");
   st->state = WS_STATE_WRITABLE;
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.ws_proto, call_new_target);
   
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
@@ -1145,8 +1146,8 @@ static ant_value_t js_ws_controller_ctor(ant_params_t) {
 void init_writable_stream_module(ant_t *js) {
   ant_value_t g = js_glob(js);
 
-  js->builtins.close_sentinel = js_mkobj(js);
-  js->builtins.ws_controller_proto = js_mkobj(js);
+  js->builtins.close_sentinel = Ant_Object_CreateBare(js);
+  js->builtins.ws_controller_proto = Ant_Object_CreateBare(js);
   
   js_set_getter_desc(js, js->builtins.ws_controller_proto, "signal", 6, Ant_Function_Create(js_ws_controller_get_signal), JS_DESC_C);
   js_set(js, js->builtins.ws_controller_proto, "error", Ant_Function_Create(js_ws_controller_error));
@@ -1157,7 +1158,7 @@ void init_writable_stream_module(ant_t *js) {
   js_set(js, g, "WritableStreamDefaultController", ctrl_ctor);
   js_set_descriptor(js, g, "WritableStreamDefaultController", 31, JS_DESC_W | JS_DESC_C);
 
-  js->builtins.ws_writer_proto = js_mkobj(js);
+  js->builtins.ws_writer_proto = Ant_Object_CreateBare(js);
   js_set_getter_desc(js, js->builtins.ws_writer_proto, "closed", 6, Ant_Function_Create(js_ws_writer_get_closed), JS_DESC_C);
   js_set_getter_desc(js, js->builtins.ws_writer_proto, "desiredSize", 11, Ant_Function_Create(js_ws_writer_get_desired_size), JS_DESC_C);
   js_set_getter_desc(js, js->builtins.ws_writer_proto, "ready", 5, Ant_Function_Create(js_ws_writer_get_ready), JS_DESC_C);
@@ -1175,7 +1176,7 @@ void init_writable_stream_module(ant_t *js) {
   js_set(js, g, "WritableStreamDefaultWriter", writer_ctor);
   js_set_descriptor(js, g, "WritableStreamDefaultWriter", 27, JS_DESC_W | JS_DESC_C);
 
-  js->builtins.ws_proto = js_mkobj(js);
+  js->builtins.ws_proto = Ant_Object_CreateBare(js);
   js_set_getter_desc(js, js->builtins.ws_proto, "locked", 6, Ant_Function_Create(js_ws_get_locked), JS_DESC_C);
   js_set(js, js->builtins.ws_proto, "abort", Ant_Function_Create(js_ws_abort));
   js_set_descriptor(js, js->builtins.ws_proto, "abort", 5, JS_DESC_W | JS_DESC_C);

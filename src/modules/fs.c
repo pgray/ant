@@ -19,6 +19,7 @@
 #include <errno.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ptr.h"
 #include "utf8.h"
 #include "utils.h"
@@ -318,7 +319,7 @@ static bool fs_parse_mode(ant_t *js, ant_value_t arg, mode_t *out) {
 }
 
 static ant_value_t fs_stream_error(ant_t *js, ant_value_t stream_obj, const char *op, int uv_code) {
-  ant_value_t props = js_mkobj(js);
+  ant_value_t props = Ant_Object_CreateBare(js);
   ant_value_t path_val = js_get(js, stream_obj, "path");
   const char *code = uv_err_name(uv_code);
 
@@ -592,8 +593,8 @@ static ant_value_t fs_writestream__final(ant_params_t) {
 static ant_value_t fs_create_readstream_impl(ant_t *js, ant_value_t path_arg, ant_value_t options_arg, ant_value_t proto, ant_value_t new_target) {
   ant_value_t path_val = fs_coerce_path(js, path_arg);
   if (is_err(path_val)) return path_val;
-  ant_value_t options = is_object_type(options_arg) ? options_arg : js_mkobj(js);
-  ant_value_t stream_options = js_mkobj(js);
+  ant_value_t options = is_object_type(options_arg) ? options_arg : Ant_Object_CreateBare(js);
+  ant_value_t stream_options = Ant_Object_CreateBare(js);
   
   ant_value_t hwm = js_get(js, options, "highWaterMark");
   ant_value_t flags_raw = js_get(js, options, "flags");
@@ -635,8 +636,8 @@ static ant_value_t fs_create_readstream_impl(ant_t *js, ant_value_t path_arg, an
 static ant_value_t fs_create_writestream_impl(ant_t *js, ant_value_t path_arg, ant_value_t options_arg, ant_value_t proto, ant_value_t new_target) {
   ant_value_t path_val = fs_coerce_path(js, path_arg);
   if (is_err(path_val)) return path_val;
-  ant_value_t options = is_object_type(options_arg) ? options_arg : js_mkobj(js);
-  ant_value_t stream_options = js_mkobj(js);
+  ant_value_t options = is_object_type(options_arg) ? options_arg : Ant_Object_CreateBare(js);
+  ant_value_t stream_options = Ant_Object_CreateBare(js);
   
   ant_value_t flags_raw = js_get(js, options, "flags");
   ant_value_t fd_val = js_get(js, options, "fd");
@@ -708,14 +709,14 @@ static void fs_init_stream_constructors(ant_t *js) {
 
   stream_init_constructors(js);
 
-  js->builtins.readstream_proto = js_mkobj(js);
+  js->builtins.readstream_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.readstream_proto, stream_readable_prototype(js));
   js_set(js, js->builtins.readstream_proto, "close", Ant_Function_Create(fs_stream_close));
   js_set_tostringtag(js, js->builtins.readstream_proto, js_mkstr(js, "ReadStream", 10));
   js->builtins.readstream_ctor = Ant_Function_CreateConstructor(js, js_readstream_ctor, js->builtins.readstream_proto, "ReadStream", 2);
   js_set_proto_init(js->builtins.readstream_ctor, stream_readable_constructor(js));
 
-  js->builtins.writestream_proto = js_mkobj(js);
+  js->builtins.writestream_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.writestream_proto, stream_writable_prototype(js));
   js_set(js, js->builtins.writestream_proto, "close", Ant_Function_Create(fs_stream_close));
   js_set_tostringtag(js, js->builtins.writestream_proto, js_mkstr(js, "WriteStream", 11));
@@ -750,7 +751,7 @@ static ant_value_t fs_new_stats_record(ant_t *js) {
   ant_value_t seed = js->mutable_roots.fs_stats_template;
   
   if (vtype(seed) != kTypeObject) {
-    seed = js_mkobj(js);
+    seed = Ant_Object_CreateBare(js);
     if (is_err(seed)) return seed;
     
     GC_ROOT_SAVE(mark, js);
@@ -793,7 +794,7 @@ static ant_value_t fs_new_io_result(ant_t *js, bool written, double bytes, ant_v
   
   ant_value_t seed = *cache;
   if (vtype(seed) != kTypeObject) {
-    seed = js_mkobj(js);
+    seed = Ant_Object_CreateBare(js);
     if (is_err(seed)) { GC_ROOT_RESTORE(js, mark); return seed; }
     
     GC_ROOT_PIN(js, seed);
@@ -818,7 +819,7 @@ static ant_value_t fs_new_io_result(ant_t *js, bool written, double bytes, ant_v
 }
 
 static ant_value_t fs_make_date(ant_t *js, double ms) {
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   if (is_err(obj)) return obj;
   GC_ROOT_SAVE(mark, js);
   GC_ROOT_PIN(js, obj);
@@ -995,7 +996,7 @@ static const char *fs_watch_basename(const char *path) {
 }
 
 static ant_value_t fs_watch_error(ant_t *js, int status, const char *path) {
-  ant_value_t props = js_mkobj(js);
+  ant_value_t props = Ant_Object_CreateBare(js);
   const char *code = uv_err_name(status);
   js_set(js, props, "code", js_mkstr(js, code, strlen(code)));
   
@@ -1192,7 +1193,7 @@ static void fs_init_watch_constructors(ant_t *js) {
   ee_ctor = js_get(js, events, "EventEmitter");
   ee_proto = js_get(js, ee_ctor, "prototype");
 
-  js->builtins.fswatcher_proto = js_mkobj(js);
+  js->builtins.fswatcher_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.fswatcher_proto, ee_proto);
   
   js_set(js, js->builtins.fswatcher_proto, "close", Ant_Function_Create(js_fswatcher_close));
@@ -1327,7 +1328,7 @@ static ant_value_t fs_watcher_make_object(ant_t *js, fs_watcher_t *watcher) {
   if (!watcher) return js_mkerr(js, "Out of memory");
   fs_init_watch_constructors(js);
 
-  obj = js_mkobj(js);
+  obj = Ant_Object_CreateBare(js);
   js_set_proto_init(obj, js->builtins.fswatcher_proto);
   js_set_native(obj, watcher, FS_WATCHER_NATIVE_TAG);
   js_set_finalizer(obj, fs_watcher_finalize);
@@ -1890,7 +1891,7 @@ static ant_value_t builtin_fs_filehandle_writeFile(ant_params_t) {
 
 static void fs_init_filehandle_proto(ant_t *js) {
   if (is_object_type(js->builtins.filehandle_proto)) return;
-  js->builtins.filehandle_proto = js_mkobj(js);
+  js->builtins.filehandle_proto = Ant_Object_CreateBare(js);
   js_set_native(js->builtins.filehandle_proto, NULL, FS_FILEHANDLE_NATIVE_TAG);
   js_set(js, js->builtins.filehandle_proto, "close", Ant_Function_Create(builtin_fs_filehandle_close));
   js_set(js, js->builtins.filehandle_proto, "stat", Ant_Function_Create(builtin_fs_filehandle_stat));
@@ -1903,7 +1904,7 @@ static void fs_init_filehandle_proto(ant_t *js) {
 
 static ant_value_t fs_make_filehandle(ant_t *js, int fd) {
   fs_init_filehandle_proto(js);
-  ant_value_t handle = js_mkobj(js);
+  ant_value_t handle = Ant_Object_CreateBare(js);
   
   js_set_native(handle, NULL, FS_FILEHANDLE_NATIVE_TAG);
   js_set_proto_init(handle, js->builtins.filehandle_proto);
@@ -1960,7 +1961,7 @@ static void complete_request(fs_request_t *req) {
     );
     
     else if (req->error_code) {
-      ant_value_t props = js_mkobj(fs_req_isolate(req));
+      ant_value_t props = Ant_Object_CreateBare(fs_req_isolate(req));
       const char *code = uv_err_name(req->error_code);
       js_set(fs_req_isolate(req), props, "code", js_mkstr(fs_req_isolate(req), code, strlen(code)));
       js_set(fs_req_isolate(req), props, "errno", js_mknum((double)req->error_code));
@@ -2373,7 +2374,7 @@ static ant_value_t create_dirent_object(
   if (is_err(name_value)) return name_value;
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, name_value);
-  ant_value_t obj = js_newobj(js);
+  ant_value_t obj = Ant_Object_Create(js);
   js_set_proto(js, obj, js->builtins.dirent_proto);
   js_set(js, obj, "name", name_value);
   js_set(js, obj, "parentPath", parent_path);
@@ -3688,7 +3689,7 @@ static const ant_cfunc_meta_t dirent_methods[] = {
 };
 
 static ant_value_t stats_ctor(ant_params_t) {
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_proto_init(obj, js_instance_proto_from_new_target(js, js->builtins.stats_proto, call_new_target));
   return obj;
 }
@@ -3697,7 +3698,7 @@ static ant_value_t dirent_ctor(ant_params_t) {
   if (!is_object_type(call_new_target))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Class constructor Dirent cannot be invoked without 'new'");
   
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_proto_init(obj, js_instance_proto_from_new_target(js, js->builtins.dirent_proto, call_new_target));
   js_set(js, obj, "name", nargs > 0 ? args[0] : js_mkundef());
   js_set(js, obj, "parentPath", nargs > 2 ? args[2] : js_mkundef());
@@ -3734,7 +3735,7 @@ static ant_value_t fs_mk_syscall_error(
   const char *message, const char *syscall,
   const char *path, const char *dest
 ) {
-  ant_value_t props = js_mkobj(js);
+  ant_value_t props = Ant_Object_CreateBare(js);
 
   if (!code) code = "UNKNOWN";
   if (!message) message = "Unknown error";
@@ -5761,12 +5762,12 @@ static ant_value_t builtin_fs_unwatchFile(ant_params_t) {
 void init_fs_module(ant_t *js) {
   utarray_new(pending_requests, &ut_ptr_icd);
   
-  js->builtins.stats_proto = js_newobj(js);
+  js->builtins.stats_proto = Ant_Object_Create(js);
   js_define_methods(js, js->builtins.stats_proto, stat_methods, countof(stat_methods), ANT_PROP_ATTR_DEFAULT);
   js_set_tostringtag(js, js->builtins.stats_proto, js_mkstr(js, "Stats", 5));
   js->builtins.stats_ctor = Ant_Function_CreateConstructor(js, stats_ctor, js->builtins.stats_proto, "Stats", 0);
 
-  js->builtins.dirent_proto = js_newobj(js);
+  js->builtins.dirent_proto = Ant_Object_Create(js);
   js_define_methods(js, js->builtins.dirent_proto, dirent_methods, countof(dirent_methods), ANT_PROP_ATTR_METHOD);
   js_set_tostringtag(js, js->builtins.dirent_proto, js_mkstr(js, "Dirent", 6));
   js->builtins.dirent_ctor = Ant_Function_CreateConstructor(js, dirent_ctor, js->builtins.dirent_proto, "Dirent", 3);
@@ -5848,9 +5849,9 @@ static ant_value_t fs_callback_attach_promise(
   GC_ROOT_PIN(js, promise);
   GC_ROOT_PIN(js, callback);
 
-  ant_value_t success_ctx = js_mkobj(js);
+  ant_value_t success_ctx = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, success_ctx);
-  ant_value_t error_ctx = js_mkobj(js);
+  ant_value_t error_ctx = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, error_ctx);
 
   js_set_slot(success_ctx, SLOT_DATA, callback);
@@ -5922,7 +5923,7 @@ static ant_value_t fs_callback_wrapper_call(ant_params_t) {
 }
 
 static ant_value_t fs_make_callback_wrapper(ant_t *js, ant_value_t original, bool exists_style, const char *name, int length) {
-  ant_value_t config = js_mkobj(js);
+  ant_value_t config = Ant_Object_CreateBare(js);
 
   js_set_slot(config, SLOT_DATA, original);
   if (exists_style) js_set(js, config, "existsStyle", js_true);
@@ -6463,7 +6464,7 @@ static ant_value_t builtin_fs_dir_asyncIterator(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Value of \"this\" must be of type Dir");
 
   GC_ROOT_SAVE(root_mark, js);
-  ant_value_t iter = js_mkobj(js);
+  ant_value_t iter = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, iter);
 
   js_set_proto_init(iter, js->sym.async_iterator_proto);
@@ -6476,7 +6477,7 @@ static ant_value_t builtin_fs_dir_asyncIterator(ant_params_t) {
 
 static void fs_init_dir_proto(ant_t *js) {
   if (is_object_type(js->builtins.dir_proto)) return;
-  ant_value_t proto = js->builtins.dir_proto = js_mkobj(js);
+  ant_value_t proto = js->builtins.dir_proto = Ant_Object_CreateBare(js);
 
   js_set(js, proto, "read", fs_make_callback_wrapper(js, Ant_Function_Create(builtin_fs_dir_read), false, "read", 1));
   js_set(js, proto, "readSync", Ant_Function_Create(builtin_fs_dir_readSync));
@@ -6568,7 +6569,7 @@ static ant_value_t fs_make_dir(ant_t *js, uv_dir_t *handle, fs_opendir_options_t
   fs_init_dir_proto(js);
   GC_ROOT_SAVE(root_mark, js);
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, obj);
 
   js_set_proto_init(obj, js->builtins.dir_proto);
@@ -6748,7 +6749,7 @@ static void fs_set_callback_compatible_methods(ant_t *js, ant_value_t lib) {
 }
 
 ant_value_t fs_make_constants(ant_t *js) {
-  ant_value_t constants = js_newobj(js);
+  ant_value_t constants = Ant_Object_Create(js);
   js_set(js, constants, "F_OK", js_mknum(F_OK));
   js_set(js, constants, "R_OK", js_mknum(R_OK));
   js_set(js, constants, "W_OK", js_mknum(W_OK));
@@ -6802,7 +6803,7 @@ static ant_value_t builtin_fs_promises_getter(ant_params_t) {
 }
 
 ant_value_t fs_library(ant_t *js) {
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
   ant_value_t realpath_sync = Ant_Function_CreateWithData(js, builtin_fs_realpathSync, "realpathSync", 2, js_mkundef());
   
   fs_set_callback_compatible_methods(js, lib);
@@ -6871,7 +6872,7 @@ ant_value_t fs_library(ant_t *js) {
 }
 
 ant_value_t fs_promises_library(ant_t *js) {
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
 
   fs_set_promise_methods(js, lib);
   js_set(js, lib, "constants", fs_make_constants(js));

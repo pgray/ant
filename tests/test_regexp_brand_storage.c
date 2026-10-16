@@ -12,7 +12,7 @@ int main(void) {
   js_setstackbase(js, NULL);
   assert(ant_object_flag_masks_match_layout());
   GC_ROOT_SAVE(roots, js);
-  ant_value_t object = js_mkobj(js);
+  ant_value_t object = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, object);
   ant_value_t flags = js_mkstr(js, "g", 1);
   GC_ROOT_PIN(js, flags);

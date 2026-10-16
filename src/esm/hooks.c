@@ -1,6 +1,7 @@
 #include <compat.h> // IWYU pragma: keep
 
 #include "esm/loader.h"
+#include "cfunc.h"
 #include "esm/builtin_bundle.h"
 #include "esm/remote.h"
 #include "loader_cache.h"
@@ -41,7 +42,7 @@ static ant_value_t esm_run_load_chain(ant_t *js, const esm_chain_t *chain, int l
 static ant_value_t esm_hook_make_next(ant_t *js, ant_value_t next_fn, const esm_chain_t *chain, int level) {
   GC_ROOT_SAVE(root_mark, js);
 
-  ant_value_t data = js_mkobj(js);
+  ant_value_t data = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, data);
   js_set(js, data, "hooks", chain->hooks);
   js_set(js, data, "level", js_mknum((double)level));
@@ -49,7 +50,7 @@ static ant_value_t esm_hook_make_next(ant_t *js, ant_value_t next_fn, const esm_
   js_set(js, data, "base", chain->base ? js_mkstr(js, chain->base, strlen(chain->base)) : js_mkundef());
   js_set(js, data, "require", js_bool(chain->is_require));
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, obj);
   js_set_slot(obj, SLOT_CFUNC, next_fn);
   js_set_slot(obj, SLOT_DATA, data);
@@ -230,7 +231,7 @@ static ant_value_t esm_run_resolve_chain(ant_t *js, const esm_chain_t *chain, in
   }
 
   GC_ROOT_SAVE(root_mark, js);
-  ant_value_t out = js_mkobj(js);
+  ant_value_t out = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, out);
 
   bool scheme_passthrough = esm_has_builtin_scheme(spec_copy)
@@ -320,7 +321,7 @@ static ant_value_t esm_run_load_chain(ant_t *js, const esm_chain_t *chain, int l
   char *path = esm_file_url_to_path(js, url_copy);
   free(url_copy);
 
-  if (!path) return js_mkobj(js);
+  if (!path) return Ant_Object_CreateBare(js);
 
   esm_file_data_t file = {0};
   ant_value_t err = esm_read_file(js, path, "module source", &file);
@@ -330,7 +331,7 @@ static ant_value_t esm_run_load_chain(ant_t *js, const esm_chain_t *chain, int l
   }
 
   GC_ROOT_SAVE(root_mark, js);
-  ant_value_t out = js_mkobj(js);
+  ant_value_t out = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, out);
 
   js_set(js, out, "source", js_mkstr(js, file.data, file.size));
@@ -362,7 +363,7 @@ ant_value_t esm_import_via_hooks(
 
   if (!base_path || !base_path[0]) base_path = esm_default_base_path(js);
 
-  ant_value_t ctx = js_mkobj(js);
+  ant_value_t ctx = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, ctx);
 
   if (esm_has_url_scheme(base_path)) {
@@ -387,7 +388,7 @@ ant_value_t esm_import_via_hooks(
   js_arr_push(js, conditions, js_mkstr(js, platform, strlen(platform)));
   js_arr_push(js, conditions, js_mkstr(js, "default", 7));
   js_set(js, ctx, "conditions", conditions);
-  js_set(js, ctx, "importAttributes", is_object_type(attrs) ? attrs : js_mkobj(js));
+  js_set(js, ctx, "importAttributes", is_object_type(attrs) ? attrs : Ant_Object_CreateBare(js));
 
   ant_value_t hooks = js->modules.hooks;
   GC_ROOT_PIN(js, hooks);

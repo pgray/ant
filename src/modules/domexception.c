@@ -1,6 +1,7 @@
 #include <string.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "common.h"
 #include "errors.h"
 #include "internal.h"
@@ -116,7 +117,7 @@ ant_value_t make_dom_exception(ant_t *js, const char *message, const char *name)
   size_t name_len = strlen(name);
   int code = name_to_code(name);
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   if (is_object_type(js->builtins.domexception_proto)) js_set_proto_init(obj, js->builtins.domexception_proto);
 
   js_set(js, obj, "message", js_mkstr(js, message, msg_len));
@@ -130,7 +131,7 @@ ant_value_t make_dom_exception(ant_t *js, const char *message, const char *name)
 }
 
 void init_domexception_module(ant_t *js) {
-  ant_value_t proto = js_mkobj(js);
+  ant_value_t proto = Ant_Object_CreateBare(js);
   js->builtins.domexception_proto = proto;
 
   ant_value_t error_proto = js->builtins.error_protos[JS_ERR_GENERIC];

@@ -7,6 +7,7 @@
 #include <stdio.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ptr.h"
 #include "errors.h"
 #include "internal.h"
@@ -163,7 +164,7 @@ static void blob_finalize(ant_t *js, ant_object_t *obj) {
 ant_value_t blob_create(ant_t *js, const uint8_t *data, size_t size, const char *type) {
   blob_data_t *bd = blob_data_new(data, size, type);
   if (!bd) return js_mkerr(js, "out of memory");
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   
   js_set_proto_init(obj, js->builtins.blob_proto);
   js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_BLOB));
@@ -346,7 +347,7 @@ static ant_value_t js_blob_ctor(ant_params_t) {
   free(buf.buf); free(type_owned);
   if (!bd) return js_mkerr(js, "out of memory");
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.blob_proto, call_new_target);
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
 
@@ -417,7 +418,7 @@ static ant_value_t js_file_ctor(ant_params_t) {
   bd->name          = strdup(name_str ? name_str : "");
   bd->last_modified = last_modified;
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.file_proto, call_new_target);
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
 
@@ -430,7 +431,7 @@ static ant_value_t js_file_ctor(ant_params_t) {
 
 void init_blob_module(ant_t *js) {
   ant_value_t g = js_glob(js);
-  js->builtins.blob_proto  = js_mkobj(js);
+  js->builtins.blob_proto  = Ant_Object_CreateBare(js);
 
   js_set_getter_desc(js, js->builtins.blob_proto, "size", 4, Ant_Function_Create(blob_get_size), JS_DESC_C);
   js_set_getter_desc(js, js->builtins.blob_proto, "type", 4, Ant_Function_Create(blob_get_type), JS_DESC_C);
@@ -447,7 +448,7 @@ void init_blob_module(ant_t *js) {
   js_set(js, g, "Blob", blob_ctor);
   js_set_descriptor(js, g, "Blob", 4, JS_DESC_W | JS_DESC_C);
 
-  js->builtins.file_proto = js_mkobj(js);
+  js->builtins.file_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.file_proto, js->builtins.blob_proto);
 
   js_set_getter_desc(js, js->builtins.file_proto, "name",         4,  Ant_Function_Create(file_get_name),          JS_DESC_C);

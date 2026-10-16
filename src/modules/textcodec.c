@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "utf8.h"
 #include "ptr.h"
 #include "errors.h"
@@ -147,7 +148,7 @@ static ant_value_t js_textencoder_encode_into(ant_params_t) {
     available, &read_units
   );
 
-  ant_value_t result = js_newobj(js);
+  ant_value_t result = Ant_Object_Create(js);
   js_set(js, result, "read", js_mknum((double)read_units));
   js_set(js, result, "written", js_mknum((double)written));
   
@@ -157,7 +158,7 @@ static ant_value_t js_textencoder_encode_into(ant_params_t) {
 static ant_value_t js_textencoder_ctor(ant_params_t) {
   if (vtype(call_new_target) == kTypeUndefined)
     return js_mkerr_typed(js, JS_ERR_TYPE, "TextEncoder constructor requires 'new'");
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.textencoder_proto, call_new_target);
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
   return obj;
@@ -406,7 +407,7 @@ static ant_value_t js_textdecoder_ctor(ant_params_t) {
   td_state_t *st = td_state_new(enc, fatal, ignore_bom);
   if (!st) return js_mkerr(js, "out of memory");
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.textdecoder_proto, call_new_target);
   
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
@@ -419,7 +420,7 @@ static ant_value_t js_textdecoder_ctor(ant_params_t) {
 void init_textcodec_module(ant_t *js) {
   ant_value_t g = js_glob(js);
 
-  js->builtins.textencoder_proto = js_mkobj(js);
+  js->builtins.textencoder_proto = Ant_Object_CreateBare(js);
   js_set_getter_desc(js, js->builtins.textencoder_proto, "encoding", 8, Ant_Function_Create(js_textencoder_get_encoding), JS_DESC_C);
   js_set(js, js->builtins.textencoder_proto, "encode",     Ant_Function_Create(js_textencoder_encode));
   js_set(js, js->builtins.textencoder_proto, "encodeInto", Ant_Function_CreateWithArity(js_textencoder_encode_into, 2));
@@ -429,7 +430,7 @@ void init_textcodec_module(ant_t *js) {
   js_set(js, g, "TextEncoder", te_ctor);
   js_set_descriptor(js, g, "TextEncoder", 11, JS_DESC_W | JS_DESC_C);
 
-  js->builtins.textdecoder_proto = js_mkobj(js);
+  js->builtins.textdecoder_proto = Ant_Object_CreateBare(js);
   js_set_getter_desc(js, js->builtins.textdecoder_proto, "encoding",  8, Ant_Function_Create(js_textdecoder_get_encoding),  JS_DESC_C);
   js_set_getter_desc(js, js->builtins.textdecoder_proto, "fatal",     5, Ant_Function_Create(js_textdecoder_get_fatal),     JS_DESC_C);
   js_set_getter_desc(js, js->builtins.textdecoder_proto, "ignoreBOM", 9, Ant_Function_Create(js_textdecoder_get_ignore_bom), JS_DESC_C);

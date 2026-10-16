@@ -7,6 +7,7 @@
 #include "gc/modules.h"
 
 #include "ant.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "internal.h"
 #include "ptr.h"
@@ -23,7 +24,7 @@ ant_value_t Ant_Iterator_CreateResult(ant_t *js, ant_value_t value, bool done) {
 
   ant_value_t seed = js->mutable_roots.iterator_result_template;
   if (vtype(seed) != kTypeObject) {
-    seed = js_newobj(js);
+    seed = Ant_Object_Create(js);
     if (is_err(seed)) {
       GC_ROOT_RESTORE(js, mark);
       return seed;
@@ -60,7 +61,7 @@ ant_value_t js_iter_result(ant_t *js, bool has_value, ant_value_t value) {
 static ant_value_t get_iterator_prototype(ant_t *js) {
   if (vtype(js->sym.iterator_proto) == kTypeObject) return js->sym.iterator_proto;
 
-  js->sym.iterator_proto = js_mkobj(js);
+  js->sym.iterator_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->sym.iterator_proto, js->sym.object_proto);
   
   defmethod_sym(js, js->sym.iterator_proto, js->sym.iterator_sym, Ant_Function_Create(sym_this_cb));
@@ -166,7 +167,7 @@ static ant_value_t get_array_iterator_prototype(ant_t *js) {
   if (vtype(js->sym.array_iterator_proto) == kTypeObject) return js->sym.array_iterator_proto;
 
   ant_value_t iterator_proto = get_iterator_prototype(js);
-  js->sym.array_iterator_proto = js_mkobj(js);
+  js->sym.array_iterator_proto = Ant_Object_CreateBare(js);
   
   bool iteration_patched = js->array_iteration_protector_invalid;
   js->sym.array_iterator_next = defmethod(js, js->sym.array_iterator_proto, "next", 4, Ant_Function_Create(arr_iter_next));
@@ -179,7 +180,7 @@ static ant_value_t get_array_iterator_prototype(ant_t *js) {
 }
 
 ant_value_t make_array_iterator(ant_t *js, ant_value_t array, array_iter_kind_t kind) {
-  ant_value_t iter = js_mkobj(js);
+  ant_value_t iter = Ant_Object_CreateBare(js);
   
   js_set_slot_wb(js, iter, SLOT_DATA, array);
   js_set_slot(iter, SLOT_ITER_STATE, js_mknum((double)iter_state_pack(kind, 0)));
@@ -196,7 +197,7 @@ static ant_value_t get_string_iterator_prototype(ant_t *js) {
   if (vtype(js->sym.string_iterator_proto) == kTypeObject) return js->sym.string_iterator_proto;
 
   ant_value_t iterator_proto = get_iterator_prototype(js);
-  js->sym.string_iterator_proto = js_mkobj(js);
+  js->sym.string_iterator_proto = Ant_Object_CreateBare(js);
   
   defmethod(js, js->sym.string_iterator_proto, "next", 4, Ant_Function_Create(str_iter_next));
   mkprop(js, js->sym.string_iterator_proto, js->sym.toStringTag_sym, ANT_STRING("String Iterator"), ANT_PROP_ATTR_CONFIGURABLE);
@@ -219,7 +220,7 @@ static ant_value_t string_iterator(ant_params_t) {
 
   GC_ROOT_SAVE(mark, js);
   GC_ROOT_PIN(js, str);
-  ant_value_t iter = js_mkobj(js);
+  ant_value_t iter = Ant_Object_CreateBare(js);
 
   js_set_slot_wb(js, iter, SLOT_DATA, str);
   js_set_slot(iter, SLOT_ITER_STATE, js_mknum(0));
@@ -595,7 +596,7 @@ static ant_value_t wrap_iter_next(ant_params_t) {
 }
 
 static ant_value_t make_wrap_iter(ant_t *js, ant_value_t source, int kind, ant_value_t cb) {
-  ant_value_t iter = js_mkobj(js);
+  ant_value_t iter = Ant_Object_CreateBare(js);
   
   js_set_proto_init(iter, js->builtins.wrap_iter_proto);
   js_set_slot_wb(js, iter, SLOT_DATA, source);
@@ -817,7 +818,7 @@ static ant_value_t iter_ctor(ant_params_t) {
   if (vtype(call_new_target) == kTypeUndefined)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Iterator is not directly constructable");
     
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->sym.iterator_proto, call_new_target);
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
   
@@ -828,7 +829,7 @@ static ant_value_t async_iter_ctor(ant_params_t) {
   if (vtype(call_new_target) == kTypeUndefined)
     return js_mkerr_typed(js, JS_ERR_TYPE, "AsyncIterator constructor requires 'new'");
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->sym.async_iterator_proto, call_new_target);
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
   
@@ -876,7 +877,7 @@ static ant_value_t async_iter_call_method(
 }
 
 static ant_value_t make_async_wrap_iter(ant_t *js, ant_value_t source, int kind, ant_value_t cb) {
-  ant_value_t iter = js_mkobj(js);
+  ant_value_t iter = Ant_Object_CreateBare(js);
   js_set_proto_init(iter, js->builtins.async_wrap_iter_proto);
   js_set_slot_wb(js, iter, SLOT_DATA, source);
   js_set_slot(iter, SLOT_ITER_STATE, js_mknum((double)iter_state_pack(kind, 0)));
@@ -952,7 +953,7 @@ static bool async_wrap_chain_step(ant_t *js, ant_value_t iter, ant_value_t promi
     return true;
   }
 
-  ant_value_t state = js_mkobj(js);
+  ant_value_t state = Ant_Object_CreateBare(js);
   js_set(js, state, "iter", iter);
   js_set(js, state, "promise", promise);
   ant_value_t on_resolve = js_heavy_mkfun(js, async_wrap_on_step, state);
@@ -1017,7 +1018,7 @@ static ant_value_t async_wrap_advance_inner(ant_t *js, ant_value_t iter, ant_val
   }
 
   if (vtype(next_result) == kTypePromise) {
-    ant_value_t state = js_mkobj(js);
+    ant_value_t state = Ant_Object_CreateBare(js);
     js_set(js, state, "iter", iter);
     js_set(js, state, "promise", promise);
     ant_value_t on_resolve = js_heavy_mkfun(js, async_wrap_on_inner_step, state);
@@ -1068,7 +1069,7 @@ static ant_value_t async_wrap_handle_step(
   }
 
   if (kind == WRAP_FROM_SYNC && vtype(value) == kTypePromise) {
-    ant_value_t state_obj = js_mkobj(js);
+    ant_value_t state_obj = Ant_Object_CreateBare(js);
     js_set(js, state_obj, "promise", promise);
     js_set(js, state_obj, "done", done ? js_true : js_false);
     
@@ -1147,7 +1148,7 @@ static ant_value_t async_wrap_handle_callback_result(
   ant_value_t result
 ) {
   if (vtype(result) == kTypePromise) {
-    ant_value_t state = js_mkobj(js);
+    ant_value_t state = Ant_Object_CreateBare(js);
     js_set(js, state, "iter", iter);
     js_set(js, state, "promise", promise);
     js_set(js, state, "kind", js_mknum((double)kind));
@@ -1660,7 +1661,7 @@ static ant_value_t async_iter_terminal(ant_native_params_t, int mode) {
   if (is_err(iter)) return rejected_promise(js, iter);
 
   ant_value_t promise = js_mkpromise(js);
-  ant_value_t state = js_mkobj(js);
+  ant_value_t state = Ant_Object_CreateBare(js);
   async_terminal_state_t *st = calloc(1, sizeof(*st));
   
   if (!st) {
@@ -1770,7 +1771,7 @@ static ant_value_t iterator_tag_set(ant_params_t) {
   ant_value_t value = nargs ? args[0] : js_mkundef();
   
   GC_ROOT_PIN(js, value);
-  ant_value_t descriptor = js_mkobj(js);
+  ant_value_t descriptor = Ant_Object_CreateBare(js);
   
   GC_ROOT_PIN(js, descriptor);
   js_set(js, descriptor, "value", value);
@@ -1792,7 +1793,7 @@ void init_iterator_module(ant_t *js) {
   
   defmethod_sym(js, js->sym.string_proto, js->sym.iterator_sym, Ant_Function_Create(string_iterator));
   
-  js->builtins.wrap_iter_proto = js_mkobj(js);
+  js->builtins.wrap_iter_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.wrap_iter_proto, iter_proto);
   defmethod(js, js->builtins.wrap_iter_proto, "next", 4, Ant_Function_Create(wrap_iter_next));
 
@@ -1814,7 +1815,7 @@ void init_iterator_module(ant_t *js) {
   defmethod_sym(js, iter_proto, js->sym.dispose_sym, js_mkfun_meta(&dispose_meta));
   js_set_sym_setter_desc(js, iter_proto, js->sym.toStringTag_sym, Ant_Function_Create(iterator_tag_set), JS_DESC_C);
 
-  ant_value_t ctor_obj = js_mkobj(js);
+  ant_value_t ctor_obj = Ant_Object_CreateBare(js);
   js_set_slot(ctor_obj, SLOT_CFUNC, Ant_Function_Create(iter_ctor));
   js_setprop_readonly_nonconfigurable(js, ctor_obj, "prototype", 9, iter_proto);
   js_set_function_name(js, ctor_obj, "Iterator", sizeof("Iterator") - 1);
@@ -1824,7 +1825,7 @@ void init_iterator_module(ant_t *js) {
   defhidden(js, iter_proto, "constructor", 11, ctor);
   js_set_global_builtin(js, "Iterator", ctor);
 
-  ant_value_t async_iter_proto = js_mkobj(js);
+  ant_value_t async_iter_proto = Ant_Object_CreateBare(js);
   js->sym.async_iterator_proto = async_iter_proto;
   js_set_proto_init(async_iter_proto, js->sym.object_proto);
   
@@ -1838,7 +1839,7 @@ void init_iterator_module(ant_t *js) {
   defmethod_sym(js, async_iter_proto, js->sym.asyncDispose_sym, js_mkfun_meta(&async_dispose_meta));
   js_set_sym_setter_desc(js, async_iter_proto, js->sym.toStringTag_sym, Ant_Function_Create(iterator_tag_set), JS_DESC_C);
 
-  ant_value_t async_ctor_obj = js_mkobj(js);
+  ant_value_t async_ctor_obj = Ant_Object_CreateBare(js);
   js_set_slot(async_ctor_obj, SLOT_CFUNC, Ant_Function_Create(async_iter_ctor));
   js_setprop_readonly_nonconfigurable(js, async_ctor_obj, "prototype", 9, async_iter_proto);
   js_set_function_name(js, async_ctor_obj, "AsyncIterator", sizeof("AsyncIterator") - 1);
@@ -1847,7 +1848,7 @@ void init_iterator_module(ant_t *js) {
   defhidden(js, async_iter_proto, "constructor", 11, async_ctor);
   js_set_global_builtin(js, "AsyncIterator", async_ctor);
 
-  js->builtins.async_wrap_iter_proto = js_mkobj(js);
+  js->builtins.async_wrap_iter_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.async_wrap_iter_proto, async_iter_proto);
   defmethod(js, js->builtins.async_wrap_iter_proto, "next", 4, Ant_Function_Create(async_wrap_next));
   defmethod(js, js->builtins.async_wrap_iter_proto, "return", 6, Ant_Function_Create(async_wrap_return));

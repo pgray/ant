@@ -1,6 +1,7 @@
 // TODO: cleanup module, make cleaner. MODULARIZE.
 
 #include "ant.h"
+#include "cfunc.h"
 #include "utf8.h"
 #include "errors.h"
 #include "internal.h"
@@ -1036,7 +1037,7 @@ ant_value_t reject_regexp_arg(ant_t *js, ant_value_t value, const char *method_n
 }
 
 static ant_value_t regexp_species_construct(ant_t *js, ant_value_t rx, ant_value_t ctor, ant_value_t *ctor_args, int nargs) {
-  ant_value_t seed = js_mkobj(js);
+  ant_value_t seed = Ant_Object_CreateBare(js);
   if (is_err(seed)) return seed;
 
   ant_value_t proto = js_get(js, ctor, "prototype");
@@ -1696,7 +1697,7 @@ static ant_value_t builtin_regexp_groups_getter(ant_params_t) {
   ant_value_t meta = js_get_slot(result_arr, SLOT_REGEXP_RESULT_GROUPS);
   if (!is_object_type(meta)) return js_mkundef();
 
-  ant_value_t groups = js_mkobj(js);
+  ant_value_t groups = Ant_Object_CreateBare(js);
   if (is_err(groups)) return groups;
   js_set_proto_init(groups, js_mknull());
 
@@ -1733,7 +1734,7 @@ static ant_value_t regexp_build_indices_groups(
   ant_value_t groups_meta,
   ant_value_t indices_arr
 ) {
-  ant_value_t groups = js_mkobj(js);
+  ant_value_t groups = Ant_Object_CreateBare(js);
   if (is_err(groups)) return groups;
   js_set_proto_init(groups, js_mknull());
 
@@ -2899,7 +2900,7 @@ static ant_value_t builtin_regexp_symbol_matchAll(ant_params_t) {
   ant_value_t li_val = js_getprop_fallback(js, rx, "lastIndex");
   js_setprop(js, new_rx, js_mkstr(js, "lastIndex", 9), li_val);
 
-  ant_value_t iter = js_mkobj(js);
+  ant_value_t iter = Ant_Object_CreateBare(js);
   js_set_slot(iter, SLOT_MATCHALL_RX, new_rx);
   js_set_slot(iter, SLOT_MATCHALL_STR, str);
   js_set_slot(iter, SLOT_MATCHALL_DONE, js_false);
@@ -4422,7 +4423,7 @@ void init_regex_module(ant_t *js) {
   ant_value_t glob = js->global;
   ant_value_t object_proto = js->sym.object_proto;
 
-  ant_value_t regexp_proto = js_mkobj(js);
+  ant_value_t regexp_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(regexp_proto, object_proto);
   js->builtins.regexp_proto = regexp_proto;
   
@@ -4439,7 +4440,7 @@ void init_regex_module(ant_t *js) {
   defmethod_sym(js, regexp_proto, js->sym.match_sym, Ant_Function_CreateWithArity(builtin_regexp_symbol_match, 1));
   defmethod_sym(js, regexp_proto, js->sym.matchAll_sym, Ant_Function_CreateWithArity(builtin_regexp_symbol_matchAll, 1));
 
-  js->builtins.regexp_matchall_iter_proto_val = js_mkobj(js);
+  js->builtins.regexp_matchall_iter_proto_val = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.regexp_matchall_iter_proto_val, js->sym.iterator_proto);
   defmethod(js, js->builtins.regexp_matchall_iter_proto_val, "next", 4, Ant_Function_Create(regexp_matchall_next));
   mkprop(js, js->builtins.regexp_matchall_iter_proto_val, js->sym.toStringTag_sym, ANT_STRING("RegExp String Iterator"), ANT_PROP_ATTR_CONFIGURABLE);

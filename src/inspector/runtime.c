@@ -1,6 +1,7 @@
 #include "ant.h"
 #include "bind.h"
 #include "pool.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "runtime.h"
 #include "internal.h"

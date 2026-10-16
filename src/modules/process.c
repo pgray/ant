@@ -29,6 +29,7 @@
 #endif
 
 #include "ant.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "output.h"
 #include "utils.h"
@@ -456,7 +457,7 @@ static void emit_keypress_event(
   ant_process_state_t *ps = process_state(js);
   if (!ps) return;
   ant_value_t str_val = js_mkstr(js, str ? str : "", str ? str_len : 0);
-  ant_value_t key_obj = js_mkobj(js);
+  ant_value_t key_obj = Ant_Object_CreateBare(js);
 
   if (name) {
     js_set(js, key_obj, "name", js_mkstr(js, name, strlen(name)));
@@ -586,7 +587,7 @@ static ant_value_t process_binding(ant_params_t) {
   if (!name || strcmp(name, "constants") != 0)
     return js_mkerr_typed(js, JS_ERR_TYPE, "No such module: %s", name ? name : "");
 
-  constants = js_mkobj(js);
+  constants = Ant_Object_CreateBare(js);
   js_set(js, constants, "fs", fs_make_constants(js));
   
   return constants;
@@ -1079,7 +1080,7 @@ static ant_value_t process_hrtime_bigint(ant_params_t) {
 
 static ant_value_t process_memory_usage(ant_params_t) {
   (void)args; (void)nargs;
-  ant_value_t obj = js_newobj(js);
+  ant_value_t obj = Ant_Object_Create(js);
   
   size_t rss = 0;
   uv_resident_set_memory(&rss);
@@ -1119,7 +1120,7 @@ static ant_value_t process_memory_usage_rss(ant_params_t) {
 }
 
 static ant_value_t process_cpu_usage(ant_params_t) {
-  ant_value_t obj = js_newobj(js);
+  ant_value_t obj = Ant_Object_Create(js);
   uv_rusage_t rusage;
   
   if (uv_getrusage(&rusage) == 0) {
@@ -1167,7 +1168,7 @@ static ant_value_t process_resource_usage(ant_params_t) {
     { "involuntaryContextSwitches", (double)ru.ru_nivcsw },
   };
 
-  ant_value_t obj = js_newobj(js);
+  ant_value_t obj = Ant_Object_Create(js);
   for (size_t i = 0; i < sizeof(fields) / sizeof(fields[0]); i++)
     js_set(js, obj, fields[i].name, js_mknum(fields[i].value));
   
@@ -1639,7 +1640,7 @@ static void env_to_object_cb(ant_t *js, const char *key, size_t key_len, const c
 }
 
 static ant_value_t env_to_object(ant_params_t) {
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   env_foreach(js, env_to_object_cb, &obj);
   return obj;
 }
@@ -1744,7 +1745,7 @@ static ant_value_t process_cwd(ant_params_t) {
   if (status == 0) result = js_mkstr(js, cwd, size);
   else {
     const char *code = uv_err_name(status);
-    ant_value_t props = js_mkobj(js);
+    ant_value_t props = Ant_Object_CreateBare(js);
     js_set(js, props, "code", js_mkstr(js, code, strlen(code)));
     js_set(js, props, "errno", js_mknum(status));
     js_set(js, props, "syscall", js_mkstr(js, "uv_cwd", 6));
@@ -1785,7 +1786,7 @@ static ant_value_t process_make_warning_object(
   ant_t *js, const char *type, js_cstr_t msg, const char *code,
   const char *detail, ant_offset_t detail_len
 ) {
-  ant_value_t warning_obj = js_mkobj(js);
+  ant_value_t warning_obj = Ant_Object_CreateBare(js);
   js_set_proto_init(warning_obj, js->builtins.error_protos[JS_ERR_GENERIC]);
   js_set_slot(warning_obj, SLOT_ERROR_BRAND, js_true);
   js_set(js, warning_obj, "name", js_mkstr(js, type, strlen(type)));
@@ -1998,13 +1999,13 @@ void init_process_module(ant_t *js) {
 
   ps->stdin_state.decoder = js_mkundef();
   ps->process_start_time = uv_hrtime();
-  ant_value_t process_proto = js_newobj(js);
+  ant_value_t process_proto = Ant_Object_Create(js);
 
   process_set_methods(js, process_proto, true);
   js_set_tostringtag(js, process_proto, js_mkstr(js, "process", 7));
 
-  ant_value_t process_obj = js_mkobj(js);
-  ant_value_t env_obj = js_newobj(js);
+  ant_value_t process_obj = Ant_Object_CreateBare(js);
+  ant_value_t env_obj = Ant_Object_Create(js);
   
   js_set_proto_init(process_obj, process_proto);
   ps->process_obj = process_obj;
@@ -2048,14 +2049,14 @@ void init_process_module(ant_t *js) {
   js_set(js, process_obj, "pid", js_mknum((double)getpid()));
   js_set(js, process_obj, "ppid", js_mknum((double)getppid()));
 
-  ant_value_t features_obj = js_newobj(js);
+  ant_value_t features_obj = Ant_Object_Create(js);
   js_set(js, features_obj, "uv", js_true);
   process_set_string(js, features_obj, "tls", "BoringSSL");
   process_set_string(js, features_obj, "typescript", "transform");
   js_set(js, process_obj, "features", features_obj);
   process_set_string(js, process_obj, "version", "v26.8.1");
   
-  ant_value_t versions_obj = js_newobj(js);
+  ant_value_t versions_obj = Ant_Object_Create(js);
   process_set_string(js, versions_obj, "ant", ANT_VERSION);
   process_set_string(js, versions_obj, "silver", ANT_VERSION);
   process_set_string(js, versions_obj, "skim", SKIM_VERSION);
@@ -2080,7 +2081,7 @@ void init_process_module(ant_t *js) {
   process_set_string(js, versions_obj, "boringssl", "297b11798a0ed6bc7736aa57328909a4afbbf67a");
   js_set(js, process_obj, "versions", versions_obj);
   
-  ant_value_t release_obj = js_newobj(js);
+  ant_value_t release_obj = Ant_Object_Create(js);
   js_set(js, release_obj, "name", js_mkstr(js, "ant", 3));
   js_set(js, process_obj, "release", release_obj);
   
@@ -2110,7 +2111,7 @@ void init_process_module(ant_t *js) {
     js_set(js, process_obj, "arch", js_mkstr(js, "unknown", 7));
   #endif
   
-  ant_value_t stdin_proto = js_mkobj(js);
+  ant_value_t stdin_proto = Ant_Object_CreateBare(js);
   if (is_object_type(ee_proto)) js_set_proto_init(stdin_proto, ee_proto);
   js_set(js, stdin_proto, "setRawMode", Ant_Function_Create(js_stdin_set_raw_mode));
   js_set(js, stdin_proto, "setEncoding", Ant_Function_Create(js_stdin_set_encoding));
@@ -2120,7 +2121,7 @@ void init_process_module(ant_t *js) {
   js_set(js, stdin_proto, "unref", Ant_Function_Create(js_stdin_unref));
   js_set_tostringtag(js, stdin_proto, js_mkstr(js, "ReadStream", 10));
   
-  ant_value_t stdin_obj = js_mkobj(js);
+  ant_value_t stdin_obj = Ant_Object_CreateBare(js);
   js_set_proto_init(stdin_obj, stdin_proto);
   ps->stdin_obj = stdin_obj;
   eventemitter_set_listener_change_hook(js, stdin_obj, process_listener_change, ps);
@@ -2128,13 +2129,13 @@ void init_process_module(ant_t *js) {
   js_set(js, stdin_obj, "encoding", js_mkundef());
   js_set(js, process_obj, "stdin", stdin_obj);
   
-  ant_value_t stdout_proto = js_mkobj(js);
+  ant_value_t stdout_proto = Ant_Object_CreateBare(js);
   if (is_object_type(ee_proto)) js_set_proto_init(stdout_proto, ee_proto);
   js_set(js, stdout_proto, "write", Ant_Function_Create(js_stdout_write));
   js_set(js, stdout_proto, "getWindowSize", Ant_Function_Create(js_stdout_get_window_size));
   js_set_tostringtag(js, stdout_proto, js_mkstr(js, "WriteStream", 11));
   
-  ant_value_t stdout_obj = js_mkobj(js);
+  ant_value_t stdout_obj = Ant_Object_CreateBare(js);
   js_set_proto_init(stdout_obj, stdout_proto);
   ps->stdout_obj = stdout_obj;
   eventemitter_set_listener_change_hook(js, stdout_obj, process_listener_change, ps);
@@ -2143,12 +2144,12 @@ void init_process_module(ant_t *js) {
   js_set_getter_desc(js, stdout_obj, "columns", 7, Ant_Function_Create(js_stdout_columns_getter), JS_DESC_E | JS_DESC_C);
   js_set(js, process_obj, "stdout", stdout_obj);
   
-  ant_value_t stderr_proto = js_mkobj(js);
+  ant_value_t stderr_proto = Ant_Object_CreateBare(js);
   if (is_object_type(ee_proto)) js_set_proto_init(stderr_proto, ee_proto);
   js_set(js, stderr_proto, "write", Ant_Function_Create(js_stderr_write));
   js_set_tostringtag(js, stderr_proto, js_mkstr(js, "WriteStream", 11));
   
-  ant_value_t stderr_obj = js_mkobj(js);
+  ant_value_t stderr_obj = Ant_Object_CreateBare(js);
   js_set_proto_init(stderr_obj, stderr_proto);
   ps->stderr_obj = stderr_obj;
   eventemitter_set_listener_change_hook(js, stderr_obj, process_listener_change, ps);

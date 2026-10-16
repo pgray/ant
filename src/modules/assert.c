@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ascii.h"
 #include "errors.h"
 #include "error_render.h"
@@ -36,7 +37,7 @@ static ant_value_t assertion_error_new(ant_t *js, ant_value_t message, bool gene
   GC_ROOT_PIN(js, info.actual);
   GC_ROOT_PIN(js, info.expected);
 
-  ant_value_t props = js_mkobj(js);
+  ant_value_t props = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, props);
   js_set(js, props, "generatedMessage", js_bool(generated));
   js_set(js, props, "code", js_mkstr(js, "ERR_ASSERTION", 13));
@@ -1009,7 +1010,7 @@ static ant_value_t assert_exception_matches(
       (assertion_info_t){ "throws", thrown, expected }
     );
 
-  ant_value_t receiver = js_mkobj(js);
+  ant_value_t receiver = Ant_Object_CreateBare(js);
   if (is_err(receiver)) return receiver;
   ant_value_t valid = sv_vm_call(js->vm, js, expected, receiver, &thrown, 1, NULL, js_mkundef());
   
@@ -1137,7 +1138,7 @@ static ant_value_t assert_rejection(ant_native_params_t, bool expect_rejection) 
   if (is_err(result)) {
     js_reject_promise(js, promise, result);
   } else if (vtype(result) == kTypePromise) {
-    ant_value_t state = js_mkobj(js);
+    ant_value_t state = Ant_Object_CreateBare(js);
     GC_ROOT_PIN(js, state);
     js_set(js, state, "promise", promise);
     js_set(js, state, "result", result);
@@ -1247,7 +1248,7 @@ static ant_value_t assert_assertion_error_ctor(ant_params_t) {
 }
 
 ant_value_t assert_library(ant_t *js) {
-  ant_value_t assert_obj = js_mkobj(js);
+  ant_value_t assert_obj = Ant_Object_CreateBare(js);
   js_set_slot(assert_obj, SLOT_CFUNC, Ant_Function_Create(assert_ok));
   js_define_function_length(js, assert_obj, 0);
   js_set_function_name(js, assert_obj, "assert", 6);

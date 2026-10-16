@@ -1,4 +1,5 @@
 #include "errors.h"
+#include "cfunc.h"
 #include "error_render.h"
 #include "internal.h"
 #include "descriptors.h"
@@ -244,7 +245,7 @@ static ant_value_t make_error_value(
   GC_ROOT_SAVE(mark, js);
   GC_ROOT_PIN(js, props);
 
-  ant_value_t err_obj = js_mkobj(js);
+  ant_value_t err_obj = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, err_obj);
 
   if (is_err(err_obj)) {
@@ -398,7 +399,7 @@ ant_value_t js_throw(ant_t *js, ant_value_t value) {
 }
 
 __attribute__((noinline, cold)) ant_value_t js_mkerr_code(ant_t *js, js_err_type_t type, const char *code, const char *message) {
-  ant_value_t props = js_mkobj(js);
+  ant_value_t props = Ant_Object_CreateBare(js);
   js_set(js, props, "code", js_mkstr(js, code, strlen(code)));
   return js_mkerr_props(js, type, props, "%s", message);
 }

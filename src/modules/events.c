@@ -6,6 +6,7 @@
 #include <utarray.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ptr.h"
 #include "errors.h"
 #include "internal.h"
@@ -882,7 +883,7 @@ ant_value_t Ant_Event_Create(
   ant_t *js, ant_value_t proto, ant_event_kind_t kind,
   ant_value_t type, unsigned int flags
 ) {
-  ant_value_t event = js_mkobj(js);
+  ant_value_t event = Ant_Object_CreateBare(js);
   if (is_err(event)) return event;
   if (is_object_type(proto)) js_set_proto_init(event, proto);
   event_data_t *data = event_init(js, event, kind, type, flags & ANT_EVENT_BUBBLES, flags & ANT_EVENT_CANCELABLE);
@@ -992,7 +993,7 @@ static ant_value_t js_eventemitter_ctor(ant_params_t) {
   if (is_object_type(this_obj)) return this_obj;
 
   if (vtype(call_new_target) != kTypeUndefined) {
-    ant_value_t obj = js_mkobj(js);
+    ant_value_t obj = Ant_Object_CreateBare(js);
     ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.eventemitter_proto, call_new_target);
     if (is_object_type(proto)) js_set_proto_init(obj, proto);
     return obj;
@@ -1713,7 +1714,7 @@ static ant_value_t js_events_once_attach(
   }
 
   if (is_eventtarget_instance(target)) {
-    ant_value_t listener_options = js_mkobj(js);
+    ant_value_t listener_options = Ant_Object_CreateBare(js);
     js_set(js, listener_options, "once", js_true);
     if (abort_signal_is_signal(signal)) js_set(js, listener_options, "signal", signal);
     
@@ -1734,7 +1735,7 @@ static ant_value_t js_events_once(ant_params_t) {
   ant_value_t promise = js_mkpromise(js);
   if (is_err(promise)) return promise;
 
-  ant_value_t state = js_mkobj(js);
+  ant_value_t state = Ant_Object_CreateBare(js);
   if (is_err(state)) { 
     js_reject_promise(js, promise, state);
     return promise;
@@ -1805,12 +1806,12 @@ static ant_value_t js_events_add_abort_listener(ant_params_t) {
     Ant_Event_EndDispatch(js, event);
   } else abort_signal_add_listener(js, args[0], args[1]);
 
-  ant_value_t state = js_mkobj(js);
+  ant_value_t state = Ant_Object_CreateBare(js);
   js_set_slot(state, SLOT_SETTLED, js_bool(already_aborted));
   js_set(js, state, "signal", args[0]);
   js_set(js, state, "listener", args[1]);
 
-  ant_value_t disposable = js_mkobj(js);
+  ant_value_t disposable = Ant_Object_CreateBare(js);
   js_set(js, disposable, "dispose", js_heavy_mkfun(js, js_events_disposable_dispose, state));
   
   return disposable;
@@ -2036,7 +2037,7 @@ static ant_value_t js_events_on(ant_params_t) {
   if (abort_signal_is_signal(signal) && abort_signal_is_aborted(signal))
     return js_throw(js, abort_signal_make_error(js, signal));
 
-  ant_value_t state = js_mkobj(js);
+  ant_value_t state = Ant_Object_CreateBare(js);
   ant_value_t listener = js_heavy_mkfun(js, js_events_on_event_cb, state);
   ant_value_t error_key = js_mkstr(js, "error", 5);
   ant_value_t error_listener = js_heavy_mkfun(js, js_events_on_error_cb, state);
@@ -2092,7 +2093,7 @@ static ant_value_t js_events_on(ant_params_t) {
     abort_signal_add_listener(js, signal, abort_listener);
   }
 
-  ant_value_t iter = js_mkobj(js);
+  ant_value_t iter = Ant_Object_CreateBare(js);
   js_set(js, iter, "next", js_heavy_mkfun(js, js_events_on_next, state));
   js_set(js, iter, "return", js_heavy_mkfun(js, js_events_on_return, state));
   js_set_sym(js, iter, js->sym.asyncIterator_sym, Ant_Function_Create(js_events_on_self));
@@ -2100,7 +2101,7 @@ static ant_value_t js_events_on(ant_params_t) {
 }
 
 ant_value_t events_library(ant_t *js) {
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
   
   eventemitter_prototype(js);
   js_set_module_default(js, lib, js->builtins.eventemitter_ctor, "EventEmitter");
@@ -2125,7 +2126,7 @@ ant_value_t eventemitter_prototype(ant_t *js) {
   if (js->builtins.eventemitter_proto) return js->builtins.eventemitter_proto;
 
   ant_value_t object_proto = js->sym.object_proto;
-  ant_value_t eventemitter_proto = js_mkobj(js);
+  ant_value_t eventemitter_proto = Ant_Object_CreateBare(js);
   if (is_object_type(object_proto)) js_set_proto_init(eventemitter_proto, object_proto);
 
   js_set(js, eventemitter_proto, "on",                 Ant_Function_CreateWithArity(js_eventemitter_on, 2));
@@ -2154,12 +2155,12 @@ ant_value_t eventemitter_prototype(ant_t *js) {
 void init_events_module(ant_t *js) {
   ant_value_t global = js_glob(js);
   
-  js->builtins.event_proto = js_mkobj(js);
+  js->builtins.event_proto = Ant_Object_CreateBare(js);
   ant_value_t event_fn = Ant_Function_CreateIntrinsicConstructor(js, js_event_ctor, js->builtins.event_proto, "Event", 1);
   event_define_prototype(js, js->builtins.event_proto, event_fn);
   js_set_global_builtin(js, "Event", event_fn);
 
-  js->builtins.customevent_proto = js_mkobj(js);
+  js->builtins.customevent_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.customevent_proto, js->builtins.event_proto);
   js_set_tostringtag(js, js->builtins.customevent_proto, js_mkstr(js, "CustomEvent", 11));
   Ant_Event_DefineFields(js, js->builtins.customevent_proto, ANT_EVENT_CUSTOM);
@@ -2167,7 +2168,7 @@ void init_events_module(ant_t *js) {
   ant_value_t customevent_fn = Ant_Function_CreateIntrinsicConstructor(js, js_customevent_ctor, js->builtins.customevent_proto, "CustomEvent", 1);
   js_set_global_builtin(js, "CustomEvent", customevent_fn);
 
-  js->builtins.errorevent_proto = js_mkobj(js);
+  js->builtins.errorevent_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.errorevent_proto, js->builtins.event_proto);
   js_set_tostringtag(js, js->builtins.errorevent_proto, js_mkstr(js, "ErrorEvent", 10));
   Ant_Event_DefineFields(js, js->builtins.errorevent_proto, ANT_EVENT_ERROR);
@@ -2175,7 +2176,7 @@ void init_events_module(ant_t *js) {
   ant_value_t errorevent_fn = Ant_Function_CreateIntrinsicConstructor(js, js_errorevent_ctor, js->builtins.errorevent_proto, "ErrorEvent", 2);
   js_set_global_builtin(js, "ErrorEvent", errorevent_fn);
 
-  js->builtins.promiserejectionevent_proto = js_mkobj(js);
+  js->builtins.promiserejectionevent_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.promiserejectionevent_proto, js->builtins.event_proto);
   js_set_tostringtag(js, js->builtins.promiserejectionevent_proto, js_mkstr(js, "PromiseRejectionEvent", 21));
   Ant_Event_DefineFields(js, js->builtins.promiserejectionevent_proto, ANT_EVENT_PROMISE_REJECTION);
@@ -2185,7 +2186,7 @@ void init_events_module(ant_t *js) {
 
   ant_value_t object_proto = js->sym.object_proto;
 
-  ant_value_t eventtarget_proto = js_mkobj(js);
+  ant_value_t eventtarget_proto = Ant_Object_CreateBare(js);
   js->builtins.eventtarget_proto = eventtarget_proto;
   if (is_object_type(object_proto)) js_set_proto_init(eventtarget_proto, object_proto);
   js_set(js, eventtarget_proto, "addEventListener",    Ant_Function_CreateWithArity(js_add_event_listener_method, 2));

@@ -4,6 +4,7 @@
 #include <math.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ptr.h"
 #include "gc.h"
 #include "errors.h"
@@ -741,7 +742,7 @@ static ant_value_t create_map_iterator(ant_t *js, ant_value_t map_obj, iter_type
   state->current = map_ptr ? *map_ptr : NULL;
   state->type = type;
   
-  ant_value_t iter = js_mkobj(js);
+  ant_value_t iter = Ant_Object_CreateBare(js);
   js_set_proto_init(iter, js->builtins.map_iter_proto);
   js_set_slot_wb(js, iter, SLOT_DATA, map_obj);
   js_set_native(iter, state, MAP_ITER_NATIVE_TAG);
@@ -794,7 +795,7 @@ static ant_value_t create_set_iterator(ant_t *js, ant_value_t set_obj, iter_type
   state->current = set_ptr ? *set_ptr : NULL;
   state->type = type;
   
-  ant_value_t iter = js_mkobj(js);
+  ant_value_t iter = Ant_Object_CreateBare(js);
   js_set_proto_init(iter, js->builtins.set_iter_proto);
   js_set_slot_wb(js, iter, SLOT_DATA, set_obj);
   js_set_native(iter, state, SET_ITER_NATIVE_TAG);
@@ -905,7 +906,7 @@ static ant_value_t set_forEach(ant_params_t) {
 }
 
 static ant_value_t make_set_result(ant_t *js, set_entry_t ***out_set) {
-  ant_value_t set_obj = js_mkobj(js);
+  ant_value_t set_obj = Ant_Object_CreateBare(js);
   if (is_err(set_obj)) return set_obj;
   js_obj_ptr(set_obj)->type_tag = kTypeSet;
 
@@ -1471,7 +1472,7 @@ static ant_value_t builtin_WeakRef(ant_params_t) {
     return js_mkerr(js, "WeakRef target must be an object");
   
   ant_value_t wr_obj = js->this_val;
-  if (vtype(wr_obj) != kTypeObject) wr_obj = js_mkobj(js);
+  if (vtype(wr_obj) != kTypeObject) wr_obj = Ant_Object_CreateBare(js);
   if (is_err(wr_obj)) return wr_obj;
 
   ant_value_t wr_proto = js->builtins.weakref_proto;
@@ -1514,7 +1515,7 @@ static ant_value_t builtin_FinalizationRegistry(ant_params_t) {
     return js_mkerr(js, "FinalizationRegistry callback must be a function");
   }
   
-  ant_value_t fr_obj = js_mkobj(js);
+  ant_value_t fr_obj = Ant_Object_CreateBare(js);
   ant_value_t fr_proto = js->builtins.finreg_proto;
   if (is_special_object(fr_proto)) js_set_proto_init(fr_obj, fr_proto);
   
@@ -1611,7 +1612,7 @@ static ant_value_t map_group_add(ant_t *js, void *ctx, ant_value_t key, ant_valu
 static ant_value_t map_groupBy(ant_params_t) {
   if (nargs < 2) return js_mkerr_typed(js, JS_ERR_TYPE, "Map.groupBy requires 2 arguments");
   
-  ant_value_t map_obj = js_mkobj(js);
+  ant_value_t map_obj = Ant_Object_CreateBare(js);
   js_obj_ptr(map_obj)->type_tag = kTypeMap;
   
   ant_value_t map_proto = js->builtins.map_proto;
@@ -1838,7 +1839,7 @@ static ant_value_t builtin_Map(ant_params_t) {
   }
   
   ant_value_t map_obj = js->this_val;
-  if (vtype(map_obj) != kTypeObject) map_obj = js_mkobj(js);
+  if (vtype(map_obj) != kTypeObject) map_obj = Ant_Object_CreateBare(js);
   if (is_err(map_obj)) return map_obj;
   js_obj_ptr(map_obj)->type_tag = kTypeMap;
   
@@ -1868,7 +1869,7 @@ static ant_value_t builtin_Set(ant_params_t) {
   }
   
   ant_value_t set_obj = js->this_val;
-  if (vtype(set_obj) != kTypeObject) set_obj = js_mkobj(js);
+  if (vtype(set_obj) != kTypeObject) set_obj = Ant_Object_CreateBare(js);
   if (is_err(set_obj)) return set_obj;
   js_obj_ptr(set_obj)->type_tag = kTypeSet;
   
@@ -1898,7 +1899,7 @@ static ant_value_t builtin_WeakMap(ant_params_t) {
   }
   
   ant_value_t wm_obj = js->this_val;
-  if (vtype(wm_obj) != kTypeObject) wm_obj = js_mkobj(js);
+  if (vtype(wm_obj) != kTypeObject) wm_obj = Ant_Object_CreateBare(js);
   if (is_err(wm_obj)) return wm_obj;
   js_obj_ptr(wm_obj)->type_tag = kTypeWeakMap;
   
@@ -1930,7 +1931,7 @@ static ant_value_t builtin_WeakSet(ant_params_t) {
   }
   
   ant_value_t ws_obj = js->this_val;
-  if (vtype(ws_obj) != kTypeObject) ws_obj = js_mkobj(js);
+  if (vtype(ws_obj) != kTypeObject) ws_obj = Ant_Object_CreateBare(js);
   if (is_err(ws_obj)) return ws_obj;
   js_obj_ptr(ws_obj)->type_tag = kTypeWeakSet;
   
@@ -1959,19 +1960,19 @@ void init_collections_module(ant_t *js) {
   ant_value_t object_proto = js->sym.object_proto;  
   ant_value_t iter_sym = js->sym.iterator_sym;
   
-  js->builtins.map_iter_proto = js_mkobj(js);
+  js->builtins.map_iter_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.map_iter_proto, js->sym.iterator_proto);
   defmethod(js, js->builtins.map_iter_proto, "next", 4, Ant_Function_Create(map_iter_next));
   js_set_tostringtag(js, js->builtins.map_iter_proto, js_mkstr(js, "Map Iterator", 12));
   js_iter_register_advance(js, js->builtins.map_iter_proto, advance_map);
   
-  js->builtins.set_iter_proto = js_mkobj(js);
+  js->builtins.set_iter_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.set_iter_proto, js->sym.iterator_proto);
   defmethod(js, js->builtins.set_iter_proto, "next", 4, Ant_Function_Create(set_iter_next));
   js_set_tostringtag(js, js->builtins.set_iter_proto, js_mkstr(js, "Set Iterator", 12));
   js_iter_register_advance(js, js->builtins.set_iter_proto, advance_set);
   
-  ant_value_t map_proto = js_mkobj(js);
+  ant_value_t map_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(map_proto, object_proto);
   js->builtins.map_proto = map_proto;
   defmethod(js, map_proto, "set", 3, Ant_Function_CreateWithArity(map_set, 2));
@@ -1994,7 +1995,7 @@ void init_collections_module(ant_t *js) {
   js_define_species_getter(js, map_ctor);
   js_set_global_builtin(js, "Map", map_ctor);
   
-  ant_value_t set_proto = js_mkobj(js);
+  ant_value_t set_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(set_proto, object_proto);
   js->builtins.set_proto = set_proto;
   defmethod(js, set_proto, "add", 3, Ant_Function_CreateWithArity(set_add, 1));
@@ -2021,7 +2022,7 @@ void init_collections_module(ant_t *js) {
   js_define_species_getter(js, set_ctor);
   js_set_global_builtin(js, "Set", set_ctor);
   
-  ant_value_t weakmap_proto = js_mkobj(js);
+  ant_value_t weakmap_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(weakmap_proto, object_proto);
   js->builtins.weakmap_proto = weakmap_proto;
   defmethod(js, weakmap_proto, "set", 3, Ant_Function_CreateWithArity(weakmap_set, 2));
@@ -2034,7 +2035,7 @@ void init_collections_module(ant_t *js) {
   ant_value_t weakmap_ctor = Ant_Function_CreateIntrinsicConstructor(js, builtin_WeakMap, weakmap_proto, "WeakMap", 0);
   js_set_global_builtin(js, "WeakMap", weakmap_ctor);
   
-  ant_value_t weakset_proto = js_mkobj(js);
+  ant_value_t weakset_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(weakset_proto, object_proto);
   js->builtins.weakset_proto = weakset_proto;
   defmethod(js, weakset_proto, "add", 3, Ant_Function_CreateWithArity(weakset_add, 1));
@@ -2045,7 +2046,7 @@ void init_collections_module(ant_t *js) {
   ant_value_t weakset_ctor = Ant_Function_CreateIntrinsicConstructor(js, builtin_WeakSet, weakset_proto, "WeakSet", 0);
   js_set_global_builtin(js, "WeakSet", weakset_ctor);
   
-  ant_value_t weakref_proto = js_mkobj(js);
+  ant_value_t weakref_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(weakref_proto, object_proto);
   js->builtins.weakref_proto = weakref_proto;
   defmethod(js, weakref_proto, "deref", 5, Ant_Function_Create(weakref_deref));
@@ -2054,7 +2055,7 @@ void init_collections_module(ant_t *js) {
   ant_value_t weakref_ctor = Ant_Function_CreateIntrinsicConstructor(js, builtin_WeakRef, weakref_proto, "WeakRef", 1);
   js_set_global_builtin(js, "WeakRef", weakref_ctor);
   
-  ant_value_t finreg_proto = js_mkobj(js);
+  ant_value_t finreg_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(finreg_proto, object_proto);
   js->builtins.finreg_proto = finreg_proto;
   defmethod(js, finreg_proto, "register", 8, Ant_Function_CreateWithArity(finreg_register, 2));

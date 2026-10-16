@@ -6,7 +6,6 @@
 
 #include "types.h"
 #include "common.h"
-#include "cfunc.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -124,8 +123,8 @@ ant_value_t js_get_sym(ant_t *, ant_value_t obj, ant_value_t sym);
 ant_value_t js_get_symbol(ant_t *, ant_value_t obj, const char *key);
 ant_value_t js_get_sym_with_receiver(ant_t *, ant_value_t obj, ant_value_t sym, ant_value_t receiver);
 
-ant_value_t js_mkobj(ant_t *);
-ant_value_t js_newobj(ant_t *);
+ant_value_t Ant_Object_CreateBare(ant_t *);
+ant_value_t Ant_Object_Create(ant_t *);
 ant_value_t js_mkarr(ant_t *);
 
 ant_value_t js_mkstr(ant_t *, const void *, size_t);

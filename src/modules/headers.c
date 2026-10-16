@@ -4,6 +4,7 @@
 #include <stdio.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ascii.h"
 #include "builder.h"
 #include "ptr.h"
@@ -615,7 +616,7 @@ static ant_value_t make_headers_iter(ant_t *js, ant_value_t headers_obj, int kin
   st->list  = l;
   st->kind  = kind;
 
-  ant_value_t iter = js_mkobj(js);
+  ant_value_t iter = Ant_Object_CreateBare(js);
   js_set_proto_init(iter, js->builtins.headers_iter_proto);
   js_set_native(iter, st, HEADERS_ITER_NATIVE_TAG);
   js_set_finalizer(iter, headers_iter_finalize);
@@ -892,7 +893,7 @@ static ant_value_t headers_inspect_finish(ant_t *js, ant_value_t this_obj, ant_v
 static ant_value_t headers_inspect(ant_params_t) {
   ant_value_t this_obj = js_getthis(js);
   hdr_list_t *list = headers_get_data(this_obj);
-  ant_value_t out = js_mkobj(js);
+  ant_value_t out = Ant_Object_CreateBare(js);
 
   if (!list) return js_mkerr(js, "Invalid Headers object");
 
@@ -954,7 +955,7 @@ static ant_value_t js_headers_ctor(ant_params_t) {
     if (is_err(r)) { headers_data_destroy(l); return r; }
   }
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.headers_proto, call_new_target);
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
 
@@ -975,7 +976,7 @@ ant_value_t headers_create_empty(ant_t *js) {
 ant_value_t headers_create_from_data(ant_t *js, headers_data_t *data) {
   if (!data) return js_mkerr(js, "out of memory");
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   js_reserve_slots(obj, 2);
   js_set_proto_init(obj, js->builtins.headers_proto);
   js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_HEADERS));
@@ -1189,14 +1190,14 @@ ant_value_t headers_get_value(ant_t *js, ant_value_t hdrs, const char *name) {
 }
 
 void init_headers_module(ant_t *js) {
-  js->builtins.headers_iter_proto = js_mkobj(js);
+  js->builtins.headers_iter_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.headers_iter_proto, js->sym.iterator_proto);
   js_set(js, js->builtins.headers_iter_proto, "next", Ant_Function_Create(headers_iter_next));
   js_set_descriptor(js, js->builtins.headers_iter_proto, "next", 4, JS_DESC_W | JS_DESC_E | JS_DESC_C);
   js_set_sym(js, js->builtins.headers_iter_proto, js->sym.iterator_sym, Ant_Function_Create(sym_this_cb));
   js_iter_register_advance(js, js->builtins.headers_iter_proto, advance_headers);
 
-  js->builtins.headers_proto = js_mkobj(js);
+  js->builtins.headers_proto = Ant_Object_CreateBare(js);
 
   js_set(js, js->builtins.headers_proto, "append",       Ant_Function_CreateWithArity(js_headers_append, 2));
   js_set(js, js->builtins.headers_proto, "set",          Ant_Function_CreateWithArity(js_headers_set, 2));

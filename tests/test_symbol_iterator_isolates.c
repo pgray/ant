@@ -1,4 +1,5 @@
 #include "internal.h"
+#include "cfunc.h"
 #include "gc.h"
 #include "gc/roots.h"
 #include "modules/symbol.h"
@@ -66,7 +67,7 @@ static void CheckGrowth(ant_t *js) {
   size_t before = js->iterators.len;
   for (size_t i = 0; i < 24; i++) {
     GC_ROOT_SAVE(setup_mark, js);
-    protos[i] = js_mkobj(js);
+    protos[i] = Ant_Object_CreateBare(js);
     GC_ROOT_PIN(js, protos[i]);
     js_set(js, protos[i], "next", Ant_Function_Create(Next));
     js_set_sym(js, protos[i], js->sym.iterator_sym, Ant_Function_Create(sym_this_cb));
@@ -80,7 +81,7 @@ static void CheckGrowth(ant_t *js) {
   gc_run(js);
   for (size_t i = 0; i < 24; i++) {
     GC_ROOT_SAVE(mark, js);
-    ant_value_t iterator = js_mkobj(js);
+    ant_value_t iterator = Ant_Object_CreateBare(js);
     GC_ROOT_PIN(js, iterator);
     js_set_proto_init(iterator, protos[i]);
     iterator_t it;

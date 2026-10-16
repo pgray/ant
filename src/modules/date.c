@@ -15,6 +15,7 @@
 #endif
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ascii.h"
 #include "internal.h"
 #include "errors.h"
@@ -804,7 +805,7 @@ static ant_value_t builtin_Date(ant_params_t) {
   if (vtype(call_new_target) == kTypeUndefined) {
     val = (double)date_now();
     
-    ant_value_t tmp = js_mkobj(js);
+    ant_value_t tmp = Ant_Object_CreateBare(js);
     ant_value_t date_proto = js->builtins.date_proto;
     if (is_object_type(date_proto)) js_set_proto_init(tmp, date_proto);
     
@@ -1264,7 +1265,7 @@ static ant_value_t date_toPrimitive(ant_params_t) {
 
 void init_date_module(ant_t *js) {
   ant_value_t object_proto = js->sym.object_proto;  
-  ant_value_t date_proto = js_mkobj(js);
+  ant_value_t date_proto = Ant_Object_CreateBare(js);
   
   js->builtins.date_proto = date_proto;
   js_set_proto_init(date_proto, object_proto);

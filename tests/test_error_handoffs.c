@@ -1,5 +1,6 @@
 // meson test -C build error-handoffs
 #include "internal.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "gc/objects.h"
 #include "gc/roots.h"
@@ -12,7 +13,6 @@
 #include "modules/iterator.h"
 #include "modules/timer.h"
 #include "sandbox/sandbox.h"
-#include "sandbox/transport.h"
 #include "silver/call.h"
 #include <assert.h>
 #include <stdio.h>
@@ -75,7 +75,7 @@ static ant_fixed_arena_t ExhaustArena(ant_fixed_arena_t *arena) {
 
 static void CheckFunctionAllocationFailure(ant_t *js) {
   GC_ROOT_SAVE(mark, js);
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, obj);
   ant_value_t oom = js->exception_oom;
   GC_ROOT_PIN(js, oom);
@@ -241,7 +241,7 @@ static void CheckAwaitValueRoots(ant_t *js) {
     GC_ROOT_SAVE(input_mark, js);
     ant_value_t awaited = js_mkpromise(js);
     GC_ROOT_PIN(js, awaited);
-    ant_value_t value = js_mkobj(js);
+    ant_value_t value = Ant_Object_CreateBare(js);
     GC_ROOT_PIN(js, value);
     js_set(js, value, "answer", js_mknum(42));
     if (input_kind == 0) js_resolve_promise(js, awaited, value);
@@ -351,7 +351,7 @@ static void CheckExplicitAwaitResume(ant_t *js) {
     GC_ROOT_PIN(js, output);
     assert(coroutine_cancel(coro));
 
-    ant_value_t value = js_mkobj(js);
+    ant_value_t value = Ant_Object_CreateBare(js);
     GC_ROOT_PIN(js, value);
     js_set(js, value, "answer", js_mknum(42));
     Ant_Coroutine_SettleAndResume(js, coro, value, rejected);
@@ -428,7 +428,7 @@ static void CheckOnceAttachmentCleanup(ant_t *js) {
   GC_ROOT_PIN(js, events);
   ant_value_t once = js_get(js, events, "once");
   assert(vtype(once) == kTypeBuiltin);
-  ant_value_t reason = js_mkobj(js);
+  ant_value_t reason = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, reason);
   ant_value_t event_name = js_mkstr(js, "ready", 5);
   GC_ROOT_PIN(js, event_name);
@@ -445,9 +445,9 @@ static void CheckOnceAttachmentCleanup(ant_t *js) {
       GC_ROOT_PIN(js, once_signal);
       once_saved_abort = js_mkundef();
       GC_ROOT_PIN(js, once_saved_abort);
-      ant_value_t target = js_mkobj(js);
+      ant_value_t target = Ant_Object_CreateBare(js);
       GC_ROOT_PIN(js, target);
-      ant_value_t options = js_mkobj(js);
+      ant_value_t options = Ant_Object_CreateBare(js);
       GC_ROOT_PIN(js, options);
       js_set(js, options, "signal", once_signal);
       js_set(js, target, "removeListener", Ant_Function_Create(RemoveOnceListener));
@@ -486,7 +486,7 @@ static void CheckOnceAttachmentCleanup(ant_t *js) {
 
 static ant_value_t retained_completion(ant_t *js) {
   GC_ROOT_SAVE(mark, js);
-  ant_value_t value = js_mkobj(js);
+  ant_value_t value = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, value);
   js_set(js, value, "answer", js_mknum(42));
   ant_value_t stack = js_mkstr(js, "retained stack", 14);
@@ -606,7 +606,7 @@ static void CheckLongErrorMessages(ant_t *js) {
   GC_ROOT_SAVE(mark, js);
   ant_value_t previous = js_throw(js, js_mkundef());
   GC_ROOT_PIN(js, previous);
-  ant_value_t props = js_mkobj(js);
+  ant_value_t props = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, props);
   js_set(js, props, "code", js_mknum(73));
   ant_value_t error = js_mkundef();
@@ -791,7 +791,7 @@ int main(void) {
   // exception. Exercise both reasons for scoped entry without C-stack roots.
   for (int pending = 0; pending < 2; pending++) {
     ant_value_t caller_exception = pending ? js_throw(js, error) : js_mkundef();
-    ant_value_t target = js_mkobj(js);
+    ant_value_t target = Ant_Object_CreateBare(js);
     sv_native_frame_t *parent_frame = js->vm->native_frame;
     js_setstackbase(js, NULL);
     success = sv_invoke_native(js, collect_native_target, NULL, 0, target);

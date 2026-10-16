@@ -1,4 +1,5 @@
 #include "modules/temporal.h"
+#include "cfunc.h"
 
 #ifdef ANT_HAVE_TEMPORAL
 #  include "temporal_internal.h"
@@ -654,7 +655,7 @@ static ant_value_t temporal_zdt_value_of(ant_params_t) {
 }
 
 void temporal_init_zdt(ant_t *js, ant_value_t temporal) {
-  ant_value_t proto = js_mkobj(js);
+  ant_value_t proto = Ant_Object_CreateBare(js);
   js_set_proto_init(proto, js->sym.object_proto);
   js->builtins.temporal_zoned_datetime_proto = proto;
   TEMPORAL_GETTER(js, proto, "calendarId", temporal_zdt_get_calendar_id);

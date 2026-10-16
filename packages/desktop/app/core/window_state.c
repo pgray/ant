@@ -90,7 +90,7 @@ ant_value_t ant_desktop_emit_window_event(ant_desktop_window_state_t *window, co
   ant_value_t listeners = js_get(window->js, events, type);
   if (!is_array_value(listeners)) return js_mkundef();
 
-  ant_value_t event = js_mkobj(window->js);
+  ant_value_t event = Ant_Object_CreateBare(window->js);
   js_set(window->js, event, "type", js_mkstr(window->js, type, strlen(type)));
   if (detail && detail_length) { js_set(window->js, event, "detail", js_mkstr(window->js, detail, detail_length)); }
   js_set(window->js, event, "code", js_mknum((double)code));

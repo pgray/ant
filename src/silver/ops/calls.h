@@ -172,7 +172,7 @@ static inline ant_value_t sv_op_new(sv_vm_t *vm, ant_t *js, uint8_t *ip) {
   GC_ROOT_PIN(js, proto);
   GC_ROOT_PIN(js, obj);
   
-  obj = js_mkobj(js);
+  obj = Ant_Object_CreateBare(js);
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
   
   ant_value_t ctor_this = obj;
@@ -296,7 +296,7 @@ static inline ant_value_t sv_op_new_apply(sv_vm_t *vm, ant_t *js, uint8_t *ip) {
   GC_ROOT_PIN(js, proto);
   GC_ROOT_PIN(js, obj);
   
-  obj = js_mkobj(js);
+  obj = Ant_Object_CreateBare(js);
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
   
   ant_value_t ctor_this = obj;

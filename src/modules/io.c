@@ -22,6 +22,7 @@
 #endif
 
 #include "ascii.h"
+#include "cfunc.h"
 #include "common.h"
 #include "builder.h"
 #include "stringify.h"
@@ -689,7 +690,7 @@ static ant_value_t console_get_state_map(ant_t *js, ant_value_t this_obj, const 
   ant_value_t map = js_get_slot(this_obj, slot);
   if (is_special_object(map)) return map;
 
-  map = js_mkobj(js);
+  map = Ant_Object_CreateBare(js);
   js_set_slot_wb(js, this_obj, slot, map);
 
   return map;
@@ -1545,7 +1546,7 @@ static void console_apply_methods(ant_t *js, ant_value_t console_obj) {
 
 static ant_value_t js_console_constructor(ant_params_t) {
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.console_proto, call_new_target);
-  ant_value_t console_obj = js_mkobj(js);
+  ant_value_t console_obj = Ant_Object_CreateBare(js);
   js_set_proto_init(console_obj, is_special_object(proto) ? proto : js->builtins.console_proto);
 
   ant_value_t stdout_obj = js_mkundef();
@@ -1566,8 +1567,8 @@ static ant_value_t js_console_constructor(ant_params_t) {
   if (vtype(stderr_obj) == kTypeUndefined) stderr_obj = stdout_obj;
   js_set_slot_wb(js, console_obj, SLOT_CONSOLE_STDOUT, stdout_obj);
   js_set_slot_wb(js, console_obj, SLOT_CONSOLE_STDERR, stderr_obj);
-  js_set_slot_wb(js, console_obj, SLOT_CONSOLE_COUNTS, js_mkobj(js));
-  js_set_slot_wb(js, console_obj, SLOT_CONSOLE_TIMERS, js_mkobj(js));
+  js_set_slot_wb(js, console_obj, SLOT_CONSOLE_COUNTS, Ant_Object_CreateBare(js));
+  js_set_slot_wb(js, console_obj, SLOT_CONSOLE_TIMERS, Ant_Object_CreateBare(js));
   
   js_set_slot(console_obj, SLOT_CONSOLE_GROUP_INDENT, js_mknum((double)group_indentation));
   js_set_slot(console_obj, SLOT_CONSOLE_GROUP_LEVEL, js_mknum(0));
@@ -1578,7 +1579,7 @@ static ant_value_t js_console_constructor(ant_params_t) {
 static void console_ensure_constructor(ant_t *js) {
   if (js->builtins.console_ctor) return;
   
-  js->builtins.console_proto = js_mkobj(js);
+  js->builtins.console_proto = Ant_Object_CreateBare(js);
   console_apply_methods(js, js->builtins.console_proto);
   
   js_set_tostringtag(js, js->builtins.console_proto, js_mkstr(js, "console", 7));
@@ -1587,11 +1588,11 @@ static void console_ensure_constructor(ant_t *js) {
 
 static ant_value_t console_create_default(ant_t *js) {
   console_ensure_constructor(js);
-  ant_value_t console_obj = js_mkobj(js);
+  ant_value_t console_obj = Ant_Object_CreateBare(js);
   
   js_set_proto_init(console_obj, js->builtins.console_proto);
-  js_set_slot_wb(js, console_obj, SLOT_CONSOLE_COUNTS, js_mkobj(js));
-  js_set_slot_wb(js, console_obj, SLOT_CONSOLE_TIMERS, js_mkobj(js));
+  js_set_slot_wb(js, console_obj, SLOT_CONSOLE_COUNTS, Ant_Object_CreateBare(js));
+  js_set_slot_wb(js, console_obj, SLOT_CONSOLE_TIMERS, Ant_Object_CreateBare(js));
   js_set_slot(console_obj, SLOT_CONSOLE_GROUP_INDENT, js_mknum(2));
   js_set_slot(console_obj, SLOT_CONSOLE_GROUP_LEVEL, js_mknum(0));
   js_set_tostringtag(js, console_obj, js_mkstr(js, "console", 7));

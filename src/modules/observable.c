@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "errors.h"
+#include "cfunc.h"
 #include "internal.h"
 #include "silver/call.h"
 #include "descriptors.h"
@@ -40,7 +41,7 @@ static void cleanup_subscription(ant_t *js, ant_value_t subscription) {
 }
 
 static ant_value_t create_subscription(ant_t *js, ant_value_t observer) {
-  ant_value_t subscription = js_mkobj(js);
+  ant_value_t subscription = Ant_Object_CreateBare(js);
   js_set_slot(subscription, SLOT_SUBSCRIPTION_OBSERVER, observer);
   js_set_slot(subscription, SLOT_SUBSCRIPTION_CLEANUP, js_mkundef());
   js_set_tostringtag(js, subscription, js_mkstr(js, "Subscription", 12));
@@ -190,7 +191,7 @@ static ant_value_t js_subobs_complete(ant_params_t) {
 }
 
 static ant_value_t create_subscription_observer(ant_t *js, ant_value_t subscription) {
-  ant_value_t subobs = js_mkobj(js);
+  ant_value_t subobs = Ant_Object_CreateBare(js);
   
   js_set_slot(subobs, SLOT_DATA, subscription);
   js_set(js, subobs, "next", Ant_Function_Create(js_subobs_next));
@@ -234,7 +235,7 @@ static ant_value_t execute_subscriber(ant_t *js, ant_value_t subscriber, ant_val
     if (vtype(result) == kTypeUndefined)
       return js_mkerr_typed(js, JS_ERR_TYPE, "Subscriber return value must have an unsubscribe method");
     
-    ant_value_t cleanupFunction = js_mkobj(js);
+    ant_value_t cleanupFunction = Ant_Object_CreateBare(js);
     js_set_slot(cleanupFunction, SLOT_DATA, subscriberResult);
     js_set_slot(cleanupFunction, SLOT_CFUNC, Ant_Function_Create(js_cleanup_fn));
 
@@ -263,13 +264,13 @@ static ant_value_t js_observable_subscribe(ant_params_t) {
     ant_value_t errorCallback = (nargs > 1) ? args[1] : js_mkundef();
     ant_value_t completeCallback = (nargs > 2) ? args[2] : js_mkundef();
     
-    observer = js_mkobj(js);
+    observer = Ant_Object_CreateBare(js);
     js_set(js, observer, "next", nextCallback);
     js_set(js, observer, "error", errorCallback);
     js_set(js, observer, "complete", completeCallback);
   } else if (nargs > 0 && is_special_object(args[0])) {
     observer = args[0];
-  } else observer = js_mkobj(js);
+  } else observer = Ant_Object_CreateBare(js);
   
   ant_value_t subscription = create_subscription(js, observer);
   setup_subscription_methods(js, subscription);
@@ -318,7 +319,7 @@ static ant_value_t js_observable_constructor(ant_params_t) {
   }
   
   ant_value_t proto = js->builtins.observable_proto;
-  ant_value_t observable = js_mkobj(js);
+  ant_value_t observable = Ant_Object_CreateBare(js);
   
   js_set_proto_init(observable, proto);
   js_set_slot(observable, SLOT_OBSERVABLE_SUBSCRIBER, subscriber);
@@ -464,7 +465,7 @@ static ant_value_t js_observable_from(ant_params_t) {
   ant_value_t iteratorMethod = js_get_sym(js, x, js->sym.iterator_sym);
   if (!is_callable(iteratorMethod)) return js_mkerr_typed(js, JS_ERR_TYPE, "Object is not observable or iterable");
   
-  ant_value_t data = js_mkobj(js);
+  ant_value_t data = Ant_Object_CreateBare(js);
   js_set(js, data, "iterable", x);
   js_set(js, data, "iteratorMethod", iteratorMethod);
   
@@ -475,8 +476,8 @@ static ant_value_t js_observable_from(ant_params_t) {
 }
 
 void init_observable_module(ant_t *js) {  
-  ant_value_t observable_ctor = js_mkobj(js);
-  ant_value_t observable_proto = js_mkobj(js);
+  ant_value_t observable_ctor = Ant_Object_CreateBare(js);
+  ant_value_t observable_proto = Ant_Object_CreateBare(js);
   js->builtins.observable_proto = observable_proto;
   
   defmethod(js, observable_proto, "subscribe", 9, Ant_Function_Create(js_observable_subscribe));

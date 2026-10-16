@@ -5,6 +5,7 @@
 #include <yyjson.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "internal.h"
 #include "descriptors.h"
@@ -277,7 +278,7 @@ void init_localstorage_module(ant_t *js) {
     storage_load();
   }
   
-  ant_value_t storage_obj = js_newobj(js);
+  ant_value_t storage_obj = Ant_Object_Create(js);
   
   js_set(js, storage_obj, "setItem", Ant_Function_Create(js_localstorage_setItem));
   js_set(js, storage_obj, "getItem", Ant_Function_Create(js_localstorage_getItem));

@@ -5,6 +5,7 @@
 #include "modules/timer.h"
 
 #include "ant.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "gc/roots.h"
 #include "internal.h"
@@ -285,7 +286,7 @@ static ant_value_t sandbox_guest_parent_port(ant_t *js) {
 
   memset(&g_guest_port, 0, sizeof(g_guest_port));
   g_guest_port.js = js;
-  g_guest_port.obj = js_mkobj(js);
+  g_guest_port.obj = Ant_Object_CreateBare(js);
   js_set(js, g_guest_port.obj, "send", Ant_Function_CreateWithArity(sandbox_guest_send, 1));
   js_set(js, g_guest_port.obj, "on", Ant_Function_CreateWithArity(sandbox_guest_on, 2));
   js_set(js, g_guest_port.obj, "close", Ant_Function_Create(sandbox_guest_close));
@@ -668,7 +669,7 @@ static ant_value_t sandbox_ctor(ant_params_t) {
     }
   }
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   state->self = obj;
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.sandbox_proto, call_new_target);
   
@@ -1375,7 +1376,7 @@ static ant_value_t sandbox_stats(ant_params_t) {
     }
   }
 
-  ant_value_t result = js_mkobj(js);
+  ant_value_t result = Ant_Object_CreateBare(js);
   js_set(js, result, "cpuTimeMs", js_mknum((double)stats.cpu_time_ns / 1000000.0));
   js_set(js, result, "wallTimeMs", js_mknum((double)stats.wall_time_ns / 1000000.0));
   if (stats.resident_memory_available)
@@ -1443,7 +1444,7 @@ void gc_mark_sandbox(ant_t *js, gc_mark_fn mark) {
 
 ant_value_t sandbox_library(ant_t *js) {
   if (!js->builtins.sandbox_ctor) {
-    js->builtins.sandbox_proto = js_mkobj(js);
+    js->builtins.sandbox_proto = Ant_Object_CreateBare(js);
     js_set(js, js->builtins.sandbox_proto, "run", Ant_Function_CreateWithArity(sandbox_run, 1));
     js_set(js, js->builtins.sandbox_proto, "eval", Ant_Function_CreateWithArity(sandbox_eval, 1));
     js_set(js, js->builtins.sandbox_proto, "send", Ant_Function_CreateWithArity(sandbox_send, 1));
@@ -1461,7 +1462,7 @@ ant_value_t sandbox_library(ant_t *js) {
     gc_register_root(&js->builtins.sandbox_ctor);
   }
 
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
   js_set(js, lib, "Sandbox", js->builtins.sandbox_ctor);
   js_set(js, lib, "parentPort", sandbox_guest_parent_port(js));
   js_set(js, lib, "default", lib);

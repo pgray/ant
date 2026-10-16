@@ -476,7 +476,7 @@ static bool inspector_safe_eval_ast(ant_t *js, sv_ast_t *node, ant_value_t *out)
       return true;
     }
     case N_OBJECT: {
-      ant_value_t obj = js_newobj(js);
+      ant_value_t obj = Ant_Object_Create(js);
       if (is_err(obj)) return false;
 
       for (int i = 0; i < node->args.count; i++) {

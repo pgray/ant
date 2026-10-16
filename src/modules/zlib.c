@@ -8,6 +8,7 @@
 #include <brotli/decode.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ptr.h"
 #include "errors.h"
 #include "internal.h"
@@ -677,7 +678,7 @@ static ant_value_t zlib_create_stream(ant_t *js, zlib_kind_t kind, ant_value_t o
     }
   }
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   if (kind >= 0 && kind < ZLIB_KIND_COUNT && is_object_type(js->builtins.zlib_protos[kind]))
     js_set_proto_init(obj, js->builtins.zlib_protos[kind]);
   else if (is_object_type(js->builtins.zlib_transform_proto)) js_set_proto_init(obj, js->builtins.zlib_transform_proto);
@@ -688,7 +689,7 @@ static ant_value_t zlib_create_stream(ant_t *js, zlib_kind_t kind, ant_value_t o
   js_set(js, obj, "writable", js_true);
   js_set(js, obj, "_processChunk", Ant_Function_Create(js_zlib_process_chunk));
 
-  ant_value_t handle_obj = js_mkobj(js);
+  ant_value_t handle_obj = Ant_Object_CreateBare(js);
   js_set(js, handle_obj, "close", Ant_Function_Create(js_zlib_close));
   js_set(js, obj, "_handle", handle_obj);
 
@@ -765,7 +766,7 @@ static int zbuf_brotli_cb(void *ctx, const uint8_t *chunk, size_t n) {
 }
 
 static ant_value_t zlib_too_large(ant_t *js, size_t limit) {
-  ant_value_t props = js_mkobj(js);
+  ant_value_t props = Ant_Object_CreateBare(js);
   js_set(js, props, "code", js_mkstr(js, "ERR_BUFFER_TOO_LARGE", 20));
   return js_mkerr_props(js, JS_ERR_RANGE, props,
     "Cannot create a Buffer larger than %zu bytes", limit);
@@ -785,7 +786,7 @@ static const char *zlib_code_name(int code) {
 }
 
 static ant_value_t zlib_error(ant_t *js, const char *message, const char *code, int errnum) {
-  ant_value_t props = js_mkobj(js);
+  ant_value_t props = Ant_Object_CreateBare(js);
   js_set(js, props, "code", js_mkstr(js, code, strlen(code)));
   js_set(js, props, "errno", js_mknum((double)errnum));
   return js_mkerr_props(js, JS_ERR_GENERIC, props, "%s", message);
@@ -1119,13 +1120,13 @@ static void zlib_install_constants(ant_t *js, ant_value_t c) {
 }
 
 static ant_value_t make_constants(ant_t *js) {
-  ant_value_t c = js_mkobj(js);
+  ant_value_t c = Ant_Object_CreateBare(js);
   zlib_install_constants(js, c);
   return c;
 }
 
 static ant_value_t make_codes(ant_t *js) {
-  ant_value_t codes = js_mkobj(js);
+  ant_value_t codes = Ant_Object_CreateBare(js);
   js_set(js, codes, "0", js_mkstr(js, "Z_OK", 4));
   js_set(js, codes, "1", js_mkstr(js, "Z_STREAM_END", 12));
   js_set(js, codes, "2", js_mkstr(js, "Z_NEED_DICT", 11));
@@ -1150,7 +1151,7 @@ static ant_value_t make_codes(ant_t *js) {
 static void zlib_init_proto(ant_t *js) {
   if (js->builtins.zlib_transform_proto) return;
 
-  js->builtins.zlib_transform_proto = js_mkobj(js);
+  js->builtins.zlib_transform_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.zlib_transform_proto, stream_readable_prototype(js));
 
   js_set(js, js->builtins.zlib_transform_proto, "write",    Ant_Function_Create(js_zlib_write));
@@ -1213,7 +1214,7 @@ static const zlib_kind_entry_t zlib_kinds[ZLIB_KIND_COUNT] = {
 
 static void zlib_define_kind(ant_t *js, ant_value_t lib, zlib_kind_t kind) {
   const zlib_kind_entry_t *entry = &zlib_kinds[kind];
-  ant_value_t proto = js_mkobj(js);
+  ant_value_t proto = Ant_Object_CreateBare(js);
   if (is_object_type(js->builtins.zlib_transform_proto)) js_set_proto_init(proto, js->builtins.zlib_transform_proto);
   js->builtins.zlib_protos[kind] = proto;
 
@@ -1226,7 +1227,7 @@ static void zlib_define_kind(ant_t *js, ant_value_t lib, zlib_kind_t kind) {
 ant_value_t zlib_library(ant_t *js) {
   zlib_init_proto(js);
 
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
   ant_value_t consts = make_constants(js);
   ant_value_t codes = make_codes(js);
 

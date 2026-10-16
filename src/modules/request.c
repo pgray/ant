@@ -5,6 +5,7 @@
 #include <stdio.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ascii.h"
 #include "builder.h"
 #include "ptr.h"
@@ -127,7 +128,7 @@ static request_data_t *data_new_server(const char *method) {
 }
 
 static ant_value_t request_create_object(ant_t *js, request_data_t *req, ant_value_t headers_obj, bool create_signal) {
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   (void)js_reserve_slots(obj, REQUEST_RESERVED_SLOTS);
   
   ant_value_t hdrs = is_object_type(headers_obj)
@@ -635,7 +636,7 @@ static ant_value_t consume_body_from_stream(
     return promise;
   }
 
-  ant_value_t state = js_mkobj(js);
+  ant_value_t state = Ant_Object_CreateBare(js);
   js_set(js, state, "promise", promise);
   js_set(js, state, "reader",  reader);
   js_set(js, state, "chunks",  js_mkarr(js));
@@ -955,7 +956,7 @@ static bool request_inspect_set(
 
 static ant_value_t request_inspect(ant_params_t) {
   ant_value_t this_obj = js_getthis(js);
-  ant_value_t out = js_mkobj(js);
+  ant_value_t out = Ant_Object_CreateBare(js);
   ant_value_t err = 0;
 
   if (!request_inspect_set(js, out, "method", js_req_get_method(js, NULL, 0, js_mkundef()), &err)) return err;
@@ -1002,7 +1003,7 @@ static ant_value_t js_request_clone(ant_params_t) {
   ant_value_t new_signal = abort_signal_create_dependent(js, src_signal);
   if (is_err(new_signal)) { data_free(nd); return new_signal; }
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   (void)js_reserve_slots(obj, REQUEST_RESERVED_SLOTS);
   js_set_proto_init(obj, js->builtins.request_proto);
   js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_REQUEST));
@@ -1359,7 +1360,7 @@ static ant_value_t js_request_ctor(ant_params_t) {
     "Failed to construct 'Request': method must be one of GET, HEAD, POST for no-cors mode");
   }
 
-  obj = js_mkobj(js);
+  obj = Ant_Object_CreateBare(js);
   (void)js_reserve_slots(obj, REQUEST_RESERVED_SLOTS);
   proto = js_instance_proto_from_new_target(js, js->builtins.request_proto, call_new_target);
   
@@ -1436,7 +1437,7 @@ ant_value_t request_create_from_input_init(ant_t *js, ant_value_t input, ant_val
     "Failed to construct 'Request': method must be one of GET, HEAD, POST for no-cors mode");
   }
 
-  obj = js_mkobj(js);
+  obj = Ant_Object_CreateBare(js);
   (void)js_reserve_slots(obj, REQUEST_RESERVED_SLOTS);
   js_set_proto_init(obj, js->builtins.request_proto);
   js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_REQUEST));
@@ -1515,7 +1516,7 @@ ant_value_t request_create_server(
 
 void init_request_module(ant_t *js) {
   ant_value_t g = js_glob(js);
-  js->builtins.request_proto = js_mkobj(js);
+  js->builtins.request_proto = Ant_Object_CreateBare(js);
 
   js_set(js, js->builtins.request_proto, "text", Ant_Function_Create(js_req_text));
   js_set(js, js->builtins.request_proto, "json", Ant_Function_Create(js_req_json));

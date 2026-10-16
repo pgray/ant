@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "gc/roots.h"
 #include "internal.h"
@@ -373,7 +374,7 @@ static bool wire_decode_value(
         return false;
 
       GC_ROOT_SAVE(root_mark, js);
-      ant_value_t object = js_newobj(js);
+      ant_value_t object = Ant_Object_Create(js);
       ant_value_t item = js_mkundef();
       GC_ROOT_PIN(js, object);
       GC_ROOT_PIN(js, item);
@@ -526,7 +527,7 @@ static ant_value_t error_payload(
   GC_ROOT_SAVE(root_mark, js);
 
   ant_value_t thrown = js_take_thrown(js, fallback);
-  ant_value_t payload = js_mkobj(js);
+  ant_value_t payload = Ant_Object_CreateBare(js);
   ant_value_t name = js_mkundef();
   ant_value_t message = js_mkundef();
   ant_value_t stack = js_mkundef();
@@ -554,7 +555,7 @@ static ant_value_t error_payload(
   if (!define_payload_property(js, payload, "name", 4, name) ||
       !define_payload_property(js, payload, "message", 7, message)) {
     js_take_thrown(js, js_mkundef());
-    payload = js_mkobj(js);
+    payload = Ant_Object_CreateBare(js);
     if (!is_err(payload)) {
       define_payload_property(
         js, payload, "name", 4, js_mkstr(js, "Error", 5)

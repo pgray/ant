@@ -271,6 +271,8 @@ struct ant_isolate_t {
 
   ant_offset_t max_size;
   double perf_time_origin_ms;
+  double perf_loop_start_ms;
+  double perf_elu_start_ms;
 
   struct {
     ant_pool_t rope;

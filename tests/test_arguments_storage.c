@@ -42,7 +42,7 @@ int main(void) {
     assert(ptr->u.array.cap >= count + 1);
 
     // Preserve the internal slot API for non-marker values as well.
-    ant_value_t payload = js_mkobj(js);
+    ant_value_t payload = Ant_Object_CreateBare(js);
     js_set_slot_wb(js, args, SLOT_ARGUMENTS_OBJECT, payload);
     assert(js_get_slot(args, SLOT_ARGUMENTS_OBJECT) == payload);
     js_set_slot(args, SLOT_ARGUMENTS_OBJECT, js_true);

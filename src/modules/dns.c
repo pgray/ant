@@ -17,6 +17,7 @@
 #endif
 
 #include "internal.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "gc/roots.h"
 
@@ -76,7 +77,7 @@ static ant_value_t dns_promises_lookup(ant_params_t) {
 
   freeaddrinfo(res);
 
-  ant_value_t result = js_mkobj(js);
+  ant_value_t result = Ant_Object_CreateBare(js);
   js_set(js, result, "address", js_mkstr(js, addr_str, strlen(addr_str)));
   js_set(js, result, "family", js_mknum(family));
 
@@ -170,7 +171,7 @@ static ant_value_t dns_parse_srv(ant_t *js, const unsigned char *abuf, int alen)
 
   ant_value_t arr = js_mkarr(js);
   for (struct ares_srv_reply *cur = srv; cur; cur = cur->next) {
-    ant_value_t record = js_mkobj(js);
+    ant_value_t record = Ant_Object_CreateBare(js);
     js_set(js, record, "name", js_mkstr(js, cur->host, strlen(cur->host)));
     js_set(js, record, "port", js_mknum((double)cur->port));
     js_set(js, record, "priority", js_mknum((double)cur->priority));
@@ -244,8 +245,8 @@ static ant_value_t dns_promises_resolve(ant_params_t) {
 }
 
 ant_value_t dns_library(ant_t *js) {
-  ant_value_t lib = js_mkobj(js);
-  ant_value_t promises = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
+  ant_value_t promises = Ant_Object_CreateBare(js);
 
   js_set(js, promises, "lookup", Ant_Function_Create(dns_promises_lookup));
   js_set(js, promises, "resolve", Ant_Function_Create(dns_promises_resolve));

@@ -19,9 +19,9 @@ int main(void) {
   js_setstackbase(js, NULL);
 
   GC_ROOT_SAVE(roots, js);
-  ant_value_t parent = js_mkobj(js);
+  ant_value_t parent = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, parent);
-  ant_value_t child = js_mkobj(js);
+  ant_value_t child = Ant_Object_CreateBare(js);
   js_set(js, parent, "child", child);
 
   // A full vector this long asks realloc for 2^63 bytes, which cannot succeed.

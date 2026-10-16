@@ -7,6 +7,7 @@
 // default loop), and destroying an isolate must close its timers before
 // that loop can fire them into freed memory.
 #include "internal.h"
+#include "cfunc.h"
 #include "loop.h"
 #include "modules/symbol.h"
 #include "modules/timer.h"

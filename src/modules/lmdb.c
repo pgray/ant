@@ -1,6 +1,7 @@
 #include <compat.h> // IWYU pragma: keep
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ptr.h"
 #include "errors.h"
 #include "internal.h"
@@ -615,7 +616,7 @@ static ant_value_t lmdb_env_stat_method(ant_params_t) {
   mdb_txn_abort(txn);
   if (rc != 0) return js_mkerr(js, "lmdb_stat failed: %s", mdb_strerror(rc));
 
-  ant_value_t out = js_mkobj(js);
+  ant_value_t out = Ant_Object_CreateBare(js);
   js_set(js, out, "psize", js_mknum((double)stat.ms_psize));
   js_set(js, out, "depth", js_mknum((double)stat.ms_depth));
   js_set(js, out, "branchPages", js_mknum((double)stat.ms_branch_pages));
@@ -634,7 +635,7 @@ static ant_value_t lmdb_env_info_method(ant_params_t) {
   int rc = mdb_env_info(env->env, &info);
   if (rc != 0) return js_mkerr(js, "lmdb_env_info failed: %s", mdb_strerror(rc));
 
-  ant_value_t out = js_mkobj(js);
+  ant_value_t out = Ant_Object_CreateBare(js);
   js_set(js, out, "mapSize", js_mknum((double)info.me_mapsize));
   js_set(js, out, "lastPgNo", js_mknum((double)info.me_last_pgno));
   js_set(js, out, "lastTxnId", js_mknum((double)info.me_last_txnid));
@@ -1002,8 +1003,8 @@ static void ensure_lmdb_prototypes(ant_t *js) {
   if (lmdb_types.ready) return;
   ant_value_t object_proto = js->sym.object_proto;
 
-  ant_value_t env_ctor_obj = js_mkobj(js);
-  ant_value_t env_proto = js_mkobj(js);
+  ant_value_t env_ctor_obj = Ant_Object_CreateBare(js);
+  ant_value_t env_proto = Ant_Object_CreateBare(js);
   
   js_set_proto_init(env_proto, object_proto);
   js_set(js, env_proto, "openDB", Ant_Function_Create(lmdb_env_open_db));
@@ -1017,8 +1018,8 @@ static void ensure_lmdb_prototypes(ant_t *js) {
   js_mkprop_fast(js, env_ctor_obj, "prototype", 9, env_proto);
   js_set_function_name(js, env_ctor_obj, "LMDBEnv", sizeof("LMDBEnv") - 1);
 
-  ant_value_t db_ctor_obj = js_mkobj(js);
-  ant_value_t db_proto = js_mkobj(js);
+  ant_value_t db_ctor_obj = Ant_Object_CreateBare(js);
+  ant_value_t db_proto = Ant_Object_CreateBare(js);
   
   js_set_proto_init(db_proto, object_proto);
   js_set(js, db_proto, "get", Ant_Function_Create(lmdb_db_get));
@@ -1034,8 +1035,8 @@ static void ensure_lmdb_prototypes(ant_t *js) {
   js_mkprop_fast(js, db_ctor_obj, "prototype", 9, db_proto);
   js_set_function_name(js, db_ctor_obj, "LMDBDatabase", sizeof("LMDBDatabase") - 1);
 
-  ant_value_t txn_ctor_obj = js_mkobj(js);
-  ant_value_t txn_proto = js_mkobj(js);
+  ant_value_t txn_ctor_obj = Ant_Object_CreateBare(js);
+  ant_value_t txn_proto = Ant_Object_CreateBare(js);
   
   js_set_proto_init(txn_proto, object_proto);
   js_set(js, txn_proto, "get", Ant_Function_Create(lmdb_txn_get));
@@ -1061,7 +1062,7 @@ static void ensure_lmdb_prototypes(ant_t *js) {
 
 static ant_value_t make_env_obj(ant_t *js, lmdb_env_handle_t *env) {
   ensure_lmdb_prototypes(js);
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_native(obj, env, LMDB_ENV_NATIVE_TAG);
   js_set_finalizer(obj, lmdb_env_finalize);
   register_env_ref(obj, env);
@@ -1071,7 +1072,7 @@ static ant_value_t make_env_obj(ant_t *js, lmdb_env_handle_t *env) {
 
 static ant_value_t make_db_obj(ant_t *js, lmdb_db_handle_t *db, ant_value_t env_obj) {
   ensure_lmdb_prototypes(js);
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_native(obj, db, LMDB_DB_NATIVE_TAG);
   js_set_finalizer(obj, lmdb_db_finalize);
   js_set_slot_wb(js, obj, SLOT_DATA, env_obj);
@@ -1082,7 +1083,7 @@ static ant_value_t make_db_obj(ant_t *js, lmdb_db_handle_t *db, ant_value_t env_
 
 static ant_value_t make_txn_obj(ant_t *js, lmdb_txn_handle_t *txn, ant_value_t env_obj) {
   ensure_lmdb_prototypes(js);
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_native(obj, txn, LMDB_TXN_NATIVE_TAG);
   js_set_finalizer(obj, lmdb_txn_finalize);
   js_set_slot_wb(js, obj, SLOT_DATA, env_obj);
@@ -1093,7 +1094,7 @@ static ant_value_t make_txn_obj(ant_t *js, lmdb_txn_handle_t *txn, ant_value_t e
 
 ant_value_t lmdb_library(ant_t *js) {
   ensure_lmdb_prototypes(js);
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
   js_set(js, lib, "open", Ant_Function_Create(lmdb_open));
   js_set(js, lib, "strerror", Ant_Function_Create(lmdb_strerror_fn));
   js_set(js, lib, "Env", lmdb_types.env_ctor);
@@ -1108,7 +1109,7 @@ ant_value_t lmdb_library(ant_t *js) {
   js_set(js, lib, "versionMinor", js_mknum((double)minor));
   js_set(js, lib, "versionPatch", js_mknum((double)patch));
 
-  ant_value_t constants = js_mkobj(js);
+  ant_value_t constants = Ant_Object_CreateBare(js);
   js_set(js, constants, "NOOVERWRITE", js_mknum((double)MDB_NOOVERWRITE));
   js_set(js, constants, "NODUPDATA", js_mknum((double)MDB_NODUPDATA));
   js_set(js, constants, "APPEND", js_mknum((double)MDB_APPEND));

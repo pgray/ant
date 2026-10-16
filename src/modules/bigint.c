@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ascii.h"
 #include "internal.h"
 #include "errors.h"
@@ -1793,7 +1794,7 @@ static ant_value_t builtin_bigint_valueOf(ant_params_t) {
 void init_bigint_module(ant_t *js) {
   ant_value_t object_proto = js->sym.object_proto;
 
-  ant_value_t bigint_proto = js_mkobj(js);
+  ant_value_t bigint_proto = Ant_Object_CreateBare(js);
   js->sym.bigint_proto = bigint_proto;
   js_set_proto_init(bigint_proto, object_proto);
   

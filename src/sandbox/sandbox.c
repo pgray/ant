@@ -671,7 +671,7 @@ static bool sandbox_send_uncaught_throw(ant_t *js) {
 
 int ant_sandbox_eval_module(ant_t *js, const char *script, size_t len) {
   const char *tag = "[sandbox eval].mjs";
-  ant_value_t ns = js_mkobj(js);
+  ant_value_t ns = Ant_Object_CreateBare(js);
 
   js_set_slot(ns, SLOT_BRAND, js_mknum(BRAND_MODULE_NAMESPACE));
   js_set_slot(ns, SLOT_MODULE_LOADING, js_true);

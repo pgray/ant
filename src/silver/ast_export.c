@@ -61,7 +61,7 @@ static ant_value_t syntax_pin(syntax_export_ctx_t *ctx, ant_value_t value) {
 }
 
 static ant_value_t syntax_obj(syntax_export_ctx_t *ctx) {
-  return syntax_pin(ctx, js_mkobj(ctx->js));
+  return syntax_pin(ctx, Ant_Object_CreateBare(ctx->js));
 }
 
 static ant_value_t syntax_arr(syntax_export_ctx_t *ctx) {

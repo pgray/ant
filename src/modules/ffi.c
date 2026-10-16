@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ptr.h"
 #include "errors.h"
 #include "internal.h"
@@ -447,7 +448,7 @@ static bool ffi_pointer_ensure_readable(
 }
 
 static ant_value_t ffi_make_pointer(ant_t *js, ffi_pointer_region_t *region, size_t byte_offset) {
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ffi_pointer_handle_t *handle = calloc(1, sizeof(*handle));
 
   if (!handle) {
@@ -727,7 +728,7 @@ static ant_value_t ffi_write_to_pointer(
 }
 
 static ant_value_t ffi_make_function(ant_t *js, ffi_library_handle_t *library, const char *symbol_name, ffi_signature_t *signature, void *func_ptr) {
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t fn = 0;
   ffi_function_handle_t *handle = calloc(1, sizeof(*handle));
 
@@ -913,10 +914,10 @@ static void ffi_init_prototypes(ant_t *js) {
   if (js->builtins.ffi_library_proto) return;
   ant_value_t function_proto = js->sym.function_proto;
 
-  js->builtins.ffi_library_proto = js_mkobj(js);
-  js->builtins.ffi_function_proto = js_mkobj(js);
-  js->builtins.ffi_pointer_proto = js_mkobj(js);
-  js->builtins.ffi_callback_proto = js_mkobj(js);
+  js->builtins.ffi_library_proto = Ant_Object_CreateBare(js);
+  js->builtins.ffi_function_proto = Ant_Object_CreateBare(js);
+  js->builtins.ffi_pointer_proto = Ant_Object_CreateBare(js);
+  js->builtins.ffi_callback_proto = Ant_Object_CreateBare(js);
 
   if (is_object_type(js->sym.object_proto)) {
     js_set_proto_init(js->builtins.ffi_library_proto, js->sym.object_proto);
@@ -987,7 +988,7 @@ static ant_value_t ffi_dlopen(ant_params_t) {
   library->handle = dl;
   library->closed = false;
 
-  obj = js_mkobj(js);
+  obj = Ant_Object_CreateBare(js);
   if (js->builtins.ffi_library_proto) js_set_proto_init(obj, js->builtins.ffi_library_proto);
   library->obj = obj;
   js_set_native(obj, library, FFI_LIBRARY_NATIVE_TAG);
@@ -1382,7 +1383,7 @@ static ant_value_t ffi_create_callback(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Failed to prepare FFICallback closure");
   }
 
-  obj = js_mkobj(js);
+  obj = Ant_Object_CreateBare(js);
   if (js->builtins.ffi_callback_proto) js_set_proto_init(obj, js->builtins.ffi_callback_proto);
   
   callback->js = js;
@@ -1415,8 +1416,8 @@ ant_value_t ffi_callback_close(ant_params_t) {
 }
 
 ant_value_t ffi_library(ant_t *js) {
-  ant_value_t ffi_obj = js_mkobj(js);
-  ant_value_t ffi_types = js_mkobj(js);
+  ant_value_t ffi_obj = Ant_Object_CreateBare(js);
+  ant_value_t ffi_types = Ant_Object_CreateBare(js);
   const char *suffix = "so";
 
   ffi_init_prototypes(js);

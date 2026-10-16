@@ -3,6 +3,7 @@
 #include <uthash.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "internal.h"
 #include "descriptors.h"
@@ -158,7 +159,7 @@ static ant_value_t js_sessionstorage_length(ant_params_t) {
 
 void init_sessionstorage_module(ant_t *js) {
   ant_value_t glob = js_glob(js);
-  ant_value_t storage_obj = js_newobj(js);
+  ant_value_t storage_obj = Ant_Object_Create(js);
   
   js_set(js, storage_obj, "setItem", Ant_Function_Create(js_sessionstorage_setItem));
   js_set(js, storage_obj, "getItem", Ant_Function_Create(js_sessionstorage_getItem));

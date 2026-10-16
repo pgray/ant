@@ -8,6 +8,7 @@
 #include "ant.h"
 #include "utf8.h"
 #include "ptr.h"
+#include "cfunc.h"
 #include "debug.h"
 #include "tokens.h"
 #include "common.h"
@@ -1290,7 +1291,7 @@ static size_t strdate(ant_t *js, ant_value_t obj, char *buf, size_t len) {
 
 static size_t strobj_host_proxy(ant_t *js, ant_value_t obj, char *buf, size_t len) {
   GC_ROOT_SAVE(root_mark, js);
-  ant_value_t copy = js_mkobj(js);
+  ant_value_t copy = Ant_Object_CreateBare(js);
   
   GC_ROOT_PIN(js, copy);
   (void)js_copy_data_props(js, copy, obj, NULL, 0);
@@ -2886,7 +2887,7 @@ static ant_value_t arguments_template(ant_t *js, bool is_strict, bool has_iterat
   if (vtype(*cached) == kTypeObject) return *cached;
 
   GC_ROOT_SAVE(roots, js);
-  ant_value_t seed = js_mkobj(js);
+  ant_value_t seed = Ant_Object_CreateBare(js);
   
   if (is_err(seed)) return seed;
   GC_ROOT_PIN(js, seed);
@@ -3243,7 +3244,7 @@ ant_value_t js_mkobj_from_template(ant_t *js, ant_value_t template) {
   return mkref(kTypeObject, target);
 }
 
-ant_value_t js_newobj(ant_t *js) {
+ant_value_t Ant_Object_Create(ant_t *js) {
   ant_value_t obj = mkobj(js, 0);
   js_set_proto_init(obj, js->sym.object_proto);
   return obj;
@@ -3986,7 +3987,7 @@ static ant_value_t array_alloc_intrinsic(ant_t *js, ant_value_t source, ant_offs
 }
 
 static ant_value_t array_construct_from_ctor(ant_t *js, ant_value_t ctor, ant_offset_t length_hint) {
-  ant_value_t seed = js_mkobj(js);
+  ant_value_t seed = Ant_Object_CreateBare(js);
   if (is_err(seed)) return seed;
 
   ant_value_t proto = js_get(js, ctor, "prototype");
@@ -6717,7 +6718,7 @@ ant_value_t js_normalize_sloppy_this(ant_t *js, ant_value_t value) {
 
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, value);
-  ant_value_t wrapper = js_mkobj(js);
+  ant_value_t wrapper = Ant_Object_CreateBare(js);
   if (!is_err(wrapper)) {
     GC_ROOT_PIN(js, wrapper);
     js_set_slot_wb(js, wrapper, SLOT_PRIMITIVE, value);
@@ -6732,7 +6733,7 @@ static ant_value_t builtin_Object(ant_params_t) {
   if (nargs == 0 || vtype(args[0]) == kTypeNull || vtype(args[0]) == kTypeUndefined) {
     ant_value_t obj_proto = js->sym.object_proto;
     if (is_unboxed_obj(js, js->this_val, obj_proto)) return js->this_val;
-    return js_newobj(js);
+    return Ant_Object_Create(js);
   }
   
   ant_value_t arg = args[0];
@@ -7508,7 +7509,7 @@ static ant_value_t builtin_Error(ant_params_t) {
   ant_value_t this_val = js->this_val;
   
   if (!is_new) {
-    this_val = js_mkobj(js);
+    this_val = Ant_Object_CreateBare(js);
     ant_value_t proto = lkp_interned_val(js, js_func_obj(js->current_func), js->intern.prototype);
     if (vtype(proto) != kTypeUndefined) js_set_proto_init(this_val, proto);
     else js_set_proto_init(this_val, js->builtins.error_protos[JS_ERR_GENERIC]);
@@ -7533,7 +7534,7 @@ ant_value_t Ant_Error_CreateConstructorEx(ant_t *js, const char *name, ant_value
   size_t name_len = strlen(name);
   ant_value_t error_ctor = js->builtins.error_ctor;
   
-  ant_value_t proto = js_mkobj(js);
+  ant_value_t proto = Ant_Object_CreateBare(js);
   GC_ROOT_SAVE(mark, js);
   GC_ROOT_PIN(js, proto);
   set_proto(js, proto, js->builtins.error_protos[JS_ERR_GENERIC]);
@@ -7608,7 +7609,7 @@ static ant_value_t builtin_AggregateError(ant_params_t) {
   ant_value_t this_val = js->this_val;
   
   if (!is_new) {
-    this_val = js_mkobj(js);
+    this_val = Ant_Object_CreateBare(js);
     ant_prop_loc_t proto_off = lkp_interned(js_func_obj(js->current_func), js->intern.prototype);
     if (proto_off.obj) js_set_proto_init(this_val, js_prop_load(proto_off));
     else js_set_proto_init(this_val, js->builtins.error_protos[JS_ERR_AGGREGATE]);
@@ -7647,7 +7648,7 @@ static ant_value_t builtin_SuppressedError(ant_params_t) {
   ant_value_t this_val = js->this_val;
 
   if (!is_new) {
-    this_val = js_mkobj(js);
+    this_val = Ant_Object_CreateBare(js);
     ant_prop_loc_t proto_off = lkp_interned(js_func_obj(js->current_func), js->intern.prototype);
     if (proto_off.obj) js_set_proto_init(this_val, js_prop_load(proto_off));
     else js_set_proto_init(this_val, js->builtins.suppressed_error_proto);
@@ -7674,7 +7675,7 @@ static ant_value_t builtin_SuppressedError(ant_params_t) {
 }
 
 static ant_value_t disposable_stack_init(ant_t *js, ant_value_t obj, int brand, ant_value_t proto) {
-  if (vtype(obj) != kTypeObject) obj = js_mkobj(js);
+  if (vtype(obj) != kTypeObject) obj = Ant_Object_CreateBare(js);
   if (is_err(obj)) return obj;
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
 
@@ -7944,7 +7945,7 @@ static ant_value_t builtin_AsyncDisposableStack_disposeAsync(ant_params_t) {
   GC_ROOT_PIN(js, entries);
   set_slot(js_as_obj(stack), SLOT_SETTLED, js_true);
 
-  ant_value_t state = js_mkobj(js);
+  ant_value_t state = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, state);
   if (is_err(state)) {
     GC_ROOT_RESTORE(js, root_mark);
@@ -8838,7 +8839,7 @@ static ant_value_t proxy_set_integrity_level(ant_t *js, ant_value_t obj, bool fr
     ant_value_t key = arr_get(js, keys, i);
     GC_ROOT_PIN(js, key);
 
-    ant_value_t desc = js_mkobj(js);
+    ant_value_t desc = Ant_Object_CreateBare(js);
     GC_ROOT_PIN(js, desc);
     
     js_setprop(js, desc, js_mkstr(js, "configurable", 12), js_false);
@@ -9476,7 +9477,7 @@ static ant_value_t builtin_object___defineGetter__(ant_params_t) {
     GC_ROOT_PIN(js, key_val);
     GC_ROOT_PIN(js, getter);
     
-    ant_value_t desc = js_mkobj(js);
+    ant_value_t desc = Ant_Object_CreateBare(js);
     if (is_err(desc)) {
       GC_ROOT_RESTORE(js, root_mark);
       return desc;
@@ -9528,7 +9529,7 @@ static ant_value_t builtin_object___defineSetter__(ant_params_t) {
     GC_ROOT_PIN(js, key_val);
     GC_ROOT_PIN(js, setter);
     
-    ant_value_t desc = js_mkobj(js);
+    ant_value_t desc = Ant_Object_CreateBare(js);
     if (is_err(desc)) {
       GC_ROOT_RESTORE(js, root_mark);
       return desc;
@@ -9630,7 +9631,7 @@ static ant_value_t builtin_object_create(ant_params_t) {
   if (pt != kTypeObject && pt != kTypeArray && pt != kTypeFunction && pt != kTypeNull)
     return js_mkerr(js, "Object.create: prototype must be an object or null");
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   if (pt == kTypeNull) js_set_proto_init(obj, js_mknull());
   else js_set_proto_init(obj, proto);
 
@@ -9847,7 +9848,7 @@ static ant_value_t object_group_add(ant_t *js, void *ctx, ant_value_t key, ant_v
 static ant_value_t builtin_object_groupBy(ant_params_t) {
   if (nargs < 2) return js_mkerr_typed(js, JS_ERR_TYPE, "Object.groupBy requires 2 arguments");
   
-  ant_value_t result = js_mkobj(js);
+  ant_value_t result = Ant_Object_CreateBare(js);
   js_set_proto_init(result, js_mknull());
   
   ant_value_t grouped = js_group_by(js, args[0], args[1], object_group_add, &result);
@@ -10089,7 +10090,7 @@ static ant_value_t define_desc_object(ant_t *js, const define_desc_raw_t *raw) {
   define_desc_raw_t pinned = *raw;
   for (int f = 0; f < DESC_FIELD_COUNT; f++) GC_ROOT_PIN(js, pinned.val[f]);
   
-  ant_value_t object = js_mkobj(js);
+  ant_value_t object = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, object);
   
   for (int f = 0; f < DESC_FIELD_COUNT && !is_err(object); f++) if (pinned.has[f]) {
@@ -10845,7 +10846,7 @@ static ant_value_t copy_define_slow(ant_t *js, ant_value_t dst, copy_key_t key, 
     
   GC_ROOT_PIN(js, key_val);
   
-  ant_value_t desc = js_mkobj(js);
+  ant_value_t desc = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, desc);
   
   js_set(js, desc, "value", val);
@@ -11607,7 +11608,7 @@ static ant_value_t builtin_object_assign(ant_params_t) {
   }
   
   if (t != kTypeObject && t != kTypeArray && t != kTypeFunction) {
-    target = js_mkobj(js);
+    target = Ant_Object_CreateBare(js);
   }
   
   GC_ROOT_SAVE(root_mark, js);
@@ -11791,7 +11792,7 @@ static ant_value_t builtin_object_fromEntries(ant_params_t) {
   ant_value_t iterable = args[0];
   GC_ROOT_PIN(js, iterable);
 
-  ant_value_t result = js_newobj(js);
+  ant_value_t result = Ant_Object_Create(js);
   GC_ROOT_PIN(js, result);
 
   ant_value_t iter_result = iter_foreach(js, iterable, object_from_entries_iter_cb, &result);
@@ -11813,7 +11814,7 @@ static ant_value_t descriptor_template(ant_t *js, bool accessor) {
   ant_value_t *slot = accessor ? &js->builtins.accessor_desc_template : &js->builtins.data_desc_template;
   if (vtype(*slot) == kTypeObject) return *slot;
   
-  ant_value_t template = js_newobj(js);
+  ant_value_t template = Ant_Object_Create(js);
   if (is_err(template)) return template;
   
   GC_ROOT_SAVE(mark, js);
@@ -12203,7 +12204,7 @@ static ant_value_t object_add_descriptors_for_keys(
 }
 
 static ant_value_t builtin_object_getOwnPropertyDescriptors(ant_params_t) {
-  ant_value_t result = js_mkobj(js);
+  ant_value_t result = Ant_Object_CreateBare(js);
   
   if (is_object_type(js->sym.object_proto)) js_set_proto_init(result, js->sym.object_proto);
   if (nargs == 0 || vtype(args[0]) == kTypeNull || vtype(args[0]) == kTypeUndefined) {
@@ -15798,7 +15799,7 @@ static ant_value_t from_async_construct(ant_t *js, ant_value_t ctor, bool with_l
   if (!js_is_constructor(ctor) || same_ctor_identity(js, ctor, js->sym.array_ctor))
     return array_alloc_intrinsic(js, js_mkundef(), with_length ? length : 0);
 
-  ant_value_t seed = js_mkobj(js);
+  ant_value_t seed = Ant_Object_CreateBare(js);
   if (is_err(seed)) return seed;
   
   ant_value_t proto = js_get(js, ctor, "prototype");
@@ -19168,7 +19169,7 @@ static ant_value_t builtin_Promise_withResolvers(ant_params_t) {
     return pair_result;
   }
 
-  ant_value_t result = js_newobj(js);
+  ant_value_t result = Ant_Object_Create(js);
   GC_ROOT_PIN(js, result);
   js_setprop(js, result, js_mkstr(js, "promise", 7), p);
   js_setprop(js, result, js_mkstr(js, "resolve", 7), res_fn);
@@ -20575,7 +20576,7 @@ ant_value_t js_create_module_context(ant_t *js, const char *filename, bool is_ma
     return js_mkundef();
   }
 
-  ant_value_t module_ctx = js_mkobj(js);
+  ant_value_t module_ctx = Ant_Object_CreateBare(js);
   if (is_err(module_ctx)) {
     GC_ROOT_RESTORE(js, root_mark);
     return module_ctx;
@@ -20625,7 +20626,7 @@ ant_value_t js_get_module_import_binding(ant_t *js) {
     return js_mkundef();
   }
 
-  ant_value_t import_obj = js_mkobj(js);
+  ant_value_t import_obj = Ant_Object_CreateBare(js);
   if (is_err(import_obj)) {
     GC_ROOT_RESTORE(js, root_mark);
     return import_obj;
@@ -21056,7 +21057,7 @@ static ant_value_t proxy_set_with_receiver(ant_t *js, ant_value_t proxy, const c
     return own_desc;
   }
 
-  ant_value_t desc = js_mkobj(js);
+  ant_value_t desc = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, desc);
   if (is_err(desc)) {
     GC_ROOT_RESTORE(js, root_mark);
@@ -21668,7 +21669,7 @@ static ant_value_t set_with_receiver(ant_t *js, ant_value_t target, ant_value_t 
   if (!fresh && (descriptor_is_accessor(js, existing) || !descriptor_bool_value(js, existing, "writable", 8, false)))
     return js_false;
   
-  ant_value_t update = js_mkobj(js);
+  ant_value_t update = Ant_Object_CreateBare(js);
   if (is_err(update)) return update;
   
   GC_ROOT_SAVE(root_mark, js);
@@ -22097,7 +22098,7 @@ static ant_value_t builtin_Proxy_revocable(ant_params_t) {
   set_slot(revoke_obj, SLOT_PROXY_REF, proxy);
   
   ant_value_t revoke_func = js_obj_to_func(js, revoke_obj);
-  ant_value_t result = js_newobj(js);
+  ant_value_t result = Ant_Object_Create(js);
   
   js_setprop(js, result, js_mkstr(js, "proxy", 5), proxy);
   js_setprop(js, result, js_mkstr(js, "revoke", 6), revoke_func);
@@ -22128,7 +22129,7 @@ static void init_function_kind(
   ant_t *js, ant_value_t function_proto, ant_value_t function_ctor, internal_slot_t slot,
   ant_value_t cfunc, ant_value_t name, ant_value_t instance_proto, bool is_async
 ) {
-  ant_value_t kind_proto = js_mkobj(js);
+  ant_value_t kind_proto = Ant_Object_CreateBare(js);
   set_proto(js, kind_proto, function_proto);
   if (is_async) set_slot(kind_proto, SLOT_ASYNC, js_true);
   set_slot(js_glob(js), slot, kind_proto);
@@ -22204,7 +22205,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   js->length_str = ANT_STRING("length");
 
   ant_value_t glob = js->global;
-  ant_value_t object_proto = js_mkobj(js);
+  ant_value_t object_proto = Ant_Object_CreateBare(js);
   set_proto(js, object_proto, js_mknull());
   
   defmethod(js, object_proto, "toString", 8, Ant_Function_Create(builtin_object_toString));
@@ -22225,7 +22226,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
     proto_getter, proto_setter, JS_DESC_C
   );
   
-  ant_value_t function_proto_obj = js_mkobj(js);
+  ant_value_t function_proto_obj = Ant_Object_CreateBare(js);
   set_proto(js, function_proto_obj, object_proto);
   set_slot(function_proto_obj, SLOT_CFUNC, Ant_Function_Create(builtin_function_empty));
   
@@ -22280,7 +22281,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   defmethod(js, array_proto, "toString", 8, Ant_Function_Create(builtin_array_toString));
   defmethod(js, array_proto, "toLocaleString", 14, Ant_Function_Create(builtin_array_toLocaleString));
   
-  ant_value_t string_proto = js_mkobj(js);
+  ant_value_t string_proto = Ant_Object_CreateBare(js);
   set_proto(js, string_proto, object_proto);
   
   defmethod(js, string_proto, "indexOf", 7, Ant_Function_CreateWithArity(builtin_string_indexOf, 1));
@@ -22327,7 +22328,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   defmethod(js, string_proto, "sub", 3, Ant_Function_Create(builtin_string_sub));
   defmethod(js, string_proto, "sup", 3, Ant_Function_Create(builtin_string_sup));
 
-  ant_value_t number_proto = js_mkobj(js);
+  ant_value_t number_proto = Ant_Object_CreateBare(js);
   set_proto(js, number_proto, object_proto);
   
   js->sym.number_to_string_fn = defmethod(js, number_proto, "toString", 8, Ant_Function_CreateWithArity(builtin_number_toString, 1));
@@ -22337,13 +22338,13 @@ static ant_t *isolate_init(void *buf, size_t len) {
   defmethod(js, number_proto, "valueOf", 7, Ant_Function_Create(builtin_number_valueOf));
   defmethod(js, number_proto, "toLocaleString", 14, Ant_Function_Create(builtin_number_toLocaleString));
   
-  ant_value_t boolean_proto = js_mkobj(js);
+  ant_value_t boolean_proto = Ant_Object_CreateBare(js);
   set_proto(js, boolean_proto, object_proto);
   
   defmethod(js, boolean_proto, "valueOf", 7, Ant_Function_Create(builtin_boolean_valueOf));
   defmethod(js, boolean_proto, "toString", 8, Ant_Function_Create(builtin_boolean_toString));
   
-  ant_value_t error_proto = js_mkobj(js);
+  ant_value_t error_proto = Ant_Object_CreateBare(js);
   set_proto(js, error_proto, object_proto);
   
   mkprop_bytes(js, error_proto, "name", 4, ANT_STRING("Error"), JS_DESC_W | JS_DESC_C);
@@ -22380,7 +22381,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   
   #undef REGISTER_ERROR_SUBTYPE
   
-  ant_value_t aggregate_proto = js_mkobj(js);
+  ant_value_t aggregate_proto = Ant_Object_CreateBare(js);
   set_proto(js, aggregate_proto, error_proto);
   mkprop_bytes(js, aggregate_proto, "name", 4, ANT_STRING("AggregateError"), JS_DESC_W | JS_DESC_C);
   js->builtins.error_protos[JS_ERR_AGGREGATE] = aggregate_proto;
@@ -22395,7 +22396,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   defhidden(js, aggregate_proto, "constructor", 11, aggregate_ctor_func);
   js_set_global_builtin(js, "AggregateError", aggregate_ctor_func);
 
-  ant_value_t suppressed_proto = js_mkobj(js);
+  ant_value_t suppressed_proto = Ant_Object_CreateBare(js);
   set_proto(js, suppressed_proto, error_proto);
   mkprop_bytes(js, suppressed_proto, "name", 4, ANT_STRING("SuppressedError"), JS_DESC_W | JS_DESC_C);
   js->builtins.suppressed_error_proto = suppressed_proto;
@@ -22410,7 +22411,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   defhidden(js, suppressed_proto, "constructor", 11, suppressed_ctor_func);
   js_set_global_builtin(js, "SuppressedError", suppressed_ctor_func);
 
-  ant_value_t disposable_stack_proto = js_mkobj(js);
+  ant_value_t disposable_stack_proto = Ant_Object_CreateBare(js);
   set_proto(js, disposable_stack_proto, object_proto);
   js->builtins.disposable_stack_proto = disposable_stack_proto;
   defmethod(js, disposable_stack_proto, "use", 3, Ant_Function_CreateWithArity(builtin_DisposableStack_use, 1));
@@ -22429,7 +22430,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   defhidden(js, disposable_stack_proto, "constructor", 11, disposable_stack_ctor_func);
   js_set_global_builtin(js, "DisposableStack", disposable_stack_ctor_func);
 
-  ant_value_t async_disposable_stack_proto = js_mkobj(js);
+  ant_value_t async_disposable_stack_proto = Ant_Object_CreateBare(js);
   set_proto(js, async_disposable_stack_proto, object_proto);
   js->builtins.async_disposable_stack_proto = async_disposable_stack_proto;
   defmethod(js, async_disposable_stack_proto, "use", 3, Ant_Function_CreateWithArity(builtin_AsyncDisposableStack_use, 1));
@@ -22448,7 +22449,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   defhidden(js, async_disposable_stack_proto, "constructor", 11, async_disposable_stack_ctor_func);
   js_set_global_builtin(js, "AsyncDisposableStack", async_disposable_stack_ctor_func);
   
-  ant_value_t promise_proto = js_mkobj(js);
+  ant_value_t promise_proto = Ant_Object_CreateBare(js);
   set_proto(js, promise_proto, object_proto);
   js->sym.promise_then = defmethod(js, promise_proto, "then", 4, Ant_Function_CreateWithArity(builtin_promise_then, 2));
   defmethod(js, promise_proto, "catch", 5, Ant_Function_CreateWithArity(builtin_promise_catch, 1));
@@ -22497,8 +22498,8 @@ static ant_t *isolate_init(void *buf, size_t len) {
   ant_value_t func_ctor_func = js_obj_to_func(js, func_ctor_obj);
   js_set_global_builtin(js, "Function", func_ctor_func);
   
-  js->sym.generator_proto = js_mkobj(js);
-  js->sym.async_generator_proto = js_mkobj(js);
+  js->sym.generator_proto = Ant_Object_CreateBare(js);
+  js->sym.async_generator_proto = Ant_Object_CreateBare(js);
   
   init_function_kind(js, function_proto, func_ctor_func, SLOT_ASYNC_PROTO, Ant_Function_Create(builtin_AsyncFunction), ANT_STRING("AsyncFunction"), js_mkundef(), true);
   init_function_kind(js, function_proto, func_ctor_func, SLOT_GENERATOR_PROTO, Ant_Function_Create(builtin_GeneratorFunction), ANT_STRING("GeneratorFunction"), js->sym.generator_proto, false);
@@ -22646,7 +22647,7 @@ void init_intrinsic_symbols(ant_t *js) {
     js, js->sym.array_proto, js->sym.iterator_sym, 
     js->sym.array_values_fn, ANT_PROP_ATTR_WRITABLE | ANT_PROP_ATTR_CONFIGURABLE);
 
-  ant_value_t unscopables = js_mkobj(js);
+  ant_value_t unscopables = Ant_Object_CreateBare(js);
   GC_ROOT_SAVE(mark, js);
   GC_ROOT_PIN(js, unscopables);
   
@@ -22871,7 +22872,7 @@ inline void js_set_filename(ant_t *js, const char *filename) { js->filename = fi
 inline ant_value_t js_mkundef(void) { return mkval(kTypeUndefined, 0); }
 inline ant_value_t js_mknull(void) { return mkval(kTypeNull, 0); }
 inline ant_value_t js_mknum(double value) { return tov(value); }
-inline ant_value_t js_mkobj(ant_t *js) { return mkobj(js, 0); }
+inline ant_value_t Ant_Object_CreateBare(ant_t *js) { return mkobj(js, 0); }
 inline ant_value_t js_glob(ant_t *js) { return js->global; }
 
 static inline ant_value_t js_cfunc_value(const ant_cfunc_meta_t *stored) {
@@ -23273,7 +23274,7 @@ ant_value_t js_make_ctor_cfunc(ant_t *js, ant_value_t cfunc, ant_value_t proto, 
   const ant_cfunc_meta_t *meta = js_as_cfunc_meta(cfunc);
   if (!meta || !meta->name) return js_mkerr(js, "constructor requires a named cfunc");
   
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_slot(obj, SLOT_CFUNC, cfunc);
   js_set_function_name(js, obj, meta->name, strlen(meta->name));
   mkprop_exact_attrs(js, obj, js_mkstr(js, "prototype", 9), proto, proto_attrs);

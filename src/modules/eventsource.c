@@ -9,6 +9,7 @@
 #include <uv.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "list.h"
 #include "loop.h"
 #include "ptr.h"
@@ -341,7 +342,7 @@ static void eventsource_finalize(ant_t *js, ant_object_t *obj) {
 }
 
 static ant_value_t eventsource_create_object(ant_t *js) {
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   if (is_object_type(js->builtins.eventsource_proto)) js_set_proto_init(obj, js->builtins.eventsource_proto);
   js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_EVENTTARGET));
   js_set_finalizer(obj, eventsource_finalize);
@@ -427,7 +428,7 @@ ANT_EVENT_HANDLER_ACCESSORS(eventsource, error, eventsource_invalid_this)
 
 void init_eventsource_module(ant_t *js) {
   ant_value_t eventtarget_proto = js->builtins.eventtarget_proto;
-  js->builtins.eventsource_proto = js_mkobj(js);
+  js->builtins.eventsource_proto = Ant_Object_CreateBare(js);
   
   if (is_object_type(eventtarget_proto)) js_set_proto_init(js->builtins.eventsource_proto, eventtarget_proto);
   js_set(js, js->builtins.eventsource_proto, "close", Ant_Function_Create(js_eventsource_close));

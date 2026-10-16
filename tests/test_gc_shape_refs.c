@@ -41,9 +41,9 @@ int main(void) {
   // must not hide a missing ordinary-value or descriptor edge.
   js_setstackbase(js, NULL);
   GC_ROOT_SAVE(roots, js);
-  ant_value_t owner = js_mkobj(js);
+  ant_value_t owner = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, owner);
-  ant_value_t ordinary = js_mkobj(js);
+  ant_value_t ordinary = Ant_Object_CreateBare(js);
   js_set(js, owner, "gc_ordinary_value", ordinary);
   ant_object_t *ptr = js_obj_ptr(owner);
   assert(!ant_shape_may_have_gc_refs(ptr->shape));
@@ -56,7 +56,7 @@ int main(void) {
   ant_shape_prop_t *prop = ant_shape_prop_mut_at(ptr->shape, (uint32_t)slot);
   assert(prop && ant_shape_may_have_gc_refs(ptr->shape));
   // Object markers exercise the descriptor edges without invoking accessors.
-  ant_value_t getter = js_mkobj(js), setter = js_mkobj(js);
+  ant_value_t getter = Ant_Object_CreateBare(js), setter = Ant_Object_CreateBare(js);
   prop->has_getter = prop->has_setter = 1;
   prop->getter = getter;
   prop->setter = setter;
@@ -68,7 +68,7 @@ int main(void) {
   assert(gc_obj_is_marked(js, js_obj_ptr(setter)));
   assert(js_symbol_gc_is_marked(symbol, gc_get_epoch(js)));
 
-  ant_value_t young = js_mkobj(js);
+  ant_value_t young = Ant_Object_CreateBare(js);
   slot = ant_shape_lookup_interned(ptr->shape, intern_string("gc_accessor", 11));
   prop = ant_shape_prop_mut_at(ptr->shape, (uint32_t)slot);
   assert(prop);

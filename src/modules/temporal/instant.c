@@ -1,4 +1,5 @@
 #include "modules/temporal.h"
+#include "cfunc.h"
 
 #ifdef ANT_HAVE_TEMPORAL
 #include "temporal_internal.h"
@@ -247,7 +248,7 @@ static ant_value_t temporal_instant_value_of(ant_params_t) {
 }
 
 void temporal_init_instant(ant_t *js, ant_value_t temporal) {
-  ant_value_t proto = js_mkobj(js);
+  ant_value_t proto = Ant_Object_CreateBare(js);
   js_set_proto_init(proto, js->sym.object_proto);
   js->builtins.temporal_instant_proto = proto;
   TEMPORAL_GETTER(js, proto, "epochMilliseconds", temporal_instant_get_epoch_milliseconds);

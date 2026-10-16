@@ -164,7 +164,7 @@ static napi_status napi_create_date_common(napi_env env, double time, napi_value
   ant_value_t ctor = js_get(js, js_glob(js), "Date");
   if (!is_callable(ctor)) return napi_set_last(env, napi_generic_failure, "Date constructor unavailable");
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_get(js, ctor, "prototype");
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
 
@@ -195,7 +195,7 @@ static napi_status napi_make_error_object(
   }
 
   const char *name = js_err_type_name(err_type);
-  ant_value_t err = js_mkobj(js);
+  ant_value_t err = Ant_Object_CreateBare(js);
   js_set(js, err, "name", js_mkstr(js, name, strlen(name)));
   js_set(js, err, "message", message);
 
@@ -234,7 +234,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_get_boolean(napi_env env, bool value, na
 NAPI_EXTERN napi_status NAPI_CDECL napi_create_object(napi_env env, napi_value *result) {
   ant_napi_env_t *nenv = (ant_napi_env_t *)env;
   if (!nenv || !nenv->js || !result) return napi_set_last(env, napi_invalid_arg, "invalid argument");
-  *result = NAPI_RETURN(nenv, js_mkobj(nenv->js));
+  *result = NAPI_RETURN(nenv, Ant_Object_CreateBare(nenv->js));
   return napi_set_last(env, napi_ok, NULL);
 }
 

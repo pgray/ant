@@ -1,4 +1,5 @@
 #include "modules/temporal.h"
+#include "cfunc.h"
 
 #ifdef ANT_HAVE_TEMPORAL
 #include "temporal_internal.h"
@@ -108,7 +109,7 @@ static ant_value_t temporal_wrap_on(
     if (!temporal_normalize_duration(&duration, &err)) return temporal_error(js, err);
     ptr = duration;
   }
-  if (!is_object_type(obj)) obj = js_mkobj(js);
+  if (!is_object_type(obj)) obj = Ant_Object_CreateBare(js);
   if (is_err(obj)) {
     temporal_destroy_value(kind, ptr);
     return obj;
@@ -124,7 +125,7 @@ static ant_value_t temporal_wrap_on(
 }
 
 ant_value_t temporal_wrap(ant_t *js, temporal_kind_t kind, void *ptr) {
-  return temporal_wrap_on(js, js_mkobj(js), kind, ptr, temporal_proto(js, kind));
+  return temporal_wrap_on(js, Ant_Object_CreateBare(js), kind, ptr, temporal_proto(js, kind));
 }
 
 ant_value_t temporal_wrap_constructed(ant_t *js, temporal_kind_t kind, void *ptr, ant_value_t new_target) {
@@ -1025,7 +1026,7 @@ void temporal_set_namespace_property(
 ant_value_t temporal_make_function(
   ant_t *js, ant_cfunc_t callback, const char *name, size_t name_len, int length
 ) {
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_proto_init(obj, js->sym.function_proto);
   js_set_slot(obj, SLOT_CFUNC, js_mkfun_dyn(callback));
   js_mkprop_fast(js, obj, "name", 4, js_mkstr(js, name, name_len));
@@ -1040,7 +1041,7 @@ void temporal_set_to_string_tag(ant_t *js, ant_value_t obj, const char *tag) {
 }
 
 void init_temporal_module(ant_t *js) {
-  ant_value_t temporal = js_mkobj(js);
+  ant_value_t temporal = Ant_Object_CreateBare(js);
   js_set_proto_init(temporal, js->sym.object_proto);
   js->builtins.temporal_namespace = temporal;
 

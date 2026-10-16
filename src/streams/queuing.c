@@ -1,6 +1,7 @@
 #include <string.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "errors.h"
 #include "internal.h"
 #include "descriptors.h"
@@ -50,7 +51,7 @@ static ant_value_t qs_ctor(ant_native_params_t, ant_value_t new_target, ant_valu
 
   double hwm = js_to_number(js, hv);
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t resolved = js_instance_proto_from_new_target(js, proto, new_target);
   
   if (is_object_type(resolved)) js_set_proto_init(obj, resolved);
@@ -68,7 +69,7 @@ static ant_value_t js_bytelength_qs_ctor(ant_params_t) {
 }
 
 static ant_value_t make_size_fn(ant_t *js, ant_cfunc_t cfunc, int length) {
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   
   js_set_slot(obj, SLOT_CFUNC, js_mkfun_dyn(cfunc));
   js_set_function_name(js, obj, "size", sizeof("size") - 1);
@@ -81,7 +82,7 @@ static ant_value_t make_size_fn(ant_t *js, ant_cfunc_t cfunc, int length) {
 void init_queuing_strategies_module(ant_t *js) {
   ant_value_t g = js_glob(js);
 
-  js->builtins.count_qs_proto = js_mkobj(js);
+  js->builtins.count_qs_proto = Ant_Object_CreateBare(js);
   js_set_slot(js->builtins.count_qs_proto, SLOT_DATA, make_size_fn(js, js_count_size, 0));
   js_set_getter_desc(js, js->builtins.count_qs_proto, "highWaterMark", 13, Ant_Function_Create(js_qs_get_highwatermark), JS_DESC_C);
   js_set_getter_desc(js, js->builtins.count_qs_proto, "size", 4, Ant_Function_Create(js_qs_get_size), JS_DESC_C);
@@ -91,7 +92,7 @@ void init_queuing_strategies_module(ant_t *js) {
   js_set(js, g, "CountQueuingStrategy", cqs_ctor);
   js_set_descriptor(js, g, "CountQueuingStrategy", 20, JS_DESC_W | JS_DESC_C);
 
-  js->builtins.bytelength_qs_proto = js_mkobj(js);
+  js->builtins.bytelength_qs_proto = Ant_Object_CreateBare(js);
   js_set_slot(js->builtins.bytelength_qs_proto, SLOT_DATA, make_size_fn(js, js_bytelength_size, 1));
   js_set_getter_desc(js, js->builtins.bytelength_qs_proto, "highWaterMark", 13, Ant_Function_Create(js_qs_get_highwatermark), JS_DESC_C);
   js_set_getter_desc(js, js->builtins.bytelength_qs_proto, "size", 4, Ant_Function_Create(js_qs_get_size), JS_DESC_C);

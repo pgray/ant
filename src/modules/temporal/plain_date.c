@@ -1,4 +1,5 @@
 #include "modules/temporal.h"
+#include "cfunc.h"
 
 #ifdef ANT_HAVE_TEMPORAL
 #include "temporal_internal.h"
@@ -369,7 +370,7 @@ static ant_value_t temporal_plain_date_value_of(ant_params_t) {
 }
 
 void temporal_init_plain_date(ant_t *js, ant_value_t temporal) {
-  ant_value_t proto = js_mkobj(js); js_set_proto_init(proto, js->sym.object_proto);
+  ant_value_t proto = Ant_Object_CreateBare(js); js_set_proto_init(proto, js->sym.object_proto);
   js->builtins.temporal_plain_date_proto = proto;
   TEMPORAL_GETTER(js, proto, "calendarId", temporal_plain_date_get_calendar_id);
   TEMPORAL_GETTER(js, proto, "year", temporal_plain_date_get_year);

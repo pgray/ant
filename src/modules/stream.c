@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "ant.h"
+#include "cfunc.h"
 #include "ptr.h"
 #include "errors.h"
 #include "modules/timer.h"
@@ -47,7 +48,7 @@ static ant_value_t stream_require_this(ant_t *js, ant_value_t value, const char 
 }
 
 static ant_value_t stream_truthy_or_object(ant_t *js, ant_value_t value) {
-  return js_truthy(js, value) ? value : js_mkobj(js);
+  return js_truthy(js, value) ? value : Ant_Object_CreateBare(js);
 }
 
 static ant_value_t stream_readable_state(ant_t *js, ant_value_t stream_obj) {
@@ -364,7 +365,7 @@ static double stream_high_water_mark_from_options(ant_t *js, ant_value_t options
 }
 
 static ant_value_t stream_make_base_object(ant_t *js, ant_value_t proto) {
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   stream_private_state_t *priv = calloc(1, sizeof(*priv));
   
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
@@ -385,8 +386,8 @@ static void stream_init_base(ant_t *js, ant_value_t obj, ant_value_t raw_options
 }
 
 static void stream_init_readable(ant_t *js, ant_value_t obj, ant_value_t raw_options) {
-  ant_value_t options = is_object_type(raw_options) ? raw_options : js_mkobj(js);
-  ant_value_t state = js_mkobj(js);
+  ant_value_t options = is_object_type(raw_options) ? raw_options : Ant_Object_CreateBare(js);
+  ant_value_t state = Ant_Object_CreateBare(js);
   ant_value_t read_fn = stream_get_option(js, options, "read");
 
   bool object_mode = js_truthy(js, stream_get_option(js, options, "objectMode"));
@@ -463,8 +464,8 @@ static void stream_define_writable_accessors(ant_t *js, ant_value_t proto) {
 }
 
 static void stream_init_writable(ant_t *js, ant_value_t obj, ant_value_t raw_options) {
-  ant_value_t options = is_object_type(raw_options) ? raw_options : js_mkobj(js);
-  ant_value_t state = js_mkobj(js);
+  ant_value_t options = is_object_type(raw_options) ? raw_options : Ant_Object_CreateBare(js);
+  ant_value_t state = Ant_Object_CreateBare(js);
   
   bool object_mode = 
     js_truthy(js, stream_get_option(js, options, "objectMode")) || 
@@ -672,7 +673,7 @@ static ant_value_t js_stream_pipe(ant_params_t) {
     if (!is_undefined(end_val)) end_dest = end_val != js_false;
   }
 
-  state_obj = js_mkobj(js);
+  state_obj = Ant_Object_CreateBare(js);
   js_set(js, state_obj, "source", source);
   js_set(js, state_obj, "dest", args[0]);
   js_set(js, state_obj, "end", js_bool(end_dest));
@@ -750,7 +751,7 @@ static ant_value_t stream_once_call(ant_params_t) {
 }
 
 static ant_value_t stream_make_once(ant_t *js, ant_value_t fn, ant_value_t this_val) {
-  ant_value_t state_obj = js_mkobj(js);
+  ant_value_t state_obj = Ant_Object_CreateBare(js);
   js_set(js, state_obj, "fn", fn);
   js_set(js, state_obj, "thisVal", this_val);
   js_set(js, state_obj, "called", js_false);
@@ -780,7 +781,7 @@ static ant_value_t js_stream_destroy(ant_params_t) {
   if (!is_undefined(error) && !is_null(error)) 
     stream_set_errored(js, stream_obj, error);
 
-  done_state = js_mkobj(js);
+  done_state = Ant_Object_CreateBare(js);
   js_set(js, done_state, "stream", stream_obj);
   done = stream_make_once(js, js_heavy_mkfun(js, stream_destroy_done, done_state), js_mkundef());
   destroy_fn = js_getprop_fallback(js, stream_obj, "_destroy");
@@ -1157,7 +1158,7 @@ static void stream_writable_enqueue(
   double chunk_size
 ) {
   ant_value_t buffer = js_get(js, state, "buffer");
-  ant_value_t entry = js_mkobj(js);
+  ant_value_t entry = Ant_Object_CreateBare(js);
 
   if (vtype(buffer) != kTypeArray) {
     buffer = js_mkarr(js);
@@ -1336,7 +1337,7 @@ static stream_write_status_t stream_writable_start(
   ant_value_t callback,
   double chunk_size
 ) {
-  ant_value_t done_state = js_mkobj(js);
+  ant_value_t done_state = Ant_Object_CreateBare(js);
   ant_value_t done = 0;
   ant_value_t write_fn = 0;
   ant_value_t write_args[3];
@@ -1405,7 +1406,7 @@ static ant_value_t stream_writable_write_impl(
   ant_value_t prior_error = js_get(js, state, "errored");
   if (!is_undefined(prior_error) && !is_null(prior_error)) {
     if (is_callable(callback)) {
-      ant_value_t tick_state = js_mkobj(js);
+      ant_value_t tick_state = Ant_Object_CreateBare(js);
       js_set(js, tick_state, "callback", callback);
       js_set(js, tick_state, "error", prior_error);
       stream_schedule_microtask(js, stream_errored_write_cb_tick, tick_state);
@@ -1528,7 +1529,7 @@ ant_value_t stream_writable_begin_end(ant_t *js, ant_value_t stream_obj, ant_val
   ant_value_t done = 0;
   stream_private_state_t *priv = stream_private_state(stream_obj);
 
-  done_state = js_mkobj(js);
+  done_state = Ant_Object_CreateBare(js);
   js_set(js, done_state, "stream", stream_obj);
   js_set(js, done_state, "callback", callback);
   
@@ -1598,7 +1599,7 @@ static ant_value_t js_writable_end(ant_params_t) {
   priv = stream_private_state(stream_obj);
 
   if (!is_undefined(chunk) && !is_null(chunk)) {
-    after_write_state = js_mkobj(js);
+    after_write_state = Ant_Object_CreateBare(js);
     js_set(js, after_write_state, "stream", stream_obj);
     js_set(js, after_write_state, "callback", callback);
     
@@ -1656,7 +1657,7 @@ static ant_value_t js_transform__write(ant_params_t) {
   if (is_err(stream_obj)) return stream_obj;
   transform_fn = js_getprop_fallback(js, stream_obj, "_transform");
 
-  cb_state = js_mkobj(js);
+  cb_state = Ant_Object_CreateBare(js);
   js_set(js, cb_state, "stream", stream_obj);
   js_set(js, cb_state, "callback", nargs > 2 ? args[2] : js_mkundef());
   cb = js_heavy_mkfun(js, stream_transform_write_callback, cb_state);
@@ -1702,7 +1703,7 @@ static ant_value_t js_transform__final(ant_params_t) {
     return js_mkundef();
   }
 
-  cb_state = js_mkobj(js);
+  cb_state = Ant_Object_CreateBare(js);
   js_set(js, cb_state, "stream", stream_obj);
   js_set(js, cb_state, "callback", nargs > 0 ? args[0] : js_mkundef());
   cb = js_heavy_mkfun(js, stream_transform_final_callback, cb_state);
@@ -1754,7 +1755,7 @@ static ant_value_t stream_finished_on_error(ant_params_t) {
 }
 
 static ant_value_t stream_finished_register(ant_t *js, ant_value_t stream_obj, ant_value_t callback) {
-  ant_value_t state_obj = js_mkobj(js);
+  ant_value_t state_obj = Ant_Object_CreateBare(js);
   ant_value_t on_finish = 0;
   ant_value_t on_error = 0;
 
@@ -1831,7 +1832,7 @@ static ant_value_t js_stream_pipeline(ant_params_t) {
   if (!is_callable(callback)) callback = Ant_Function_Create(stream_noop);
   if (stream_count <= 0) return js_mkundef();
 
-  done_state = js_mkobj(js);
+  done_state = Ant_Object_CreateBare(js);
   js_set(js, done_state, "callback", callback);
   js_set(js, done_state, "called", js_false);
   done = js_heavy_mkfun(js, stream_pipeline_done, done_state);
@@ -2079,7 +2080,7 @@ static ant_value_t js_readable_from(ant_params_t) {
   readable = stream_construct(js, js->builtins.readable_proto, ctor_args[0], stream_init_readable, js_mkundef());
   if (is_err(readable)) return readable;
 
-  state_obj = js_mkobj(js);
+  state_obj = Ant_Object_CreateBare(js);
   js_set(js, state_obj, "readable", readable);
   js_set(js, state_obj, "source", nargs > 0 ? args[0] : js_mkundef());
   js_set(js, state_obj, "iterator", js_mkundef());
@@ -2174,7 +2175,7 @@ static ant_value_t js_readable_to_web(ant_params_t) {
   if (!is_object_type(source))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Readable.toWeb requires a stream");
 
-  state_obj = js_mkobj(js);
+  state_obj = Ant_Object_CreateBare(js);
   js_set(js, state_obj, "source", source);
   js_set(js, state_obj, "closed", js_false);
 
@@ -2218,7 +2219,7 @@ static ant_value_t js_duplex_ctor(ant_params_t) {
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.duplex_proto, call_new_target);
   ant_value_t obj = stream_make_base_object(js, is_object_type(proto) ? proto : js->builtins.duplex_proto);
   ant_value_t options = nargs > 0 ? args[0] : js_mkundef();
-  ant_value_t options_obj = is_object_type(options) ? options : js_mkobj(js);
+  ant_value_t options_obj = is_object_type(options) ? options : Ant_Object_CreateBare(js);
 
   stream_init_readable(js, obj, options);
   stream_init_writable(js, obj, options);
@@ -2233,7 +2234,7 @@ static ant_value_t js_transform_ctor(ant_params_t) {
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.stream_transform_proto, call_new_target);
   ant_value_t obj = stream_make_base_object(js, is_object_type(proto) ? proto : js->builtins.stream_transform_proto);
   ant_value_t options = nargs > 0 ? args[0] : js_mkundef();
-  ant_value_t options_obj = is_object_type(options) ? options : js_mkobj(js);
+  ant_value_t options_obj = is_object_type(options) ? options : Ant_Object_CreateBare(js);
   
   ant_value_t transform_fn = 0;
   ant_value_t flush_fn = 0;
@@ -2257,7 +2258,7 @@ static ant_value_t js_passthrough_ctor(ant_params_t) {
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.passthrough_proto, call_new_target);
   ant_value_t obj = stream_make_base_object(js, is_object_type(proto) ? proto : js->builtins.passthrough_proto);
   ant_value_t options = nargs > 0 ? args[0] : js_mkundef();
-  ant_value_t options_obj = is_object_type(options) ? options : js_mkobj(js);
+  ant_value_t options_obj = is_object_type(options) ? options : Ant_Object_CreateBare(js);
 
   stream_init_readable(js, obj, options);
   stream_init_writable(js, obj, options);
@@ -2279,7 +2280,7 @@ void stream_init_constructors(ant_t *js) {
   ee_ctor = js_get(js, events, "EventEmitter");
   ee_proto = js_get(js, ee_ctor, "prototype");
 
-  js->builtins.stream_proto = js_mkobj(js);
+  js->builtins.stream_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.stream_proto, ee_proto);
   js_set(js, js->builtins.stream_proto, "pipe", Ant_Function_CreateWithArity(js_stream_pipe, 2));
   js_set(js, js->builtins.stream_proto, "unpipe", Ant_Function_Create(js_stream_unpipe));
@@ -2290,7 +2291,7 @@ void stream_init_constructors(ant_t *js) {
   js_set_tostringtag(js, js->builtins.stream_proto, js_mkstr(js, "Stream", 6));
   js->builtins.stream_ctor = Ant_Function_CreateConstructor(js, js_stream_ctor, js->builtins.stream_proto, "Stream", 1);
 
-  js->builtins.readable_proto = js_mkobj(js);
+  js->builtins.readable_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.readable_proto, js->builtins.stream_proto);
   js_set(js, js->builtins.readable_proto, "_read", Ant_Function_CreateWithArity(js_readable__read, 1));
   js_set(js, js->builtins.readable_proto, "push", Ant_Function_CreateWithArity(js_readable_push, 2));
@@ -2307,7 +2308,7 @@ void stream_init_constructors(ant_t *js) {
   js_set(js, js->builtins.readable_ctor, "fromWeb", Ant_Function_Create(js_readable_from_web));
   js_set(js, js->builtins.readable_ctor, "toWeb", Ant_Function_Create(js_readable_to_web));
 
-  js->builtins.writable_proto = js_mkobj(js);
+  js->builtins.writable_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.writable_proto, js->builtins.stream_proto);
   js_set(js, js->builtins.writable_proto, "_write", Ant_Function_CreateWithArity(js_writable__write, 3));
   js_set(js, js->builtins.writable_proto, "_final", Ant_Function_Create(js_writable__final));
@@ -2319,7 +2320,7 @@ void stream_init_constructors(ant_t *js) {
   js_set_tostringtag(js, js->builtins.writable_proto, js_mkstr(js, "Writable", 8));
   js->builtins.writable_ctor = Ant_Function_CreateConstructor(js, js_writable_ctor, js->builtins.writable_proto, "Writable", 1);
 
-  js->builtins.duplex_proto = js_mkobj(js);
+  js->builtins.duplex_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.duplex_proto, js->builtins.readable_proto);
   js_set(js, js->builtins.duplex_proto, "_write", Ant_Function_CreateWithArity(js_writable__write, 3));
   js_set(js, js->builtins.duplex_proto, "_final", Ant_Function_Create(js_writable__final));
@@ -2331,7 +2332,7 @@ void stream_init_constructors(ant_t *js) {
   js_set_tostringtag(js, js->builtins.duplex_proto, js_mkstr(js, "Duplex", 6));
   js->builtins.duplex_ctor = Ant_Function_CreateConstructor(js, js_duplex_ctor, js->builtins.duplex_proto, "Duplex", 1);
 
-  js->builtins.stream_transform_proto = js_mkobj(js);
+  js->builtins.stream_transform_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.stream_transform_proto, js->builtins.duplex_proto);
   js_set(js, js->builtins.stream_transform_proto, "_transform", Ant_Function_CreateWithArity(js_transform__transform, 3));
   js_set(js, js->builtins.stream_transform_proto, "_write", Ant_Function_CreateWithArity(js_transform__write, 3));
@@ -2339,7 +2340,7 @@ void stream_init_constructors(ant_t *js) {
   js_set_tostringtag(js, js->builtins.stream_transform_proto, js_mkstr(js, "Transform", 9));
   js->builtins.stream_transform_ctor = Ant_Function_CreateConstructor(js, js_transform_ctor, js->builtins.stream_transform_proto, "Transform", 1);
 
-  js->builtins.passthrough_proto = js_mkobj(js);
+  js->builtins.passthrough_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.passthrough_proto, js->builtins.stream_transform_proto);
   js_set(js, js->builtins.passthrough_proto, "_transform", Ant_Function_CreateWithArity(js_passthrough__transform, 3));
   js_set_tostringtag(js, js->builtins.passthrough_proto, js_mkstr(js, "PassThrough", 11));
@@ -2513,8 +2514,8 @@ static void stream_web_define_common(ant_t *js, ant_value_t obj) {
 }
 
 ant_value_t stream_library(ant_t *js) {
-  ant_value_t lib = js_mkobj(js);
-  ant_value_t promises = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
+  ant_value_t promises = Ant_Object_CreateBare(js);
   stream_init_constructors(js);
 
   js_set(js, promises, "pipeline", Ant_Function_Create(js_stream_promises_pipeline));
@@ -2573,7 +2574,7 @@ ant_value_t stream_promises_library(ant_t *js) {
 }
 
 ant_value_t stream_web_library(ant_t *js) {
-  ant_value_t lib = js_mkobj(js);
+  ant_value_t lib = Ant_Object_CreateBare(js);
 
   stream_web_define_common(js, lib);
   js_set(js, lib, "default", lib);

@@ -36,7 +36,7 @@ static ant_value_t target(
 
 // keeps only the masked address, so the object's pointer stays off the stack
 __attribute__((noinline)) static void make_object(ant_t *js) {
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = Ant_Object_CreateBare(js);
   g_masked = (uint64_t)(uintptr_t)js_obj_ptr(obj) ^ MASK;
 }
 

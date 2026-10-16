@@ -2,6 +2,7 @@
 // Include the application entrypoint to exercise its actual private formatter.
 // The unused application entrypoint is removed by the linker's dead stripping.
 #include "runtime.h"
+#include "cfunc.h"
 #include "esm/library.h"
 #include "gc/roots.h"
 #include "descriptors.h"
@@ -28,9 +29,9 @@ static ant_value_t ThrowingMessageGetter(ant_params_t) {
 static void CheckMessageAccessors(ant_t *js) {
   for (int inherited = 0; inherited < 2; inherited++) {
     GC_ROOT_SAVE(mark, js);
-    ant_value_t value = js_mkobj(js);
+    ant_value_t value = Ant_Object_CreateBare(js);
     GC_ROOT_PIN(js, value);
-    ant_value_t proto = js_mkobj(js);
+    ant_value_t proto = Ant_Object_CreateBare(js);
     GC_ROOT_PIN(js, proto);
     if (inherited) js_set_proto_init(value, proto);
     js_set(js, value, "detail", js_mkstr(js, "original thrown detail", 22));

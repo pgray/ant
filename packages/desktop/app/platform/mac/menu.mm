@@ -1,4 +1,5 @@
 #include "internal.h"
+#include "cfunc.h"
 
 #include "native_menu.h"
 void RefreshApplicationMenu(ant_t *js, ant_value_t menu) {
@@ -46,7 +47,7 @@ ant_value_t DesktopMenuBuildFromTemplate(ant_params_t) {
   if (nargs < 1 || !is_array_value(args[0])) {
     return js_mkerr(js, "Menu.buildFromTemplate(template) requires an array");
   }
-  ant_value_t menu = js_mkobj(js);
+  ant_value_t menu = Ant_Object_CreateBare(js);
   ant_desktop_state_t *state = ant_desktop_state_from(js_getthis(js));
   if (!state) return js_mkerr(js, "invalid Menu receiver");
   ant_desktop_state_attach(menu, state);
@@ -86,7 +87,7 @@ ant_value_t DesktopSetApplicationMenu(ant_params_t) {
 
 ant_value_t DesktopMenuItemCtor(ant_params_t) {
   ant_value_t item = js_getthis(js);
-  if (!is_object_type(item)) item = js_newobj(js);
+  if (!is_object_type(item)) item = Ant_Object_Create(js);
   if (nargs > 0 && is_object_type(args[0])) js_merge_obj(js, item, args[0]);
   return item;
 }
