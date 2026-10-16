@@ -187,6 +187,7 @@ static bool is_valued_flag(const char *arg) {
     strcmp(arg, "--eval") == 0 || 
     strcmp(arg, "--repl") == 0 ||
     strcmp(arg, "--input-type") == 0 ||
+    strcmp(arg, "--location") == 0 ||
     strcmp(arg, "--localstorage-file") == 0 ||
     strcmp(arg, "--cron-title") == 0 ||
     strcmp(arg, "--cron-period") == 0;
