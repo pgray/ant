@@ -1596,7 +1596,7 @@ static ant_value_t exec_file_promisify_callback(ant_params_t) {
     return js_mkundef();
   }
 
-  ant_value_t result = js_mkobj(js);
+  ant_value_t result = js_newobj(js);
   js_set(js, result, "stdout", stdout_val);
   js_set(js, result, "stderr", stderr_val);
   js_resolve_promise(js, promise, result);
@@ -1908,7 +1908,7 @@ static ant_value_t spawn_sync_impl(ant_native_params_t, bool force_shell) {
     return stderr_val;
   }
 
-  ant_value_t result = js_mkobj(js);
+  ant_value_t result = js_newobj(js);
   js_set(js, result, "stdout", stdout_val);
   js_set(js, result, "stderr", stderr_val);
   js_set(js, result, "status", js_mknum((double)exit_code));
@@ -2345,7 +2345,7 @@ static ant_value_t sync_build_spawn_error(
     js_set(js, error, "spawnargs", spawnargs);
   }
 
-  ant_value_t result = js_mkobj(js);
+  ant_value_t result = js_newobj(js);
   js_set(js, result, "error", error);
   js_set(js, result, "status", js_mknull());
   js_set(js, result, "signal", js_mknull());
@@ -2365,7 +2365,7 @@ static ant_value_t sync_build_result(
   ant_value_t stderr_val = sync_make_output(js, err->buf, err->len, opts->encode_as_string);
   if (is_err(stderr_val)) return stderr_val;
 
-  ant_value_t result = js_mkobj(js);
+  ant_value_t result = js_newobj(js);
   js_set(js, result, "stdout", stdout_val);
   js_set(js, result, "stderr", stderr_val);
   js_set(js, result, "pid", js_mknum((double)pid));
