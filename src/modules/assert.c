@@ -10,6 +10,7 @@
 #include "internal.h"
 #include "gc/roots.h"
 
+#include "esm/library.h"
 #include "modules/assert.h"
 #include "modules/buffer.h"
 #include "modules/collections.h"
@@ -1247,6 +1248,49 @@ static ant_value_t assert_assertion_error_ctor(ant_params_t) {
   return err;
 }
 
+static ant_value_t assert_strict_object(ant_t *js, ant_value_t assert_fn) {
+  static const struct { const char *name; const char *source; } members[] = {
+    { "ok", "ok" },
+    { "fail", "fail" },
+    { "ifError", "ifError" },
+    { "equal", "strictEqual" },
+    { "notEqual", "notStrictEqual" },
+    { "strictEqual", "strictEqual" },
+    { "notStrictEqual", "notStrictEqual" },
+    { "deepEqual", "deepStrictEqual" },
+    { "notDeepEqual", "notDeepStrictEqual" },
+    { "deepStrictEqual", "deepStrictEqual" },
+    { "notDeepStrictEqual", "notDeepStrictEqual" },
+    { "throws", "throws" },
+    { "doesNotThrow", "doesNotThrow" },
+    { "rejects", "rejects" },
+    { "doesNotReject", "doesNotReject" },
+    { "match", "match" },
+    { "doesNotMatch", "doesNotMatch" },
+    { "AssertionError", "AssertionError" },
+  };
+
+  GC_ROOT_SAVE(mark, js);
+  ant_value_t strict_obj = Ant_Object_CreateBare(js);
+  GC_ROOT_PIN(js, strict_obj);
+  js_set_slot(strict_obj, SLOT_CFUNC, Ant_Function_Create(assert_ok));
+  js_define_function_length(js, strict_obj, 0);
+  js_set_function_name(js, strict_obj, "strict", 6);
+
+  for (size_t i = 0; i < countof(members); i++) {
+    const char *key = intern_string(members[i].name, strlen(members[i].name));
+    if (!key) { GC_ROOT_RESTORE(js, mark); return js_mkerr(js, "oom"); }
+    mkprop_interned_exact(js, strict_obj, key, js_get(js, assert_fn, members[i].source), ANT_PROP_ATTR_DEFAULT);
+  }
+
+  ant_value_t strict_fn = js_obj_to_func(js, strict_obj);
+  js_set(js, strict_fn, "strict", strict_fn);
+  js_set(js, strict_fn, "default", strict_fn);
+  
+  GC_ROOT_RESTORE(js, mark);
+  return strict_fn;
+}
+
 ant_value_t assert_library(ant_t *js) {
   ant_value_t assert_obj = Ant_Object_CreateBare(js);
   js_set_slot(assert_obj, SLOT_CFUNC, Ant_Function_Create(assert_ok));
@@ -1279,6 +1323,13 @@ ant_value_t assert_library(ant_t *js) {
   js_set(js, assert_obj, "AssertionError", ae_fn);
   ant_value_t lib = js_obj_to_func(js, assert_obj);
   js_set(js, lib, "default", lib);
+  js_set(js, lib, "strict", assert_strict_object(js, lib));
   
   return lib;
+}
+
+ant_value_t assert_strict_library(ant_t *js) {
+  ant_library_entry_t *entry = ant_library_find("assert", 6);
+  ant_value_t lib = entry ? ant_library_load(js, entry) : assert_library(js);
+  return is_err(lib) ? lib : js_get(js, lib, "strict");
 }

@@ -38,6 +38,7 @@ Store in-progress execution plans here.
 - [Node–Ant Differential Runner](node-ant-differential-runner.md)
 - [Vendored Node.js Compatibility Suite](node-compat-suite.md)
 - [Node Core JavaScript Shims](node-core-js-shims.md)
+- [Node dns Module](node-dns-module.md)
 - [PR #44 Source Port Audit](pr-44-source-port-audit.md)
 - [Silver Recursive JIT Performance](silver-recursive-jit-perf.md)
 - [Silver JIT Inline Arena Allocation](silver-jit-inline-arena-allocation.md)

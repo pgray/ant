@@ -178,6 +178,8 @@ void ant_bootstrap_modules(ant_t *js) {
   ant_standard_library("stream", stream_library);
   ant_standard_library("timers", timers_library);
 
+  ant_standard_library("assert/strict", assert_strict_library);
+  ant_standard_library("dns/promises", dns_promises_library);
   ant_standard_library("fs/promises", fs_promises_library);
   ant_standard_library("timers/promises", timers_promises_library);
   ant_standard_library("readline/promises", readline_promises_library);

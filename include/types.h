@@ -48,6 +48,8 @@ typedef struct eventsource_state_s eventsource_state_t;
 typedef struct websocket_state_s   websocket_state_t;
 typedef struct child_process_s     child_process_t;
 
+typedef struct dns_channel_s    dns_channel_t;
+typedef struct dns_request_s    dns_request_t;
 typedef struct net_server_s     net_server_t;
 typedef struct net_socket_s     net_socket_t;
 typedef struct ant_tls_socket_s ant_tls_socket_t;

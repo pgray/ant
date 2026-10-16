@@ -11,6 +11,7 @@ void gc_mark_atomics(ant_t *js, gc_mark_fn mark);
 void gc_mark_fetch(ant_t *js, gc_mark_fn mark);
 void gc_mark_fs(ant_t *js, gc_mark_fn mark);
 void gc_mark_child_process(ant_t *js, gc_mark_fn mark);
+void gc_mark_dns(ant_t *js, gc_mark_fn mark);
 void gc_mark_readline(ant_t *js, gc_mark_fn mark);
 void gc_mark_process(ant_t *js, gc_mark_fn mark);
 void gc_mark_navigator(ant_t *js, gc_mark_fn mark);

@@ -1230,6 +1230,7 @@ static void gc_mark_roots(ant_t *js) {
   gc_mark_fetch(js, gc_mark_value);
   gc_mark_fs(js, gc_mark_value);
   gc_mark_child_process(js, gc_mark_value);
+  gc_mark_dns(js, gc_mark_value);
   gc_mark_readline(js, gc_mark_value);
   gc_mark_process(js, gc_mark_value);
   gc_mark_navigator(js, gc_mark_value);

@@ -39,6 +39,11 @@ typedef struct {
   ant_value_t value;
 } ant_global_lexical_t;
 
+typedef struct ant_array_join_frame {
+  struct ant_array_join_frame *prev;
+  ant_value_t receiver;
+} ant_array_join_frame_t;
+
 static constexpr int MAX_STRINGIFY_DEPTH   = 64;
 static constexpr int MAX_PROTO_CHAIN_DEPTH = 256;
 static constexpr int MAX_MULTIREF_OBJS     = 128;
@@ -102,6 +107,10 @@ struct ant_isolate_t {
   eventsource_state_t *active_eventsources;
   websocket_state_t *active_websockets;
   child_process_t *active_children;
+  dns_channel_t *dns_channels;
+  dns_channel_t *dns_default_channel;
+  dns_request_t *dns_requests;
+  uint8_t dns_result_order;
   
   net_server_t *net_servers;
   net_socket_t *net_sockets;
@@ -200,6 +209,7 @@ struct ant_isolate_t {
   ant_value_t exception_oom;
 
   ant_stringify_ctx_t *stringify;
+  ant_array_join_frame_t *array_join_stack;
   ant_stringify_ctx_t stringify_root;
 
   struct {

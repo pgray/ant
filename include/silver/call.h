@@ -19,10 +19,17 @@ static inline ant_value_t Ant_Silver_FinishNativeCall(ant_t *js, ant_value_t res
   return result;
 }
 
+static inline bool sv_check_c_stack_overflow(ant_t *js) {
+  return (uintptr_t)__builtin_frame_address(0) < (uintptr_t)js->cstk.floor;
+}
+
 static inline ant_value_t sv_invoke_native(
   ant_t *js, ant_cfunc_t fn, ant_value_t *args,
   int nargs, ant_value_t new_target
 ) {
+  if (__builtin_expect(sv_check_c_stack_overflow(js), 0))
+    return js_mkerr_typed(js, JS_ERR_RANGE | JS_ERR_NO_STACK, "Maximum call stack size exceeded");
+
   if (__builtin_expect(Ant_Exception_Pending(js), 0))
     return Ant_Silver_InvokeNativeScoped(js, fn, args, nargs, new_target);
 
@@ -276,17 +283,6 @@ static inline bool sv_closure_is_plain_sync(const sv_closure_t *closure) {
   return 
     closure && closure->call_flags == 0 && closure->func &&
     !closure->func->is_async && !closure->func->is_generator;
-}
-
-static inline bool sv_check_c_stack_overflow(ant_t *js) {
-  volatile char marker;
-  if (js->cstk.limit == 0 || js->cstk.base == NULL) return false;
-
-  uintptr_t base = (uintptr_t)js->cstk.base;
-  uintptr_t curr = (uintptr_t)&marker;
-
-  size_t used = (base > curr) ? (base - curr) : (curr - base);
-  return used > js->cstk.limit;
 }
 
 typedef struct {

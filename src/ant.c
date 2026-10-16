@@ -53,6 +53,7 @@
 #include "modules/abort.h"
 #include "modules/eventsource.h"
 #include "modules/websocket.h"
+#include "modules/dns.h"
 
 #ifndef ANT_WASM_EMBED
 #include <uv.h>
@@ -13089,7 +13090,7 @@ static ant_value_t builtin_array_slice(ant_params_t) {
   return result;
 }
 
-static ant_value_t builtin_array_join(ant_params_t) {
+static ant_value_t array_join_body(ant_params_t) {
   ant_value_t arr = js->this_val;
   arr = array_method_receiver(js, arr, "join");
   if (is_err(arr)) return arr;
@@ -15221,7 +15222,7 @@ static bool array_try_builtin_string_locale(
   return true;
 }
 
-static ant_value_t builtin_array_toLocaleString(ant_params_t) {
+static ant_value_t array_to_locale_string_body(ant_params_t) {
   ant_value_t arr = js->this_val;
   arr = array_method_receiver(js, arr, "toLocaleString");
   if (is_err(arr)) return arr;
@@ -15427,6 +15428,28 @@ static ant_value_t builtin_array_toLocaleString(ant_params_t) {
   GC_ROOT_RESTORE(js, root_mark);
   
   return ret;
+}
+
+static ant_value_t array_join_guarded(ant_native_params_t, ant_value_t new_target, ant_cfunc_t body) {
+  ant_value_t receiver = js->this_val;
+  for (ant_array_join_frame_t *frame = js->array_join_stack; frame; frame = frame->prev)
+    if (frame->receiver == receiver && is_object_type(receiver)) return js_mkstr(js, "", 0);
+
+  ant_array_join_frame_t frame = { js->array_join_stack, receiver };
+  js->array_join_stack = &frame;
+  
+  ant_value_t result = body(js, args, nargs, new_target);
+  js->array_join_stack = frame.prev;
+  
+  return result;
+}
+
+static ant_value_t builtin_array_join(ant_params_t) {
+  return array_join_guarded(js, args, nargs, call_new_target, array_join_body);
+}
+
+static ant_value_t builtin_array_toLocaleString(ant_params_t) {
+  return array_join_guarded(js, args, nargs, call_new_target, array_to_locale_string_body);
 }
 
 static ant_value_t builtin_Array_isArray(ant_params_t) {
@@ -17858,15 +17881,22 @@ static ant_value_t builtin_number_toLocaleString(ant_params_t) {
   return js_mkstr(js, buf, len);
 }
 
+static ant_value_t string_this_value(ant_t *js, const char *method) {
+  ant_value_t self = js->this_val;
+  if (vtype(self) == kTypeString) return self;
+  
+  ant_value_t wrapped = js_string_wrapper_value(self);
+  if (vtype(wrapped) == kTypeString) return wrapped;
+  
+  return js_mkerr_typed(js, JS_ERR_TYPE, "String.prototype.%s requires that 'this' be a String", method);
+}
+
 static ant_value_t builtin_string_valueOf(ant_params_t) {
-  (void) args; (void) nargs;
-  ant_value_t str = to_string_val(js, js->this_val);
-  if (vtype(str) != kTypeString) return js_mkerr(js, "valueOf called on non-string");
-  return str;
+  return string_this_value(js, "valueOf");
 }
 
 static ant_value_t builtin_string_toString(ant_params_t) {
-  return builtin_string_valueOf(js, args, nargs, js_mkundef());
+  return string_this_value(js, "toString");
 }
 
 static ant_value_t builtin_boolean_valueOf(ant_params_t) {
@@ -22283,6 +22313,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   
   ant_value_t string_proto = Ant_Object_CreateBare(js);
   set_proto(js, string_proto, object_proto);
+  set_slot(string_proto, SLOT_PRIMITIVE, js_mkstr(js, "", 0));
   
   defmethod(js, string_proto, "indexOf", 7, Ant_Function_CreateWithArity(builtin_string_indexOf, 1));
   defmethod(js, string_proto, "substring", 9, Ant_Function_CreateWithArity(builtin_string_substring, 2));
@@ -22330,6 +22361,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
 
   ant_value_t number_proto = Ant_Object_CreateBare(js);
   set_proto(js, number_proto, object_proto);
+  set_slot(number_proto, SLOT_PRIMITIVE, tov(0.0));
   
   js->sym.number_to_string_fn = defmethod(js, number_proto, "toString", 8, Ant_Function_CreateWithArity(builtin_number_toString, 1));
   defmethod(js, number_proto, "toFixed", 7, Ant_Function_CreateWithArity(builtin_number_toFixed, 1));
@@ -22340,6 +22372,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   
   ant_value_t boolean_proto = Ant_Object_CreateBare(js);
   set_proto(js, boolean_proto, object_proto);
+  set_slot(boolean_proto, SLOT_PRIMITIVE, js_false);
   
   defmethod(js, boolean_proto, "valueOf", 7, Ant_Function_Create(builtin_boolean_valueOf));
   defmethod(js, boolean_proto, "toString", 8, Ant_Function_Create(builtin_boolean_toString));
@@ -22732,6 +22765,8 @@ void js_destroy(ant_t *js) {
   cleanup_abort_module(js);
   cleanup_eventsource_module(js);
   cleanup_websocket_module(js);
+  cleanup_dns_module(js);
+  
   Ant_Loop_Drain(js);
   gc_weak_cleanup(js);
 

@@ -57,8 +57,9 @@ async function main() {
 
   // A malformed numeric host fails locally without depending on external DNS.
   await expectRejection(() => dns.promises.lookup('256.256.256.256'));
-  await expectRejection(() => dns.promises.lookup());
-  await expectRejection(() => dns.promises.lookup(42));
+  const empty = await dns.promises.lookup();
+  assert(empty.address === null && empty.family === 4, 'lookup() without a hostname resolves to a null address');
+  expectTypeError(() => dns.promises.lookup(42), 'The "hostname" argument must be of type string. Received type number (42)');
 
   const pipeFailure = new Error('source pipe failed');
   const source = new Readable({ read() {} });

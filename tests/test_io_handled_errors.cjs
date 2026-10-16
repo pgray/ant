@@ -92,7 +92,8 @@ const cases = {
     const dns = require('node:dns').promises;
     // c-ares rejects this name before sending any network traffic.
     await rejected(dns.resolve('bad..name', 'A'));
-    await rejected(dns.resolve('localhost', 'INVALID'));
+    try { dns.resolve('localhost', 'INVALID'); throw new Error('expected a synchronous throw'); }
+    catch (error) { if (error.code !== 'ERR_INVALID_ARG_VALUE') throw error; }
   `,
 };
 
