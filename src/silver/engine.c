@@ -601,6 +601,10 @@ const sv_srcpos_t *sv_srcpos_at(sv_func_t *func, int bc_offset) {
   return lo > 0 ? &pos[lo - 1] : NULL;
 }
 
+ant_value_t Ant_Value_LooseEquals(ant_t *js, ant_value_t l, ant_value_t r) {
+  return sv_abstract_eq(js, l, r);
+}
+
 bool sv_lookup_srcpos(sv_func_t *func, int bc_offset, uint32_t *line, uint32_t *col) {
   const sv_srcpos_t *pos = sv_srcpos_at(func, bc_offset);
   if (!pos) return false;
@@ -2470,6 +2474,7 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
     }
     if (vtype(call_func) == kTypeBuiltin) sv_tfb_record_builtin_call(func, ip);
     ant_value_t *call_args = &vm->stack[vm->sp - tc_argc];
+    frame->ip = ip;
     ant_value_t call_result = sv_vm_call(
       vm, js, call_func, tc_this, call_args, tc_argc, NULL, js_mkundef());
     sv_sync_frame_locals(vm, &frame, &func, &lp);

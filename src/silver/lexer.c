@@ -66,20 +66,14 @@ void sv_lexer_pop_source(sv_lexer_t *lx, const sv_lexer_checkpoint_t *cp) {
   lx->st = cp->st;
 }
 
-static const char *sv_lexer_escape_error(sv_lexer_t *lx, const uint8_t *in, size_t pos, uint8_t flags) {
-  if (flags & ESCAPE_BAD_HEX) return "Invalid hexadecimal escape sequence";
-  if (flags & ESCAPE_BAD_CODEPOINT) return "Undefined Unicode code-point";
-  if (flags & ESCAPE_BAD_UNICODE) return "Invalid Unicode escape sequence";
-  if (lx->strict && is_octal_escape(in, pos)) return "Octal escape sequences are not allowed in strict mode.";
-  return NULL;
-}
-
 static bool sv_lexer_decode_string_escape(sv_lexer_t *lx, const uint8_t *in, uint8_t *out, size_t *n1, size_t *n2) {
   uint8_t flags = 0;
   size_t pos = *n2;
   *n2 += decode_escape(in, pos, (size_t)lx->st.tlen, out, n1, in[0], &flags) + 1;
 
-  const char *error = flags ? sv_lexer_escape_error(lx, in, pos, flags) : NULL;
+  const char *error = flags ? escape_error_message(
+    flags, in[pos + 1], lx->strict ? ESCAPE_CONTEXT_STRICT : ESCAPE_CONTEXT_SLOPPY
+  ) : NULL;
   if (!error) return true;
 
   js_error_site_t site = sv_lexer_error_site(lx);
@@ -864,26 +858,8 @@ static inline uint8_t scan_string(sv_lexer_t *lx, const char *buf, ant_offset_t 
       return TOK_ERR;
     }
 
-    char esc_char = buf[esc_pos + 1];
-    ant_offset_t skip = 2;
-
-    if (esc_char == '\r' && esc_pos + 2 < rem && buf[esc_pos + 2] == '\n') skip = 3;
-    else if (esc_char == 'x') { skip = 4; } else if (esc_char == 'u') {
-      skip = (esc_pos + 2 < rem && buf[esc_pos + 2] == '{') ? 0 : 6;
-      if (skip == 0) {
-        ant_offset_t j = esc_pos + 3;
-        while (j < rem && buf[j] != '}') j++;
-        skip = (j < rem) ? (j - esc_pos + 1) : (rem - esc_pos);
-      }
-    }
-
-    if (esc_pos + skip > rem) {
-      lx->st.tok = TOK_ERR;
-      lx->st.tlen = rem;
-      return TOK_ERR;
-    }
-
-    i = esc_pos + skip;
+    bool crlf = buf[esc_pos + 1] == '\r' && esc_pos + 2 < rem && buf[esc_pos + 2] == '\n';
+    i = esc_pos + (crlf ? 3 : 2);
   }
 
   lx->st.tok = TOK_ERR;

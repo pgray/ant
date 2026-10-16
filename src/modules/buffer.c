@@ -2727,16 +2727,19 @@ static ant_value_t js_buffer_of(ant_params_t) {
 }
 
 static ant_value_t buffer_index_arg(ant_t *js, ant_value_t v, const char *name, size_t *out) {
-  if (vtype(v) != kTypeNumber) return js_mkerr_typed(js, JS_ERR_TYPE, "The \"%s\" argument must be of type number", name);
+  if (vtype(v) != kTypeNumber) return Ant_Error_CreateInvalidArgType(js, name, "of type number", v);
+  
   double d = js_getnum(v);
-  if (d != floor(d) || d < 0 || d > 9007199254740991.0) return js_mkerr_typed(js, JS_ERR_RANGE, "The value of \"%s\" is out of range", name);
+  if (!isfinite(d) || d != trunc(d)) return buffer_out_of_range(js, name, "an integer", v);
+  if (d < 0 || d > 9007199254740991.0) return buffer_out_of_range(js, name, ">= 0 && <= 9007199254740991", v);
+  
   *out = (size_t)d;
   return js_mkundef();
 }
 
 static ant_value_t js_buffer_copyBytesFrom(ant_params_t) {
   TypedArrayData *view = nargs > 0 ? buffer_get_typedarray_data(args[0]) : NULL;
-  if (!view) return js_mkerr_typed(js, JS_ERR_TYPE, "The \"view\" argument must be an instance of TypedArray");
+  if (!view) return Ant_Error_CreateInvalidArgType(js, "view", "an instance of TypedArray", nargs > 0 ? args[0] : js_mkundef());
   
   size_t len = Ant_Buffer_ViewIsLive(view) ? view->length : 0;
   size_t start = 0, count = len;

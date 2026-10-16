@@ -51,6 +51,7 @@
 #include "modules/cron.h"
 #include "modules/process.h"
 #include "modules/tty.h"
+#include "modules/url.h"
 #include "modules/sandbox.h"
 
 int js_result = EXIT_SUCCESS;
@@ -622,6 +623,7 @@ int main(int argc, char *argv[]) {
     X(struct arg_lit *, print, arg_lit0("p", "print", "evaluate script and print result")) \
     X(struct arg_lit *, watch, arg_lit0("w", "watch", "restart process when entry file changes")) \
     X(struct arg_lit *, web_compat, arg_lit0(NULL, "web-compat", "browser-compatible mode: location, relative URLs, browser package resolution")) \
+    X(struct arg_str *, location, arg_str0(NULL, "location", "<href>", "set globalThis.location and the base URL for relative fetches")) \
     X(struct arg_lit *, no_clear_screen, arg_lit0(NULL, "no-clear-screen", "keep output when restarting in watch mode")) \
     X(struct arg_lit *, jitless, arg_lit0(NULL, "jitless", "run everything in the interpreter, without compiling to native code")) \
     X(struct arg_file *, localstorage_file, arg_file0(NULL, "localstorage-file", "<path>", "file path for localStorage persistence")) \
@@ -791,6 +793,16 @@ int main(int argc, char *argv[]) {
   }
 
   input_mode_t input_mode = INPUT_MODE_COMMONJS;
+  if (location->count > 0) {
+    url_state_t location_url;
+    if (Ant_URL_ParseLocation(location->sval[0], &location_url) != 0) {
+      fprintf(stderr, "Error: --location must be an http: or https: URL, got \"%s\".\n", location->sval[0]);
+      CLEANUP_ARGS_AND_ARGV();
+      return EXIT_FAILURE;
+    }
+    url_state_clear(&location_url);
+  }
+
   if (input_type->count > 0) {
     const char *type_value = input_type->sval[0];
     if (strcmp(type_value, "module") == 0) input_mode = INPUT_MODE_MODULE;
@@ -871,6 +883,7 @@ int main(int argc, char *argv[]) {
   
   ant_runtime_init(js, proc_argv.argc, proc_argv.argv, localstorage_file);
   if (web_compat->count > 0) js->runtime.flags |= ANT_RUNTIME_WEB_COMPAT;
+  if (location->count > 0) js->runtime.location = location->sval[0];
   
   if (sandbox_daemon) {
     io_set_sandbox_terminal(sandbox.capabilities);

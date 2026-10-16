@@ -121,7 +121,7 @@ static bool util_sb_append_jsval(ant_t *js, util_sb_t *sb, ant_value_t v) {
 static bool util_sb_append_inspect(ant_t *js, util_sb_t *sb, ant_value_t v, bool show_hidden) {
   char cbuf[512];
   js_cstr_t cstr = show_hidden
-    ? js_inspect_cstr_opts(js, v, cbuf, sizeof(cbuf), 4, true)
+    ? js_inspect_cstr_opts(js, v, cbuf, sizeof(cbuf), 4, ANT_INSPECT_SHOW_HIDDEN)
     : js_inspect_cstr(js, v, cbuf, sizeof(cbuf));
   bool ok = util_sb_append_n(sb, cstr.ptr, strlen(cstr.ptr));
   if (cstr.needs_free) free((void *)cstr.ptr);
@@ -592,10 +592,15 @@ static int util_inspect_depth(ant_t *js, ant_value_t *args, int nargs) {
   return d >= MAX_STRINGIFY_DEPTH ? MAX_STRINGIFY_DEPTH : (int)d;
 }
 
-static bool util_inspect_show_hidden(ant_t *js, ant_value_t *args, int nargs) {
-  if (nargs < 2) return false;
-  if (is_object_type(args[1])) return js_truthy(js, js_get(js, args[1], "showHidden"));
-  return vtype(args[1]) == kTypeBool && js_truthy(js, args[1]);
+static uint8_t util_inspect_flags(ant_t *js, ant_value_t *args, int nargs) {
+  if (nargs < 2) return 0;
+  if (!is_object_type(args[1])) return vtype(args[1]) == kTypeBool && js_truthy(js, args[1]) ? ANT_INSPECT_SHOW_HIDDEN : 0;
+
+  uint8_t flags = 0;
+  if (js_truthy(js, js_get(js, args[1], "showHidden"))) flags |= ANT_INSPECT_SHOW_HIDDEN;
+  if (js_get(js, args[1], "compact") == js_false) flags |= ANT_INSPECT_EXPAND;
+  if (js_get(js, args[1], "sorted") == js_true) flags |= ANT_INSPECT_SORTED;
+  return flags;
 }
 
 static ant_value_t util_inspect(ant_params_t) {
@@ -603,7 +608,7 @@ static ant_value_t util_inspect(ant_params_t) {
   char cbuf[512];
   js_cstr_t cstr = js_inspect_cstr_opts(
     js, args[0], cbuf, sizeof(cbuf),
-    util_inspect_depth(js, args, nargs), util_inspect_show_hidden(js, args, nargs)
+    util_inspect_depth(js, args, nargs), util_inspect_flags(js, args, nargs)
   );
   ant_value_t out = js_mkstr(js, cstr.ptr, strlen(cstr.ptr));
   if (cstr.needs_free) free((void *)cstr.ptr);

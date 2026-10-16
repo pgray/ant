@@ -93,7 +93,7 @@ static inline unsigned collection_key_hash(const collection_key_t *key) {
   return (unsigned)hash_key((const char *)key->bytes, key->len);
 }
 
-static map_entry_t *map_find_entry(ant_t *js, map_entry_t **map_ptr, ant_value_t key_val) {
+map_entry_t *Ant_Map_Find(ant_t *js, map_entry_t **map_ptr, ant_value_t key_val) {
   collection_key_t key;
   if (!collection_key_init(js, key_val, &key)) return NULL;
 
@@ -106,7 +106,7 @@ static map_entry_t *map_find_entry(ant_t *js, map_entry_t **map_ptr, ant_value_t
   return entry;
 }
 
-static set_entry_t *set_find_entry(ant_t *js, set_entry_t **set_ptr, ant_value_t value) {
+set_entry_t *Ant_Set_Find(ant_t *js, set_entry_t **set_ptr, ant_value_t value) {
   collection_key_t key;
   if (!collection_key_init(js, value, &key)) return NULL;
   
@@ -431,7 +431,7 @@ static ant_value_t map_get(ant_params_t) {
   map_entry_t **map_ptr = get_map_from_obj(this_val);
   if (!map_ptr) return js_mkundef();
 
-  map_entry_t *entry = map_find_entry(js, map_ptr, args[0]);
+  map_entry_t *entry = Ant_Map_Find(js, map_ptr, args[0]);
   return entry ? entry->value : js_mkundef();
 }
 
@@ -502,7 +502,7 @@ static ant_value_t map_has(ant_params_t) {
   map_entry_t **map_ptr = get_map_from_obj(this_val);
   
   if (!map_ptr) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid Map object");
-  map_entry_t *entry = map_find_entry(js, map_ptr, args[0]);
+  map_entry_t *entry = Ant_Map_Find(js, map_ptr, args[0]);
   return js_bool(entry != NULL);
 }
 
@@ -612,7 +612,7 @@ static ant_value_t map_upsert(ant_params_t) {
   if (!is_callable(insert_fn))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Map.upsert insert callback must be callable");
 
-  map_entry_t *entry = map_find_entry(js, map_ptr, args[0]);
+  map_entry_t *entry = Ant_Map_Find(js, map_ptr, args[0]);
   ant_value_t value;
 
   if (entry) {
@@ -645,7 +645,7 @@ static ant_value_t map_delete(ant_params_t) {
   map_entry_t **map_ptr = get_map_from_obj(this_val);
   
   if (!map_ptr) return js_false;
-  map_entry_t *entry = map_find_entry(js, map_ptr, args[0]);
+  map_entry_t *entry = Ant_Map_Find(js, map_ptr, args[0]);
   if (entry) {
     HASH_DEL(*map_ptr, entry);
     free(entry->key);
@@ -825,7 +825,7 @@ static ant_value_t set_has(ant_params_t) {
   set_entry_t **set_ptr = get_set_from_obj(this_val);
   if (!set_ptr) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid Set object");
 
-  set_entry_t *entry = set_find_entry(js, set_ptr, args[0]);
+  set_entry_t *entry = Ant_Set_Find(js, set_ptr, args[0]);
   return js_bool(entry != NULL);
 }
 
@@ -836,7 +836,7 @@ static ant_value_t set_delete(ant_params_t) {
   set_entry_t **set_ptr = get_set_from_obj(this_val);
   if (!set_ptr) return js_false;
 
-  set_entry_t *entry = set_find_entry(js, set_ptr, args[0]);
+  set_entry_t *entry = Ant_Set_Find(js, set_ptr, args[0]);
   
   if (entry) {
     HASH_DEL(*set_ptr, entry);
@@ -930,7 +930,7 @@ static bool set_result_add(ant_t *js, ant_value_t set_obj, set_entry_t **set_ptr
 }
 
 static void set_result_delete(ant_t *js, set_entry_t **set_ptr, ant_value_t value) {
-  set_entry_t *entry = set_find_entry(js, set_ptr, value);
+  set_entry_t *entry = Ant_Set_Find(js, set_ptr, value);
   if (!entry) return;
   HASH_DEL(*set_ptr, entry);
   free(entry->key);
@@ -1087,7 +1087,7 @@ typedef struct {
 static set_key_status_t set_intersection_key_cb(ant_t *js, ant_value_t value, ant_value_t *result, void *ctx) {
   set_compare_build_ctx_t *build = (set_compare_build_ctx_t *)ctx;
   if (
-    set_find_entry(js, build->this_set, value) && 
+    Ant_Set_Find(js, build->this_set, value) && 
     !set_result_add(js, build->out, build->out_set, value)
   ) *result = js_mkerr(js, "out of memory");
   return SET_KEY_CONTINUE;
@@ -1186,9 +1186,9 @@ typedef struct {
 
 static set_key_status_t set_symmetric_difference_key_cb(ant_t *js, ant_value_t value, ant_value_t *result, void *ctx) {
   set_symdiff_ctx_t *build = (set_symdiff_ctx_t *)ctx;
-  if (set_find_entry(js, build->this_set, value)) {
+  if (Ant_Set_Find(js, build->this_set, value)) {
     set_result_delete(js, build->out_set, value);
-  } else if (!set_find_entry(js, build->out_set, value))
+  } else if (!Ant_Set_Find(js, build->out_set, value))
     if (!set_result_add(js, build->out, build->out_set, value)) *result = js_mkerr(js, "out of memory");
   return SET_KEY_CONTINUE;
 }
@@ -1243,7 +1243,7 @@ typedef struct {
 
 static set_key_status_t set_superset_key_cb(ant_t *js, ant_value_t value, ant_value_t *result, void *ctx) {
   set_predicate_ctx_t *pred = (set_predicate_ctx_t *)ctx;
-  if (!set_find_entry(js, pred->this_set, value)) {
+  if (!Ant_Set_Find(js, pred->this_set, value)) {
     pred->result = false;
     return SET_KEY_STOP;
   }
@@ -1268,7 +1268,7 @@ static ant_value_t set_isSupersetOf(ant_params_t) {
 
 static set_key_status_t set_disjoint_key_cb(ant_t *js, ant_value_t value, ant_value_t *result, void *ctx) {
   set_predicate_ctx_t *pred = (set_predicate_ctx_t *)ctx;
-  if (set_find_entry(js, pred->this_set, value)) {
+  if (Ant_Set_Find(js, pred->this_set, value)) {
     pred->result = false;
     return SET_KEY_STOP;
   }
@@ -1596,7 +1596,7 @@ static ant_value_t map_group_add(ant_t *js, void *ctx, ant_value_t key, ant_valu
   map_entry_t **map_head = ctx;
   key = normalize_map_key(key);
   
-  map_entry_t *entry = map_find_entry(js, map_head, key);
+  map_entry_t *entry = Ant_Map_Find(js, map_head, key);
   ant_value_t group;
 
   if (entry) group = entry->value; else {

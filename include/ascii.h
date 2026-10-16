@@ -27,6 +27,10 @@ static inline bool ant_ascii_is_xdigit(int c) {
   return ant_ascii_is_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 }
 
+static inline bool ant_ascii_is_space(int c) {
+  return c == ' ' || (c >= '\t' && c <= '\r');
+}
+
 static inline int ant_ascii_to_lower(int c) {
   return ant_ascii_is_upper(c) ? c + ('a' - 'A') : c;
 }

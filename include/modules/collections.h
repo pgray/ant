@@ -80,6 +80,9 @@ void weakmap_table_finish_prune(weakmap_table_t *table);
 map_entry_t **get_map_from_obj(ant_value_t obj);
 set_entry_t **get_set_from_obj(ant_value_t obj);
 
+map_entry_t *Ant_Map_Find(ant_t *js, map_entry_t **map_ptr, ant_value_t key);
+set_entry_t *Ant_Set_Find(ant_t *js, set_entry_t **set_ptr, ant_value_t value);
+
 map_iterator_state_t *get_map_iter_state(ant_value_t obj);
 set_iterator_state_t *get_set_iter_state(ant_value_t obj);
 

@@ -67,6 +67,22 @@ static size_t decode_unicode_fixed(const uint8_t *in, size_t pos, size_t end, ui
   return 4;
 }
 
+const char *escape_error_message(uint8_t flags, uint8_t escape_char, escape_context_t context) {
+  if (flags & ESCAPE_BAD_HEX) return "Invalid hexadecimal escape sequence";
+  if (flags & ESCAPE_BAD_CODEPOINT) return "Undefined Unicode code-point";
+  if (flags & ESCAPE_BAD_UNICODE) return "Invalid Unicode escape sequence";
+  if (!(flags & ESCAPE_LEGACY) || context == ESCAPE_CONTEXT_SLOPPY) return NULL;
+
+  bool eight_nine = escape_char == '8' || escape_char == '9';
+  if (context == ESCAPE_CONTEXT_TEMPLATE) return eight_nine
+    ? "\\8 and \\9 are not allowed in template strings."
+    : "Octal escape sequences are not allowed in template strings.";
+  
+  return eight_nine
+    ? "\\8 and \\9 are not allowed in strict mode."
+    : "Octal escape sequences are not allowed in strict mode.";
+}
+
 size_t decode_escape(const uint8_t *in, size_t pos, size_t end, uint8_t *out, size_t *out_pos, uint8_t quote, uint8_t *flags) {
   uint8_t c = in[pos + 1];
   size_t advance = 0;

@@ -3821,14 +3821,6 @@ void compile_template(sv_compiler_t *c, sv_ast_t *node) {
     emit_constant(c, sv_const_str(c, "", 0));
     return;
   }
-  if (!template_has_valid_cooked_segments(node)) {
-    static const char msg[] = "Invalid or unexpected token";
-    int atom = add_atom(c, msg, sizeof(msg) - 1);
-    emit_op(c, OP_THROW_ERROR);
-    emit_u32(c, (uint32_t)atom);
-    emit(c, (uint8_t)JS_ERR_SYNTAX);
-    return;
-  }
   compile_template_items(c, node, 0);
 }
 
@@ -3993,6 +3985,12 @@ static void emit_derived_field_inits(sv_compiler_t *c) {
     emit_field_inits(c, owner, owner->field_inits, owner->field_init_count);
 }
 
+static void emit_call_srcpos(sv_compiler_t *c, sv_ast_t *node) {
+  sv_ast_t *callee = node->left;
+  if (callee && (callee->type == N_MEMBER || callee->type == N_OPTIONAL) && callee->right) callee = callee->right;
+  emit_srcpos(c, callee ? callee : node);
+}
+
 static void compile_call_emit_invoke(
   sv_compiler_t *c, sv_ast_t *node,
   sv_call_kind_t kind, bool has_spread
@@ -4002,6 +4000,7 @@ static void compile_call_emit_invoke(
     if (kind == SV_CALL_METHOD) emit_op(c, OP_SWAP);
     else if (kind == SV_CALL_DIRECT) emit_op(c, OP_GLOBAL);
     compile_call_args_array(c, node);
+    emit_call_srcpos(c, node);
     emit_op(c, kind == SV_CALL_SUPER ? OP_SUPER_APPLY : OP_APPLY);
     emit_u16(c, 1);
     if (kind == SV_CALL_SUPER) emit_derived_field_inits(c);
@@ -4010,6 +4009,7 @@ static void compile_call_emit_invoke(
 
   for (int i = 0; i < argc; i++)
     compile_expr(c, node->args.items[i]);
+  emit_call_srcpos(c, node);
   emit_op(c,
     kind == SV_CALL_SUPER ? OP_CALL_SUPER :
     kind == SV_CALL_METHOD ? OP_CALL_METHOD : OP_CALL);
@@ -5589,6 +5589,7 @@ static void compile_tail_call(sv_compiler_t *c, sv_ast_t *node) {
     compile_expr(c, node->args.items[i]);
 
   emit_close_upvals(c);
+  emit_call_srcpos(c, node);
   emit_op(c, kind == SV_CALL_METHOD ? OP_TAIL_CALL_METHOD : OP_TAIL_CALL);
   emit_u16(c, (uint16_t)argc);
 }

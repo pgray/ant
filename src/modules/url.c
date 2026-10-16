@@ -255,8 +255,14 @@ int parse_url_to_state(const char *url_str, const char *base_str, url_state_t *s
 
 int Ant_URL_ParseDocumentRelative(ant_t *js, const char *url_str, url_state_t *s) {
   ant_value_t href = js->builtins.location_href;
-  bool web = (js->runtime.flags & ANT_RUNTIME_WEB_COMPAT) && vtype(href) == kTypeString;
-  return parse_url_to_state(url_str, web ? js_getstr(js, href, NULL) : NULL, s);
+  return parse_url_to_state(url_str, vtype(href) == kTypeString ? js_getstr(js, href, NULL) : NULL, s);
+}
+
+int Ant_URL_ParseLocation(const char *href, url_state_t *s) {
+  if (parse_url_to_state(href, NULL, s) != 0) return -1;
+  if (strcmp(s->protocol, "http:") == 0 || strcmp(s->protocol, "https:") == 0) return 0;
+  url_state_clear(s);
+  return -1;
 }
 
 char *build_href(const url_state_t *s) {

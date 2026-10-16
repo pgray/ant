@@ -934,7 +934,7 @@ static bool is_small_array(ant_t *js, ant_value_t obj, int *elem_count) {
   }
   
   if (elem_count) *elem_count = count;
-  return count <= 4 && !has_nested;
+  return count <= 4 && !has_nested && !(js->stringify && (js->stringify->flags & ANT_INSPECT_EXPAND));
 }
 
 static inline bool is_array_index(const char *key, ant_offset_t klen) {
@@ -2053,7 +2053,7 @@ static size_t strcfunc(ant_t *js, ant_value_t value, char *buf, size_t len) {
 
 static size_t strcfunc_inspect(ant_t *js, ant_value_t value, char *buf, size_t len) {
   size_t n = strcfunc(js, value, buf, len);
-  if (!js->stringify || !js->stringify->show_hidden) return n;
+  if (!js->stringify || !(js->stringify->flags & ANT_INSPECT_SHOW_HIDDEN)) return n;
 
   js_inspect_builder_t builder;
   js_inspect_builder_init_fixed(&builder, js, buf, len, n);
@@ -2074,10 +2074,14 @@ size_t tostr(ant_t *js, ant_value_t value, char *buf, size_t len) {
     case kTypeArray:    return strarr(js, value, buf, len);
     case kTypeObject:   return strobj(js, value, buf, len);
     case kTypeString:   return strstring(js, value, buf, len);
-    case kTypeNumber:   return js_number_to_chars(value, buf, len);
     case kTypePromise:  return strpromise(js, value, buf, len);
     case kTypeFunction: return strfunc_inspect(js, value, buf, len);
     case kTypeBuiltin:  return strcfunc_inspect(js, value, buf, len);
+    
+    case kTypeNumber: {
+      if (tod(value) == 0 && signbit(tod(value))) return ANT_COPY(buf, len, "-0");
+      return js_number_to_chars(value, buf, len);
+    }
     
     case kTypeBigInt: {
       size_t n = strbigint(js, value, buf, len);
@@ -2193,11 +2197,11 @@ static js_cstr_t js_cstr_render(
 
 static js_cstr_t js_cstr_impl(
   ant_t *js, ant_value_t value, char *stack_buf, size_t stack_size, 
-  bool quote_strings, int max_depth, bool show_hidden
+  bool quote_strings, int max_depth, uint8_t flags
 ) {
   ant_stringify_ctx_t ctx;
   ant_stringify_enter(js, &ctx, max_depth);
-  ctx.show_hidden = show_hidden;
+  ctx.flags = flags;
   
   js_cstr_t out = js_cstr_render(js, value, stack_buf, stack_size, quote_strings);
   Ant_List_Remove(&ctx);
@@ -2206,19 +2210,19 @@ static js_cstr_t js_cstr_impl(
 }
 
 js_cstr_t js_to_cstr(ant_t *js, ant_value_t value, char *stack_buf, size_t stack_size) {
-  return js_cstr_impl(js, value, stack_buf, stack_size, false, ANT_INSPECT_MAX_DEPTH, false);
+  return js_cstr_impl(js, value, stack_buf, stack_size, false, ANT_INSPECT_MAX_DEPTH, 0);
 }
 
 js_cstr_t js_inspect_cstr(ant_t *js, ant_value_t value, char *stack_buf, size_t stack_size) {
-  return js_cstr_impl(js, value, stack_buf, stack_size, true, ANT_INSPECT_MAX_DEPTH, false);
+  return js_cstr_impl(js, value, stack_buf, stack_size, true, ANT_INSPECT_MAX_DEPTH, 0);
 }
 
 js_cstr_t js_inspect_cstr_depth(ant_t *js, ant_value_t value, char *stack_buf, size_t stack_size, int max_depth) {
-  return js_cstr_impl(js, value, stack_buf, stack_size, true, max_depth, false);
+  return js_cstr_impl(js, value, stack_buf, stack_size, true, max_depth, 0);
 }
 
-js_cstr_t js_inspect_cstr_opts(ant_t *js, ant_value_t value, char *stack_buf, size_t stack_size, int max_depth, bool show_hidden) {
-  return js_cstr_impl(js, value, stack_buf, stack_size, true, max_depth, show_hidden);
+js_cstr_t js_inspect_cstr_opts(ant_t *js, ant_value_t value, char *stack_buf, size_t stack_size, int max_depth, uint8_t flags) {
+  return js_cstr_impl(js, value, stack_buf, stack_size, true, max_depth, flags);
 }
 
 ant_value_t js_tostring_val(ant_t *js, ant_value_t value) {
@@ -9723,7 +9727,7 @@ static ant_value_t object_has_own_key(ant_t *js, ant_value_t obj, property_key_v
   );
 }
 
-static ant_value_t object_has_own(
+ant_value_t Ant_Object_HasOwn(
   ant_t *js, ant_value_t obj, ant_value_t raw_key
 ) {
   uint8_t t = vtype(obj);
@@ -9758,7 +9762,7 @@ static ant_value_t object_has_own(
 static ant_value_t builtin_object_hasOwn(ant_params_t) {
   ant_value_t target = nargs >= 1 ? js_object_view(args[0]) : js_mkundef();
   ant_value_t key = nargs >= 2 ? args[1] : js_mkundef();
-  return object_has_own(js, target, key);
+  return Ant_Object_HasOwn(js, target, key);
 }
 
 typedef struct {
@@ -11387,7 +11391,7 @@ static ant_value_t copy_object_data_props(ant_t *js, ant_value_t dst, ant_value_
     copy_key_t ck;
     if (!copy_key_of(js, key, &ck)) result = js_mkerr(js, "out of memory");
     else if (!copy_key_excluded(cx, ck)) {
-      ant_value_t own = object_has_own(js, view, key);
+      ant_value_t own = Ant_Object_HasOwn(js, view, key);
       if (is_err(own)) result = own;
       else if (js_truthy(js, own)) {
         ant_value_t val = copy_key_get(js, src, ck);
@@ -12275,7 +12279,7 @@ static ant_value_t builtin_object_preventExtensions(ant_params_t) {
 static ant_value_t builtin_object_hasOwnProperty(ant_params_t) {
   ant_value_t obj = js_object_view(js->this_val);
   ant_value_t key = nargs >= 1 ? args[0] : js_mkundef();
-  return object_has_own(js, obj, key);
+  return Ant_Object_HasOwn(js, obj, key);
 }
 
 static bool proto_chain_contains_cycle_safe(ant_t *js, ant_value_t start, ant_value_t target);
@@ -12298,6 +12302,12 @@ static ant_value_t object_property_is_enumerable_key(
   ant_t *js, ant_value_t obj, property_key_view_t *key
 ) {
   uint8_t t = vtype(obj);
+  ant_value_t string_exotic = js_mkundef();
+  bool string_length = false;
+  
+  if (t == kTypeString) return mkval(kTypeBool, !key->is_symbol && js_try_get_string_own_exotic(
+    js, obj, key->bytes, key->length, &string_exotic, &string_length
+  ) && !string_length);
   
   if (t != kTypeObject && t != kTypeArray && t != kTypeFunction) return mkval(kTypeBool, 0);
   ant_value_t as_obj = js_as_obj(obj);
@@ -12322,6 +12332,9 @@ static ant_value_t object_property_is_enumerable_key(
     if (parse_array_index(key_str, key_len, get_array_length(js, as_obj), &idx))
       return mkval(kTypeBool, arr_has(js, as_obj, (ant_offset_t)idx) ? 1 : 0);
   }
+
+  if (t == kTypeObject && js_try_get_string_own_exotic(js, obj, key_str, key_len, &string_exotic, &string_length))
+    return mkval(kTypeBool, string_length ? 0 : 1);
   
   ant_prop_loc_t off = lkp(js, as_obj, key_str, key_len);
   if (!off.obj) return mkval(kTypeBool, 0);
@@ -12341,10 +12354,7 @@ static ant_value_t object_property_is_enumerable_key(
   return mkval(kTypeBool, 1);
 }
 
-static ant_value_t builtin_object_propertyIsEnumerable(ant_params_t) {
-  ant_value_t raw_key = nargs >= 1 ? args[0] : js_mkundef();
-  ant_value_t obj = js->this_val;
-  
+ant_value_t Ant_Object_PropertyIsEnumerable(ant_t *js, ant_value_t obj, ant_value_t raw_key) {
   char key_stack[128];
   property_key_view_t key;
   ant_value_t error = property_key_view_init(
@@ -12357,6 +12367,10 @@ static ant_value_t builtin_object_propertyIsEnumerable(ant_params_t) {
 
   property_key_view_dispose(&key);
   return result;
+}
+
+static ant_value_t builtin_object_propertyIsEnumerable(ant_params_t) {
+  return Ant_Object_PropertyIsEnumerable(js, js->this_val, nargs >= 1 ? args[0] : js_mkundef());
 }
 
 typedef enum {
@@ -12464,8 +12478,7 @@ static ant_value_t object_tag_string_for(ant_t *js, ant_value_t tag_val) {
   return result;
 }
 
-static ant_value_t builtin_object_toString(ant_params_t) {
-  ant_value_t obj = js->this_val;
+ant_value_t Ant_Object_ToStringTag(ant_t *js, ant_value_t obj) {
   uint8_t t = vtype(obj);
   
   if (t != kTypeUndefined && t != kTypeNull) {
@@ -12480,6 +12493,10 @@ static ant_value_t builtin_object_toString(ant_params_t) {
     : t <= kTypeSourceCode ? (object_tag_t)object_type_tags[t] : OBJECT_TAG_OBJECT;
   
   return is_err(err) ? err : object_tag_string(js, tag);
+}
+
+static ant_value_t builtin_object_toString(ant_params_t) {
+  return Ant_Object_ToStringTag(js, js->this_val);
 }
 
 static ant_value_t builtin_object_valueOf(ant_params_t) {
@@ -15812,8 +15829,10 @@ static ant_value_t from_async_start(
 ) {
   if (vtype(mapfn) != kTypeUndefined && !is_callable(mapfn))
     return js_mkerr_typed(js, JS_ERR_TYPE, "%s is not a function", js_str(js, mapfn));
-  if (is_nullish(items))
-    return js_mkerr_typed(js, JS_ERR_TYPE, "%s is not iterable", js_str(js, items));
+  if (is_nullish(items)) return js_mkerr_typed(
+    js, JS_ERR_TYPE, "Cannot read properties of %s (reading 'Symbol(Symbol.asyncIterator)')",
+    vtype(items) == kTypeNull ? "null" : "undefined"
+  );
 
   ant_value_t lookup = is_object_type(items) ? items : builtin_Object(js, &items, 1, js_mkundef());
   if (is_err(lookup)) return lookup;

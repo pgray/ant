@@ -23,7 +23,7 @@ ant_value_t Ant_Iterator_CreateResult(ant_t *js, ant_value_t value, bool done) {
 
   ant_value_t seed = js->mutable_roots.iterator_result_template;
   if (vtype(seed) != kTypeObject) {
-    seed = js_mkobj(js);
+    seed = js_newobj(js);
     if (is_err(seed)) {
       GC_ROOT_RESTORE(js, mark);
       return seed;

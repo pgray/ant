@@ -66,6 +66,7 @@ typedef struct {
   bool module_item;
   bool in_async;
   bool wants_module;
+  bool tagged_template;
   uint32_t *scope_words;
   uint32_t scope_word_count, scope_word_cap;
   ant_offset_t scope_words_len;
@@ -181,6 +182,7 @@ static inline void sv_ast_set_string(sv_ast_t *n, sv_lex_string_t s) {
 typedef struct {
   const char *str;
   uint32_t len;
+  const char *error;
   bool ok;
   bool valid_cooked;
 } sv_tpl_cooked_t;
@@ -611,10 +613,12 @@ static sv_tpl_cooked_t decode_template_segment(P, const uint8_t *in, size_t star
     }
     
     uint8_t flags = 0;
+    uint8_t escape_char = in[i + 1];
     i += 1 + decode_escape(in, i, end, out, &out_len, '`', &flags);
     
     if (flags) {
       outv.valid_cooked = false;
+      outv.error = escape_error_message(flags, escape_char, ESCAPE_CONTEXT_TEMPLATE);
       return outv;
     }
   }
@@ -817,6 +821,8 @@ static sv_ast_t *parse_primary(P) {
 
   l_template: {
     CONSUME();
+    bool tagged = p->tagged_template;
+    p->tagged_template = false;
     sv_ast_t *n = mk(N_TEMPLATE);
     n->src_end = (uint32_t)(TOFF + TLEN);
     
@@ -840,6 +846,9 @@ static sv_ast_t *parse_primary(P) {
       if (cooked.ok && cooked.valid_cooked) {
         s->str = cooked.str;
         s->len = cooked.len;
+      } else if (cooked.ok && !tagged) {
+        SV_MKERR_TYPED(JS, JS_ERR_SYNTAX, "%s", cooked.error);
+        return n;
       } else if (cooked.ok) s->flags |= FN_INVALID_COOKED;
       
       sv_ast_list_push(JS, &n->args, s);
@@ -1373,6 +1382,7 @@ static sv_ast_t *parse_call(P) {
     } else if (la == TOK_TEMPLATE) {
       sv_ast_t *tagged = mk(N_TAGGED_TEMPLATE);
       tagged->left = n;
+      p->tagged_template = true;
       tagged->right = parse_primary(p);
       n = tagged;
     } else break;

@@ -332,6 +332,9 @@ ant_value_t js_mkobj_from_template(ant_t *js, ant_value_t template);
 
 ant_value_t js_for_in_keys(ant_t *js, ant_value_t obj);
 ant_value_t js_own_property_keys(ant_t *js, ant_value_t obj, bool include_symbols, bool enumerable_only);
+ant_value_t Ant_Object_ToStringTag(ant_t *js, ant_value_t obj);
+ant_value_t Ant_Object_PropertyIsEnumerable(ant_t *js, ant_value_t obj, ant_value_t key);
+ant_value_t Ant_Object_HasOwn(ant_t *js, ant_value_t obj, ant_value_t key);
 ant_value_t js_delete_prop(ant_t *js, ant_value_t obj, const char *key, size_t len);
 ant_value_t js_delete_prop_ordinary(ant_t *js, ant_value_t obj, const char *key, size_t len);
 ant_value_t js_delete_sym_prop(ant_t *js, ant_value_t obj, ant_value_t sym);

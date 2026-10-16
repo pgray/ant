@@ -31,8 +31,12 @@ static size_t strkey_interned(ant_t *js, const char *key, size_t klen, char *buf
   return strstring(js, key_str, buf, len);
 }
 
+static inline bool js_inspect_has_flag(ant_t *js, ant_inspect_flags_t flag) {
+  return js->stringify && (js->stringify->flags & flag);
+}
+
 static bool js_inspect_showing_hidden(ant_t *js) {
-  return js->stringify && js->stringify->show_hidden;
+  return js_inspect_has_flag(js, ANT_INSPECT_SHOW_HIDDEN);
 }
 
 typedef bool (*js_inspect_hidden_visit_t)(
@@ -136,7 +140,7 @@ static bool is_small_object(ant_t *js, ant_value_t obj, int *prop_count) {
   has_nested |= hidden_nested;
 
   if (prop_count) *prop_count = count;
-  return count <= 4 && !has_nested;
+  return count <= 4 && !has_nested && !js_inspect_has_flag(js, ANT_INSPECT_EXPAND);
 }
 
 void js_inspect_builder_init_fixed(js_inspect_builder_t *builder, ant_t *js, char *buf, size_t len, size_t initial_n) {
@@ -556,6 +560,97 @@ bool js_inspect_hidden_trailer(js_inspect_builder_t *builder, ant_value_t obj) {
   return js_inspect_hidden_props(builder, obj) && js_inspect_close(builder);
 }
 
+static bool js_inspect_shape_entry(js_inspect_builder_t *builder, ant_value_t as_obj, ant_object_t *ptr, uint32_t i) {
+  ant_t *js = builder->js;
+  const ant_shape_prop_t *prop = ant_shape_prop_at(ptr->shape, i);
+  if (!prop) return true;
+  if ((ant_shape_get_attrs(ptr->shape, i) & ANT_PROP_ATTR_ENUMERABLE) == 0) return true;
+  
+  ant_value_t val = (i < ptr->prop_count) ? ant_object_prop_get_unchecked(ptr, i) : js_mkundef();
+  bool is_sym = prop->type == ANT_SHAPE_KEY_SYMBOL;
+  const char *key = is_sym ? NULL : prop->key.interned;
+  ant_offset_t klen = is_sym ? 0 : (ant_offset_t)intern_length(key);
+  
+  if (ptr && ptr->flags.is_exotic) {
+    prop_meta_t meta;
+    bool found = is_sym
+      ? lookup_symbol_prop_meta(js, as_obj, prop->key.sym_off, &meta)
+      : lookup_string_prop_meta(js, as_obj, key, (size_t)klen, &meta);
+    if (found && !meta.enumerable) return true;
+  }
+
+  if (prop->has_getter || prop->has_setter) {
+    if (!js_inspect_property_prefix(builder)) return false;
+    if (!js_inspect_append_prop_key(builder, prop, key, (size_t)klen)) return false;
+    if (!js_inspect_append(builder, ": ", 2)) return false;
+    if (prop->has_getter && prop->has_setter) {
+      if (!js_inspect_append(builder, "[Getter/Setter]", 15)) return false;
+    } else if (prop->has_getter) {
+      if (!js_inspect_append(builder, "[Getter]", 8)) return false;
+    } else if (!js_inspect_append(builder, "[Setter]", 8)) return false;
+    return true;
+  }
+
+  if (is_sym) {
+    if (!js_inspect_property_prefix(builder)) return false;
+    if (!js_inspect_append_prop_key(builder, prop, key, 0)) return false;
+    if (!js_inspect_append(builder, ": ", 2)) return false;
+    return js_inspect_append_tostr(builder, val);
+  }
+
+  if (js_inspect_error_key_in_stack(builder, key, (size_t)klen, val)) return true;
+  if (!js_inspect_property_prefix(builder)) return false;
+
+  bool is_special_global = false;
+  if (vtype(val) == kTypeUndefined && streq(key, klen, "undefined", 9)) {
+    is_special_global = true;
+  } else if (vtype(val) == kTypeNumber) {
+    double d = tod(val);
+    if (isinf(d) && d > 0 && streq(key, klen, "Infinity", 8)) {
+      is_special_global = true;
+    } else if (isnan(d) && streq(key, klen, "NaN", 3)) {
+      is_special_global = true;
+    }
+  }
+
+  if (!is_special_global) {
+    if (!js_inspect_append_key_interned(builder, key, (size_t)klen)) return false;
+    if (!js_inspect_append(builder, ": ", 2)) return false;
+  }
+  
+  return js_inspect_append_tostr(builder, val);
+}
+
+typedef struct {
+  const char *key;
+  uint32_t index;
+} js_inspect_sorted_key_t;
+
+static int js_inspect_sorted_key_cmp(const void *a, const void *b) {
+  const js_inspect_sorted_key_t *x = a, *y = b;
+  if (!x->key != !y->key) return x->key ? -1 : 1;
+  int c = x->key ? strcmp(x->key, y->key) : 0;
+  return c ? c : (x->index > y->index) - (x->index < y->index);
+}
+
+static bool js_inspect_shape_sorted(js_inspect_builder_t *builder, ant_value_t as_obj, ant_object_t *ptr, uint32_t count) {
+  js_inspect_sorted_key_t stack_keys[32];
+  js_inspect_sorted_key_t *keys = count <= 32 ? stack_keys : malloc(count * sizeof(*keys));
+  if (!keys) return false;
+
+  for (uint32_t i = 0; i < count; i++) {
+    const ant_shape_prop_t *prop = ant_shape_prop_at(ptr->shape, i);
+    bool named = prop && prop->type != ANT_SHAPE_KEY_SYMBOL;
+    keys[i] = (js_inspect_sorted_key_t){ named ? prop->key.interned : NULL, i };
+  }
+  qsort(keys, count, sizeof(*keys), js_inspect_sorted_key_cmp);
+
+  bool ok = true;
+  for (uint32_t i = 0; ok && i < count; i++) ok = js_inspect_shape_entry(builder, as_obj, ptr, keys[i].index);
+  if (keys != stack_keys) free(keys);
+  return ok;
+}
+
 bool js_inspect_object_body(js_inspect_builder_t *builder, ant_value_t obj) {
   if (builder->closed) return true;
   js_inspect_begin_body(builder);
@@ -567,67 +662,10 @@ bool js_inspect_object_body(js_inspect_builder_t *builder, ant_value_t obj) {
   uintptr_t obj_off = (uintptr_t)vdata(as_obj);
   uint32_t shape_count = (ptr && ptr->shape) ? ant_shape_count(ptr->shape) : 0;
 
-  for (uint32_t i = 0; i < shape_count; i++) {
-    const ant_shape_prop_t *prop = ant_shape_prop_at(ptr->shape, i);
-    if (!prop) continue;
-    if ((ant_shape_get_attrs(ptr->shape, i) & ANT_PROP_ATTR_ENUMERABLE) == 0) continue;
-    ant_value_t val = (i < ptr->prop_count) ? ant_object_prop_get_unchecked(ptr, i) : js_mkundef();
-    
-    bool is_sym = prop->type == ANT_SHAPE_KEY_SYMBOL;
-    const char *key = is_sym ? NULL : prop->key.interned;
-    ant_offset_t klen = is_sym ? 0 : (ant_offset_t)intern_length(key);
-    
-    if (ptr && ptr->flags.is_exotic) {
-      prop_meta_t meta;
-      bool found = is_sym
-        ? lookup_symbol_prop_meta(js, as_obj, prop->key.sym_off, &meta)
-        : lookup_string_prop_meta(js, as_obj, key, (size_t)klen, &meta);
-      if (found && !meta.enumerable) continue;
-    }
-
-    if (prop->has_getter || prop->has_setter) {
-      if (!js_inspect_property_prefix(builder)) return false;
-      if (!js_inspect_append_prop_key(builder, prop, key, (size_t)klen)) return false;
-      if (!js_inspect_append(builder, ": ", 2)) return false;
-      if (prop->has_getter && prop->has_setter) {
-        if (!js_inspect_append(builder, "[Getter/Setter]", 15)) return false;
-      } else if (prop->has_getter) {
-        if (!js_inspect_append(builder, "[Getter]", 8)) return false;
-      } else if (!js_inspect_append(builder, "[Setter]", 8)) return false;
-      continue;
-    }
-
-    if (is_sym) {
-      if (!js_inspect_property_prefix(builder)) return false;
-      if (!js_inspect_append_prop_key(builder, prop, key, 0)) return false;
-      if (!js_inspect_append(builder, ": ", 2)) return false;
-      if (!js_inspect_append_tostr(builder, val)) return false;
-      continue;
-    }
-
-    if (js_inspect_error_key_in_stack(builder, key, (size_t)klen, val)) continue;
-    if (!js_inspect_property_prefix(builder)) return false;
-
-    bool is_special_global = false;
-    if (vtype(val) == kTypeUndefined && streq(key, klen, "undefined", 9)) {
-      is_special_global = true;
-    } else if (vtype(val) == kTypeNumber) {
-      double d = tod(val);
-      if (isinf(d) && d > 0 && streq(key, klen, "Infinity", 8)) {
-        is_special_global = true;
-      } else if (isnan(d) && streq(key, klen, "NaN", 3)) {
-        is_special_global = true;
-      }
-    }
-
-    if (is_special_global) {
-      if (!js_inspect_append_tostr(builder, val)) return false;
-    } else {
-      if (!js_inspect_append_key_interned(builder, key, (size_t)klen)) return false;
-      if (!js_inspect_append(builder, ": ", 2)) return false;
-      if (!js_inspect_append_tostr(builder, val)) return false;
-    }
-  }
+  if (shape_count > 1 && js_inspect_has_flag(js, ANT_INSPECT_SORTED)) {
+    if (!js_inspect_shape_sorted(builder, as_obj, ptr, shape_count)) return false;
+  } else for (uint32_t i = 0; i < shape_count; i++)
+    if (!js_inspect_shape_entry(builder, as_obj, ptr, i)) return false;
 
   if (ptr && ptr->flags.is_exotic) {
     descriptor_entry_t *desc, *tmp;

@@ -21,6 +21,7 @@
 
 #include "modules/events.h"
 #include "modules/globals.h"
+#include "modules/url.h"
 
 #ifdef _WIN32
 static bool is_windows_drive_path(const char *path) {
@@ -30,48 +31,68 @@ static bool is_windows_drive_path(const char *path) {
 }
 #endif
 
-static ant_value_t make_global_location(ant_t *js) {
-  ant_value_t location = js_newobj(js);
+static char *location_file_href(void) {
   char *cwd = ant_getcwd(NULL, 0);
+  const char *path = cwd && cwd[0] ? cwd : "/";
 
 #ifdef _WIN32
-  if (cwd) {
-    for (char *ch = cwd; *ch; ch++) {
-      if (*ch == '\\') *ch = '/';
-    }
-  }
+  for (char *ch = cwd; ch && *ch; ch++) if (*ch == '\\') *ch = '/';
+  const char *scheme = is_windows_drive_path(path) ? "file:///" : "file://";
+#else
+  const char *scheme = "file://";
 #endif
+
+  size_t path_len = strlen(path);
+  const char *slash = path_len > 0 && path[path_len - 1] == '/' ? "" : "/";
+  size_t len = strlen(scheme) + path_len + strlen(slash);
   
-  const char *pathname = (cwd && cwd[0]) ? cwd : "/";
-  size_t pathname_len = strlen(pathname);
+  char *href = malloc(len + 1);
+  if (href) snprintf(href, len + 1, "%s%s%s", scheme, path, slash);
   
-  bool needs_slash = pathname_len > 0 && pathname[pathname_len - 1] != '/';
-  size_t scheme_len = 7;
-#ifdef _WIN32
-  if (is_windows_drive_path(pathname)) scheme_len = 8;
-#endif
-  size_t href_len = scheme_len + pathname_len + (needs_slash ? 1 : 0);
-  char *href = malloc(href_len + 1);
-
-  if (href) {
-    const char *scheme = "file://";
-#ifdef _WIN32
-    if (is_windows_drive_path(pathname)) scheme = "file:///";
-#endif
-    snprintf(href, href_len + 1, "%s%s%s", scheme, pathname, needs_slash ? "/" : "");
-    js->builtins.location_href = js_mkstr(js, href, href_len);
-    js_set(js, location, "href", js->builtins.location_href);
-    free(href);
-  }
-  else js_set(js, location, "href", js_mkstr(js, "file:///", 8));
-
-  js_set(js, location, "origin", js_mkstr(js, "null", 4));
-  js_set(js, location, "protocol", js_mkstr(js, "file:", 5));
-  js_set(js, location, "pathname", js_mkstr(js, pathname, pathname_len));
-  js_set(js, location, "search", js_mkstr(js, "", 0));
-  js_set(js, location, "hash", js_mkstr(js, "", 0));
   free(cwd);
+  return href;
+}
 
+static void location_set(ant_t *js, ant_value_t location, const char *name, const char *value, const char *empty_if) {
+  if (empty_if && strcmp(value, empty_if) == 0) value = "";
+  js_set(js, location, name, js_mkstr(js, value, strlen(value)));
+}
+
+static ant_value_t make_global_location(ant_t *js, const char *href) {
+  url_state_t url;
+  bool http = Ant_URL_ParseLocation(href, &url) == 0;
+  if (!http && parse_url_to_state(href, NULL, &url) != 0) return js_mkundef();
+
+  const char *colon = url.port[0] ? ":" : "";
+  size_t host_len = strlen(url.hostname) + strlen(colon) + strlen(url.port);
+  size_t origin_len = strlen(url.protocol) + 2 + host_len;
+  
+  char *host = malloc(host_len + 1);
+  char *origin = malloc(origin_len + 1);
+  ant_value_t location = js_mkundef();
+
+  if (host && origin) {
+    snprintf(host, host_len + 1, "%s%s%s", url.hostname, colon, url.port);
+    snprintf(origin, origin_len + 1, "%s//%s", url.protocol, host);
+
+    location = js_newobj(js);
+    js->builtins.location_href = js_mkstr(js, url.href, strlen(url.href));
+    js_set(js, location, "href", js->builtins.location_href);
+    
+    location_set(js, location, "origin", http ? origin : "null", NULL);
+    location_set(js, location, "protocol", url.protocol, NULL);
+    location_set(js, location, "host", host, NULL);
+    location_set(js, location, "hostname", url.hostname, NULL);
+    location_set(js, location, "port", url.port, NULL);
+    location_set(js, location, "pathname", url.pathname, NULL);
+    location_set(js, location, "search", url.search, "?");
+    location_set(js, location, "hash", url.hash, "#");
+  }
+
+  free(host);
+  free(origin);
+  url_state_clear(&url);
+  
   return location;
 }
 
@@ -178,8 +199,15 @@ void js_fire_rejection_handled(ant_t *js, ant_value_t promise_val, ant_value_t r
 void init_globals_module(ant_t *js) {
   ant_value_t global = js_glob(js);
 
-  if (js->runtime.flags & ANT_RUNTIME_WEB_COMPAT) {
-    js_set(js, global, "location", make_global_location(js));
+  char *file_href = NULL;
+  const char *href = js->runtime.location;
+  if (!href && (js->runtime.flags & ANT_RUNTIME_WEB_COMPAT)) href = file_href = location_file_href();
+
+  ant_value_t location = href ? make_global_location(js, href) : js_mkundef();
+  free(file_href);
+  
+  if (is_object_type(location)) {
+    js_set(js, global, "location", location);
     js_set_descriptor(js, global, "location", 8, JS_DESC_W | JS_DESC_C);
   }
 

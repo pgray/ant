@@ -7,19 +7,7 @@
 #include <string.h>
 
 static constexpr int STR_SHORT_CONS_THRESHOLD = 32;
-
-enum: uint64_t {
-  STR_META_ASCII_SHIFT = 56,
-  STR_META_VALID_SHIFT = 58,
-  STR_BUILDER_TAIL_CAP = 256,
-};
-
-enum {
-  STR_UTF_UNKNOWN = 0,
-  STR_UTF_VALID = 1,
-  STR_UTF_INVALID = 2,
-  STR_UTF_INVALID_SAME_LENGTH = 3,
-};
+static constexpr size_t STR_BUILDER_TAIL_CAP = 256;
 
 enum: uint64_t {
   STR_HEAP_TAG_MASK    = 0x3,
@@ -28,19 +16,30 @@ enum: uint64_t {
   STR_HEAP_TAG_BUILDER = 0x2,
 };
 
-static constexpr uint64_t STR_META_FIELD_MASK   = 0x3;
-static constexpr uint64_t STR_META_PERMANENT    = UINT64_C(1) << 60;
-static constexpr uint64_t STR_META_UTF16_MASK   = (UINT64_C(1) << STR_META_ASCII_SHIFT) - 1;
+enum {
+  STR_ASCII_UNKNOWN = 0,
+  STR_ASCII_YES     = 1,
+  STR_ASCII_NO      = 2,
+};
+
+enum {
+  STR_UTF_UNKNOWN             = 0,
+  STR_UTF_VALID               = 1,
+  STR_UTF_INVALID             = 2,
+  STR_UTF_INVALID_SAME_LENGTH = 3,
+};
+
+static constexpr uint64_t STR_META_ASCII_SHIFT = 56;
+static constexpr uint64_t STR_META_VALID_SHIFT = 58;
+static constexpr uint64_t STR_META_FIELD_MASK  = 0x3;
+
+static constexpr uint64_t STR_META_PERMANENT  = UINT64_C(1) << 60;
+static constexpr uint64_t STR_META_UTF16_MASK = (UINT64_C(1) << STR_META_ASCII_SHIFT) - 1;
+
 static constexpr uint64_t STR_META_ASCII_MASK   = STR_META_FIELD_MASK << STR_META_ASCII_SHIFT;
 static constexpr uint64_t STR_META_VALID_MASK   = STR_META_FIELD_MASK << STR_META_VALID_SHIFT;
 static constexpr uint64_t STR_META_STATE_MASK   = ~STR_META_UTF16_MASK;
 static constexpr uint64_t STR_UTF16_LEN_UNKNOWN = STR_META_UTF16_MASK;
-
-enum {
-  STR_ASCII_UNKNOWN = 0,
-  STR_ASCII_YES = 1,
-  STR_ASCII_NO = 2,
-};
 
 typedef struct {
   ant_offset_t len;
@@ -317,7 +316,7 @@ size_t intern_length(const char *interned);
 js_cstr_t js_to_cstr(ant_t *js, ant_value_t value, char *stack_buf, size_t stack_size);
 js_cstr_t js_inspect_cstr(ant_t *js, ant_value_t value, char *stack_buf, size_t stack_size);
 js_cstr_t js_inspect_cstr_depth(ant_t *js, ant_value_t value, char *stack_buf, size_t stack_size, int max_depth);
-js_cstr_t js_inspect_cstr_opts(ant_t *js, ant_value_t value, char *stack_buf, size_t stack_size, int max_depth, bool show_hidden);
+js_cstr_t js_inspect_cstr_opts(ant_t *js, ant_value_t value, char *stack_buf, size_t stack_size, int max_depth, uint8_t flags);
 
 ant_offset_t vstr(ant_t *js, ant_value_t value, ant_offset_t *len);
 ant_offset_t vstrlen(ant_t *js, ant_value_t value);

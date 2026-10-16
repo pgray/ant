@@ -58,6 +58,12 @@ typedef struct {
   const char *interned;
 } ant_intern_memo_entry_t;
 
+typedef enum {
+  ANT_INSPECT_SHOW_HIDDEN = 1 << 0,
+  ANT_INSPECT_EXPAND      = 1 << 1,
+  ANT_INSPECT_SORTED      = 1 << 2,
+} ant_inspect_flags_t;
+
 typedef struct ant_stringify_ctx {
   struct ant_stringify_ctx *next;
   struct ant_stringify_ctx **pprev;
@@ -67,7 +73,7 @@ typedef struct ant_stringify_ctx {
   int max_depth;
   int multiref_count;
   int multiref_next_id;
-  bool show_hidden;
+  uint8_t flags;
 
   ant_value_t stack[MAX_STRINGIFY_DEPTH];
   ant_value_t multiref_objs[MAX_MULTIREF_OBJS];
@@ -468,6 +474,7 @@ struct ant_isolate_t {
   struct {
     char **argv;
     const char *ls_fp;
+    const char *location;
     int argc;
     int pid;
     uint32_t flags;

@@ -706,7 +706,7 @@ static bool console_emit_value(console_format_ctx_t *c, ant_value_t value, bool 
   char cbuf[512];
   js_cstr_t cstr = js_to_cstr(c->js, value, cbuf, sizeof(cbuf));
 
-  if (plain) c->ok = io_print_to_output(cstr.ptr, c->out, io_no_color);
+  if (plain) c->ok = io_print_to_output_n(cstr.ptr, cstr.len, c->out, io_no_color);
   else print_value_colored_to_output(cstr.ptr, c->out, io_no_color || !c->color_values);
 
   if (cstr.needs_free) free((void *)cstr.ptr);
@@ -723,7 +723,7 @@ static bool console_emit_inspected(console_format_ctx_t *c, ant_value_t value, b
   char cbuf[256];
   
   js_cstr_t cstr = show_hidden
-    ? js_inspect_cstr_opts(c->js, value, cbuf, sizeof(cbuf), 4, true)
+    ? js_inspect_cstr_opts(c->js, value, cbuf, sizeof(cbuf), 4, ANT_INSPECT_SHOW_HIDDEN)
     : js_inspect_cstr(c->js, value, cbuf, sizeof(cbuf));
 
   c->ok = io_print_to_output(cstr.ptr, c->out, io_no_color);
