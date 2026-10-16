@@ -10,6 +10,14 @@ assert.strictEqual(order([1].values().map(x => x).next()), 'value,done');
 assert.deepStrictEqual([1].values().next(), { value: 1, done: false });
 assert.deepStrictEqual((function* () { return 7; })().next(), { value: 7, done: true });
 
+for (const result of [
+  [1].values().next(),
+  new Map([[1, 2]]).keys().next(),
+  new Set([1]).values().next(),
+  'a'[Symbol.iterator]().next(),
+  (function* () { yield 1; })().next(),
+]) assert.strictEqual(Object.getPrototypeOf(result), Object.prototype);
+
 (async () => {
   assert.strictEqual(order(await (async function* () { yield 1; })().next()), 'value,done');
   const a = [1].values().next(), b = [1].values().next();

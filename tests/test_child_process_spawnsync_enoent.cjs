@@ -20,6 +20,9 @@ assert(JSON.stringify(result.error.spawnargs) === '["a","b"]', `bad spawnargs ${
 const badCwd = spawnSync('ls', { cwd: '/ant-definitely-missing-dir' });
 assert(badCwd.error && badCwd.error.code === 'ENOENT', `expected cwd ENOENT, got ${badCwd.error && badCwd.error.code}`);
 
+assert(Object.getPrototypeOf(result) === Object.prototype, 'spawnSync error result should inherit Object.prototype');
+assert(Object.getPrototypeOf(spawnSync('true')) === Object.prototype, 'spawnSync result should inherit Object.prototype');
+
 const exit127 = spawnSync('sh', ['-c', 'exit 127']);
 assert(exit127.status === 127 && !exit127.error, 'real exit 127 should not be an error');
 
