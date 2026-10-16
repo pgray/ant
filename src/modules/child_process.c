@@ -25,6 +25,7 @@
 #endif
 
 #include "ant.h"
+#include "list.h"
 #include "ptr.h"
 #include "errors.h"
 #include "modules/timer.h"
@@ -42,9 +43,6 @@
 #include "modules/process.h"
 #include "modules/stream.h"
 #include "modules/child_process.h"
-
-typedef struct 
-  child_process_s child_process_t;
 
 typedef enum {
   CHILD_STREAM_STDIN = 0,
@@ -118,13 +116,9 @@ struct child_process_s {
   stdio_mode_t stdio_modes[3];
   bool end_stdin_when_writes_finish;
   bool suppress_stdin_errors;
-  struct child_process_s *next;
-  struct child_process_s *prev;
+  child_process_t *next;
+  child_process_t **pprev;
 };
-
-// TODO: isolate
-static child_process_t *pending_children_head = NULL;
-static child_process_t *pending_children_tail = NULL;
 
 static ant_value_t child_end_impl(child_process_t *cp);
 static void try_free_child(child_process_t *cp);
@@ -203,25 +197,6 @@ static bool *child_closed_flag(child_process_t *cp, child_stream_kind_t kind) {
   }
 }
 
-static void add_pending_child(child_process_t *cp) {
-  cp->next = NULL;
-  cp->prev = pending_children_tail;
-  if (pending_children_tail) {
-    pending_children_tail->next = cp;
-  } else pending_children_head = cp;
-  pending_children_tail = cp;
-}
-
-static void remove_pending_child(child_process_t *cp) {
-  if (!cp->prev && !cp->next && pending_children_head != cp) return;
-  if (cp->prev) cp->prev->next = cp->next;
-  else pending_children_head = cp->next;
-  if (cp->next) cp->next->prev = cp->prev;
-  else pending_children_tail = cp->prev;
-  cp->next = NULL;
-  cp->prev = NULL;
-}
-
 static void free_child_process(child_process_t *cp) {
   if (!cp) return;
 
@@ -254,7 +229,7 @@ static void try_free_child(child_process_t *cp) {
   if (cp->exited && cp->stdout_closed && cp->stderr_closed &&
     (!cp->process.handle_open || cp->process.closed) &&
     cp->pending_closes == 0 && !cp->pending_writes) {
-    remove_pending_child(cp);
+    Ant_List_Remove(cp);
     free_child_process(cp);
   }
 }
@@ -332,27 +307,33 @@ static void check_completion(child_process_t *cp) {
   }
 }
 
+static ant_value_t child_syscall_error(ant_t *js, int uv_code, const char *syscall, const char *path) {
+  const char *code = uv_err_name(uv_code);
+
+  char message[256];
+  snprintf(message, sizeof(message), "%s %s", syscall, code);
+
+  ant_value_t error = Ant_Error_Create(js, JS_ERR_GENERIC, message);
+  if (!is_object_type(error)) return error;
+
+  js_set(js, error, "code", js_mkstr(js, code, strlen(code)));
+  js_set(js, error, "errno", js_mknum((double)uv_code));
+  js_set(js, error, "syscall", js_mkstr(js, syscall, strlen(syscall)));
+  if (path) js_set(js, error, "path", js_mkstr(js, path, strlen(path)));
+
+  return error;
+}
+
 static ant_value_t child_spawn_failure_cb(ant_params_t) {
   ant_value_t child = js_get_slot(js_getcurrentfunc(js), SLOT_DATA);
   child_process_t *cp = get_child_process(child);
   if (!cp) return js_mkundef();
 
   const char *file = cp->spawn_file ? cp->spawn_file : "";
-  const char *name = uv_err_name(cp->spawn_error);
 
   char syscall[224];
-  char message[256];
   snprintf(syscall, sizeof(syscall), "spawn %s", file);
-  snprintf(message, sizeof(message), "%s %s", syscall, name);
-
-  ant_value_t error = Ant_Error_Create(js, JS_ERR_GENERIC, message);
-
-  if (is_object_type(error)) {
-    js_set(js, error, "code", js_mkstr(js, name, strlen(name)));
-    js_set(js, error, "errno", js_mknum((double)cp->spawn_error));
-    js_set(js, error, "syscall", js_mkstr(js, syscall, strlen(syscall)));
-    js_set(js, error, "path", js_mkstr(js, file, strlen(file)));
-  }
+  ant_value_t error = child_syscall_error(js, cp->spawn_error, syscall, file);
 
   ant_value_t error_args[1] = { error };
   emit_event(cp, "error", error_args, 1);
@@ -1317,7 +1298,7 @@ static ant_value_t builtin_spawn(ant_params_t) {
       if (child_stdio_is_pipe(cp, i) && pipe) close_child_handle(cp, (uv_handle_t *)pipe);
     }
 
-    add_pending_child(cp);
+    Ant_List_Insert(&js->active_children, cp);
     ant_value_t child_obj = create_child_object(js, cp);
     if (is_err(child_obj)) return child_obj;
     js_set(js, cp->child_obj, "pid", js_mkundef());
@@ -1335,7 +1316,7 @@ static ant_value_t builtin_spawn(ant_params_t) {
     } else if (stdio_modes[i] != STDIO_PIPE) *closed[i] = true;
   }
   
-  add_pending_child(cp);
+  Ant_List_Insert(&js->active_children, cp);
   ant_value_t child_obj = create_child_object(js, cp);
   if (is_err(child_obj)) return child_obj;
   
@@ -1433,7 +1414,7 @@ static ant_value_t builtin_exec(ant_params_t) {
       if (child_stdio_is_pipe(cp, i) && pipe) close_child_handle(cp, (uv_handle_t *)pipe);
     }
 
-    add_pending_child(cp);
+    Ant_List_Insert(&js->active_children, cp);
     ant_value_t child_obj = create_child_object(js, cp);
     if (is_err(child_obj)) return child_obj;
     js_set(js, cp->child_obj, "pid", js_mkundef());
@@ -1461,8 +1442,7 @@ static ant_value_t builtin_exec(ant_params_t) {
   
   uv_read_start((uv_stream_t *)&cp->stdout_pipe, alloc_buffer, on_stdout_read);
   uv_read_start((uv_stream_t *)&cp->stderr_pipe, alloc_buffer, on_stderr_read);
-  
-  add_pending_child(cp);
+  Ant_List_Insert(&js->active_children, cp);
   
   ant_value_t child_obj = create_child_object(js, cp);
   if (is_err(child_obj)) return child_obj;
@@ -2310,11 +2290,17 @@ static bool sync_build_argv(sync_res_t *res, bool use_shell, size_t command_len)
 
 extern char **environ;
 
+static void sync_child_fail(int report_fd) {
+  int err = errno;
+  if (report_fd >= 0) while (write(report_fd, &err, sizeof(err)) < 0 && errno == EINTR) {}
+  _exit(127);
+}
+
 static void sync_child_exec(
-  const sync_pipes_t *pipes, const sync_opts_t *opts, const sync_res_t *res
+  const sync_pipes_t *pipes, const sync_opts_t *opts, const sync_res_t *res, int report_fd
 ) {
   signal(SIGPIPE, SIG_DFL);
-  if (res->cwd && chdir(res->cwd) != 0) _exit(127);
+  if (res->cwd && chdir(res->cwd) != 0) sync_child_fail(report_fd);
   if (res->env) environ = res->env;
 
   static const int target_fd[3] = { STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO };
@@ -2335,7 +2321,38 @@ static void sync_child_exec(
   }
 
   execvp(res->argv[0], res->argv);
-  _exit(127);
+  sync_child_fail(report_fd);
+}
+
+static int sync_report_pipe_read(int fd) {
+  int err = 0;
+  ssize_t n;
+  while ((n = read(fd, &err, sizeof(err))) < 0 && errno == EINTR) {}
+  close(fd);
+  return n == (ssize_t)sizeof(err) ? err : 0;
+}
+
+static ant_value_t sync_build_spawn_error(
+  ant_t *js, int child_errno, const sync_opts_t *opts, const sync_res_t *res
+) {
+  char syscall[224];
+  snprintf(syscall, sizeof(syscall), "spawnSync %s", opts->label);
+
+  ant_value_t error = child_syscall_error(js, uv_translate_sys_error(child_errno), syscall, res->argv[0]);
+  if (is_object_type(error)) {
+    ant_value_t spawnargs = js_mkarr(js);
+    for (int i = 1; res->argv[i]; i++) js_arr_push(js, spawnargs, js_mkstr(js, res->argv[i], strlen(res->argv[i])));
+    js_set(js, error, "spawnargs", spawnargs);
+  }
+
+  ant_value_t result = js_mkobj(js);
+  js_set(js, result, "error", error);
+  js_set(js, result, "status", js_mknull());
+  js_set(js, result, "signal", js_mknull());
+  js_set(js, result, "output", js_mknull());
+  js_set(js, result, "pid", js_mknum(0));
+
+  return result;
 }
 
 static ant_value_t sync_build_result(
@@ -2371,20 +2388,9 @@ static ant_value_t sync_build_result(
 
   int failure = ctl->timed_out ? UV_ETIMEDOUT : ctl->over_buffer ? UV_ENOBUFS : 0;
   if (failure) {
-    const char *code = uv_err_name(failure);
-
     char syscall[224];
-    char message[256];
     snprintf(syscall, sizeof(syscall), "spawnSync %s", opts->label);
-    snprintf(message, sizeof(message), "%s %s", syscall, code);
-
-    ant_value_t error = Ant_Error_Create(js, JS_ERR_GENERIC, message);
-    if (is_object_type(error)) {
-      js_set(js, error, "code", js_mkstr(js, code, strlen(code)));
-      js_set(js, error, "errno", js_mknum((double)failure));
-      js_set(js, error, "syscall", js_mkstr(js, syscall, strlen(syscall)));
-    }
-    js_set(js, result, "error", error);
+    js_set(js, result, "error", child_syscall_error(js, failure, syscall, NULL));
   }
 
   return result;
@@ -2430,13 +2436,37 @@ static ant_value_t spawn_sync_impl(ant_native_params_t, bool force_shell) {
     return js_mkerr(js, "Failed to create pipes");
   }
 
+  int report[2] = { -1, -1 };
+  if (uv_pipe(report, 0, 0) != 0) {
+    sync_pipes_close_all(&pipes);
+    sync_res_free(&res);
+    return js_mkerr(js, "Failed to create pipes");
+  }
+
   pid_t pid = fork();
   if (pid < 0) {
+    close(report[0]);
+    close(report[1]);
     sync_pipes_close_all(&pipes);
     sync_res_free(&res);
     return js_mkerr(js, "Fork failed");
   }
-  if (pid == 0) sync_child_exec(&pipes, &opts, &res);
+  if (pid == 0) {
+    close(report[0]);
+    sync_child_exec(&pipes, &opts, &res, report[1]);
+  }
+
+  close(report[1]);
+  int child_errno = sync_report_pipe_read(report[0]);
+
+  if (child_errno) {
+    int status = 0;
+    while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
+    sync_pipes_close_all(&pipes);
+    ant_value_t result = sync_build_spawn_error(js, child_errno, &opts, &res);
+    sync_res_free(&res);
+    return result;
+  }
 
   bool want_stdin = opts.stdio[CHILD_STREAM_STDIN] == STDIO_PIPE;
 
@@ -2495,17 +2525,8 @@ static ant_value_t sync_result_error(
   ant_value_t stdout_val = js_get(js, result, "stdout");
   ant_value_t stderr_val = js_get(js, result, "stderr");
 
-  char message[512];
-  if (is_object_type(spawn_error)) {
-    ant_value_t existing = js_get(js, spawn_error, "message");
-    size_t existing_len = 0;
-    char *existing_str = vtype(existing) == kTypeString ? js_getstr(js, existing, &existing_len) : NULL;
-    snprintf(
-      message, sizeof(message), "%.*s",
-      (int)(existing_len < sizeof(message) - 1 ? existing_len : sizeof(message) - 1),
-      existing_str ? existing_str : "Command failed"
-    );
-  } else {
+  char message[512] = "";
+  if (!is_object_type(spawn_error)) {
     size_t command_len = 0;
     char *command_str = vtype(command_val) == kTypeString ? js_getstr(js, command_val, &command_len) : NULL;
     const char *stderr_str = NULL;
@@ -2523,7 +2544,9 @@ static ant_value_t sync_result_error(
     );
   }
 
-  ant_value_t error = Ant_Error_Create(js, JS_ERR_GENERIC, message);
+  ant_value_t error = is_object_type(spawn_error)
+    ? spawn_error
+    : Ant_Error_Create(js, JS_ERR_GENERIC, message);
   if (!is_object_type(error)) return error;
 
   js_set(js, error, "status", status);
@@ -2679,14 +2702,14 @@ ant_value_t child_process_library(ant_t *js) {
   return lib;
 }
 
-int has_pending_child_processes(void) {
-  for (child_process_t *cp = pending_children_head; cp; cp = cp->next) 
+int has_pending_child_processes(ant_t *js) {
+  for (child_process_t *cp = js->active_children; cp; cp = cp->next) 
     if (cp->keep_alive) return 1;
   return 0;
 }
 
 void gc_mark_child_process(ant_t *js, gc_mark_fn mark) {
-  for (child_process_t *cp = pending_children_head; cp; cp = cp->next) {
+  for (child_process_t *cp = js->active_children; cp; cp = cp->next) {
     mark(js, cp->child_obj);
     mark(js, cp->stdin_obj);
     mark(js, cp->stdout_obj);

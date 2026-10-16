@@ -17,7 +17,7 @@ static inline work_flags_t get_pending_work(ant_t *js) {
   if (has_pending_immediates(js))       flags |= WORK_IMMEDIATES;
   if (has_pending_fetches())            flags |= WORK_FETCHES;
   if (has_pending_fs_ops())             flags |= WORK_FS_OPS;
-  if (has_pending_child_processes())    flags |= WORK_CHILD_PROCS;
+  if (has_pending_child_processes(js))  flags |= WORK_CHILD_PROCS;
   if (has_active_readline_interfaces()) flags |= WORK_READLINE;
   if (has_active_stdin(js))             flags |= WORK_STDIN;
   return flags;

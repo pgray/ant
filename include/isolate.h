@@ -101,6 +101,7 @@ struct ant_isolate_t {
   abort_timeout_entry_t *abort_timeouts;
   eventsource_state_t *active_eventsources;
   websocket_state_t *active_websockets;
+  child_process_t *active_children;
   
   net_server_t *net_servers;
   net_socket_t *net_sockets;

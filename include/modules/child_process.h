@@ -3,7 +3,7 @@
 
 #include "types.h"
 
-int has_pending_child_processes(void);
+int has_pending_child_processes(ant_t *js);
 ant_value_t child_process_library(ant_t *js);
 
 #endif

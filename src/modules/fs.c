@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <limits.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #ifndef _WIN32
@@ -101,6 +102,7 @@ typedef struct fs_request_s {
   char *error_msg;
   const char *syscall;
   size_t data_len;
+  size_t data_cap;
   size_t buf_offset;
 
   fs_op_type_t op_type;
@@ -1994,25 +1996,55 @@ static void complete_request(fs_request_t *req) {
   free_fs_request(req);
 }
 
+static void fs_read_close_and_complete(fs_request_t *req) {
+  uv_fs_t close_req;
+  uv_fs_close(req->uv_req.loop, &close_req, req->fd, NULL);
+  uv_fs_req_cleanup(&close_req);
+  req->completed = 1;
+  complete_request(req);
+}
+
+static void on_read_complete(uv_fs_t *uv_req);
+
+static int fs_read_next_chunk(fs_request_t *req) {
+  if (req->data_len == req->data_cap) {
+    size_t cap = req->data_cap ? req->data_cap * 2 : 64 * 1024;
+    char *grown = realloc(req->data, cap + 1);
+    if (!grown) return UV_ENOMEM;
+    req->data = grown;
+    req->data_cap = cap;
+  }
+
+  size_t want = req->data_cap - req->data_len;
+  if (want > INT_MAX) want = INT_MAX;
+
+  uv_buf_t buf = uv_buf_init(req->data + req->data_len, (unsigned int)want);
+  return uv_fs_read(req->uv_req.loop, &req->uv_req, req->fd, &buf, 1, -1, on_read_complete);
+}
+
 static void on_read_complete(uv_fs_t *uv_req) {
   GC_UV_CALLBACK();
   fs_request_t *req = (fs_request_t *)uv_req->data;
-  
-  if (uv_req->result < 0) {
-    fs_request_fail(req, (int)uv_req->result);
-    req->completed = 1;
-    complete_request(req);
+  ssize_t n = uv_req->result;
+  uv_fs_req_cleanup(uv_req);
+
+  if (n < 0) {
+    fs_request_fail(req, (int)n);
+    fs_read_close_and_complete(req);
     return;
   }
-  
-  req->data_len = uv_req->result;
-  uv_fs_t close_req;
-  
-  uv_fs_close(uv_req->loop, &close_req, req->fd, NULL);
-  uv_fs_req_cleanup(&close_req);
-  
-  req->completed = 1;
-  complete_request(req);
+
+  if (n == 0) {
+    fs_read_close_and_complete(req);
+    return;
+  }
+
+  req->data_len += (size_t)n;
+  int result = fs_read_next_chunk(req);
+  if (result < 0) {
+    fs_request_fail(req, result);
+    fs_read_close_and_complete(req);
+  }
 }
 
 static void on_open_for_read(uv_fs_t *uv_req) {
@@ -2044,30 +2076,19 @@ static void on_open_for_read(uv_fs_t *uv_req) {
   size_t file_size = stat_req.statbuf.st_size;
   uv_fs_req_cleanup(&stat_req);
   
-  size_t alloc_size = (req->op_type == FS_OP_READ) ? file_size + 1 : file_size;
-  req->data = malloc(alloc_size);
+  req->data_cap = file_size + 1;
+  req->data = malloc(req->data_cap + 1);
   if (!req->data) {
     req->failed = 1;
     req->error_msg = strdup("Out of memory");
-    req->completed = 1;
-    uv_fs_t close_req;
-    uv_fs_close(uv_req->loop, &close_req, req->fd, NULL);
-    uv_fs_req_cleanup(&close_req);
-    complete_request(req);
+    fs_read_close_and_complete(req);
     return;
   }
   
-  uv_buf_t buf = uv_buf_init(req->data, (unsigned int)file_size);
-  int read_result = uv_fs_read(uv_req->loop, uv_req, req->fd, &buf, 1, 0, on_read_complete);
-  
+  int read_result = fs_read_next_chunk(req);
   if (read_result < 0) {
     fs_request_fail(req, read_result);
-    req->completed = 1;
-    uv_fs_t close_req;
-    uv_fs_close(uv_req->loop, &close_req, req->fd, NULL);
-    uv_fs_req_cleanup(&close_req);
-    complete_request(req);
-    return;
+    fs_read_close_and_complete(req);
   }
 }
 
@@ -2500,31 +2521,36 @@ static ant_value_t builtin_fs_readFileSync(ant_params_t) {
     return err;
   }
   
-  fseek(file, 0, SEEK_END);
-  long file_size = ftell(file);
-  fseek(file, 0, SEEK_SET);
+  struct stat st;
+  size_t cap = (fstat(fileno(file), &st) == 0 && st.st_size > 0) ? (size_t)st.st_size + 1 : 64 * 1024;
+  size_t file_size = 0;
+  char *data = malloc(cap);
   
-  if (file_size < 0) {
-    fclose(file);
-    free(path_cstr);
-    return js_mkerr(js, "Failed to get file size");
+  while (data) {
+    file_size += fread(data + file_size, 1, cap - file_size, file);
+    if (file_size < cap) break;
+    char *grown = realloc(data, cap * 2);
+    if (!grown) { free(data); data = NULL; break; }
+    data = grown;
+    cap *= 2;
   }
   
-  char *data = malloc(file_size + 1);
+  int read_errno = data && ferror(file) ? errno : 0;
+  fclose(file);
+  
   if (!data) {
-    fclose(file);
     free(path_cstr);
     return js_mkerr(js, "Out of memory");
   }
   
-  size_t bytes_read = fread(data, 1, file_size, file);
-  fclose(file);
-  free(path_cstr);
-  
-  if (bytes_read != (size_t)file_size) {
+  if (read_errno) {
     free(data);
-    return js_mkerr(js, "Failed to read entire file");
+    ant_value_t err = fs_mk_errno_error(js, read_errno, "read", path_cstr, NULL);
+    free(path_cstr);
+    return err;
   }
+  
+  free(path_cstr);
   
   fs_encoding_t enc = (nargs > 1) ? parse_encoding(js, args[1]) : FS_ENC_NONE;
   ant_value_t result = (enc != FS_ENC_NONE)
