@@ -3661,83 +3661,48 @@ static ant_value_t builtin_fs_rm(ant_params_t) {
   return fs_rm_impl(js, args, nargs, true);
 }
 
-static ant_value_t dirent_isFile(ant_params_t) {
-  ant_value_t this = js_getthis(js);
-  ant_value_t type_val = js_get_slot(this, SLOT_DATA);
-  if (vtype(type_val) != kTypeNumber) return js_false;
-  return js_bool((int)js_getnum(type_val) == UV_DIRENT_FILE);
-}
-
-static ant_value_t dirent_isDirectory(ant_params_t) {
-  ant_value_t this = js_getthis(js);
-  ant_value_t type_val = js_get_slot(this, SLOT_DATA);
-  if (vtype(type_val) != kTypeNumber) return js_false;
-  return js_bool((int)js_getnum(type_val) == UV_DIRENT_DIR);
-}
-
-static ant_value_t dirent_isSymbolicLink(ant_params_t) {
-  ant_value_t this = js_getthis(js);
-  ant_value_t type_val = js_get_slot(this, SLOT_DATA);
-  if (vtype(type_val) != kTypeNumber) return js_false;
-  return js_bool((int)js_getnum(type_val) == UV_DIRENT_LINK);
-}
-
-static ant_value_t dirent_isBlockDevice(ant_params_t) {
-  ant_value_t this = js_getthis(js);
-  ant_value_t type_val = js_get_slot(this, SLOT_DATA);
-  if (vtype(type_val) != kTypeNumber) return js_false;
-  return js_bool((int)js_getnum(type_val) == UV_DIRENT_BLOCK);
-}
-
-static ant_value_t dirent_isCharacterDevice(ant_params_t) {
-  ant_value_t this = js_getthis(js);
-  ant_value_t type_val = js_get_slot(this, SLOT_DATA);
-  if (vtype(type_val) != kTypeNumber) return js_false;
-  return js_bool((int)js_getnum(type_val) == UV_DIRENT_CHAR);
-}
-
-static ant_value_t dirent_isFIFO(ant_params_t) {
-  ant_value_t this = js_getthis(js);
-  ant_value_t type_val = js_get_slot(this, SLOT_DATA);
-  if (vtype(type_val) != kTypeNumber) return js_false;
-  return js_bool((int)js_getnum(type_val) == UV_DIRENT_FIFO);
-}
-
-static ant_value_t dirent_isSocket(ant_params_t) {
-  ant_value_t this = js_getthis(js);
-  ant_value_t type_val = js_get_slot(this, SLOT_DATA);
-  if (vtype(type_val) != kTypeNumber) return js_false;
-  return js_bool((int)js_getnum(type_val) == UV_DIRENT_SOCKET);
-}
-
-static ant_value_t stat_isFile(ant_params_t) {
-  ant_value_t this = js_getthis(js);
-  ant_value_t mode_val = js_get_slot(this, SLOT_DATA);
-  
+static ant_value_t stat_mode_is(ant_t *js, mode_t type) {
+  ant_value_t mode_val = js_get_slot(js_getthis(js), SLOT_DATA);
   if (vtype(mode_val) != kTypeNumber) return js_false;
-  mode_t mode = (mode_t)js_getnum(mode_val);
-  
-  return js_bool(S_ISREG(mode));
+  return js_bool(((mode_t)js_getnum(mode_val) & S_IFMT) == type);
 }
 
-static ant_value_t stat_isDirectory(ant_params_t) {
-  ant_value_t this = js_getthis(js);
-  ant_value_t mode_val = js_get_slot(this, SLOT_DATA);
-  
-  if (vtype(mode_val) != kTypeNumber) return js_false;
-  mode_t mode = (mode_t)js_getnum(mode_val);
-  
-  return js_bool(S_ISDIR(mode));
+static ant_value_t dirent_type_is(ant_t *js, uv_dirent_type_t type) {
+  ant_value_t type_val = js_get_slot(js_getthis(js), SLOT_DATA);
+  return js_bool(vtype(type_val) == kTypeNumber && (int)js_getnum(type_val) == (int)type);
 }
 
-static ant_value_t stat_isSymbolicLink(ant_params_t) {
-  ant_value_t this = js_getthis(js);
-  ant_value_t mode_val = js_get_slot(this, SLOT_DATA);
+#define FS_FILE_TYPE(name, mode, dirent) \
+  static ant_value_t stat_##name(ant_params_t) { return stat_mode_is(js, mode); } \
+  static ant_value_t dirent_##name(ant_params_t) { return dirent_type_is(js, dirent); }
+#include "fs/file_types.h"
+
+static const ant_cfunc_meta_t stat_methods[] = {
+  #define FS_FILE_TYPE(name, mode, dirent) { stat_##name, #name, 0, 0 },
+  #include "fs/file_types.h"
+};
+
+static const ant_cfunc_meta_t dirent_methods[] = {
+  #define FS_FILE_TYPE(name, mode, dirent) { dirent_##name, #name, 0, 0 },
+  #include "fs/file_types.h"
+};
+
+static ant_value_t stats_ctor(ant_params_t) {
+  ant_value_t obj = js_mkobj(js);
+  js_set_proto_init(obj, js_instance_proto_from_new_target(js, js->builtins.stats_proto, call_new_target));
+  return obj;
+}
+
+static ant_value_t dirent_ctor(ant_params_t) {
+  if (!is_object_type(call_new_target))
+    return js_mkerr_typed(js, JS_ERR_TYPE, "Class constructor Dirent cannot be invoked without 'new'");
   
-  if (vtype(mode_val) != kTypeNumber) return js_false;
-  mode_t mode = (mode_t)js_getnum(mode_val);
-  
-  return js_bool(S_ISLNK(mode));
+  ant_value_t obj = js_mkobj(js);
+  js_set_proto_init(obj, js_instance_proto_from_new_target(js, js->builtins.dirent_proto, call_new_target));
+  js_set(js, obj, "name", nargs > 0 ? args[0] : js_mkundef());
+  js_set(js, obj, "parentPath", nargs > 2 ? args[2] : js_mkundef());
+  if (nargs > 1 && vtype(args[1]) == kTypeNumber) js_set_slot(obj, SLOT_DATA, args[1]);
+  return obj;
 }
 
 static ant_value_t create_stats_object(ant_t *js, struct stat *st) {
@@ -5796,28 +5761,15 @@ static ant_value_t builtin_fs_unwatchFile(ant_params_t) {
 void init_fs_module(ant_t *js) {
   utarray_new(pending_requests, &ut_ptr_icd);
   
-  ant_value_t stats_ctor = js_mkobj(js);
-  js->builtins.stats_proto = js_mkobj(js);
-  
-  js_set(js, js->builtins.stats_proto, "isFile", Ant_Function_Create(stat_isFile));
-  js_set(js, js->builtins.stats_proto, "isDirectory", Ant_Function_Create(stat_isDirectory));
-  js_set(js, js->builtins.stats_proto, "isSymbolicLink", Ant_Function_Create(stat_isSymbolicLink));
+  js->builtins.stats_proto = js_newobj(js);
+  js_define_methods(js, js->builtins.stats_proto, stat_methods, countof(stat_methods), ANT_PROP_ATTR_DEFAULT);
   js_set_tostringtag(js, js->builtins.stats_proto, js_mkstr(js, "Stats", 5));
-  
-  js_mkprop_fast(js, stats_ctor, "prototype", 9, js->builtins.stats_proto);
-  js_set_function_name(js, stats_ctor, "Stats", sizeof("Stats") - 1);
-  
-  js->builtins.stats_ctor = js_obj_to_func(js, stats_ctor);
+  js->builtins.stats_ctor = Ant_Function_CreateConstructor(js, stats_ctor, js->builtins.stats_proto, "Stats", 0);
 
-  js->builtins.dirent_proto = js_mkobj(js);
-  js_set(js, js->builtins.dirent_proto, "isFile", Ant_Function_Create(dirent_isFile));
-  js_set(js, js->builtins.dirent_proto, "isDirectory", Ant_Function_Create(dirent_isDirectory));
-  js_set(js, js->builtins.dirent_proto, "isSymbolicLink", Ant_Function_Create(dirent_isSymbolicLink));
-  js_set(js, js->builtins.dirent_proto, "isBlockDevice", Ant_Function_Create(dirent_isBlockDevice));
-  js_set(js, js->builtins.dirent_proto, "isCharacterDevice", Ant_Function_Create(dirent_isCharacterDevice));
-  js_set(js, js->builtins.dirent_proto, "isFIFO", Ant_Function_Create(dirent_isFIFO));
-  js_set(js, js->builtins.dirent_proto, "isSocket", Ant_Function_Create(dirent_isSocket));
+  js->builtins.dirent_proto = js_newobj(js);
+  js_define_methods(js, js->builtins.dirent_proto, dirent_methods, countof(dirent_methods), ANT_PROP_ATTR_METHOD);
   js_set_tostringtag(js, js->builtins.dirent_proto, js_mkstr(js, "Dirent", 6));
+  js->builtins.dirent_ctor = Ant_Function_CreateConstructor(js, dirent_ctor, js->builtins.dirent_proto, "Dirent", 3);
 }
 
 static ant_value_t fs_callback_success_handler(ant_params_t) {
@@ -6902,6 +6854,7 @@ ant_value_t fs_library(ant_t *js) {
   js_set(js, lib, "ReadStream", js->builtins.readstream_ctor);
   js_set(js, lib, "WriteStream", js->builtins.writestream_ctor);
   js_set(js, lib, "Stats", js->builtins.stats_ctor);
+  js_set(js, lib, "Dirent", js->builtins.dirent_ctor);
   js_set(js, realpath_sync, "native", realpath_sync);
   
   js_set_getter_desc(

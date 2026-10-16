@@ -219,7 +219,7 @@ test('AssertionError is a constructor', typeof assert.AssertionError, 'function'
 
 const ae = new assert.AssertionError({ message: 'test', actual: 1, expected: 2, operator: 'strictEqual' });
 test('AssertionError has name', ae.name, 'AssertionError');
-test('AssertionError has message', ae.message, 'test');
+test('AssertionError has message', ae.message, 'test\n\n1 !== 2\n');
 test('AssertionError has actual', ae.actual, 1);
 test('AssertionError has expected', ae.expected, 2);
 test('AssertionError has operator', ae.operator, 'strictEqual');

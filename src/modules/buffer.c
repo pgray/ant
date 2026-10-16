@@ -2247,7 +2247,7 @@ static ant_value_t js_uint8array_toBase64(ant_params_t) {
 }
 
 static ant_value_t uint8array_set_result(ant_t *js, size_t read, size_t written) {
-  ant_value_t result = js_mkobj(js);
+  ant_value_t result = js_newobj(js);
   js_set(js, result, "read", js_mknum((double)read));
   js_set(js, result, "written", js_mknum((double)written));
   return result;
@@ -2471,6 +2471,34 @@ static size_t buffer_encoded_length(ant_t *js, ant_value_t str_value, const char
   }
 }
 
+__attribute__((noinline, cold)) static ant_value_t buffer_from_invalid(ant_t *js, ant_value_t value) {
+  char got[160], message[320];
+  js_describe_received(js, value, got, sizeof(got));
+  snprintf(
+    message, sizeof(message), "The first argument must be of type string or an instance of Buffer, "
+    "ArrayBuffer, or Array or an Array-like Object. %s", got
+  );
+  return js_mkerr_code(js, JS_ERR_TYPE, "ERR_INVALID_ARG_TYPE", message);
+}
+
+static ant_value_t buffer_from_array_like(ant_t *js, ant_value_t source, ant_value_t length_val) {
+  double length = vtype(length_val) == kTypeNumber ? js_getnum(length_val) : 0;
+  size_t len = length > 0 && isfinite(length) ? (size_t)length : 0;
+  
+  ArrayBufferData *buffer = create_array_buffer_data(js, len);
+  if (!buffer) return js_mkerr(js, "Failed to allocate buffer");
+
+  for (size_t i = 0; i < len; i++) {
+    char idx_str[32];
+    snprintf(idx_str, sizeof(idx_str), "%zu", i);
+    ant_value_t elem = js_get(js, source, idx_str);
+    if (is_err(elem)) return elem;
+    buffer->data[i] = (uint8_t)js_to_uint32(js_to_number(js, elem));
+  }
+
+  return create_typed_array(js, TYPED_ARRAY_UINT8, buffer, 0, len, js->builtins.buffer_proto);
+}
+
 static ant_value_t js_buffer_from(ant_params_t) {
   if (nargs < 1) return js_mkerr(js, "Buffer.from requires at least one argument");
   
@@ -2530,25 +2558,47 @@ static ant_value_t js_buffer_from(ant_params_t) {
     );
   }
   
-  ant_value_t length_val = js_get(js, args[0], "length");
-  if (vtype(length_val) == kTypeNumber) {
-    size_t len = (size_t)js_getnum(length_val);
-    ArrayBufferData *buffer = create_array_buffer_data(js, len);
-    if (!buffer) return js_mkerr(js, "Failed to allocate buffer");
-    
-    for (size_t i = 0; i < len; i++) {
-      char idx_str[32];
-      snprintf(idx_str, sizeof(idx_str), "%zu", i);
-      ant_value_t elem = js_get(js, args[0], idx_str);
-      if (vtype(elem) == kTypeNumber) {
-        buffer->data[i] = (uint8_t)js_getnum(elem);
-      }
-    }
-    
-    return create_typed_array(js, TYPED_ARRAY_UINT8, buffer, 0, len, js->builtins.buffer_proto);
-  }
+  if (!is_object_type(args[0])) return buffer_from_invalid(js, args[0]);
+  ant_value_t value_of = js_getprop_fallback(js, args[0], "valueOf");
+  if (is_err(value_of)) return value_of;
   
-  return js_mkerr(js, "Invalid argument to Buffer.from");
+  if (is_callable(value_of)) {
+    ant_value_t primitive = sv_vm_call(js->vm, js, value_of, args[0], NULL, 0, NULL, js_mkundef());
+    if (is_err(primitive)) return primitive;
+    if (primitive != args[0] && (vtype(primitive) == kTypeString || is_object_type(primitive))) {
+      ant_value_t from_args[3] = { primitive, nargs > 1 ? args[1] : js_mkundef(), nargs > 2 ? args[2] : js_mkundef() };
+      return js_buffer_from(js, from_args, nargs > 1 ? nargs : 1, js_mkundef());
+    }
+  }
+
+  ant_value_t length_val = js_get(js, args[0], "length");
+  if (is_err(length_val)) return length_val;
+  if (vtype(length_val) != kTypeUndefined) return buffer_from_array_like(js, args[0], length_val);
+
+  ant_value_t type = js_get(js, args[0], "type");
+  ant_value_t data = js_get(js, args[0], "data");
+  if (is_err(type)) return type;
+  if (is_err(data)) return data;
+  
+  size_t type_len = 0;
+  const char *type_str = vtype(type) == kTypeString ? js_getstr(js, type, &type_len) : NULL;
+  if (type_str && type_len == 6 && memcmp(type_str, "Buffer", 6) == 0 && vtype(data) == kTypeArray)
+    return buffer_from_array_like(js, data, js_get(js, data, "length"));
+
+  ant_value_t to_primitive = js_get_sym(js, args[0], js->sym.toPrimitive_sym);
+  if (is_err(to_primitive)) return to_primitive;
+  
+  if (is_callable(to_primitive)) {
+    ant_value_t hint = js_mkstr(js, "string", 6);
+    ant_value_t primitive = sv_vm_call(js->vm, js, to_primitive, args[0], &hint, 1, NULL, js_mkundef());
+    if (is_err(primitive)) return primitive;
+    if (vtype(primitive) == kTypeString) {
+      ant_value_t from_args[2] = { primitive, nargs > 1 ? args[1] : js_mkundef() };
+      return js_buffer_from(js, from_args, nargs > 1 ? 2 : 1, js_mkundef());
+    }
+  }
+
+  return buffer_from_invalid(js, args[0]);
 }
 
 static ant_value_t buffer_fill_range(
@@ -3135,6 +3185,27 @@ bool buffer_bytes_to_string(
 }
 
 // Buffer.prototype.toString(encoding)
+static ant_value_t js_buffer_toJSON(ant_params_t) {
+  TypedArrayData *ta_data = buffer_get_typedarray_data(js_getthis(js));
+  if (!ta_data) return js_mkerr(js, "Invalid Buffer");
+  
+  size_t len = Ant_Buffer_ViewIsLive(ta_data) ? ta_data->byte_length : 0;
+  const uint8_t *bytes = len ? ta_data->buffer->data + ta_data->byte_offset : NULL;
+
+  GC_ROOT_SAVE(root_mark, js);
+  ant_value_t data = js_mkarr(js);
+  GC_ROOT_PIN(js, data);
+  for (size_t i = 0; i < len; i++) js_arr_push(js, data, js_mknum(bytes[i]));
+
+  ant_value_t result = js_newobj(js);
+  GC_ROOT_PIN(js, result);
+  js_set(js, result, "type", js_mkstr(js, "Buffer", 6));
+  js_set(js, result, "data", data);
+  
+  GC_ROOT_RESTORE(js, root_mark);
+  return result;
+}
+
 static ant_value_t js_buffer_toString(ant_params_t) {
   ant_value_t this_val = js_getthis(js);
   TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
@@ -4204,6 +4275,7 @@ void init_buffer_module(ant_t *js) {
   static const ant_cfunc_meta_t buffer_proto_methods[] = {
     { js_buffer_slice,         "slice",       2, 0 },
     { js_buffer_toString,      "toString",    3, 0 },
+    { js_buffer_toJSON,        "toJSON",      0, 0 },
     { js_buffer_utf8Slice,     "utf8Slice",   2, 0 },
     { js_buffer_toBase64,      "toBase64",    0, 0 },
     { js_buffer_indexOf,       "indexOf",     4, 0 },

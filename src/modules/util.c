@@ -290,14 +290,14 @@ option_error:
 
   ant_value_t values = js_mkobj(js);
   ant_value_t positionals = js_mkarr(js);
-  ant_value_t out = js_mkobj(js);
+  ant_value_t out = js_newobj(js);
 
   for (size_t i = 0; i < option_count; i++) {
-  if (vtype(options[i].default_value) != kTypeUndefined) {
-  if (!util_set_named_value(js, values, options[i].name, options[i].default_value, options[i].multiple)) {
+    if (vtype(options[i].default_value) == kTypeUndefined) continue;
+    if (util_set_named_value(js, values, options[i].name, options[i].default_value, options[i].multiple)) continue;
     util_free_parse_options(options, option_count);
     return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : js_mkerr(js, "parseArgs failed to set default");
-  }}}
+  }
 
   ant_offset_t arg_len = js_arr_len(js, args_list);
   bool stop_parsing = false;

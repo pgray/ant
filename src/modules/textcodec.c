@@ -147,7 +147,7 @@ static ant_value_t js_textencoder_encode_into(ant_params_t) {
     available, &read_units
   );
 
-  ant_value_t result = js_mkobj(js);
+  ant_value_t result = js_newobj(js);
   js_set(js, result, "read", js_mknum((double)read_units));
   js_set(js, result, "written", js_mknum((double)written));
   

@@ -37,7 +37,7 @@ static void legacy_url_set(ant_t *js, ant_value_t obj, const char *name, url_sli
 }
 
 static ant_value_t legacy_url_object(ant_t *js, const legacy_url_t *u) {
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = js_newobj(js);
 
   legacy_url_set(js, obj, "protocol", u->protocol);
   js_set(js, obj, "slashes", u->slashes ? js_true : js_mknull());

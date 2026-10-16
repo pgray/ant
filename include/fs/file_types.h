@@ -1,0 +1,10 @@
+#ifdef FS_FILE_TYPE
+FS_FILE_TYPE(isFile,            S_IFREG,  UV_DIRENT_FILE)
+FS_FILE_TYPE(isDirectory,       S_IFDIR,  UV_DIRENT_DIR)
+FS_FILE_TYPE(isSymbolicLink,    S_IFLNK,  UV_DIRENT_LINK)
+FS_FILE_TYPE(isBlockDevice,     S_IFBLK,  UV_DIRENT_BLOCK)
+FS_FILE_TYPE(isCharacterDevice, S_IFCHR,  UV_DIRENT_CHAR)
+FS_FILE_TYPE(isFIFO,            S_IFIFO,  UV_DIRENT_FIFO)
+FS_FILE_TYPE(isSocket,          S_IFSOCK, UV_DIRENT_SOCKET)
+#undef FS_FILE_TYPE
+#endif

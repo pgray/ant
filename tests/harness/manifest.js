@@ -127,6 +127,7 @@ export function targets() {
     'test_console_log_nul.cjs',
     'test_call_site_positions.cjs',
     'test_inspect_compact_sorted.cjs',
+    'test_node_api_result_shapes.cjs',
     'test_error_stack_format.cjs',
     'test_error_stack_jit_frames.cjs',
     'test_esm_package_self_reference.cjs',

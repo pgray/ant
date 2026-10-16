@@ -1079,7 +1079,7 @@ static ant_value_t process_hrtime_bigint(ant_params_t) {
 
 static ant_value_t process_memory_usage(ant_params_t) {
   (void)args; (void)nargs;
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = js_newobj(js);
   
   size_t rss = 0;
   uv_resident_set_memory(&rss);
@@ -1119,7 +1119,7 @@ static ant_value_t process_memory_usage_rss(ant_params_t) {
 }
 
 static ant_value_t process_cpu_usage(ant_params_t) {
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = js_newobj(js);
   uv_rusage_t rusage;
   
   if (uv_getrusage(&rusage) == 0) {
@@ -1139,6 +1139,37 @@ static ant_value_t process_cpu_usage(ant_params_t) {
     js_set(js, obj, "user", js_mknum(0));
     js_set(js, obj, "system", js_mknum(0));
   }
+  
+  return obj;
+}
+
+static ant_value_t process_resource_usage(ant_params_t) {
+  uv_rusage_t ru;
+  int rc = uv_getrusage(&ru);
+  if (rc != 0) return js_mkerr_typed(js, JS_ERR_GENERIC, "uv_getrusage: %s", uv_strerror(rc));
+
+  const struct { const char *name; double value; } fields[] = {
+    { "userCPUTime",                (double)ru.ru_utime.tv_sec * 1e6 + (double)ru.ru_utime.tv_usec },
+    { "systemCPUTime",              (double)ru.ru_stime.tv_sec * 1e6 + (double)ru.ru_stime.tv_usec },
+    { "maxRSS",                     (double)ru.ru_maxrss },
+    { "sharedMemorySize",           (double)ru.ru_ixrss },
+    { "unsharedDataSize",           (double)ru.ru_idrss },
+    { "unsharedStackSize",          (double)ru.ru_isrss },
+    { "minorPageFault",             (double)ru.ru_minflt },
+    { "majorPageFault",             (double)ru.ru_majflt },
+    { "swappedOut",                 (double)ru.ru_nswap },
+    { "fsRead",                     (double)ru.ru_inblock },
+    { "fsWrite",                    (double)ru.ru_oublock },
+    { "ipcSent",                    (double)ru.ru_msgsnd },
+    { "ipcReceived",                (double)ru.ru_msgrcv },
+    { "signalsCount",               (double)ru.ru_nsignals },
+    { "voluntaryContextSwitches",   (double)ru.ru_nvcsw },
+    { "involuntaryContextSwitches", (double)ru.ru_nivcsw },
+  };
+
+  ant_value_t obj = js_newobj(js);
+  for (size_t i = 0; i < sizeof(fields) / sizeof(fields[0]); i++)
+    js_set(js, obj, fields[i].name, js_mknum(fields[i].value));
   
   return obj;
 }
@@ -1911,6 +1942,7 @@ static void process_set_methods(ant_t *js, ant_value_t obj, bool include_event_m
   js_set(js, obj, "chdir", Ant_Function_CreateWithArity(process_chdir, 1));
   js_set(js, obj, "uptime", Ant_Function_Create(process_uptime));
   js_set(js, obj, "cpuUsage", Ant_Function_CreateWithArity(process_cpu_usage, 1));
+  js_set(js, obj, "resourceUsage", Ant_Function_Create(process_resource_usage));
   js_set(js, obj, "kill", Ant_Function_CreateWithArity(process_kill, 2));
   js_set(js, obj, "abort", Ant_Function_Create(process_abort));
   js_set(js, obj, "umask", Ant_Function_CreateWithArity(process_umask, 1));

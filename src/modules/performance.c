@@ -31,6 +31,13 @@ static ant_value_t js_performance_now(ant_params_t) {
   return js_mknum(now);
 }
 
+// performance.toJSON()
+static ant_value_t js_performance_to_json(ant_params_t) {
+  ant_value_t obj = js_newobj(js);
+  js_set(js, obj, "timeOrigin", js_mknum(js->perf_time_origin_ms));
+  return obj;
+}
+
 ant_value_t perf_hooks_library(ant_t *js) {
   ant_value_t lib = js_mkobj(js);
   js_set(js, lib, "performance", js_get(js, js_glob(js), "performance"));
@@ -45,6 +52,7 @@ void init_performance_module(ant_t *js) {
   js->perf_time_origin_ms = get_current_time_ms();
   js_set(js, perf_obj, "now", Ant_Function_Create(js_performance_now));
   js_set(js, perf_obj, "timeOrigin", js_mknum(js->perf_time_origin_ms));
+  js_set(js, perf_obj, "toJSON", Ant_Function_Create(js_performance_to_json));
   
   js_set_tostringtag(js, perf_obj, ANT_STRING("Performance"));
   js_set(js, glob, "performance", perf_obj);

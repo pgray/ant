@@ -23,6 +23,12 @@ typedef struct sc_entry {
   UT_hash_handle hh;
 } sc_entry_t;
 
+static js_err_type_t sc_error_type(const char *name) {
+  for (js_err_type_t type = JS_ERR_TYPE; name && type <= JS_ERR_URI; type++)
+    if (strcmp(name, js_err_type_name(type)) == 0) return type;
+  return JS_ERR_GENERIC;
+}
+
 static void sc_add(sc_entry_t **table, ant_value_t key, ant_value_t value) {
   sc_entry_t *e = calloc(1, sizeof(sc_entry_t));
   if (!e) return;
@@ -254,20 +260,20 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
   }
 
   if (js_get_slot(val, SLOT_ERROR_BRAND) == js_true) {
+    const char *name = get_str_prop(js, val, "name", 4, NULL);
+    js_err_type_t type = sc_error_type(name);
+    
     ant_value_t clone = js_mkobj(js);
+    js_set_proto_init(clone, js->builtins.error_protos[type]);
     sc_add(seen, val, clone);
 
     const char *msg   = get_str_prop(js, val, "message", 7, NULL);
-    const char *name  = get_str_prop(js, val, "name",    4, NULL);
     const char *stack = get_str_prop(js, val, "stack",   5, NULL);
 
-    if (msg)   js_set(js, clone, "message", js_mkstr(js, msg,   strlen(msg)));
-    if (name)  js_set(js, clone, "name",    js_mkstr(js, name,  strlen(name)));
-    if (stack) js_set(js, clone, "stack",   js_mkstr(js, stack, strlen(stack)));
+    if (stack) defhidden(js, clone, "stack", 5, js_mkstr(js, stack, strlen(stack)));
+    if (msg)   defhidden(js, clone, "message", 7, js_mkstr(js, msg, strlen(msg)));
     js_set_slot(clone, SLOT_ERROR_BRAND, js_true);
-
-    ant_value_t err_type = js_get_slot(val, SLOT_ERR_TYPE);
-    if (vtype(err_type) != kTypeUndefined) js_set_slot(clone, SLOT_ERR_TYPE, err_type);
+    js_set_slot(clone, SLOT_ERR_TYPE, js_mknum((double)type));
 
     return clone;
   }
@@ -311,7 +317,7 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
     return clone;
   }
 
-  ant_value_t clone = js_mkobj(js);
+  ant_value_t clone = js_newobj(js);
   sc_add(seen, val, clone);
 
   if (js_proxy_is_host(val)) {

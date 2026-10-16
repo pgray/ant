@@ -266,7 +266,7 @@ static ant_value_t des_val(ant_t *js, dec_t *d) {
     case 'O': {
       uint32_t n;
       if (!dec_u32(d, &n)) return js_mkundef();
-      ant_value_t obj = js_mkobj(js);
+      ant_value_t obj = js_newobj(js);
       char kbuf[4096];
       for (uint32_t i = 0; i < n; i++) {
         uint32_t klen;
@@ -320,7 +320,7 @@ static ant_value_t v8_get_heap_statistics(ant_params_t) {
   size_t total_heap = arena_committed + closure_committed + pool_total + extra_alloc;
   size_t heap_limit = arena_reserved + closure_reserved;
 
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = js_newobj(js);
   js_set(js, obj, "total_heap_size",             js_mknum((double)total_heap));
   js_set(js, obj, "total_heap_size_executable",  js_mknum(0));
   js_set(js, obj, "total_physical_size",         js_mknum((double)rss));
@@ -340,7 +340,7 @@ static ant_value_t v8_get_heap_statistics(ant_params_t) {
 }
 
 static ant_value_t v8_get_heap_space_statistics(ant_params_t) {
-  ant_value_t nursery = js_mkobj(js);
+  ant_value_t nursery = js_newobj(js);
   size_t arena_committed  = js->obj_arena.committed;
   size_t arena_live_bytes = js->obj_arena.live_count * js->obj_arena.elem_size;
   double arena_available = (double)(arena_committed / 2 > arena_live_bytes / 2 ? arena_committed / 2 - arena_live_bytes / 2 : 0);
@@ -351,7 +351,7 @@ static ant_value_t v8_get_heap_space_statistics(ant_params_t) {
   js_set(js, nursery, "space_available_size",  js_mknum(arena_available));
   js_set(js, nursery, "physical_space_size",   js_mknum((double)arena_committed / 2));
 
-  ant_value_t oldspace = js_mkobj(js);
+  ant_value_t oldspace = js_newobj(js);
   size_t old_live = js->old_live_count * js->obj_arena.elem_size;
   double old_size = (double)(arena_committed / 2 > old_live ? arena_committed / 2 - old_live : 0);
   
@@ -389,7 +389,7 @@ static ant_value_t v8_get_heap_code_statistics(ant_params_t) {
   size_t bytecode_alloc  = js->alloc_bytes.closures;
 
   ant_pool_stats_t rope_stats = js_rope_pool_stats(js);
-  ant_value_t obj = js_mkobj(js);
+  ant_value_t obj = js_newobj(js);
   
   js_set(js, obj, "code_and_metadata_size",      js_mknum((double)(closure_structs + bytecode_alloc)));
   js_set(js, obj, "bytecode_and_metadata_size",  js_mknum((double)bytecode_alloc));

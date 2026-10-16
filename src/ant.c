@@ -22097,8 +22097,8 @@ static ant_value_t builtin_Proxy_revocable(ant_params_t) {
   set_slot(revoke_obj, SLOT_PROXY_REF, proxy);
   
   ant_value_t revoke_func = js_obj_to_func(js, revoke_obj);
+  ant_value_t result = js_newobj(js);
   
-  ant_value_t result = mkobj(js, 0);
   js_setprop(js, result, js_mkstr(js, "proxy", 5), proxy);
   js_setprop(js, result, js_mkstr(js, "revoke", 6), revoke_func);
   

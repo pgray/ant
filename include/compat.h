@@ -145,6 +145,14 @@ typedef unsigned int gid_t;
 #define S_ISLNK(m) (((m) & S_IFMT) == S_IFLNK)
 #endif
 
+#ifndef S_IFBLK
+#define S_IFBLK 0060000
+#endif
+
+#ifndef S_IFSOCK
+#define S_IFSOCK 0140000
+#endif
+
 #else
 #include <unistd.h>
 #include <libgen.h>
