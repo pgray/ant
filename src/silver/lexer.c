@@ -1,7 +1,8 @@
 #include "silver/lexer.h"
 
 #include "ascii.h"
-#include "internal.h"
+#include "ant.h"
+#include "isolate.h"
 #include "escape.h"
 #include "tokens.h"
 #include "utf8.h"
@@ -825,46 +826,32 @@ static inline uint8_t scan_string_error(sv_lexer_t *lx, ant_offset_t len) {
 }
 
 static inline uint8_t scan_string(sv_lexer_t *lx, const char *buf, ant_offset_t rem, char quote) {
-  ant_offset_t i = 1;
+  const char *end = buf + rem;
+  const char *p = buf + 1;
+  
+  const char *q = NULL;
+  const char *nl = NULL;
 
-  while (i < rem) {
-    const char *p = buf + i;
-    ant_offset_t search_len = rem - i;
+  for (;;) {
+    if (!q || q < p) {
+      q = p < end ? memchr(p, quote, (size_t)(end - p)) : NULL;
+      if (!q) return scan_string_error(lx, rem);
+      nl = scan_string_newline(p, (size_t)(q - p));
+    } else if (nl && nl < p) nl = scan_string_newline(p, (size_t)(q - p));
 
-    const char *q = memchr(p, quote, search_len);
-    const char *b = memchr(p, '\\', search_len);
+    const char *b = memchr(p, '\\', (size_t)(q - p));
+    if (nl && nl < (b ? b : q)) return scan_string_error(lx, (ant_offset_t)(nl - buf));
 
-    if (q == NULL) {
-      lx->st.tok = TOK_ERR;
-      lx->st.tlen = rem;
-      return TOK_ERR;
-    }
-
-    const char *plain_end = b == NULL || q < b ? q : b;
-    const char *newline = scan_string_newline(p, (size_t)(plain_end - p));
-    if (newline) return scan_string_error(lx, (ant_offset_t)(newline - buf));
-
-    if (b == NULL || q < b) {
-      i = (ant_offset_t)((q - buf) + 1);
+    if (!b) {
       lx->st.tok = TOK_STRING;
-      lx->st.tlen = i;
+      lx->st.tlen = (ant_offset_t)(q - buf + 1);
       return TOK_STRING;
     }
 
-    ant_offset_t esc_pos = (ant_offset_t)(b - buf);
-    if (esc_pos + 1 >= rem) {
-      lx->st.tok = TOK_ERR;
-      lx->st.tlen = rem;
-      return TOK_ERR;
-    }
-
-    bool crlf = buf[esc_pos + 1] == '\r' && esc_pos + 2 < rem && buf[esc_pos + 2] == '\n';
-    i = esc_pos + (crlf ? 3 : 2);
+    if (b + 1 >= end) return scan_string_error(lx, rem);
+    bool crlf = b[1] == '\r' && b + 2 < end && b[2] == '\n';
+    p = b + (crlf ? 3 : 2);
   }
-
-  lx->st.tok = TOK_ERR;
-  lx->st.tlen = rem;
-  return TOK_ERR;
 }
 
 static inline ant_offset_t skip_string_literal(const char *buf, ant_offset_t rem, ant_offset_t start, char quote) {
