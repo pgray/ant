@@ -8,40 +8,77 @@
 #include "modules/assert.h"
 #include "silver/call.h"
 
-static ant_value_t assertion_error_make(ant_t *js, const char *msg, ant_value_t msg_val, bool generated) {
+typedef struct {
+  const char *op;
+  ant_value_t actual;
+  ant_value_t expected;
+} assertion_info_t;
+
+static bool assert_is_error_instance(ant_t *js, ant_value_t value) {
+  if (!is_object_type(value)) return false;
+  ant_value_t is = do_instanceof(js, value, js->builtins.error_ctor);
+  return !is_err(is) && js_truthy(js, is);
+}
+
+static ant_value_t assertion_error_make(
+  ant_t *js, const char *msg, ant_value_t msg_val, bool generated, assertion_info_t info
+) {
   const char *text = vtype(msg_val) == kTypeString ? js_getstr(js, msg_val, NULL) : NULL;
-  ant_value_t err = Ant_Error_Create(js, JS_ERR_GENERIC, text ? text : msg);
-  if (vtype(err) != kTypeObject) return err;
 
   GC_ROOT_SAVE(root_mark, js);
-  GC_ROOT_PIN(js, err);
-  if (is_object_type(js->builtins.assertion_error_proto)) js_set_proto_init(err, js->builtins.assertion_error_proto);
-  js_set(js, err, "generatedMessage", js_bool(generated && text == NULL));
-  js_set(js, err, "code", js_mkstr(js, "ERR_ASSERTION", 13));
-  GC_ROOT_RESTORE(js, root_mark);
+  GC_ROOT_PIN(js, msg_val);
+  GC_ROOT_PIN(js, info.actual);
+  GC_ROOT_PIN(js, info.expected);
 
+  ant_value_t props = js_mkobj(js);
+  GC_ROOT_PIN(js, props);
+  js_set(js, props, "generatedMessage", js_bool(generated && text == NULL));
+  js_set(js, props, "code", js_mkstr(js, "ERR_ASSERTION", 13));
+  js_set(js, props, "actual", info.actual);
+  js_set(js, props, "expected", info.expected);
+  js_set(js, props, "operator", info.op ? js_mkstr(js, info.op, strlen(info.op)) : js_mkundef());
+
+  ant_value_t err = Ant_Error_CreateWithProps(js, JS_ERR_GENERIC, props, text ? text : msg);
+  if (vtype(err) == kTypeObject && is_object_type(js->builtins.assertion_error_proto))
+    js_set_proto_init(err, js->builtins.assertion_error_proto);
+
+  GC_ROOT_RESTORE(js, root_mark);
   return err;
 }
 
-static ant_value_t assertion_error_ex(ant_t *js, const char *msg, ant_value_t msg_val, bool generated) {
-  ant_value_t err = assertion_error_make(js, msg, msg_val, generated);
+static ant_value_t assertion_error_ex(
+  ant_t *js, const char *msg, ant_value_t msg_val, bool generated, assertion_info_t info
+) {
+  if (assert_is_error_instance(js, msg_val)) return js_throw(js, msg_val);
+  ant_value_t err = assertion_error_make(js, msg, msg_val, generated, info);
   return is_err(err) ? err : js_throw(js, err);
 }
 
-static inline ant_value_t assertion_error(ant_t *js, const char *msg, ant_value_t msg_val) {
-  return assertion_error_ex(js, msg, msg_val, true);
+static inline ant_value_t assertion_error(ant_t *js, const char *msg, ant_value_t msg_val, assertion_info_t info) {
+  return assertion_error_ex(js, msg, msg_val, true, info);
+}
+
+static inline assertion_info_t assert_compared(ant_value_t *args, int nargs, const char *op) {
+  return (assertion_info_t){
+    .op = op,
+    .actual = nargs > 0 ? args[0] : js_mkundef(),
+    .expected = nargs > 1 ? args[1] : js_mkundef(),
+  };
 }
 
 // assert(value, message) / assert.ok
 static ant_value_t assert_ok(ant_params_t) {
   if (nargs < 1 || !js_truthy(js, args[0]))
-    return assertion_error(js, "The expression evaluated to a falsy value", nargs >= 2 ? args[1] : js_mkundef());
+    return assertion_error(
+      js, "The expression evaluated to a falsy value", nargs >= 2 ? args[1] : js_mkundef(),
+      (assertion_info_t){ "==", nargs > 0 ? args[0] : js_mkundef(), js_true }
+    );
   return js_mkundef();
 }
 
 // assert.fail(message)
 static ant_value_t assert_fail(ant_params_t) {
-  return assertion_error(js, "Failed", nargs >= 1 ? args[0] : js_mkundef());
+  return assertion_error(js, "Failed", nargs >= 1 ? args[0] : js_mkundef(), (assertion_info_t){ "fail", js_mkundef(), js_mkundef() });
 }
 
 // assert.ifError(value)
@@ -57,7 +94,7 @@ static ant_value_t assert_if_error(ant_params_t) {
   if (vtype(msg) == kTypeString) snprintf(buf, sizeof(buf), "ifError got unwanted exception: %s", js_getstr(js, msg, NULL));
   else if (t == kTypeString) snprintf(buf, sizeof(buf), "ifError got unwanted exception: '%s'", js_getstr(js, args[0], NULL));
   else snprintf(buf, sizeof(buf), "ifError got unwanted exception: %s", js_str(js, args[0]));
-  return assertion_error_ex(js, buf, js_mkundef(), false);
+  return assertion_error_ex(js, buf, js_mkundef(), false, (assertion_info_t){ "ifError", args[0], js_mknull() });
 }
 
 // TODO: make into global helper
@@ -125,56 +162,56 @@ bool js_deep_equal(ant_t *js, ant_value_t a, ant_value_t b, bool strict) {
 static ant_value_t assert_equal(ant_params_t) {
   if (nargs < 2) return js_mkundef();
   if (!values_loose_equal(js, args[0], args[1]))
-    return assertion_error(js, "Expected values to be equal", nargs >= 3 ? args[2] : js_mkundef());
+    return assertion_error(js, "Expected values to be equal", nargs >= 3 ? args[2] : js_mkundef(), assert_compared(args, nargs, "=="));
   return js_mkundef();
 }
 
 static ant_value_t assert_not_equal(ant_params_t) {
   if (nargs < 2) return js_mkundef();
   if (values_loose_equal(js, args[0], args[1]))
-    return assertion_error(js, "Expected values to not be equal", nargs >= 3 ? args[2] : js_mkundef());
+    return assertion_error(js, "Expected values to not be equal", nargs >= 3 ? args[2] : js_mkundef(), assert_compared(args, nargs, "!="));
   return js_mkundef();
 }
 
 static ant_value_t assert_strict_equal(ant_params_t) {
   if (nargs < 2) return js_mkundef();
   if (!same_value_values(js, args[0], args[1]))
-    return assertion_error(js, "Expected values to be strictly equal", nargs >= 3 ? args[2] : js_mkundef());
+    return assertion_error(js, "Expected values to be strictly equal", nargs >= 3 ? args[2] : js_mkundef(), assert_compared(args, nargs, "strictEqual"));
   return js_mkundef();
 }
 
 static ant_value_t assert_not_strict_equal(ant_params_t) {
   if (nargs < 2) return js_mkundef();
   if (same_value_values(js, args[0], args[1]))
-    return assertion_error(js, "Expected values to not be strictly equal", nargs >= 3 ? args[2] : js_mkundef());
+    return assertion_error(js, "Expected values to not be strictly equal", nargs >= 3 ? args[2] : js_mkundef(), assert_compared(args, nargs, "notStrictEqual"));
   return js_mkundef();
 }
 
 static ant_value_t assert_deep_equal(ant_params_t) {
   if (nargs < 2) return js_mkundef();
   if (!js_deep_equal(js, args[0], args[1], false))
-    return assertion_error(js, "Expected values to be deeply equal", nargs >= 3 ? args[2] : js_mkundef());
+    return assertion_error(js, "Expected values to be deeply equal", nargs >= 3 ? args[2] : js_mkundef(), assert_compared(args, nargs, "deepEqual"));
   return js_mkundef();
 }
 
 static ant_value_t assert_not_deep_equal(ant_params_t) {
   if (nargs < 2) return js_mkundef();
   if (js_deep_equal(js, args[0], args[1], false))
-    return assertion_error(js, "Expected values to not be deeply equal", nargs >= 3 ? args[2] : js_mkundef());
+    return assertion_error(js, "Expected values to not be deeply equal", nargs >= 3 ? args[2] : js_mkundef(), assert_compared(args, nargs, "notDeepEqual"));
   return js_mkundef();
 }
 
 static ant_value_t assert_deep_strict_equal(ant_params_t) {
   if (nargs < 2) return js_mkundef();
   if (!js_deep_equal(js, args[0], args[1], true))
-    return assertion_error(js, "Expected values to be deeply strictly equal", nargs >= 3 ? args[2] : js_mkundef());
+    return assertion_error(js, "Expected values to be deeply strictly equal", nargs >= 3 ? args[2] : js_mkundef(), assert_compared(args, nargs, "deepStrictEqual"));
   return js_mkundef();
 }
 
 static ant_value_t assert_not_deep_strict_equal(ant_params_t) {
   if (nargs < 2) return js_mkundef();
   if (js_deep_equal(js, args[0], args[1], true))
-    return assertion_error(js, "Expected values to not be deeply strictly equal", nargs >= 3 ? args[2] : js_mkundef());
+    return assertion_error(js, "Expected values to not be deeply strictly equal", nargs >= 3 ? args[2] : js_mkundef(), assert_compared(args, nargs, "notDeepStrictEqual"));
   return js_mkundef();
 }
 
@@ -193,7 +230,10 @@ static ant_value_t assert_exception_matches(
 
   ant_value_t error_ctor = js->primordial_values[ANT_PRIMORDIAL_Error];
   if (js_is_prototype_of(js, error_ctor, expected))
-    return assertion_error(js, "The error is expected to be an instance of the specified constructor", message);
+    return assertion_error(
+      js, "The error is expected to be an instance of the specified constructor", message,
+      (assertion_info_t){ "throws", thrown, expected }
+    );
 
   ant_value_t receiver = js_mkobj(js);
   if (is_err(receiver)) return receiver;
@@ -201,9 +241,26 @@ static ant_value_t assert_exception_matches(
   
   if (is_err(valid)) return valid;
   if (valid != js_true)
-    return assertion_error(js, "The validation function is expected to return true", message);
+    return assertion_error(
+      js, "The validation function is expected to return true", message,
+      (assertion_info_t){ "throws", thrown, expected }
+    );
   
   return js_mkundef();
+}
+
+static ant_value_t assert_missing_exception(ant_t *js, ant_value_t expected, ant_value_t message) {
+  if (assert_is_error_instance(js, message)) return js_throw(js, message);
+
+  char kind[160] = "";
+  ant_value_t name = is_callable(expected) ? js_get(js, expected, "name") : js_mkundef();
+  if (vtype(name) == kTypeString) snprintf(kind, sizeof(kind), " (%s)", js_getstr(js, name, NULL));
+
+  char buf[512];
+  if (vtype(message) == kTypeString) snprintf(buf, sizeof(buf), "Missing expected exception%s: %s", kind, js_getstr(js, message, NULL));
+  else snprintf(buf, sizeof(buf), "Missing expected exception%s.", kind);
+
+  return assertion_error_ex(js, buf, js_mkundef(), false, (assertion_info_t){ "throws", js_mkundef(), expected });
 }
 
 static ant_value_t assert_throws(ant_params_t) {
@@ -215,6 +272,10 @@ static ant_value_t assert_throws(ant_params_t) {
   ant_value_t expected = nargs >= 2 ? args[1] : js_mkundef();
   ant_value_t message = nargs >= 3 ? args[2] : js_mkundef();
   ant_value_t thrown = js_mkundef();
+  if (vtype(expected) == kTypeString && nargs < 3) {
+    message = expected;
+    expected = js_mkundef();
+  }
   
   GC_ROOT_PIN(js, fn);
   GC_ROOT_PIN(js, expected);
@@ -222,8 +283,7 @@ static ant_value_t assert_throws(ant_params_t) {
   GC_ROOT_PIN(js, thrown);
 
   ant_value_t result = sv_vm_call(js->vm, js, fn, js_mkundef(), NULL, 0, NULL, js_mkundef());
-  if (!is_err(result))
-    result = assertion_error_ex(js, "Missing expected exception.", message, false);
+  if (!is_err(result)) result = assert_missing_exception(js, expected, message);
   else {
     thrown = js_take_thrown(js, result);
     result = assert_exception_matches(js, thrown, expected, message);
@@ -250,14 +310,19 @@ static ant_value_t assert_does_not_throw(ant_params_t) {
     return msg;
   }
   
+  ant_value_t user_msg = nargs >= 3 ? args[2] : nargs >= 2 && vtype(args[1]) == kTypeString ? args[1] : js_mkundef();
+  char head[256] = "Got unwanted exception.";
+  if (vtype(user_msg) == kTypeString) snprintf(head, sizeof(head), "Got unwanted exception: %s", js_getstr(js, user_msg, NULL));
+
   char buf[512];
   snprintf(
-    buf, sizeof(buf), "Got unwanted exception.\nActual message: \"%s\"",
+    buf, sizeof(buf), "%s\nActual message: \"%s\"", head,
     vtype(msg) == kTypeString ? js_getstr(js, msg, NULL) : js_str(js, thrown)
   );
   
+  result = assertion_error_ex(js, buf, js_mkundef(), false, (assertion_info_t){ "doesNotThrow", thrown, js_mkundef() });
   GC_ROOT_RESTORE(js, mark);
-  return assertion_error_ex(js, buf, js_mkundef(), false);
+  return result;
 }
 
 static ant_value_t assert_rejection_settle(
@@ -339,7 +404,10 @@ static ant_value_t assert_regexp(ant_native_params_t, bool expect_match) {
     const char *message = expect_match
       ? "Value does not match the regular expression"
       : "Value matches the regular expression";
-    return assertion_error(js, message, nargs >= 3 ? args[2] : js_mkundef());
+    return assertion_error(
+      js, message, nargs >= 3 ? args[2] : js_mkundef(),
+      assert_compared(args, nargs, expect_match ? "match" : "doesNotMatch")
+    );
   }
 
   return js_mkundef();
@@ -355,30 +423,28 @@ static ant_value_t assert_does_not_match(ant_params_t) {
 
 static ant_value_t assert_assertion_error_ctor(ant_params_t) {
   ant_value_t options = nargs >= 1 && vtype(args[0]) == kTypeObject ? args[0] : js_mkundef();
-  ant_value_t message = is_object_type(options) ? js_get(js, options, "message") : js_mkundef();
-  if (is_err(message)) return message;
+  assertion_info_t info = { NULL, js_mkundef(), js_mkundef() };
+  ant_value_t fields[4] = { js_mkundef(), js_mkundef(), js_mkundef(), js_mkundef() };
+  static const char *const names[] = { "message", "actual", "expected", "operator" };
 
-  ant_value_t err = assertion_error_make(js, "Failed", message, true);
-  if (is_err(err) || !is_object_type(options)) return err;
+  for (int i = 0; i < 4 && is_object_type(options); i++) {
+    fields[i] = js_get(js, options, names[i]);
+    if (is_err(fields[i])) return fields[i];
+  }
 
   GC_ROOT_SAVE(mark, js);
-  GC_ROOT_PIN(js, err);
-  
-  if (is_object_type(call_new_target)) {
+  for (int i = 0; i < 4; i++) GC_ROOT_PIN(js, fields[i]);
+  info.actual = fields[1];
+  info.expected = fields[2];
+  info.op = vtype(fields[3]) == kTypeString ? js_getstr(js, fields[3], NULL) : NULL;
+
+  ant_value_t err = assertion_error_make(js, "Failed", fields[0], true, info);
+  if (!is_err(err) && is_object_type(call_new_target)) {
+    GC_ROOT_PIN(js, err);
     ant_value_t proto = js_get(js, call_new_target, "prototype");
     if (is_object_type(proto)) js_set_proto_init(err, proto);
   }
-  
-  static const char *const fields[] = {"actual", "expected", "operator"};
-  for (size_t i = 0; i < sizeof(fields) / sizeof(fields[0]); i++) {
-    ant_value_t v = js_get(js, options, fields[i]);
-    if (is_err(v)) {
-      GC_ROOT_RESTORE(js, mark);
-      return v;
-    }
-    js_set(js, err, fields[i], v);
-  }
-  
+
   GC_ROOT_RESTORE(js, mark);
   return err;
 }

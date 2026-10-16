@@ -8,6 +8,7 @@
 #include "errors.h"
 #include "value.h"
 #include "tokens.h"
+#include "internal.h"
 
 #include <runtime.h>
 #include <stdio.h>
@@ -582,6 +583,27 @@ static bool template_escape_is_cookable(const uint8_t *p, size_t avail, uint8_t 
   return j > 1 && j < avail && p[j] == '}';
 }
 
+static void template_set_raw(P, sv_ast_t *s, const uint8_t *in, size_t start, size_t end) {
+  s->aux = (const char *)&in[start];
+  s->aux_len = (uint32_t)(end - start);
+  if (!memchr(in + start, '\r', end - start)) return;
+
+  uint8_t *raw = parse_arena_bump(JS, end - start);
+  if (!raw) {
+    (void)SV_MKERR(JS, "oom");
+    return;
+  }
+
+  size_t n = 0;
+  for (size_t i = start; i < end; i++) {
+    raw[n++] = in[i] == '\r' ? '\n' : in[i];
+    if (in[i] == '\r' && i + 1 < end && in[i + 1] == '\n') i++;
+  }
+  
+  s->aux = (const char *)raw;
+  s->aux_len = (uint32_t)n;
+}
+
 static sv_tpl_cooked_t decode_template_segment(P, const uint8_t *in, size_t start, size_t end) {
   sv_tpl_cooked_t outv = { .str = NULL, .len = 0, .ok = true, .valid_cooked = true };
   size_t raw_len = (end > start) ? (end - start) : 0;
@@ -835,8 +857,7 @@ static sv_ast_t *parse_primary(P) {
       }
       sv_ast_t *s = mk(N_STRING);
       s->flags |= FN_TEMPLATE_SEGMENT;
-      s->aux = (const char *)&in[seg_start];
-      s->aux_len = (uint32_t)(i - seg_start);
+      template_set_raw(p, s, in, seg_start, i);
       sv_tpl_cooked_t cooked = decode_template_segment(p, in, seg_start, i);
       if (cooked.ok && cooked.valid_cooked) {
         s->str = cooked.str;

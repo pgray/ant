@@ -1,7 +1,6 @@
 #ifndef ERRORS_H
 #define ERRORS_H
 
-#include "ant.h"
 #include "types.h"
 #include <stdio.h>
 #include <stdbool.h>
@@ -23,6 +22,10 @@ typedef enum {
   JS_ERR_AGGREGATE,
   JS_ERR_TYPE_COUNT
 } js_err_type_t;
+
+static constexpr int JS_ERR_NO_STACK  = 1 << 8;
+static constexpr int JS_ERR_NODE_CODE = 1 << 9;
+static constexpr int JS_ERR_FLAG_MASK = JS_ERR_NO_STACK | JS_ERR_NODE_CODE;
 
 typedef struct {
   const char *src;
@@ -55,6 +58,7 @@ void js_capture_stack(ant_t *js, ant_value_t err_obj);
 void js_error_define_stack(ant_t *js, ant_value_t obj, ant_value_t record, ant_value_t text);
 
 ant_value_t js_error_header_text(ant_t *js, ant_value_t obj);
+ant_value_t js_error_display_name(ant_t *js, ant_value_t obj, ant_value_t name);
 ant_value_t js_error_stack_value(ant_t *js, ant_value_t obj);
 ant_value_t js_error_header_parts(ant_t *js, ant_value_t obj, ant_value_t *name, ant_value_t *message);
 
@@ -81,6 +85,7 @@ ant_value_t js_create_error_at(
 __attribute__((format(printf, 4, 5)))
 ant_value_t js_create_error(ant_t *js, js_err_type_t err_type, ant_value_t props, const char *fmt, ...);
 ant_value_t Ant_Error_Create(ant_t *js, js_err_type_t err_type, const char *message);
+ant_value_t Ant_Error_CreateWithProps(ant_t *js, js_err_type_t err_type, ant_value_t props, const char *message);
 ant_value_t Ant_Error_CreateConstructor(ant_t *js, const char *name, ant_value_t *out_proto);
 ant_value_t Ant_Error_CreateConstructorEx(ant_t *js, const char *name, ant_value_t cfunc, ant_value_t *out_proto);
 

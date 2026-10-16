@@ -140,5 +140,5 @@ js_err_type_t get_error_type(ant_t *js) {
   if (!Ant_Exception_Pending(js)) return JS_ERR_GENERIC;
   ant_value_t err_type = js_get_slot(Ant_Exception_Value(js, Ant_Exception_Peek(js)), SLOT_ERR_TYPE);
   if (vtype(err_type) != kTypeNumber) return JS_ERR_GENERIC;
-  return (js_err_type_t)((int)js_getnum(err_type) & ~JS_ERR_NO_STACK);
+  return (js_err_type_t)((int)js_getnum(err_type) & ~JS_ERR_FLAG_MASK);
 }

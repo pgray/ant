@@ -73,6 +73,12 @@ size_t decode_escape(const uint8_t *in, size_t pos, size_t end, uint8_t *out, si
     case 'f':  out[(*out_pos)++] = '\f'; break;
     case 'b':  out[(*out_pos)++] = '\b'; break;
     case '\\': out[(*out_pos)++] = '\\'; break;
+    case '\n': break;
+    case '\r': advance = pos + 2 < end && in[pos + 2] == '\n'; break;
+    case 0xE2:
+      if (pos + 3 < end && in[pos + 2] == 0x80 && (in[pos + 3] == 0xA8 || in[pos + 3] == 0xA9)) advance = 2;
+      else out[(*out_pos)++] = c;
+      break;
     case '0':
       if (!(in[pos + 2] >= '0' && in[pos + 2] <= '7')) { out[(*out_pos)++] = '\0'; break; }
       [[fallthrough]];

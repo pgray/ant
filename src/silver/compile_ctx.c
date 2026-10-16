@@ -68,6 +68,7 @@ void sv_compile_ctx_init_child(
   ctx->allows_new_target = (!enclosing->enclosing || ctx->is_arrow)
     ? enclosing->allows_new_target : true;
   ctx->is_async = node && !!(node->flags & FN_ASYNC);
+  ctx->is_async_generator = ctx->is_async && !!(node->flags & FN_GENERATOR);
   ctx->args_length_only = node && !!(node->flags & FN_ARGS_LENGTH_ONLY);
   ctx->is_strict = enclosing->is_strict || (node && !!(node->flags & FN_CLASS_BODY));
   memset(ctx->var_name_bloom, 0xff, sizeof(ctx->var_name_bloom));

@@ -90,11 +90,42 @@ static ant_value_t error_header_part(ant_t *js, ant_value_t obj, const char *key
   return vtype(v) == kTypeString ? v : js_tostring_val(js, v);
 }
 
+static bool error_has_node_code(ant_value_t obj) {
+  ant_value_t type = vtype(obj) == kTypeObject ? js_get_slot(obj, SLOT_ERR_TYPE) : js_mkundef();
+  return vtype(type) == kTypeNumber && ((int)js_getnum(type) & JS_ERR_NODE_CODE);
+}
+
+static bool error_props_have_node_code(ant_t *js, ant_value_t props) {
+  if (!is_object_type(props)) return false;
+  ant_value_t code = js_get(js, props, "code");
+  size_t len = 0;
+  const char *text = vtype(code) == kTypeString ? js_getstr(js, code, &len) : NULL;
+  return text && len > 4 && memcmp(text, "ERR_", 4) == 0;
+}
+
+ant_value_t js_error_display_name(ant_t *js, ant_value_t obj, ant_value_t name) {
+  if (!error_has_node_code(obj) || vtype(name) != kTypeString) return name;
+  
+  ant_value_t code = js_getprop_fallback_len(js, obj, "code", 4);
+  if (is_err(code) || vtype(code) != kTypeString) return is_err(code) ? code : name;
+
+  size_t name_len = 0, code_len = 0;
+  const char *name_text = js_getstr(js, name, &name_len);
+  const char *code_text = js_getstr(js, code, &code_len);
+  
+  errbuf_t eb;
+  if (!errbuf_init(&eb, name_len + code_len + 3)) return name;
+  size_t n = errbuf_appendf(&eb, 0, "%.*s [%.*s]", (int)name_len, name_text, (int)code_len, code_text);
+  
+  return errbuf_take_string(js, &eb, n);
+}
+
 ant_value_t js_error_header_parts(ant_t *js, ant_value_t obj, ant_value_t *name, ant_value_t *message) {
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, obj);
   
   *name = error_header_part(js, obj, "name", 4, "Error");
+  if (!is_err(*name)) *name = js_error_display_name(js, obj, *name);
   GC_ROOT_PIN(js, *name);
   *message = is_err(*name) ? *name : error_header_part(js, obj, "message", 7, "");
   
@@ -222,14 +253,18 @@ static ant_value_t make_error_value(
   ant_value_t message = js_mkstr(js, error_msg, msg_len);
   GC_ROOT_PIN(js, message);
   mkprop_interned(js, err_obj, js->intern.message, message, ANT_PROP_ATTR_WRITABLE | ANT_PROP_ATTR_CONFIGURABLE);
-  js_set_slot(err_obj, SLOT_ERR_TYPE, js_mknum((double)err_type));
 
+  int type_bits = err_type;
   int props_type = vtype(props);
-  if ((T_FLAG_FIND(props_type) & T_SPECIAL_OBJECT_MASK) != 0)
+  if ((T_FLAG_FIND(props_type) & T_SPECIAL_OBJECT_MASK) != 0) {
     js_merge_obj(js, err_obj, props);
-
+    if (error_props_have_node_code(js, props)) type_bits |= JS_ERR_NODE_CODE;
+  }
+  
+  js_set_slot(err_obj, SLOT_ERR_TYPE, js_mknum((double)type_bits));
   ant_value_t proto = js->builtins.error_protos[base_type];
   int proto_type = vtype(proto);
+  
   if ((T_FLAG_FIND(proto_type) & T_SPECIAL_OBJECT_MASK) != 0)
     js_set_proto_init(err_obj, proto);
   else {
@@ -315,6 +350,10 @@ ant_value_t js_create_error_at(
 
 ant_value_t Ant_Error_Create(ant_t *js, js_err_type_t err_type, const char *message) {
   return make_error_value(js, NULL, err_type, js_mkundef(), message);
+}
+
+ant_value_t Ant_Error_CreateWithProps(ant_t *js, js_err_type_t err_type, ant_value_t props, const char *message) {
+  return make_error_value(js, NULL, err_type, props, message);
 }
 
 __attribute__((format(printf, 3, 4)))

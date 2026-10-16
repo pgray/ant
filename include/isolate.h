@@ -48,6 +48,7 @@ static constexpr int MAX_DENSE_INITIAL_CAP = 8;
 // many elements, so filling it stays on the fast path
 static constexpr uint32_t MAX_DENSE_PREALLOC_LEN = 65536;
 static constexpr uint32_t INTERN_INDEX_CACHE_SIZE = 1024;
+static constexpr uint32_t ANT_RUNTIME_WEB = 1u << 0;
 
 static constexpr uint32_t INTERN_MEMO_SIZE = 64;
 static_assert((INTERN_MEMO_SIZE & (INTERN_MEMO_SIZE - 1)) == 0, "the intern memo is indexed by a mask");
@@ -468,7 +469,7 @@ struct ant_isolate_t {
     const char *ls_fp;
     int argc;
     int pid;
-    unsigned int flags;
+    uint32_t flags;
   } runtime;
 
   bool owns_mem;

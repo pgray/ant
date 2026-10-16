@@ -16,12 +16,6 @@
 #include <assert.h>
 #include <string.h>
 
-// TODO: CLEANUP
-static constexpr uint32_t ANT_RUNTIME_WEB = 1u << 0;
-static constexpr uint32_t PROTO_WALK_F_OBJECT_ONLY = 1u << 0;
-static constexpr uint32_t PROTO_WALK_F_LOOKUP = 1u << 1;
-static constexpr int JS_ERR_NO_STACK  = 1 << 8;
-
 typedef enum {
   ANT_STRING_INTRINSIC_INDEX_OF = 0,
   ANT_STRING_INTRINSIC_SUBSTRING,
@@ -201,6 +195,10 @@ static inline bool is_null(ant_value_t v) {
 
 static inline bool is_undefined(ant_value_t v) {
   return vtype(v) == kTypeUndefined;
+}
+
+static inline bool is_nullish(ant_value_t v) {
+  return vtype(v) == kTypeUndefined || vtype(v) == kTypeNull;
 }
 
 static inline bool is_empty_slot(ant_value_t v) {

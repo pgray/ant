@@ -187,6 +187,7 @@ typedef struct sv_compiler {
 
   bool is_arrow;
   bool is_async;
+  bool is_async_generator;
   bool is_strict;
   uint64_t var_name_bloom[4];
   

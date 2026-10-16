@@ -12,6 +12,7 @@
 #include "internal.h"
 
 #include "modules/intl.h"
+#include "modules/intl_tag.h"
 
 typedef struct {
   int hour12;
@@ -27,59 +28,6 @@ static ant_value_t intl_create_instance(ant_t *js, ant_value_t fallback_proto, a
   return obj;
 }
 
-static bool intl_ascii_all(const char *s, size_t len, bool (*pred)(int)) {
-  if (len == 0) return false;
-  for (size_t i = 0; i < len; i++) if (!pred((unsigned char)s[i])) return false;
-  return true;
-}
-
-typedef struct {
-  const char *tag;
-  size_t len;
-  size_t pos;
-} intl_subtags_t;
-
-static bool intl_subtag_next(intl_subtags_t *it, const char **subtag, size_t *subtag_len) {
-  if (it->pos > it->len) return false;
-  const char *start = it->tag + it->pos;
-  const char *dash = memchr(start, '-', it->len - it->pos);
-  
-  *subtag = start;
-  *subtag_len = dash ? (size_t)(dash - start) : it->len - it->pos;
-  it->pos += *subtag_len + 1;
-  
-  return true;
-}
-
-static bool intl_is_valid_language_tag(const char *tag, size_t len) {
-  if (!tag) return false;
-
-  intl_subtags_t it = { tag, len, 0 };
-  const char *sub;
-  size_t n;
-
-  if (!intl_subtag_next(&it, &sub, &n)) return false;
-  if (n < 2 || n > 8 || !intl_ascii_all(sub, n, ant_ascii_is_alpha)) return false;
-
-  bool need_extension = false;
-  bool private_use = false;
-  bool saw_private_use = false;
-
-  while (intl_subtag_next(&it, &sub, &n)) {
-    if (n == 0 || n > 8 || !intl_ascii_all(sub, n, ant_ascii_is_alnum)) return false;
-    if (private_use) saw_private_use = true;
-    else if (need_extension) {
-      if (n < 2) return false;
-      need_extension = false;
-    } else if (n == 1) {
-      if (ant_ascii_to_lower(sub[0]) == 'x') private_use = true;
-      else need_extension = true;
-    }
-  }
-
-  return !need_extension && (!private_use || saw_private_use);
-}
-
 static ant_value_t intl_default_locale(ant_t *js) {
   return js_mkstr(js, "en-US", 5);
 }
@@ -87,33 +35,18 @@ static ant_value_t intl_default_locale(ant_t *js) {
 static ant_value_t intl_canonicalize_tag(ant_t *js, ant_value_t locale) {
   size_t len = 0;
   const char *tag = js_getstr(js, locale, &len);
-  if (!intl_is_valid_language_tag(tag, len))
+
+  char *canonical = NULL;
+  size_t canonical_len = 0;
+  intl_tag_status_t status = Ant_Intl_CanonicalizeTag(tag, len, &canonical, &canonical_len);
+  
+  if (status == INTL_TAG_OOM) return js_mkerr(js, "oom");
+  if (status == INTL_TAG_INVALID)
     return js_mkerr_typed(js, JS_ERR_RANGE, "Invalid language tag: %.*s", (int)len, tag ? tag : "");
 
-  char stack_buf[64];
-  char *out = len <= sizeof(stack_buf) ? stack_buf : malloc(len);
-  if (!out) return js_mkerr(js, "oom");
-
-  intl_subtags_t it = { tag, len, 0 };
-  const char *sub;
-  size_t n;
-  bool first = true;
-  bool after_singleton = false;
-
-  while (intl_subtag_next(&it, &sub, &n)) {
-    char *dst = out + (sub - tag);
-    bool cased = !first && !after_singleton && intl_ascii_all(sub, n, ant_ascii_is_alpha);
-    for (size_t i = 0; i < n; i++) {
-      bool upper = cased && (n == 2 || (n == 4 && i == 0));
-      dst[i] = (char)(upper ? ant_ascii_to_upper(sub[i]) : ant_ascii_to_lower(sub[i]));
-    }
-    if (it.pos <= len) dst[n] = '-';
-    if (!first && n == 1) after_singleton = true;
-    first = false;
-  }
-
-  ant_value_t result = js_mkstr(js, out, len);
-  if (out != stack_buf) free(out);
+  ant_value_t result = js_mkstr(js, canonical, canonical_len);
+  free(canonical);
+  
   return result;
 }
 
@@ -151,7 +84,13 @@ static ant_value_t intl_canonical_locale_list_fill(ant_t *js, ant_value_t out, a
 
   ant_value_t len_val = js_get(js, locales, "length");
   if (is_err(len_val)) return len_val;
-  double len = vtype(len_val) == kTypeUndefined ? 0 : js_to_number(js, len_val);
+  
+  ant_value_t len_num = vtype(len_val) == kTypeUndefined ? js_mknum(0) : js_to_numeric(js, len_val);
+  if (is_err(len_num)) return len_num;
+  
+  if (vtype(len_num) == kTypeBigInt) 
+    return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert a BigInt value to a number");
+  double len = js_getnum(len_num);
 
   for (double k = 0; k < len; k++) {
     ant_value_t present = do_in(js, js_mknum(k), locales);
@@ -160,7 +99,10 @@ static ant_value_t intl_canonical_locale_list_fill(ant_t *js, ant_value_t out, a
 
     char idx[32];
     snprintf(idx, sizeof(idx), "%.0f", k);
-    ant_value_t tag = intl_locale_from_list_entry(js, js_get(js, locales, idx));
+    ant_value_t entry = js_get(js, locales, idx);
+    if (is_err(entry)) return entry;
+    
+    ant_value_t tag = intl_locale_from_list_entry(js, entry);
     if (is_err(tag)) return tag;
     if (!intl_list_has_tag(js, out, tag)) js_arr_push(js, out, tag);
   }

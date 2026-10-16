@@ -3742,7 +3742,12 @@ static inline bool proto_overflow_guard_hit_cycle(ant_t *js, proto_overflow_guar
   return same_object_identity(cur, g->fast);
 }
 
-static inline bool proto_walk_next(ant_t *js, ant_value_t *cur, uint8_t *t, uint8_t flags) {
+typedef enum: uint8_t {
+  PROTO_WALK_F_OBJECT_ONLY = 1u << 0,
+  PROTO_WALK_F_LOOKUP      = 1u << 1,
+} proto_walk_flags_t;
+
+static inline bool proto_walk_next(ant_t *js, ant_value_t *cur, uint8_t *t, proto_walk_flags_t flags) {
   uint8_t ct = *t;
 
   if (flags & PROTO_WALK_F_OBJECT_ONLY) {
@@ -3809,7 +3814,7 @@ static inline bool proto_walk_overflow_guard_hit_cycle(
   proto_walk_overflow_guard_t *g,
   ant_value_t cur,
   uint8_t cur_t,
-  uint8_t flags
+  proto_walk_flags_t flags
 ) {
   if (!g->overflow) {
     if (++g->depth < MAX_PROTO_CHAIN_DEPTH) return false;
@@ -7532,6 +7537,8 @@ static ant_value_t builtin_Error_toString(ant_params_t) {
     const char *s = js_str(js, name);
     name = js_mkstr(js, s, strlen(s));
   }
+  name = js_error_display_name(js, this_val, name);
+  if (is_err(name)) return name;
   
   ant_value_t msg = js_getprop_fallback_len(js, this_val, "message", 7);
   if (vtype(msg) == kTypeUndefined) msg = js_mkstr(js, "", 0);
@@ -10046,19 +10053,39 @@ static __attribute__((noinline)) bool string_wrapper_define(
   return true;
 }
 
+static ant_value_t define_desc_object(ant_t *js, const define_desc_raw_t *raw) {
+  GC_ROOT_SAVE(mark, js);
+  define_desc_raw_t pinned = *raw;
+  for (int f = 0; f < DESC_FIELD_COUNT; f++) GC_ROOT_PIN(js, pinned.val[f]);
+  
+  ant_value_t object = js_mkobj(js);
+  GC_ROOT_PIN(js, object);
+  
+  for (int f = 0; f < DESC_FIELD_COUNT && !is_err(object); f++) if (pinned.has[f]) {
+    ant_value_t key = js_mkstr(js, define_desc_field_names[f].name, define_desc_field_names[f].len);
+    ant_value_t set = js_setprop(js, object, key, pinned.val[f]);
+    if (is_err(set)) object = set;
+  }
+  
+  GC_ROOT_RESTORE(js, mark);
+  return object;
+}
+
 // TODO: decompose this huge function into small pieces
 static ant_value_t object_define_property_keyed(
   ant_t *js, ant_value_t obj, property_key_view_t *key, 
-  ant_value_t descriptor, define_desc_fields_t *fields
+  ant_value_t descriptor, const define_desc_raw_t *pre_raw, define_desc_fields_t *fields
 ) {
   bool sym_key = key->is_symbol;
   ant_value_t prop = key->js_key;
 
   if (vtype(descriptor) == kTypeBuiltin) descriptor = js_cfunc_promote(js, descriptor);
-  if (!is_object_type(descriptor)) return descriptor_value_error(js, "Property description must be an object: ", descriptor);
+  if (!pre_raw && !is_object_type(descriptor)) return descriptor_value_error(js, "Property description must be an object: ", descriptor);
   
   ant_value_t as_obj = js_as_obj(obj);
   if (is_proxy(as_obj)) {
+    if (!is_object_type(descriptor)) descriptor = define_desc_object(js, pre_raw);
+    if (is_err(descriptor)) return descriptor;
     prop = property_key_view_materialize(js, key);
     if (is_err(prop)) return prop;
     ant_value_t proxy_result = proxy_define_property(js, as_obj, prop, descriptor);
@@ -10091,8 +10118,11 @@ static ant_value_t object_define_property_keyed(
 
   {
     define_desc_raw_t raw = {0};
-    ant_value_t read_err = define_desc_read(js, descriptor, &raw);
-    if (is_err(read_err)) return read_err;
+    if (pre_raw) raw = *pre_raw;
+    else {
+      ant_value_t read_err = define_desc_read(js, descriptor, &raw);
+      if (is_err(read_err)) return read_err;
+    }
 
     has_enumerable = raw.has[DESC_ENUMERABLE];
     enumerable = has_enumerable && js_truthy(js, raw.val[DESC_ENUMERABLE]);
@@ -10421,7 +10451,8 @@ static ant_value_t object_define_property_keyed(
 }
 
 static ant_value_t object_define_property_reporting(
-  ant_t *js, ant_value_t obj, ant_value_t prop, ant_value_t descriptor, bool *abrupt
+  ant_t *js, ant_value_t obj, ant_value_t prop, ant_value_t descriptor,
+  const define_desc_raw_t *raw, bool *abrupt
 ) {
   if (vtype(obj) == kTypeBuiltin) obj = js_cfunc_promote(js, obj);
   if (!is_object_type(obj))
@@ -10444,7 +10475,7 @@ static ant_value_t object_define_property_reporting(
   if (root_key) GC_ROOT_PIN(js, key.js_key);
 
   define_desc_fields_t fields = {0};
-  ant_value_t result = object_define_property_keyed(js, obj, &key, descriptor, &fields);
+  ant_value_t result = object_define_property_keyed(js, obj, &key, descriptor, raw, &fields);
   
   if (!is_err(result) && !key.is_symbol && js_is_arguments(obj))
     js_arguments_after_define(js, obj, key.bytes, key.length, &fields);
@@ -10459,7 +10490,7 @@ static ant_value_t object_define_property_reporting(
 static ant_value_t object_define_property(
   ant_t *js, ant_value_t obj, ant_value_t prop, ant_value_t descriptor
 ) {
-  return object_define_property_reporting(js, obj, prop, descriptor, NULL);
+  return object_define_property_reporting(js, obj, prop, descriptor, NULL, NULL);
 }
 
 static ant_value_t builtin_object_defineProperty(ant_params_t) {
@@ -10473,22 +10504,7 @@ static ant_value_t define_desc_snapshot(ant_t *js, ant_value_t descriptor) {
   
   define_desc_raw_t raw = {0};
   ant_value_t err = define_desc_read(js, descriptor, &raw);
-  
-  if (is_err(err)) return err;
-  
-  GC_ROOT_SAVE(mark, js);
-  for (int f = 0; f < DESC_FIELD_COUNT; f++) GC_ROOT_PIN(js, raw.val[f]);
-  
-  ant_value_t snapshot = js_mkobj(js);
-  GC_ROOT_PIN(js, snapshot);
-  
-  for (int f = 0; f < DESC_FIELD_COUNT && !is_err(snapshot); f++) if (raw.has[f]) {
-    ant_value_t set = js_setprop(js, snapshot, js_mkstr(js, define_desc_field_names[f].name, define_desc_field_names[f].len), raw.val[f]);
-    if (is_err(set)) snapshot = set;
-  }
-  
-  GC_ROOT_RESTORE(js, mark);
-  return snapshot;
+  return is_err(err) ? err : define_desc_object(js, &raw);
 }
 
 static ant_value_t reflect_define_property(ant_t *js, ant_value_t obj, ant_value_t prop, ant_value_t descriptor) {
@@ -10525,7 +10541,7 @@ static ant_value_t reflect_define_property(ant_t *js, ant_value_t obj, ant_value
   ant_value_t saved = Ant_Exception_Peek(js);
   GC_ROOT_PIN(js, saved);
   bool abrupt = false;
-  ant_value_t result = object_define_property_reporting(js, obj, key_val, snapshot, &abrupt);
+  ant_value_t result = object_define_property_reporting(js, obj, key_val, snapshot, NULL, &abrupt);
   
   if (is_err(result) && !abrupt) {
     Ant_Exception_Set(js, saved);
@@ -10543,16 +10559,18 @@ ant_value_t js_define_property(ant_t *js, ant_value_t obj, ant_value_t prop, ant
 }
 
 static ant_value_t object_define_properties_from_slots(
-  ant_t *js, ant_value_t obj, ant_object_t *ptr, uint32_t count, bool symbols
+  ant_t *js, ant_value_t obj, ant_object_t *ptr, uint32_t count,
+  const define_desc_raw_t *raws, bool symbols
 ) {
-  for (uint32_t i = 0; i < count && i < ant_shape_count(ptr->shape); i++) {
+  for (uint32_t i = 0; i < count; i++) {
     const ant_shape_prop_t *prop = ant_shape_prop_at(ptr->shape, i);
     if (!prop || !(ant_shape_get_attrs(ptr->shape, i) & ANT_PROP_ATTR_ENUMERABLE)) continue;
     if ((prop->type == ANT_SHAPE_KEY_SYMBOL) != symbols) continue;
     ant_value_t key = symbols
       ? mkval(kTypeSymbol, prop->key.sym_off)
       : js_mkstr(js, prop->key.interned, intern_length(prop->key.interned));
-    ant_value_t result = object_define_property(js, obj, key, ant_object_prop_get_unchecked(ptr, i));
+    ant_value_t desc = ant_object_prop_get_unchecked(ptr, i);
+    ant_value_t result = object_define_property_reporting(js, obj, key, desc, &raws[i], NULL);
     if (is_err(result)) return result;
   }
   return obj;
@@ -10562,6 +10580,7 @@ static ant_value_t object_define_properties_from_data(ant_t *js, ant_value_t obj
   *handled = false;
   
   if (vtype(props) != kTypeObject || is_proxy(props) || is_proxy(js_as_obj(obj))) return js_mkundef();
+  if (js_as_obj(obj) == props) return js_mkundef();
   ant_object_t *ptr = js_obj_ptr(props);
   
   if (!ptr || !ptr->shape || ptr->flags.is_exotic || ant_object_extra_count(ptr) != 0) return js_mkundef();
@@ -10574,30 +10593,46 @@ static ant_value_t object_define_properties_from_data(ant_t *js, ant_value_t obj
     if (prop->has_getter || prop->has_setter) return js_mkundef();
   }
 
+  define_desc_raw_t stack_raws[16];
+  define_desc_raw_t *raws = count <= 16 ? stack_raws : calloc(count, sizeof(*raws));
+  
+  if (!raws) return js_mkerr(js, "oom");
+  if (raws == stack_raws) memset(stack_raws, 0, sizeof(stack_raws));
+
+  ant_value_t result = js_mkundef();
   for (uint32_t i = 0; i < count; i++) {
     if (!(ant_shape_get_attrs(ptr->shape, i) & ANT_PROP_ATTR_ENUMERABLE)) continue;
     ant_value_t desc = ant_object_prop_get_unchecked(ptr, i);
-    if (vtype(desc) == kTypeBuiltin) return js_mkundef();
+    if (vtype(desc) == kTypeBuiltin) goto done;
     
     if (!is_object_type(desc)) {
       *handled = true;
-      return descriptor_value_error(js, "Property description must be an object: ", desc);
+      result = descriptor_value_error(js, "Property description must be an object: ", desc);
+      goto done;
     }
     
-    define_desc_raw_t raw = {0};
-    if (!define_desc_read_plain(js, desc, &raw)) return js_mkundef();
+    if (!define_desc_read_plain(js, desc, &raws[i])) goto done;
     
-    ant_value_t err = define_desc_check(js, desc, &raw);
+    ant_value_t err = define_desc_check(js, desc, &raws[i]);
     if (is_err(err)) {
       *handled = true;
-      return err;
+      result = err;
+      goto done;
     }
   }
 
   *handled = true;
-  
-  ant_value_t result = object_define_properties_from_slots(js, obj, ptr, count, false);
-  return is_err(result) ? result : object_define_properties_from_slots(js, obj, ptr, count, true);
+  GC_ROOT_SAVE(root_mark, js);
+  for (uint32_t i = 0; i < count; i++)
+    for (int f = 0; f < DESC_FIELD_COUNT; f++) if (raws[i].has[f]) GC_ROOT_PIN(js, raws[i].val[f]);
+
+  result = object_define_properties_from_slots(js, obj, ptr, count, raws, false);
+  if (!is_err(result)) result = object_define_properties_from_slots(js, obj, ptr, count, raws, true);
+  GC_ROOT_RESTORE(js, root_mark);
+
+done:
+  if (raws != stack_raws) free(raws);
+  return result;
 }
 
 static ant_value_t object_define_properties_get(ant_t *js, ant_value_t source, bool proxied, ant_value_t key) {
@@ -15516,6 +15551,307 @@ static ant_value_t builtin_Array_of(ant_params_t) {
   if (!use_ctor) return mkval(kTypeArray, vdata(arr));
 
   return arr;
+}
+
+typedef enum {
+  FROM_ASYNC_PROMISE,
+  FROM_ASYNC_RESULT,
+  FROM_ASYNC_SOURCE,
+  FROM_ASYNC_NEXT,
+  FROM_ASYNC_MAPFN,
+  FROM_ASYNC_THIS,
+  FROM_ASYNC_INDEX,
+  FROM_ASYNC_LENGTH,
+  FROM_ASYNC_KIND,
+  FROM_ASYNC_REASON,
+  FROM_ASYNC_FIELD_COUNT,
+} from_async_field_t;
+
+typedef enum {
+  FROM_ASYNC_ASYNC_ITERATOR,
+  FROM_ASYNC_SYNC_ITERATOR,
+  FROM_ASYNC_ARRAY_LIKE,
+} from_async_kind_t;
+
+static ant_value_t from_async_step(ant_t *js, ant_value_t state);
+
+static inline ant_value_t from_async_field(ant_t *js, ant_value_t state, from_async_field_t field) {
+  return arr_get(js, state, field);
+}
+
+static inline from_async_kind_t from_async_kind(ant_t *js, ant_value_t state) {
+  return (from_async_kind_t)tod(from_async_field(js, state, FROM_ASYNC_KIND));
+}
+
+static inline double from_async_index(ant_t *js, ant_value_t state) {
+  return tod(from_async_field(js, state, FROM_ASYNC_INDEX));
+}
+
+static ant_value_t from_async_reject(ant_t *js, ant_value_t state, ant_value_t reason) {
+  js_reject_promise(js, from_async_field(js, state, FROM_ASYNC_PROMISE), reason);
+  return js_mkundef();
+}
+
+static ant_value_t from_async_fail(ant_t *js, ant_value_t state, ant_value_t err) {
+  return from_async_reject(js, state, Ant_Error_ConsumeMarker(js, err));
+}
+
+static ant_value_t from_async_on_rejected(ant_params_t) {
+  return from_async_reject(js, get_slot(js->current_func, SLOT_DATA), nargs > 0 ? args[0] : js_mkundef());
+}
+
+static ant_value_t from_async_on_closed(ant_params_t) {
+  ant_value_t state = get_slot(js->current_func, SLOT_DATA);
+  return from_async_reject(js, state, from_async_field(js, state, FROM_ASYNC_REASON));
+}
+
+static ant_value_t from_async_await(
+  ant_t *js, ant_value_t state, ant_value_t value,
+  ant_value_t (*on_fulfilled)(ant_params_t), ant_value_t (*on_rejected)(ant_params_t)
+) {
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, state);
+  
+  ant_value_t promise = js_promise_assimilate_awaitable(js, value);
+  if (is_err(promise)) {
+    GC_ROOT_RESTORE(js, mark);
+    return from_async_fail(js, state, promise);
+  }
+  
+  GC_ROOT_PIN(js, promise);
+  ant_value_t fulfill = js_heavy_mkfun(js, on_fulfilled, state);
+  GC_ROOT_PIN(js, fulfill);
+  ant_value_t reject = js_heavy_mkfun(js, on_rejected, state);
+  Ant_Promise_Observe(js, promise, fulfill, reject);
+  
+  GC_ROOT_RESTORE(js, mark);
+  return js_mkundef();
+}
+
+static ant_value_t from_async_close_and_reject(ant_t *js, ant_value_t state, ant_value_t reason) {
+  if (from_async_kind(js, state) == FROM_ASYNC_ARRAY_LIKE) return from_async_reject(js, state, reason);
+
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, state);
+  GC_ROOT_PIN(js, reason);
+  arr_set(js, state, FROM_ASYNC_REASON, reason);
+
+  ant_value_t iterator = from_async_field(js, state, FROM_ASYNC_SOURCE);
+  ant_value_t ret = js_getprop_fallback(js, iterator, "return");
+  bool has_return = !is_err(ret) && is_callable(ret);
+  
+  ant_value_t closed = has_return ? sv_vm_call(js->vm, js, ret, iterator, NULL, 0, NULL, js_mkundef()) : ret;
+  if (is_err(closed)) Ant_Error_ConsumeMarker(js, closed);
+
+  bool await_close = has_return && !is_err(closed) && from_async_kind(js, state) == FROM_ASYNC_ASYNC_ITERATOR;
+  ant_value_t result = await_close
+    ? from_async_await(js, state, closed, from_async_on_closed, from_async_on_closed)
+    : from_async_reject(js, state, reason);
+
+  GC_ROOT_RESTORE(js, mark);
+  return result;
+}
+
+static ant_value_t from_async_on_close_rejected(ant_params_t) {
+  return from_async_close_and_reject(js, get_slot(js->current_func, SLOT_DATA), nargs > 0 ? args[0] : js_mkundef());
+}
+
+static ant_value_t from_async_mapped(ant_t *js, ant_value_t state, ant_value_t value) {
+  ant_value_t target = from_async_field(js, state, FROM_ASYNC_RESULT);
+  double index = from_async_index(js, state);
+
+  define_desc_raw_t raw = {
+    .has = { true, true, true, true, false, false },
+    .val = { js_true, js_true, value, js_true, js_mkundef(), js_mkundef() },
+  };
+  
+  ant_value_t defined = object_define_property_reporting(js, target, tov(index), js_mkundef(), &raw, NULL);
+  if (is_err(defined)) return from_async_close_and_reject(js, state, Ant_Error_ConsumeMarker(js, defined));
+
+  arr_set(js, state, FROM_ASYNC_INDEX, tov(index + 1));
+  return from_async_step(js, state);
+}
+
+static ant_value_t from_async_on_mapped(ant_params_t) {
+  return from_async_mapped(js, get_slot(js->current_func, SLOT_DATA), nargs > 0 ? args[0] : js_mkundef());
+}
+
+static ant_value_t from_async_value(ant_t *js, ant_value_t state, ant_value_t value) {
+  ant_value_t mapfn = from_async_field(js, state, FROM_ASYNC_MAPFN);
+  if (vtype(mapfn) == kTypeUndefined) return from_async_mapped(js, state, value);
+
+  ant_value_t call_args[2] = { value, from_async_field(js, state, FROM_ASYNC_INDEX) };
+  ant_value_t this_arg = from_async_field(js, state, FROM_ASYNC_THIS);
+  ant_value_t mapped = sv_vm_call(js->vm, js, mapfn, this_arg, call_args, 2, NULL, js_mkundef());
+  
+  if (is_err(mapped)) return from_async_close_and_reject(js, state, Ant_Error_ConsumeMarker(js, mapped));
+  return from_async_await(js, state, mapped, from_async_on_mapped, from_async_on_close_rejected);
+}
+
+static ant_value_t from_async_on_value(ant_params_t) {
+  return from_async_value(js, get_slot(js->current_func, SLOT_DATA), nargs > 0 ? args[0] : js_mkundef());
+}
+
+static ant_value_t from_async_finish(ant_t *js, ant_value_t state) {
+  ant_value_t target = from_async_field(js, state, FROM_ASYNC_RESULT);
+  ant_value_t set = js_setprop(js, target, js->length_str, from_async_field(js, state, FROM_ASYNC_INDEX));
+  
+  if (is_err(set)) return from_async_fail(js, state, set);
+  js_resolve_promise(js, from_async_field(js, state, FROM_ASYNC_PROMISE), target);
+  
+  return js_mkundef();
+}
+
+static ant_value_t from_async_next_result(ant_t *js, ant_value_t state, ant_value_t result) {
+  if (!is_object_type(result)) return from_async_fail(
+    js, state, js_mkerr_typed(js, JS_ERR_TYPE, "Iterator result %s is not an object", js_str(js, result))
+  );
+
+  ant_value_t done = js_getprop_fallback(js, result, "done");
+  if (is_err(done)) return from_async_fail(js, state, done);
+  if (js_truthy(js, done)) return from_async_finish(js, state);
+
+  ant_value_t value = js_getprop_fallback(js, result, "value");
+  if (is_err(value)) return from_async_fail(js, state, value);
+  
+  if (from_async_kind(js, state) == FROM_ASYNC_ASYNC_ITERATOR) return from_async_value(js, state, value);
+  return from_async_await(js, state, value, from_async_on_value, from_async_on_close_rejected);
+}
+
+static ant_value_t from_async_on_next_result(ant_params_t) {
+  return from_async_next_result(js, get_slot(js->current_func, SLOT_DATA), nargs > 0 ? args[0] : js_mkundef());
+}
+
+static ant_value_t from_async_step(ant_t *js, ant_value_t state) {
+  ant_value_t source = from_async_field(js, state, FROM_ASYNC_SOURCE);
+  from_async_kind_t kind = from_async_kind(js, state);
+
+  if (kind == FROM_ASYNC_ARRAY_LIKE) {
+    double index = from_async_index(js, state);
+    if (index >= tod(from_async_field(js, state, FROM_ASYNC_LENGTH))) return from_async_finish(js, state);
+    
+    char key[32];
+    size_t key_len = uint_to_str(key, sizeof(key), (unsigned)index);
+    ant_value_t value = js_getprop_fallback_len(js, source, key, key_len);
+    
+    if (is_err(value)) return from_async_fail(js, state, value);
+    return from_async_await(js, state, value, from_async_on_value, from_async_on_rejected);
+  }
+
+  ant_value_t next = from_async_field(js, state, FROM_ASYNC_NEXT);
+  ant_value_t result = sv_vm_call(js->vm, js, next, source, NULL, 0, NULL, js_mkundef());
+  
+  if (is_err(result)) return from_async_fail(js, state, result);
+  if (kind == FROM_ASYNC_SYNC_ITERATOR) return from_async_next_result(js, state, result);
+  
+  return from_async_await(js, state, result, from_async_on_next_result, from_async_on_rejected);
+}
+
+static ant_value_t from_async_construct(ant_t *js, ant_value_t ctor, bool with_length, ant_offset_t length) {
+  if (!js_is_constructor(ctor) || same_ctor_identity(js, ctor, js->sym.array_ctor))
+    return array_alloc_intrinsic(js, js_mkundef(), with_length ? length : 0);
+
+  ant_value_t seed = js_mkobj(js);
+  if (is_err(seed)) return seed;
+  
+  ant_value_t proto = js_get(js, ctor, "prototype");
+  if (is_err(proto)) return proto;
+  if (is_object_type(proto)) js_set_proto_init(seed, proto);
+
+  ant_value_t ctor_args[1] = { tov((double)length) };
+  ant_value_t constructed = sv_vm_call(js->vm, js, ctor, seed, ctor_args, with_length ? 1 : 0, NULL, ctor);
+  
+  if (is_err(constructed)) return constructed;
+  return is_object_type(constructed) ? constructed : seed;
+}
+
+static ant_value_t from_async_open_iterator(ant_t *js, ant_value_t items, ant_value_t method, ant_value_t *next) {
+  if (!is_callable(method)) return js_mkerr_typed(js, JS_ERR_TYPE, "%s is not a function", js_str(js, method));
+  
+  ant_value_t iterator = sv_vm_call(js->vm, js, method, items, NULL, 0, NULL, js_mkundef());
+  if (is_err(iterator)) return iterator;
+  if (!is_object_type(iterator)) return js_mkerr_typed(js, JS_ERR_TYPE, "Result of the Symbol.iterator method is not an object");
+  
+  *next = js_getprop_fallback(js, iterator, "next");
+  return is_err(*next) ? *next : iterator;
+}
+
+static ant_value_t from_async_start(
+  ant_t *js, ant_value_t ctor, ant_value_t items,
+  ant_value_t mapfn, ant_value_t this_arg, ant_value_t promise
+) {
+  if (vtype(mapfn) != kTypeUndefined && !is_callable(mapfn))
+    return js_mkerr_typed(js, JS_ERR_TYPE, "%s is not a function", js_str(js, mapfn));
+  if (is_nullish(items))
+    return js_mkerr_typed(js, JS_ERR_TYPE, "%s is not iterable", js_str(js, items));
+
+  ant_value_t lookup = is_object_type(items) ? items : builtin_Object(js, &items, 1, js_mkundef());
+  if (is_err(lookup)) return lookup;
+
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, lookup);
+
+  from_async_kind_t kind = FROM_ASYNC_ASYNC_ITERATOR;
+  ant_value_t method = js_get_sym(js, lookup, js->sym.asyncIterator_sym);
+  if (!is_err(method) && is_nullish(method)) {
+    kind = FROM_ASYNC_SYNC_ITERATOR;
+    method = js_get_sym(js, lookup, js->sym.iterator_sym);
+  }
+  if (!is_err(method) && is_nullish(method)) kind = FROM_ASYNC_ARRAY_LIKE;
+
+  ant_value_t source = lookup;
+  ant_value_t next = js_mkundef();
+  ant_value_t target = method;
+  ant_offset_t length = 0;
+  
+  GC_ROOT_PIN(js, source);
+  GC_ROOT_PIN(js, next);
+  GC_ROOT_PIN(js, target);
+
+  if (!is_err(target) && kind == FROM_ASYNC_ARRAY_LIKE) {
+    target = array_like_length_checked(js, lookup, &length);
+    if (!is_err(target)) target = from_async_construct(js, ctor, true, length);
+  } else if (!is_err(target)) {
+    source = from_async_open_iterator(js, items, method, &next);
+    target = is_err(source) ? source : from_async_construct(js, ctor, false, 0);
+  }
+
+  ant_value_t state = is_err(target) ? target : mkarr(js);
+  GC_ROOT_PIN(js, state);
+  
+  if (!is_err(state)) {
+    ant_value_t fields[FROM_ASYNC_FIELD_COUNT] = {
+      [FROM_ASYNC_PROMISE] = promise, [FROM_ASYNC_RESULT] = target,
+      [FROM_ASYNC_SOURCE] = source, [FROM_ASYNC_NEXT] = next,
+      [FROM_ASYNC_MAPFN] = mapfn, [FROM_ASYNC_THIS] = this_arg,
+      [FROM_ASYNC_INDEX] = tov(0), [FROM_ASYNC_LENGTH] = tov((double)length),
+      [FROM_ASYNC_KIND] = tov((double)kind), [FROM_ASYNC_REASON] = js_mkundef(),
+    };
+    
+    for (int f = 0; f < FROM_ASYNC_FIELD_COUNT; f++) arr_set(js, state, f, fields[f]);
+    state = from_async_step(js, state);
+  }
+
+  GC_ROOT_RESTORE(js, mark);
+  return state;
+}
+
+static ant_value_t builtin_Array_fromAsync(ant_params_t) {
+  ant_value_t promise = js_mkpromise(js);
+  if (is_err(promise)) return promise;
+
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, promise);
+  
+  ant_value_t started = from_async_start(
+    js, js->this_val, nargs > 0 ? args[0] : js_mkundef(),
+    nargs > 1 ? args[1] : js_mkundef(), nargs > 2 ? args[2] : js_mkundef(), promise
+  );
+  
+  if (is_err(started)) js_reject_promise(js, promise, Ant_Error_ConsumeMarker(js, started));
+  GC_ROOT_RESTORE(js, mark);
+
+  return promise;
 }
 
 static ant_value_t js_mkstr_utf16_range(
@@ -22172,6 +22508,7 @@ static ant_t *isolate_init(void *buf, size_t len) {
   defmethod(js, arr_ctor_obj, "isArray", 7, Ant_Function_CreateWithArity(builtin_Array_isArray, 1));
   defmethod(js, arr_ctor_obj, "isTemplateObject", 16, Ant_Function_Create(builtin_Array_isTemplateObject));
   defmethod(js, arr_ctor_obj, "from", 4, Ant_Function_CreateWithArity(builtin_Array_from, 1));
+  defmethod(js, arr_ctor_obj, "fromAsync", 9, Ant_Function_CreateWithArity(builtin_Array_fromAsync, 1));
   defmethod(js, arr_ctor_obj, "of", 2, Ant_Function_Create(builtin_Array_of));
   js_set_function_name(js, arr_ctor_obj, "Array", sizeof("Array") - 1);
   

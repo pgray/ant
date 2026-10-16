@@ -57,6 +57,17 @@ const frozenA = Object.defineProperty({}, 'a', { value: 0 });
 assert.throws(() => Object.defineProperties(frozenA, { [orderSym]: { value: 1 }, a: { value: 2 } }), TypeError);
 assert.strictEqual(Object.getOwnPropertySymbols(frozenA).length, 0);
 
+const selfDesc = {};
+Object.defineProperties(selfDesc, { get: { value: 5, enumerable: true }, x: selfDesc });
+assert.deepStrictEqual(Object.getOwnPropertyDescriptor(selfDesc, 'x'), { value: undefined, writable: false, enumerable: false, configurable: false });
+const enumDesc = { enumerable: true };
+Object.defineProperties(enumDesc, { value: { value: 7, enumerable: true }, x: enumDesc });
+assert.strictEqual(enumDesc.x, undefined);
+const protoDesc = {};
+const childDesc = Object.create(protoDesc);
+Object.defineProperties(protoDesc, { get: { value: 1, enumerable: true }, y: childDesc });
+assert.strictEqual(Object.getOwnPropertyDescriptor(protoDesc, 'y').value, undefined);
+
 assert.throws(() => new Error(Symbol('x')), TypeError);
 assert.throws(() => new TypeError(Symbol('x')), TypeError);
 assert.throws(() => new AggregateError([], Symbol('x')), TypeError);

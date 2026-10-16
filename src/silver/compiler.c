@@ -3098,6 +3098,7 @@ void compile_expr(sv_compiler_t *c, sv_ast_t *node) {
       else {
         if (node->right) compile_expr(c, node->right);
         else emit_op(c, OP_UNDEF);
+        if (c->is_async_generator) emit_op(c, OP_AWAIT);
         emit_op(c, OP_YIELD);
       }
       break;

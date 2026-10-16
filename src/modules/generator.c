@@ -226,7 +226,7 @@ bool generator_resume_pending_request(ant_t *js, coroutine_t *coro, ant_value_t 
   }
 
   if (coro->act && coro->act->frame_count > 0) {
-    if (vtype(coro->awaited_promise) != kTypeUndefined) {
+    if (coro->await_registered) {
       generator_set_state(gen, GEN_EXECUTING);
       GC_ROOT_RESTORE(js, root_mark);
       return true;
@@ -398,7 +398,7 @@ static ant_value_t generator_resume_kind_inner(
   }
 
   if (suspended_now) {
-    if (generator_is_async(gen) && vtype(coro->awaited_promise) != kTypeUndefined) {
+    if (generator_is_async(gen) && coro->await_registered) {
       generator_set_state(gen, GEN_EXECUTING);
       
       if (vtype(coro->async_promise) != kTypePromise) {
