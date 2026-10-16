@@ -66,6 +66,27 @@ void sv_lexer_pop_source(sv_lexer_t *lx, const sv_lexer_checkpoint_t *cp) {
   lx->st = cp->st;
 }
 
+static const char *sv_lexer_escape_error(sv_lexer_t *lx, const uint8_t *in, size_t pos, uint8_t flags) {
+  if (flags & ESCAPE_BAD_HEX) return "Invalid hexadecimal escape sequence";
+  if (flags & ESCAPE_BAD_CODEPOINT) return "Undefined Unicode code-point";
+  if (flags & ESCAPE_BAD_UNICODE) return "Invalid Unicode escape sequence";
+  if (lx->strict && is_octal_escape(in, pos)) return "Octal escape sequences are not allowed in strict mode.";
+  return NULL;
+}
+
+static bool sv_lexer_decode_string_escape(sv_lexer_t *lx, const uint8_t *in, uint8_t *out, size_t *n1, size_t *n2) {
+  uint8_t flags = 0;
+  size_t pos = *n2;
+  *n2 += decode_escape(in, pos, (size_t)lx->st.tlen, out, n1, in[0], &flags) + 1;
+
+  const char *error = flags ? sv_lexer_escape_error(lx, in, pos, flags) : NULL;
+  if (!error) return true;
+
+  js_error_site_t site = sv_lexer_error_site(lx);
+  (void)js_mkerr_typed_at(&site, lx->js, JS_ERR_SYNTAX, "%s", error);
+  return false;
+}
+
 sv_lex_string_t sv_lexer_str_literal(sv_lexer_t *lx) {
   ant_t *js = lx->js;
   sv_lex_string_t outv = { .str = NULL, .len = 0, .ok = false };
@@ -87,18 +108,11 @@ sv_lex_string_t sv_lexer_str_literal(sv_lexer_t *lx) {
   }
   
   while (n2++ + 2 < (size_t)lx->st.tlen) {
-    if (in[n2] == '\\') {
-      // TODO: reduce nesting
-      if (lx->strict && is_octal_escape(in, n2)) {
-        js_error_site_t site = sv_lexer_error_site(lx);
-        (void)js_mkerr_typed_at(&site, js, JS_ERR_SYNTAX,
-          "Octal escape sequences are not allowed in strict mode.");
-        return outv;
-      }
-      size_t extra = decode_escape(in, n2, (size_t)lx->st.tlen, out, &n1, in[0]);
-      n2 += extra + 1;
+    if (in[n2] != '\\') {
+      out[n1++] = in[n2];
+      continue;
     }
-    else out[n1++] = ((uint8_t *)lx->code)[lx->st.toff + n2];
+    if (!sv_lexer_decode_string_escape(lx, in, out, &n1, &n2)) return outv;
   }
   
   outv.str = (const char *)out;
@@ -804,6 +818,18 @@ static inline uint8_t parse_number(sv_lexer_t *lx, const char *buf, ant_offset_t
   return lx->st.tok;
 }
 
+static inline const char *scan_string_newline(const char *p, size_t len) {
+  const char *lf = memchr(p, '\n', len);
+  const char *cr = memchr(p, '\r', lf ? (size_t)(lf - p) : len);
+  return cr ? cr : lf;
+}
+
+static inline uint8_t scan_string_error(sv_lexer_t *lx, ant_offset_t len) {
+  lx->st.tok = TOK_ERR;
+  lx->st.tlen = len;
+  return TOK_ERR;
+}
+
 static inline uint8_t scan_string(sv_lexer_t *lx, const char *buf, ant_offset_t rem, char quote) {
   ant_offset_t i = 1;
 
@@ -819,6 +845,10 @@ static inline uint8_t scan_string(sv_lexer_t *lx, const char *buf, ant_offset_t 
       lx->st.tlen = rem;
       return TOK_ERR;
     }
+
+    const char *plain_end = b == NULL || q < b ? q : b;
+    const char *newline = scan_string_newline(p, (size_t)(plain_end - p));
+    if (newline) return scan_string_error(lx, (ant_offset_t)(newline - buf));
 
     if (b == NULL || q < b) {
       i = (ant_offset_t)((q - buf) + 1);
@@ -837,7 +867,8 @@ static inline uint8_t scan_string(sv_lexer_t *lx, const char *buf, ant_offset_t 
     char esc_char = buf[esc_pos + 1];
     ant_offset_t skip = 2;
 
-    if (esc_char == 'x') { skip = 4; } else if (esc_char == 'u') {
+    if (esc_char == '\r' && esc_pos + 2 < rem && buf[esc_pos + 2] == '\n') skip = 3;
+    else if (esc_char == 'x') { skip = 4; } else if (esc_char == 'u') {
       skip = (esc_pos + 2 < rem && buf[esc_pos + 2] == '{') ? 0 : 6;
       if (skip == 0) {
         ant_offset_t j = esc_pos + 3;

@@ -24,16 +24,22 @@ static size_t decode_octal_escape(const uint8_t *in, size_t pos, uint8_t *out, s
   return extra;
 }
 
-static size_t decode_unicode_braced(const uint8_t *in, size_t pos, size_t end, uint8_t *out, size_t *out_pos) {
+static inline void escape_flag(uint8_t *flags, escape_flags_t flag) {
+  if (flags) *flags |= flag;
+}
+
+static size_t decode_unicode_braced(const uint8_t *in, size_t pos, size_t end, uint8_t *out, size_t *out_pos, uint8_t *flags) {
   uint32_t cp = 0;
   size_t i = pos + 3;
   
-  while (i < end && ant_ascii_is_xdigit(in[i])) { cp = (cp << 4) | unhex(in[i]); i++; }
-  if (i < end && in[i] == '}') {
+  for (; i < end && ant_ascii_is_xdigit(in[i]); i++) if (cp <= 0x10FFFF) cp = (cp << 4) | unhex(in[i]);
+  if (i < end && in[i] == '}' && i > pos + 3 && cp <= 0x10FFFF) {
     *out_pos += utf8_encode(cp, (char *)&out[*out_pos]);
     return i - pos - 1;
   }
   
+  bool closed = i < end && in[i] == '}' && i > pos + 3;
+  escape_flag(flags, closed ? ESCAPE_BAD_CODEPOINT : ESCAPE_BAD_UNICODE);
   out[(*out_pos)++] = 'u';
   return 0;
 }
@@ -61,7 +67,7 @@ static size_t decode_unicode_fixed(const uint8_t *in, size_t pos, size_t end, ui
   return 4;
 }
 
-size_t decode_escape(const uint8_t *in, size_t pos, size_t end, uint8_t *out, size_t *out_pos, uint8_t quote) {
+size_t decode_escape(const uint8_t *in, size_t pos, size_t end, uint8_t *out, size_t *out_pos, uint8_t quote, uint8_t *flags) {
   uint8_t c = in[pos + 1];
   size_t advance = 0;
 
@@ -80,24 +86,36 @@ size_t decode_escape(const uint8_t *in, size_t pos, size_t end, uint8_t *out, si
       else out[(*out_pos)++] = c;
       break;
     case '0':
+      if (pos + 2 < end && in[pos + 2] >= '8' && in[pos + 2] <= '9') escape_flag(flags, ESCAPE_LEGACY);
       if (!(in[pos + 2] >= '0' && in[pos + 2] <= '7')) { out[(*out_pos)++] = '\0'; break; }
       [[fallthrough]];
     case '1': case '2': case '3': case '4': case '5': case '6': case '7':
+      escape_flag(flags, ESCAPE_LEGACY);
       advance = decode_octal_escape(in, pos, out, out_pos);
+      break;
+    case '8': case '9':
+      escape_flag(flags, ESCAPE_LEGACY);
+      out[(*out_pos)++] = c;
       break;
     case 'x':
       if (pos + 3 < end && ant_ascii_is_xdigit(in[pos + 2]) && ant_ascii_is_xdigit(in[pos + 3])) {
         advance = decode_hex_escape(in, pos, out, out_pos);
-      } else out[(*out_pos)++] = c;
+      } else {
+        escape_flag(flags, ESCAPE_BAD_HEX);
+        out[(*out_pos)++] = c;
+      }
       break;
     case 'u':
       if (pos + 2 < end && in[pos + 2] == '{') {
-        advance = decode_unicode_braced(in, pos, end, out, out_pos);
+        advance = decode_unicode_braced(in, pos, end, out, out_pos, flags);
       } else if (
         pos + 5 < end && ant_ascii_is_xdigit(in[pos + 2]) && ant_ascii_is_xdigit(in[pos + 3]) &&
         ant_ascii_is_xdigit(in[pos + 4]) && ant_ascii_is_xdigit(in[pos + 5])
       ) advance = decode_unicode_fixed(in, pos, end, out, out_pos);
-      else out[(*out_pos)++] = c;
+      else {
+        escape_flag(flags, ESCAPE_BAD_UNICODE);
+        out[(*out_pos)++] = c;
+      }
       break;
     default:
       out[(*out_pos)++] = (c == quote) ? quote : c;

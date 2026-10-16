@@ -154,6 +154,9 @@ size_t error_render_value(errbuf_t *eb, ant_t *js, size_t used, ant_value_t valu
     message = js_mkstr(js, "", 0);
   }
   
+  ant_value_t display = js_error_display_name(js, value, name);
+  if (!is_err(display)) name = display;
+  
   GC_ROOT_PIN(js, name);
   GC_ROOT_PIN(js, message);
 

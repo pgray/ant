@@ -48,7 +48,7 @@ static constexpr int MAX_DENSE_INITIAL_CAP = 8;
 // many elements, so filling it stays on the fast path
 static constexpr uint32_t MAX_DENSE_PREALLOC_LEN = 65536;
 static constexpr uint32_t INTERN_INDEX_CACHE_SIZE = 1024;
-static constexpr uint32_t ANT_RUNTIME_WEB = 1u << 0;
+static constexpr uint32_t ANT_RUNTIME_WEB_COMPAT = 1u << 0;
 
 static constexpr uint32_t INTERN_MEMO_SIZE = 64;
 static_assert((INTERN_MEMO_SIZE & (INTERN_MEMO_SIZE - 1)) == 0, "the intern memo is indexed by a mask");
@@ -67,6 +67,7 @@ typedef struct ant_stringify_ctx {
   int max_depth;
   int multiref_count;
   int multiref_next_id;
+  bool show_hidden;
 
   ant_value_t stack[MAX_STRINGIFY_DEPTH];
   ant_value_t multiref_objs[MAX_MULTIREF_OBJS];

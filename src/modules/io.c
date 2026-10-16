@@ -719,19 +719,23 @@ static bool console_format_text(void *ctx, const char *s, size_t len) {
   return c->ok;
 }
 
-static bool console_emit_inspected(console_format_ctx_t *c, ant_value_t value) {
+static bool console_emit_inspected(console_format_ctx_t *c, ant_value_t value, bool show_hidden) {
   char cbuf[256];
-  js_cstr_t cstr = js_inspect_cstr(c->js, value, cbuf, sizeof(cbuf));
+  
+  js_cstr_t cstr = show_hidden
+    ? js_inspect_cstr_opts(c->js, value, cbuf, sizeof(cbuf), 4, true)
+    : js_inspect_cstr(c->js, value, cbuf, sizeof(cbuf));
 
   c->ok = io_print_to_output(cstr.ptr, c->out, io_no_color);
   if (cstr.needs_free) free((void *)cstr.ptr);
+  
   return c->ok;
 }
 
 static bool console_format_value(void *ctx, ant_value_t value, char spec) {
   console_format_ctx_t *c = (console_format_ctx_t *)ctx;
-  if ((spec == 'o' || spec == 'O') && vtype(value) == kTypeString)
-    return console_emit_inspected(c, value);
+  if (spec == 'o') return console_emit_inspected(c, value, true);
+  if (spec == 'O' && vtype(value) == kTypeString) return console_emit_inspected(c, value, false);
   return console_emit_value(c, value, spec == 's' && vtype(value) == kTypeString);
 }
 
@@ -760,9 +764,17 @@ bool io_print_error_header(ant_t *js, ant_output_stream_t *out, ant_value_t err)
   
   ant_offset_t class_len = 0;
   const char *class_name = get_class_name(js, err, &class_len, "Object");
+  bool class_differs = name_len && class_name && class_len > 0 &&
+    ((size_t)class_len != name_len || memcmp(class_name, name_text, name_len) != 0);
+
+  ant_value_t display = js_error_display_name(js, err, name);
+  if (!is_err(display) && display != name) {
+    GC_ROOT_PIN(js, display);
+    name_text = js_getstr(js, display, &name_len);
+  }
 
   bool ok = true;
-  if (name_len && class_name && class_len > 0 && ((size_t)class_len != name_len || memcmp(class_name, name_text, name_len) != 0)) {
+  if (class_differs) {
     ok = ant_output_stream_appendf(out, "%s%.*s [%.*s]%s", C_RED, (int)class_len, class_name, (int)name_len, name_text, C_RESET);
   } else if (name_len) ok = ant_output_stream_appendf(out, "%s%.*s%s", C_RED, (int)name_len, name_text, C_RESET);
   if (ok && message_len) ok = ant_output_stream_appendf(out, "%s%s%.*s%s", name_len ? ": " : "", C_BOLD, (int)message_len, message_text, C_RESET);

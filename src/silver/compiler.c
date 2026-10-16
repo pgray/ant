@@ -3098,7 +3098,7 @@ void compile_expr(sv_compiler_t *c, sv_ast_t *node) {
       else {
         if (node->right) compile_expr(c, node->right);
         else emit_op(c, OP_UNDEF);
-        if (c->is_async_generator) emit_op(c, OP_AWAIT);
+        if (c->is_async_generator) emit_op(c, OP_ASYNC_YIELD);
         emit_op(c, OP_YIELD);
       }
       break;
@@ -7502,6 +7502,7 @@ static bool sv_func_compute_fusable_leaf(sv_func_t *func) {
       case OP_AWAIT_ITER_NEXT:
       case OP_FOR_AWAIT_OF:
       case OP_YIELD:
+      case OP_ASYNC_YIELD:
       case OP_YIELD_STAR_INIT:
       case OP_YIELD_STAR_NEXT:
       case OP_YIELD_STAR_THROW:
@@ -8051,7 +8052,7 @@ sv_func_t *compile_function_body(
   const uint8_t *end = func->code + func->code_len;
   while (ip < end) {
     sv_op_t op = (sv_op_t)*ip;
-    if (op == OP_AWAIT || op == OP_FOR_AWAIT_OF || op == OP_AWAIT_ITER_NEXT) {
+    if (op == OP_AWAIT || op == OP_ASYNC_YIELD || op == OP_FOR_AWAIT_OF || op == OP_AWAIT_ITER_NEXT) {
       func->has_await = true;
       break;
     }

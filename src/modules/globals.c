@@ -59,7 +59,8 @@ static ant_value_t make_global_location(ant_t *js) {
     if (is_windows_drive_path(pathname)) scheme = "file:///";
 #endif
     snprintf(href, href_len + 1, "%s%s%s", scheme, pathname, needs_slash ? "/" : "");
-    js_set(js, location, "href", js_mkstr(js, href, href_len));
+    js->builtins.location_href = js_mkstr(js, href, href_len);
+    js_set(js, location, "href", js->builtins.location_href);
     free(href);
   }
   else js_set(js, location, "href", js_mkstr(js, "file:///", 8));
@@ -177,7 +178,7 @@ void js_fire_rejection_handled(ant_t *js, ant_value_t promise_val, ant_value_t r
 void init_globals_module(ant_t *js) {
   ant_value_t global = js_glob(js);
 
-  if (js->runtime.flags & ANT_RUNTIME_WEB) {
+  if (js->runtime.flags & ANT_RUNTIME_WEB_COMPAT) {
     js_set(js, global, "location", make_global_location(js));
     js_set_descriptor(js, global, "location", 8, JS_DESC_W | JS_DESC_C);
   }

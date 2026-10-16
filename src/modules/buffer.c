@@ -2554,15 +2554,136 @@ static ant_value_t js_buffer_from(ant_params_t) {
 static ant_value_t buffer_fill_range(
   ant_t *js, uint8_t *data, size_t start, size_t end,
   ant_value_t value, ant_value_t encoding_val
-);
+) {
+  if (start >= end) return js_mkundef();
+  size_t span = end - start;
+
+  if (vtype(value) == kTypeString) {
+    BufferEncoding encoding = ENC_UTF8;
+    size_t enc_len = 0;
+    bool empty_encoding = vtype(encoding_val) == kTypeString && js_getstr(js, encoding_val, &enc_len) && enc_len == 0;
+    if (vtype(encoding_val) != kTypeUndefined && vtype(encoding_val) != kTypeNull && !empty_encoding) {
+      ant_value_t checked = buffer_require_encoding(js, encoding_val, &encoding);
+      if (is_err(checked)) return checked;
+    }
+
+    size_t str_len = 0;
+    char *str = js_getstr(js, value, &str_len);
+    if (str_len == 0) {
+      memset(data + start, 0, span);
+      return js_mkundef();
+    }
+
+    const uint8_t *pattern = NULL;
+    size_t pattern_len = 0;
+    uint8_t *owned = NULL;
+
+    ant_value_t encoded = buffer_encode_string(js, value, encoding, &pattern, &pattern_len, &owned);
+    if (is_err(encoded)) return encoded;
+
+    if (pattern_len == 0) {
+      free(owned);
+      ant_value_t props = js_mkobj(js);
+      js_set(js, props, "code", js_mkstr(js, "ERR_INVALID_ARG_VALUE", 21));
+      return js_mkerr_props(js, JS_ERR_TYPE, props, "The argument 'value' is invalid. Received '%.*s'", (int)str_len, str);
+    }
+
+    for (size_t i = 0; i < span; i += pattern_len) {
+      size_t chunk = span - i < pattern_len ? span - i : pattern_len;
+      memcpy(data + start + i, pattern, chunk);
+    }
+    
+    free(owned);
+    return js_mkundef();
+  }
+
+  if (buffer_get_typedarray_data(value) || buffer_is_dataview(value)) {
+    const uint8_t *source = NULL;
+    size_t source_len = 0;
+    buffer_source_get_bytes(js, value, &source, &source_len);
+    if (source_len == 0) return js_mkerr_code(
+      js, JS_ERR_TYPE, "ERR_INVALID_ARG_VALUE",
+      "The argument 'value' is invalid. Received an empty buffer"
+    );
+
+    uint8_t *pattern = malloc(source_len);
+    if (!pattern) return js_mkerr(js, "Failed to allocate buffer");
+    memcpy(pattern, source, source_len);
+    
+    for (size_t i = 0; i < span; i += source_len) {
+      size_t chunk = span - i < source_len ? span - i : source_len;
+      memcpy(data + start + i, pattern, chunk);
+    }
+    
+    free(pattern);
+    return js_mkundef();
+  }
+
+  double num = js_to_number(js, value);
+  memset(data + start, (int)(js_to_uint32(num) & 0xff), span);
+  return js_mkundef();
+}
+
+static void buffer_group_digits(const char *digits, char *out, size_t len) {
+  size_t n = strlen(digits), start = digits[0] == '-' ? 1 : 0, head = n;
+  while (head >= start + 4) head -= 3;
+  
+  size_t w = 0;
+  for (size_t i = 0; i < n && w + 1 < len; i++) {
+    if (i >= head && i > start && (i - head) % 3 == 0) out[w++] = '_';
+    if (w + 1 < len) out[w++] = digits[i];
+  }
+  out[w] = '\0';
+}
+
+static void buffer_describe_value(ant_t *js, ant_value_t value, char *out, size_t len) {
+  char raw[96];
+  
+  if (vtype(value) == kTypeBigInt) {
+    size_t n = strbigint(js, value, raw, sizeof(raw) - 1);
+    raw[n < sizeof(raw) - 1 ? n : sizeof(raw) - 2] = '\0';
+    const char *digits = raw[0] == '-' ? raw + 1 : raw;
+    bool large = strlen(digits) > 10 || (strlen(digits) == 10 && strcmp(digits, "4294967296") > 0);
+    if (large) buffer_group_digits(raw, out, len - 1);
+    else snprintf(out, len - 1, "%s", raw);
+    strncat(out, "n", len - strlen(out) - 1);
+    return;
+  }
+  
+  double d = js_getnum(value);
+  if (d == 0 && signbit(d)) { snprintf(out, len, "-0"); return; }
+  
+  size_t n = js_number_to_chars(value, raw, sizeof(raw) - 1);
+  raw[n < sizeof(raw) - 1 ? n : sizeof(raw) - 2] = '\0';
+  if (isfinite(d) && d == trunc(d) && fabs(d) > 4294967296.0) buffer_group_digits(raw, out, len);
+  else snprintf(out, len, "%s", raw);
+}
+
+__attribute__((noinline, cold)) static ant_value_t buffer_out_of_range(ant_t *js, const char *name, const char *range, ant_value_t received) {
+  char got[128], message[384];
+  buffer_describe_value(js, received, got, sizeof(got));
+  snprintf(message, sizeof(message), "The value of \"%s\" is out of range. It must be %s. Received %s", name, range, got);
+  return js_mkerr_code(js, JS_ERR_RANGE, "ERR_OUT_OF_RANGE", message);
+}
+
+static ant_value_t buffer_size_arg(ant_t *js, ant_value_t *args, int nargs, size_t *out) {
+  ant_value_t value = nargs > 0 ? args[0] : js_mkundef();
+  if (vtype(value) != kTypeNumber) return Ant_Error_CreateInvalidArgType(js, "size", "of type number", value);
+
+  double size = js_getnum(value);
+  if (!(size >= 0 && size <= 9007199254740991.0))
+    return buffer_out_of_range(js, "size", ">= 0 && <= 9007199254740991", value);
+
+  *out = (size_t)size;
+  return js_mkundef();
+}
 
 // Buffer.alloc(size[, fill[, encoding]])
 static ant_value_t js_buffer_alloc(ant_params_t) {
-  if (nargs < 1) {
-    return js_mkerr(js, "Buffer.alloc requires a size argument");
-  }
+  size_t size = 0;
+  ant_value_t valid = buffer_size_arg(js, args, nargs, &size);
+  if (is_err(valid)) return valid;
   
-  size_t size = (size_t)js_getnum(args[0]);
   ArrayBufferData *buffer = create_array_buffer_data(js, size);
   if (!buffer) return js_mkerr(js, "Failed to allocate buffer");
   
@@ -2588,11 +2709,10 @@ static ant_value_t js_buffer_alloc(ant_params_t) {
 
 // Buffer.allocUnsafe(size)
 static ant_value_t js_buffer_allocUnsafe(ant_params_t) {
-  if (nargs < 1) {
-    return js_mkerr(js, "Buffer.allocUnsafe requires a size argument");
-  }
-  
-  size_t size = (size_t)js_getnum(args[0]);
+  size_t size = 0;
+  ant_value_t valid = buffer_size_arg(js, args, nargs, &size);
+  if (is_err(valid)) return valid;
+
   ArrayBufferData *buffer = create_array_buffer_data(js, size);
   if (!buffer) return js_mkerr(js, "Failed to allocate buffer");
   return create_typed_array(js, TYPED_ARRAY_UINT8, buffer, 0, size, js->builtins.buffer_proto);
@@ -3230,79 +3350,6 @@ static ant_value_t js_buffer_includes(ant_params_t) {
   return js_bool(js_getnum(result) != -1);
 }
 
-static ant_value_t buffer_fill_range(
-  ant_t *js, uint8_t *data, size_t start, size_t end,
-  ant_value_t value, ant_value_t encoding_val
-) {
-  if (start >= end) return js_mkundef();
-  size_t span = end - start;
-
-  if (vtype(value) == kTypeString) {
-    BufferEncoding encoding = ENC_UTF8;
-    size_t enc_len = 0;
-    bool empty_encoding = vtype(encoding_val) == kTypeString && js_getstr(js, encoding_val, &enc_len) && enc_len == 0;
-    if (vtype(encoding_val) != kTypeUndefined && vtype(encoding_val) != kTypeNull && !empty_encoding) {
-      ant_value_t checked = buffer_require_encoding(js, encoding_val, &encoding);
-      if (is_err(checked)) return checked;
-    }
-
-    size_t str_len = 0;
-    char *str = js_getstr(js, value, &str_len);
-    if (str_len == 0) {
-      memset(data + start, 0, span);
-      return js_mkundef();
-    }
-
-    const uint8_t *pattern = NULL;
-    size_t pattern_len = 0;
-    uint8_t *owned = NULL;
-
-    ant_value_t encoded = buffer_encode_string(js, value, encoding, &pattern, &pattern_len, &owned);
-    if (is_err(encoded)) return encoded;
-
-    if (pattern_len == 0) {
-      free(owned);
-      ant_value_t props = js_mkobj(js);
-      js_set(js, props, "code", js_mkstr(js, "ERR_INVALID_ARG_VALUE", 21));
-      return js_mkerr_props(js, JS_ERR_TYPE, props, "The argument 'value' is invalid. Received '%.*s'", (int)str_len, str);
-    }
-
-    for (size_t i = 0; i < span; i += pattern_len) {
-      size_t chunk = span - i < pattern_len ? span - i : pattern_len;
-      memcpy(data + start + i, pattern, chunk);
-    }
-    
-    free(owned);
-    return js_mkundef();
-  }
-
-  if (buffer_get_typedarray_data(value) || buffer_is_dataview(value)) {
-    const uint8_t *source = NULL;
-    size_t source_len = 0;
-    buffer_source_get_bytes(js, value, &source, &source_len);
-    if (source_len == 0) return js_mkerr_code(
-      js, JS_ERR_TYPE, "ERR_INVALID_ARG_VALUE",
-      "The argument 'value' is invalid. Received an empty buffer"
-    );
-
-    uint8_t *pattern = malloc(source_len);
-    if (!pattern) return js_mkerr(js, "Failed to allocate buffer");
-    memcpy(pattern, source, source_len);
-    
-    for (size_t i = 0; i < span; i += source_len) {
-      size_t chunk = span - i < source_len ? span - i : source_len;
-      memcpy(data + start + i, pattern, chunk);
-    }
-    
-    free(pattern);
-    return js_mkundef();
-  }
-
-  double num = js_to_number(js, value);
-  memset(data + start, (int)(js_to_uint32(num) & 0xff), span);
-  return js_mkundef();
-}
-
 static ant_value_t buffer_validate_offset(ant_t *js, ant_value_t value, const char *name, size_t max, size_t *out) {
   if (vtype(value) != kTypeNumber) {
     ant_value_t props = js_mkobj(js);
@@ -3459,48 +3506,6 @@ static inline uint64_t buffer_load_bytes(const uint8_t *ptr, size_t width, bool 
 static inline void buffer_store_bytes(uint8_t *ptr, size_t width, bool little_endian, uint64_t bits) {
   if (!little_endian) bits = __builtin_bswap64(bits << (64 - 8 * width));
   memcpy(ptr, &bits, width);
-}
-
-static void buffer_group_digits(const char *digits, char *out, size_t len) {
-  size_t n = strlen(digits), start = digits[0] == '-' ? 1 : 0, head = n;
-  while (head >= start + 4) head -= 3;
-  
-  size_t w = 0;
-  for (size_t i = 0; i < n && w + 1 < len; i++) {
-    if (i >= head && i > start && (i - head) % 3 == 0) out[w++] = '_';
-    if (w + 1 < len) out[w++] = digits[i];
-  }
-  out[w] = '\0';
-}
-
-static void buffer_describe_value(ant_t *js, ant_value_t value, char *out, size_t len) {
-  char raw[96];
-  
-  if (vtype(value) == kTypeBigInt) {
-    size_t n = strbigint(js, value, raw, sizeof(raw) - 1);
-    raw[n < sizeof(raw) - 1 ? n : sizeof(raw) - 2] = '\0';
-    const char *digits = raw[0] == '-' ? raw + 1 : raw;
-    bool large = strlen(digits) > 10 || (strlen(digits) == 10 && strcmp(digits, "4294967296") > 0);
-    if (large) buffer_group_digits(raw, out, len - 1);
-    else snprintf(out, len - 1, "%s", raw);
-    strncat(out, "n", len - strlen(out) - 1);
-    return;
-  }
-  
-  double d = js_getnum(value);
-  if (d == 0 && signbit(d)) { snprintf(out, len, "-0"); return; }
-  
-  size_t n = js_number_to_chars(value, raw, sizeof(raw) - 1);
-  raw[n < sizeof(raw) - 1 ? n : sizeof(raw) - 2] = '\0';
-  if (isfinite(d) && d == trunc(d) && fabs(d) > 4294967296.0) buffer_group_digits(raw, out, len);
-  else snprintf(out, len, "%s", raw);
-}
-
-static __attribute__((noinline, cold)) ant_value_t buffer_out_of_range(ant_t *js, const char *name, const char *range, ant_value_t received) {
-  char got[128], message[384];
-  buffer_describe_value(js, received, got, sizeof(got));
-  snprintf(message, sizeof(message), "The value of \"%s\" is out of range. It must be %s. Received %s", name, range, got);
-  return js_mkerr_code(js, JS_ERR_RANGE, "ERR_OUT_OF_RANGE", message);
 }
 
 static __attribute__((noinline, cold)) ant_value_t buffer_bounds_error(ant_t *js, ant_value_t offset, double max) {

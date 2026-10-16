@@ -10,6 +10,8 @@
 #include "gc/roots.h"
 #include "silver/call.h"
 #include "modules/generator.h"
+#include "modules/iterator.h"
+#include "modules/timer.h"
 
 enum { GENERATOR_NATIVE_TAG = 0x47454e52u }; // GENR
 
@@ -41,10 +43,7 @@ static ant_value_t generator_resume_kind(
 );
 
 static ant_value_t generator_result(ant_t *js, bool done, ant_value_t value) {
-  ant_value_t result = js_newobj(js);
-  js_set(js, result, "value", value);
-  js_set(js, result, "done", js_bool(done));
-  return result;
+  return Ant_Iterator_CreateResult(js, value, done);
 }
 
 static generator_data_t *generator_data(ant_value_t gen) {
@@ -195,6 +194,32 @@ void generator_mark_for_gc(ant_t *js, ant_value_t gen) {
   }
 }
 
+void Ant_Generator_SettleYield(ant_t *js, ant_value_t gen, ant_value_t value) {
+  coroutine_t *coro = generator_coro(gen);
+  if (!coro || vtype(coro->async_promise) != kTypePromise) return;
+
+  GC_ROOT_SAVE(root_mark, js);
+  GC_ROOT_PIN(js, gen);
+  ant_value_t pending = coro->async_promise;
+  GC_ROOT_PIN(js, pending);
+  ant_value_t out = generator_result(js, false, value);
+  GC_ROOT_PIN(js, out);
+
+  coro->async_promise = js_mkundef();
+  generator_set_state(gen, GEN_SUSPENDED_YIELD);
+  js_resolve_promise(js, pending, out);
+  js_maybe_drain_microtasks_after_async_settle(js);
+  generator_process_queue(js, gen);
+
+  GC_ROOT_RESTORE(js, root_mark);
+}
+
+static void generator_queue_yield_tick(ant_t *js, ant_value_t gen, coroutine_t *coro, ant_value_t value) {
+  coro->yield_tick = false;
+  generator_set_state(gen, GEN_EXECUTING);
+  if (!queue_generator_yield_job(js, gen, value)) Ant_Generator_SettleYield(js, gen, value);
+}
+
 bool generator_resume_pending_request(ant_t *js, coroutine_t *coro, ant_value_t result) {
   if (!coro || !coro->is_generator || vtype(coro->async_promise) != kTypePromise) return false;
 
@@ -228,6 +253,12 @@ bool generator_resume_pending_request(ant_t *js, coroutine_t *coro, ant_value_t 
   if (coro->act && coro->act->frame_count > 0) {
     if (coro->await_registered) {
       generator_set_state(gen, GEN_EXECUTING);
+      GC_ROOT_RESTORE(js, root_mark);
+      return true;
+    }
+
+    if (coro->yield_tick) {
+      generator_queue_yield_tick(js, gen, coro, result);
       GC_ROOT_RESTORE(js, root_mark);
       return true;
     }
@@ -398,13 +429,14 @@ static ant_value_t generator_resume_kind_inner(
   }
 
   if (suspended_now) {
-    if (generator_is_async(gen) && coro->await_registered) {
+    if (generator_is_async(gen) && (coro->await_registered || coro->yield_tick)) {
       generator_set_state(gen, GEN_EXECUTING);
       
       if (vtype(coro->async_promise) != kTypePromise) {
         coro->async_promise = js_mkpromise(js);
         GC_ROOT_PIN(js, coro->async_promise);
       }
+      if (coro->yield_tick) generator_queue_yield_tick(js, gen, coro, result);
       
       ant_value_t out = coro->async_promise;
       GC_ROOT_RESTORE(js, root_mark);

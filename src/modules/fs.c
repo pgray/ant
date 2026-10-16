@@ -6468,16 +6468,14 @@ static ant_value_t fs_dir_iter_return(ant_params_t) {
   fs_dir_t *d = (fs_dir_t *)js_get_native(dir_obj, FS_DIR_NATIVE_TAG);
   GC_ROOT_SAVE(root_mark, js);
   
-  ant_value_t done = js_mkobj(js);
+  ant_value_t done = Ant_Iterator_CreateResult(js, value, true);
   GC_ROOT_PIN(js, done);
-  js_set(js, done, "value", value);
-  js_set(js, done, "done", js_true);
 
   ant_value_t promise = (!d || (d->closed && !d->ops_head))
     ? fs_resolved_promise(js, done)
     : fs_dir_enqueue(js, dir_obj, d, FS_OP_DIR_ITER_RETURN, done);
+  
   GC_ROOT_RESTORE(js, root_mark);
-
   return promise;
 }
 

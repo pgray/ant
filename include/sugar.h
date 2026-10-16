@@ -38,6 +38,7 @@ struct coroutine {
 
   bool is_generator: 1;
   bool await_registered: 1;
+  bool yield_tick: 1;
 
   uint64_t gc_epoch;
   uint32_t refcount;

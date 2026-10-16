@@ -175,7 +175,7 @@ static int esm_extract_condition_override(ant_t *js, ant_value_t ctx, bool is_re
   const char *lead = is_require ? "require" : "import";
   bool is_default_set = count == 3
     && strcmp(list[0], lead) == 0
-    && strcmp(list[1], "node") == 0
+    && strcmp(list[1], esm_platform_condition(js)) == 0
     && strcmp(list[2], "default") == 0;
 
   if (count == 0 || is_default_set) {
@@ -379,9 +379,12 @@ ant_value_t esm_import_via_hooks(
 
   ant_value_t conditions = js_mkarr(js);
   GC_ROOT_PIN(js, conditions);
+  
   if (is_require) js_arr_push(js, conditions, js_mkstr(js, "require", 7));
   else js_arr_push(js, conditions, js_mkstr(js, "import", 6));
-  js_arr_push(js, conditions, js_mkstr(js, "node", 4));
+  const char *platform = esm_platform_condition(js);
+  
+  js_arr_push(js, conditions, js_mkstr(js, platform, strlen(platform)));
   js_arr_push(js, conditions, js_mkstr(js, "default", 7));
   js_set(js, ctx, "conditions", conditions);
   js_set(js, ctx, "importAttributes", is_object_type(attrs) ? attrs : js_mkobj(js));

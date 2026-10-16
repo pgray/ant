@@ -1177,7 +1177,9 @@ static size_t strarr_body(ant_t *js, ant_value_t obj, char *buf, size_t len) {
   const char *class_name = arguments ? NULL : get_class_name(js, obj, &class_len, "Array");
   
   int elem_count = 0;
-  bool inline_mode = is_small_array(js, obj, &elem_count);
+  bool hidden_nested = false;
+  int hidden = js_inspect_hidden_count(js, obj, &hidden_nested);
+  bool inline_mode = is_small_array(js, obj, &elem_count) && !hidden_nested;
   size_t n = 0;
   
   if (arguments) n += cpy(buf + n, REMAIN(n, len), "[Arguments] ", 12);
@@ -1188,7 +1190,7 @@ static size_t strarr_body(ant_t *js, ant_value_t obj, char *buf, size_t len) {
   
   char open = arguments ? '{' : '[';
   char close = arguments ? '}' : ']';
-  if (length == 0 && !(arguments && stringify_has_shown_props(obj)))
+  if (length == 0 && hidden == 0 && !(arguments && stringify_has_shown_props(obj)))
     return n + (size_t) snprintf(buf + n, REMAIN(n, len), "%c%c", open, close);
   
   n += (size_t) snprintf(buf + n, REMAIN(n, len), inline_mode ? "%c " : "%c\n", open);
@@ -1217,7 +1219,7 @@ static size_t strarr_body(ant_t *js, ant_value_t obj, char *buf, size_t len) {
       ant_offset_t klen = (ant_offset_t)intern_length(key);
       
       if (is_length_key(key, klen)) continue;
-      if (arguments && !(prop->attrs & ANT_PROP_ATTR_ENUMERABLE)) continue;
+      if (!(prop->attrs & ANT_PROP_ATTR_ENUMERABLE)) continue;
       
       if (printed_first) n += cpy(buf + n, REMAIN(n, len), inline_mode ? ", " : ",\n", 2);
       if (!inline_mode) n += add_indent(buf + n, REMAIN(n, len), js->stringify->indent);
@@ -1234,6 +1236,16 @@ static size_t strarr_body(ant_t *js, ant_value_t obj, char *buf, size_t len) {
       
       printed_first = true;
     }
+  }
+
+  if (hidden) {
+    js_inspect_builder_t hidden_builder;
+    js_inspect_builder_init_fixed(&hidden_builder, js, buf, len, n);
+    hidden_builder.inline_mode = inline_mode;
+    hidden_builder.first = !printed_first;
+    hidden_builder.did_indent = true;
+    js_inspect_hidden_props(&hidden_builder, obj);
+    n = hidden_builder.n;
   }
   
   if (!inline_mode) {
@@ -2019,7 +2031,7 @@ static size_t strfunc_inspect(ant_t *js, ant_value_t value, char *buf, size_t le
   if (ref) return ref > 0 ? (size_t)snprintf(buf, len, "[Circular *%d]", ref) : cpy(buf, len, "[Circular]", 10);
 
   push_stringify(js, value);
-  size_t n = strobj_trailing_props(js, js_func_obj(value), buf, len, strfunc(js, value, buf, len));
+  size_t n = strobj_trailing_props(js, value, buf, len, strfunc(js, value, buf, len));
   pop_stringify(js);
   return stringify_ref_label(js, value, buf, len, n);
 }
@@ -2039,6 +2051,16 @@ static size_t strcfunc(ant_t *js, ant_value_t value, char *buf, size_t len) {
   return cpy(buf, len, fmt->anon, fmt->anon_len);
 }
 
+static size_t strcfunc_inspect(ant_t *js, ant_value_t value, char *buf, size_t len) {
+  size_t n = strcfunc(js, value, buf, len);
+  if (!js->stringify || !js->stringify->show_hidden) return n;
+
+  js_inspect_builder_t builder;
+  js_inspect_builder_init_fixed(&builder, js, buf, len, n);
+  js_inspect_hidden_trailer(&builder, value);
+  return builder.n;
+}
+
 size_t tostr(ant_t *js, ant_value_t value, char *buf, size_t len) {
   switch (vtype(value)) {
     case kTypeUndefined:   return ANT_COPY(buf, len, "undefined");
@@ -2055,7 +2077,7 @@ size_t tostr(ant_t *js, ant_value_t value, char *buf, size_t len) {
     case kTypeNumber:   return js_number_to_chars(value, buf, len);
     case kTypePromise:  return strpromise(js, value, buf, len);
     case kTypeFunction: return strfunc_inspect(js, value, buf, len);
-    case kTypeBuiltin:  return strcfunc(js, value, buf, len);
+    case kTypeBuiltin:  return strcfunc_inspect(js, value, buf, len);
     
     case kTypeBigInt: {
       size_t n = strbigint(js, value, buf, len);
@@ -2170,11 +2192,12 @@ static js_cstr_t js_cstr_render(
 }
 
 static js_cstr_t js_cstr_impl(
-  ant_t *js, ant_value_t value,
-  char *stack_buf, size_t stack_size, bool quote_strings, int max_depth
+  ant_t *js, ant_value_t value, char *stack_buf, size_t stack_size, 
+  bool quote_strings, int max_depth, bool show_hidden
 ) {
   ant_stringify_ctx_t ctx;
   ant_stringify_enter(js, &ctx, max_depth);
+  ctx.show_hidden = show_hidden;
   
   js_cstr_t out = js_cstr_render(js, value, stack_buf, stack_size, quote_strings);
   Ant_List_Remove(&ctx);
@@ -2183,15 +2206,19 @@ static js_cstr_t js_cstr_impl(
 }
 
 js_cstr_t js_to_cstr(ant_t *js, ant_value_t value, char *stack_buf, size_t stack_size) {
-  return js_cstr_impl(js, value, stack_buf, stack_size, false, ANT_INSPECT_MAX_DEPTH);
+  return js_cstr_impl(js, value, stack_buf, stack_size, false, ANT_INSPECT_MAX_DEPTH, false);
 }
 
 js_cstr_t js_inspect_cstr(ant_t *js, ant_value_t value, char *stack_buf, size_t stack_size) {
-  return js_cstr_impl(js, value, stack_buf, stack_size, true, ANT_INSPECT_MAX_DEPTH);
+  return js_cstr_impl(js, value, stack_buf, stack_size, true, ANT_INSPECT_MAX_DEPTH, false);
 }
 
 js_cstr_t js_inspect_cstr_depth(ant_t *js, ant_value_t value, char *stack_buf, size_t stack_size, int max_depth) {
-  return js_cstr_impl(js, value, stack_buf, stack_size, true, max_depth);
+  return js_cstr_impl(js, value, stack_buf, stack_size, true, max_depth, false);
+}
+
+js_cstr_t js_inspect_cstr_opts(ant_t *js, ant_value_t value, char *stack_buf, size_t stack_size, int max_depth, bool show_hidden) {
+  return js_cstr_impl(js, value, stack_buf, stack_size, true, max_depth, show_hidden);
 }
 
 ant_value_t js_tostring_val(ant_t *js, ant_value_t value) {
@@ -10593,17 +10620,20 @@ static ant_value_t object_define_properties_from_data(ant_t *js, ant_value_t obj
     if (prop->has_getter || prop->has_setter) return js_mkundef();
   }
 
-  define_desc_raw_t stack_raws[16];
-  define_desc_raw_t *raws = count <= 16 ? stack_raws : calloc(count, sizeof(*raws));
+  define_desc_raw_t stack_raws[32];
+  define_desc_raw_t *raws = count <= 32 ? stack_raws : calloc(count, sizeof(*raws));
   
   if (!raws) return js_mkerr(js, "oom");
-  if (raws == stack_raws) memset(stack_raws, 0, sizeof(stack_raws));
+  if (raws == stack_raws) memset(stack_raws, 0, count * sizeof(*raws));
 
   ant_value_t result = js_mkundef();
+  bool target_is_descriptor = false;
+  
   for (uint32_t i = 0; i < count; i++) {
     if (!(ant_shape_get_attrs(ptr->shape, i) & ANT_PROP_ATTR_ENUMERABLE)) continue;
     ant_value_t desc = ant_object_prop_get_unchecked(ptr, i);
     if (vtype(desc) == kTypeBuiltin) goto done;
+    target_is_descriptor |= desc == js_as_obj(obj);
     
     if (!is_object_type(desc)) {
       *handled = true;
@@ -10623,7 +10653,7 @@ static ant_value_t object_define_properties_from_data(ant_t *js, ant_value_t obj
 
   *handled = true;
   GC_ROOT_SAVE(root_mark, js);
-  for (uint32_t i = 0; i < count; i++)
+  for (uint32_t i = 0; target_is_descriptor && i < count; i++)
     for (int f = 0; f < DESC_FIELD_COUNT; f++) if (raws[i].has[f]) GC_ROOT_PIN(js, raws[i].val[f]);
 
   result = object_define_properties_from_slots(js, obj, ptr, count, raws, false);

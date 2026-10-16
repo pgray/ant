@@ -46,6 +46,9 @@ bool js_inspect_object_body(js_inspect_builder_t *builder, ant_value_t obj);
 bool js_inspect_field(js_inspect_builder_t *builder, const char *key, ant_value_t value);
 bool js_inspect_close(js_inspect_builder_t *builder);
 bool js_inspect_trailing_props(js_inspect_builder_t *builder, ant_value_t obj);
+bool js_inspect_hidden_props(js_inspect_builder_t *builder, ant_value_t obj);
+bool js_inspect_hidden_trailer(js_inspect_builder_t *builder, ant_value_t obj);
+int js_inspect_hidden_count(ant_t *js, ant_value_t obj, bool *has_nested);
 bool js_inspect_error(js_inspect_builder_t *builder, ant_value_t obj);
 
 __attribute__((format(printf, 2, 3)))

@@ -47,6 +47,7 @@ bool js_iter_next(ant_t *js, iterator_t *it, ant_value_t *out);
 bool js_iter_is_array_values(ant_value_t iterator, ant_value_t next, ant_value_t source);
 
 ant_value_t js_iter_result(ant_t *js, bool has_value, ant_value_t value);
+ant_value_t Ant_Iterator_CreateResult(ant_t *js, ant_value_t value, bool done);
 ant_value_t make_array_iterator(ant_t *js, ant_value_t array, array_iter_kind_t kind);
 ant_value_t Ant_Iterator_ToList(ant_t *js, ant_value_t iterable, const char *not_iterable);
 

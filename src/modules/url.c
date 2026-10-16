@@ -253,6 +253,12 @@ int parse_url_to_state(const char *url_str, const char *base_str, url_state_t *s
   );
 }
 
+int Ant_URL_ParseDocumentRelative(ant_t *js, const char *url_str, url_state_t *s) {
+  ant_value_t href = js->builtins.location_href;
+  bool web = (js->runtime.flags & ANT_RUNTIME_WEB_COMPAT) && vtype(href) == kTypeString;
+  return parse_url_to_state(url_str, web ? js_getstr(js, href, NULL) : NULL, s);
+}
+
 char *build_href(const url_state_t *s) {
   if (!s) return NULL;
   if (s->href) return strdup(s->href);

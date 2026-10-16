@@ -125,7 +125,6 @@ ant_value_t js_error_header_parts(ant_t *js, ant_value_t obj, ant_value_t *name,
   GC_ROOT_PIN(js, obj);
   
   *name = error_header_part(js, obj, "name", 4, "Error");
-  if (!is_err(*name)) *name = js_error_display_name(js, obj, *name);
   GC_ROOT_PIN(js, *name);
   *message = is_err(*name) ? *name : error_header_part(js, obj, "message", 7, "");
   
@@ -136,6 +135,9 @@ ant_value_t js_error_header_parts(ant_t *js, ant_value_t obj, ant_value_t *name,
 ant_value_t js_error_header_text(ant_t *js, ant_value_t obj) {
   GC_ROOT_SAVE(root_mark, js);
   ant_value_t name, msg, failed = js_error_header_parts(js, obj, &name, &msg);
+  
+  if (!is_err(failed)) name = js_error_display_name(js, obj, name);
+  if (is_err(name)) failed = name;
   
   GC_ROOT_PIN(js, name);
   GC_ROOT_PIN(js, msg);

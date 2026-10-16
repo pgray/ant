@@ -80,10 +80,16 @@ static inline void sv_init_closure_function_object(
     func_obj,
     !child->is_arrow && !child->is_method && !child->is_generator && !child->is_async
   );
-  (void)sv_define_function_length(js, func_obj, (double)child->function_length);
+  
+  sv_define_function_length(js, func_obj, (double)child->function_length);
 
-  if (is_object_type(module_ctx))
-    js_set_slot_wb(js, func_obj, SLOT_MODULE_CTX, module_ctx);
+  if (!(closure->call_flags & SV_CALL_HAS_BOUND_ARGS) && closure->u.pending.name) {
+    js_set_function_name(js, func_val, closure->u.pending.name, closure->u.pending.len);
+    closure->u.pending.name = NULL;
+    closure->u.pending.len = 0;
+  }
+
+  if (is_object_type(module_ctx)) js_set_slot_wb(js, func_obj, SLOT_MODULE_CTX, module_ctx);
 
   if (!child->is_arrow && !child->is_method && (!child->is_async || child->is_generator)) {
     ant_value_t parent_proto = child->is_async

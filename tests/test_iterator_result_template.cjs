@@ -5,7 +5,7 @@ for (const iterable of [[7, 8], 'ab', new Uint8Array([7, 8])]) {
   const first = iterator.next();
   const savedValue = first.value;
   const originalPrototype = Object.getPrototypeOf(first);
-  assert.deepStrictEqual(Object.keys(first), ['done', 'value']);
+  assert.deepStrictEqual(Object.keys(first), ['value', 'done']);
   for (const key of ['done', 'value']) {
     const descriptor = Object.getOwnPropertyDescriptor(first, key);
     assert.strictEqual(descriptor.writable, true);
@@ -23,7 +23,7 @@ for (const iterable of [[7, 8], 'ab', new Uint8Array([7, 8])]) {
   const end = iterator.next();
   assert.strictEqual(end.done, true);
   assert.strictEqual(end.value, undefined);
-  assert.deepStrictEqual(Object.keys(end), ['done', 'value']);
+  assert.deepStrictEqual(Object.keys(end), ['value', 'done']);
   assert.notStrictEqual(end, iterator.next());
 }
 

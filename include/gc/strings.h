@@ -317,6 +317,7 @@ size_t intern_length(const char *interned);
 js_cstr_t js_to_cstr(ant_t *js, ant_value_t value, char *stack_buf, size_t stack_size);
 js_cstr_t js_inspect_cstr(ant_t *js, ant_value_t value, char *stack_buf, size_t stack_size);
 js_cstr_t js_inspect_cstr_depth(ant_t *js, ant_value_t value, char *stack_buf, size_t stack_size, int max_depth);
+js_cstr_t js_inspect_cstr_opts(ant_t *js, ant_value_t value, char *stack_buf, size_t stack_size, int max_depth, bool show_hidden);
 
 ant_offset_t vstr(ant_t *js, ant_value_t value, ant_offset_t *len);
 ant_offset_t vstrlen(ant_t *js, ant_value_t value);

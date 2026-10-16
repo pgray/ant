@@ -621,7 +621,7 @@ int main(int argc, char *argv[]) {
     X(struct arg_str *, input_type, arg_str0(NULL, "input-type", "<type>", "set string input type: commonjs or module")) \
     X(struct arg_lit *, print, arg_lit0("p", "print", "evaluate script and print result")) \
     X(struct arg_lit *, watch, arg_lit0("w", "watch", "restart process when entry file changes")) \
-    X(struct arg_lit *, web, arg_lit0(NULL, "web", "enable web-compatible globals")) \
+    X(struct arg_lit *, web_compat, arg_lit0(NULL, "web-compat", "browser-compatible mode: location, relative URLs, browser package resolution")) \
     X(struct arg_lit *, no_clear_screen, arg_lit0(NULL, "no-clear-screen", "keep output when restarting in watch mode")) \
     X(struct arg_lit *, jitless, arg_lit0(NULL, "jitless", "run everything in the interpreter, without compiling to native code")) \
     X(struct arg_file *, localstorage_file, arg_file0(NULL, "localstorage-file", "<path>", "file path for localStorage persistence")) \
@@ -870,7 +870,7 @@ int main(int argc, char *argv[]) {
   if (sandbox_daemon) ant_sandbox_set_guest_process(true);
   
   ant_runtime_init(js, proc_argv.argc, proc_argv.argv, localstorage_file);
-  if (web->count > 0) js->runtime.flags |= ANT_RUNTIME_WEB;
+  if (web_compat->count > 0) js->runtime.flags |= ANT_RUNTIME_WEB_COMPAT;
   
   if (sandbox_daemon) {
     io_set_sandbox_terminal(sandbox.capabilities);

@@ -26,6 +26,7 @@
 #include "modules/buffer.h"
 #include "modules/events.h"
 #include "modules/websocket.h"
+#include "modules/url.h"
 #include "net/listener.h"
 
 struct websocket_state_s {
@@ -456,6 +457,51 @@ static ant_value_t websocket_create_object(ant_t *js) {
   return obj;
 }
 
+static ant_value_t websocket_resolve_url(ant_t *js, ant_value_t input) {
+  const char *text = js_getstr(js, input, NULL);
+  url_state_t parsed = {0};
+  
+  if (!text || Ant_URL_ParseDocumentRelative(js, text, &parsed) != 0) {
+    url_state_clear(&parsed);
+    return js_mkerr_typed(js, JS_ERR_SYNTAX, "Failed to construct 'WebSocket': The URL '%s' is invalid.", text ? text : "");
+  }
+
+  const char *protocol = parsed.protocol ? parsed.protocol : "";
+  const char *scheme = NULL;
+  size_t skip = 0;
+  
+  if (strcmp(protocol, "ws:") == 0 || strcmp(protocol, "wss:") == 0) scheme = "";
+  else if (strcmp(protocol, "http:") == 0) { scheme = "ws"; skip = 4; }
+  else if (strcmp(protocol, "https:") == 0) { scheme = "wss"; skip = 5; }
+
+  ant_value_t result;
+  if (!scheme) result = js_mkerr_typed(
+    js, JS_ERR_SYNTAX, "Failed to construct 'WebSocket': The URL's scheme must be either 'http', 'https', 'ws', or 'wss'. '%s' is not allowed.", protocol
+  );
+  else if (parsed.hash && parsed.hash[0]) result = js_mkerr_typed(
+    js, JS_ERR_SYNTAX, "Failed to construct 'WebSocket': The URL contains a fragment identifier ('%s'). Fragment identifiers are not allowed in WebSocket URLs.", parsed.hash
+  );
+  else {
+    char *href = build_href(&parsed);
+    if (!href) result = js_mkerr(js, "oom");
+    else {
+      size_t scheme_len = strlen(scheme), rest_len = strlen(href) - skip;
+      char *out = malloc(scheme_len + rest_len + 1);
+      if (!out) result = js_mkerr(js, "oom");
+      else {
+        memcpy(out, scheme, scheme_len);
+        memcpy(out + scheme_len, href + skip, rest_len + 1);
+        result = js_mkstr(js, out, scheme_len + rest_len);
+        free(out);
+      }
+      free(href);
+    }
+  }
+
+  url_state_clear(&parsed);
+  return result;
+}
+
 static ant_value_t js_websocket_ctor(ant_params_t) {
   if (vtype(call_new_target) == kTypeUndefined)
     return js_mkerr_typed(js, JS_ERR_TYPE, "WebSocket constructor requires 'new'");
@@ -463,13 +509,17 @@ static ant_value_t js_websocket_ctor(ant_params_t) {
 
   ant_value_t url_val = js_tostring_val(js, args[0]);
   if (is_err(url_val)) return url_val;
+  
+  ant_value_t resolved = websocket_resolve_url(js, url_val);
+  if (is_err(resolved)) return resolved;
+  
+  url_val = resolved;
   const char *url = js_getstr(js, url_val, NULL);
-  if (!url || (strncmp(url, "ws://", 5) != 0 && strncmp(url, "wss://", 6) != 0))
-    return js_mkerr_typed(js, JS_ERR_SYNTAX, "WebSocket URL must use ws: or wss:");
 
   ant_value_t obj = websocket_create_object(js);
   websocket_state_t *ws = websocket_state_new(js, obj);
   if (!ws) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+  
   ws->is_client = true;
   js_set_native(obj, ws, WS_NATIVE_TAG);
   js_set(js, obj, "url", url_val);

@@ -31,6 +31,70 @@ static size_t strkey_interned(ant_t *js, const char *key, size_t klen, char *buf
   return strstring(js, key_str, buf, len);
 }
 
+static bool js_inspect_showing_hidden(ant_t *js) {
+  return js->stringify && js->stringify->show_hidden;
+}
+
+typedef bool (*js_inspect_hidden_visit_t)(
+  void *ctx, ant_value_t key, ant_value_t desc
+);
+
+static bool js_inspect_each_hidden(ant_t *js, ant_value_t obj, js_inspect_hidden_visit_t visit, void *ctx) {
+  if (!js_inspect_showing_hidden(js)) return true;
+  if (vtype(obj) == kTypeBuiltin) obj = js_cfunc_promote(js, obj);
+  if (!is_object_type(obj) || is_proxy(js_as_obj(obj))) return true;
+
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, obj);
+  ant_value_t keys = js_own_property_keys(js, obj, true, false);
+  GC_ROOT_PIN(js, keys);
+  if (is_err(keys)) {
+    Ant_Exception_Clear(js);
+    GC_ROOT_RESTORE(js, mark);
+    return true;
+  }
+
+  bool ok = true;
+  ant_offset_t count = js_arr_len(js, keys);
+  for (ant_offset_t i = 0; ok && i < count; i++) {
+    ant_value_t args[2] = { obj, js_arr_get(js, keys, i) };
+    ant_value_t desc = builtin_object_getOwnPropertyDescriptor(js, args, 2, js_mkundef());
+    if (is_err(desc)) {
+      Ant_Exception_Clear(js);
+      continue;
+    }
+    if (!is_object_type(desc) || js_truthy(js, js_get(js, desc, "enumerable"))) continue;
+    GC_ROOT_PIN(js, desc);
+    ok = visit(ctx, args[1], desc);
+  }
+
+  GC_ROOT_RESTORE(js, mark);
+  return ok;
+}
+
+typedef struct {
+  ant_t *js;
+  int count;
+  bool has_nested;
+} js_inspect_hidden_tally_t;
+
+static bool js_inspect_tally_hidden(void *ctx, ant_value_t key, ant_value_t desc) {
+  js_inspect_hidden_tally_t *tally = ctx;
+  (void)key;
+  tally->count++;
+  ant_value_t value = js_get(tally->js, desc, "value");
+  uint8_t t = vtype(value);
+  if (t == kTypeObject || t == kTypeArray || t == kTypeFunction) tally->has_nested = true;
+  return true;
+}
+
+int js_inspect_hidden_count(ant_t *js, ant_value_t obj, bool *has_nested) {
+  js_inspect_hidden_tally_t tally = { js, 0, false };
+  js_inspect_each_hidden(js, obj, js_inspect_tally_hidden, &tally);
+  if (has_nested) *has_nested = tally.has_nested;
+  return tally.count;
+}
+
 static bool is_small_object(ant_t *js, ant_value_t obj, int *prop_count) {
   int count = 0;
   bool has_nested = false;
@@ -67,6 +131,10 @@ static bool is_small_object(ant_t *js, ant_value_t obj, int *prop_count) {
     }
   }
   
+  bool hidden_nested = false;
+  count += js_inspect_hidden_count(js, obj, &hidden_nested);
+  has_nested |= hidden_nested;
+
   if (prop_count) *prop_count = count;
   return count <= 4 && !has_nested;
 }
@@ -445,6 +513,49 @@ static bool js_inspect_append_prop_key(js_inspect_builder_t *builder, const ant_
   return js_inspect_append_tostr(builder, mkval(kTypeSymbol, prop->key.sym_off));
 }
 
+static bool js_inspect_emit_hidden(void *ctx, ant_value_t key, ant_value_t desc) {
+  js_inspect_builder_t *builder = ctx;
+  ant_t *js = builder->js;
+  if (!js_inspect_property_prefix(builder)) return false;
+  if (!js_inspect_append(builder, "[", 1)) return false;
+
+  if (vtype(key) == kTypeSymbol) {
+    const char *text = js_str(js, key);
+    if (!js_inspect_append(builder, text, strlen(text))) return false;
+  } else {
+    size_t key_len = 0;
+    const char *text = js_getstr(js, key, &key_len);
+    if (!js_inspect_append(builder, text, key_len)) return false;
+  }
+  if (!js_inspect_append(builder, "]: ", 3)) return false;
+
+  bool getter = vtype(js_get(js, desc, "get")) != kTypeUndefined;
+  bool setter = vtype(js_get(js, desc, "set")) != kTypeUndefined;
+  if (getter && setter) return js_inspect_append(builder, "[Getter/Setter]", 15);
+  if (getter) return js_inspect_append(builder, "[Getter]", 8);
+  if (setter) return js_inspect_append(builder, "[Setter]", 8);
+  return js_inspect_append_tostr(builder, js_get(js, desc, "value"));
+}
+
+bool js_inspect_hidden_props(js_inspect_builder_t *builder, ant_value_t obj) {
+  if (!js_inspect_showing_hidden(builder->js)) return true;
+  js_inspect_begin_body(builder);
+  return js_inspect_each_hidden(builder->js, obj, js_inspect_emit_hidden, builder);
+}
+
+bool js_inspect_hidden_trailer(js_inspect_builder_t *builder, ant_value_t obj) {
+  bool nested = false;
+  if (js_inspect_hidden_count(builder->js, obj, &nested) == 0) return true;
+
+  if (!js_inspect_append(builder, nested ? " {\n" : " { ", 3)) return false;
+  builder->inline_mode = !nested;
+  builder->first = true;
+  builder->closed = false;
+  builder->did_indent = false;
+
+  return js_inspect_hidden_props(builder, obj) && js_inspect_close(builder);
+}
+
 bool js_inspect_object_body(js_inspect_builder_t *builder, ant_value_t obj) {
   if (builder->closed) return true;
   js_inspect_begin_body(builder);
@@ -537,7 +648,7 @@ bool js_inspect_object_body(js_inspect_builder_t *builder, ant_value_t obj) {
     }
   }
 
-  return true;
+  return js_inspect_hidden_props(builder, obj);
 }
 
 bool js_inspect_trailing_props(js_inspect_builder_t *builder, ant_value_t obj) {

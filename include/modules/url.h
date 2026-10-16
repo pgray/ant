@@ -40,4 +40,6 @@ int parse_url_to_state(
   const char *base_str, url_state_t *s
 );
 
+int Ant_URL_ParseDocumentRelative(ant_t *js, const char *url_str, url_state_t *s);
+
 #endif

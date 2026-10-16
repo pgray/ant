@@ -1064,7 +1064,7 @@ static ant_value_t request_new_from_input(
     }
 
     url_str = js_getstr(js, input, &ulen);
-    if (parse_url_to_state(url_str, NULL, &parsed) != 0) {
+    if (Ant_URL_ParseDocumentRelative(js, url_str, &parsed) != 0) {
       url_state_clear(&parsed);
       return js_mkerr_typed(js, JS_ERR_TYPE, "Failed to construct 'Request': Invalid URL");
     }

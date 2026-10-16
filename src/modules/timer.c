@@ -21,6 +21,7 @@
 #include "loop.h"
 #include "modules/timer.h"
 #include "modules/process.h"
+#include "modules/generator.h"
 
 typedef struct timer_entry {
   struct timer_entry *next;
@@ -45,6 +46,7 @@ enum {
   MT_PROMISE_TRIGGER,
   MT_THENABLE_JOB,
   MT_AWAIT_RESUME,
+  MT_GENERATOR_YIELD,
 };
 
 typedef struct microtask_entry {
@@ -807,6 +809,18 @@ bool queue_promise_thenable_job(ant_t *js, ant_value_t promise, ant_value_t then
   return true;
 }
 
+bool queue_generator_yield_job(ant_t *js, ant_value_t gen, ant_value_t value) {
+  microtask_entry_t *entry = calloc(1, sizeof(microtask_entry_t));
+  if (entry == NULL) return false;
+
+  entry->callback = value;
+  entry->u.this_val = gen;
+  entry->kind = MT_GENERATOR_YIELD;
+  queue_microtask_entry(&js->timers.microtasks, &js->timers.microtasks_tail, entry);
+  
+  return true;
+}
+
 bool queue_await_resume_job(coroutine_t *coro, ant_value_t value) {
   ant_t *js = coro->js;
   microtask_entry_t *entry = calloc(1, sizeof(microtask_entry_t));
@@ -883,6 +897,11 @@ static inline void process_microtask_entry(ant_t *js, microtask_entry_t *entry) 
     js_process_promise_handlers(js, promise);
     GC_ROOT_RESTORE(js, root_mark);
 
+    return;
+  }
+
+  if (entry->kind == MT_GENERATOR_YIELD) {
+    Ant_Generator_SettleYield(js, entry->u.this_val, entry->callback);
     return;
   }
 

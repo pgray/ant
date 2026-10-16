@@ -1304,13 +1304,6 @@ static inline __attribute__((always_inline)) ant_value_t sv_try_direct_closure_j
 ant_value_t sv_closure_materialize_func_obj(ant_t *js, sv_closure_t *c, ant_value_t func_val) {
   if (c->func_obj) return c->func_obj;
   sv_init_closure_function_object(js, c, func_val, c->module_ctx);
-  
-  if (!(c->call_flags & SV_CALL_HAS_BOUND_ARGS) && c->u.pending.name && c->func_obj) {
-    js_set_function_name(js, func_val, c->u.pending.name, c->u.pending.len);
-    c->u.pending.name = NULL;
-    c->u.pending.len = 0;
-  }
-  
   return c->func_obj;
 }
 
@@ -2778,6 +2771,20 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
     NEXT(OP_AWAIT);
   }
   
+  L_ASYNC_YIELD: {
+    ant_value_t yielded = vm->stack[vm->sp - 1];
+    coroutine_t *coro = sv_async_active_coro(js);
+    if (!coro || !coro->is_generator || !sv_await_type_is_primitive(vtype(yielded))) goto L_AWAIT;
+    vm->sp--;
+    coro->yield_tick = true;
+    vm->suspended = true;
+    vm->suspended_entry_fp = entry_fp;
+    vm->suspended_saved_fp = entry_fp - 1;
+    frame->ip = ip + sv_op_size[OP_ASYNC_YIELD] + sv_op_size[OP_YIELD];
+    vm_result = yielded;
+    goto sv_leave;
+  }
+
   L_YIELD: {
     ant_value_t yielded = vm->stack[--vm->sp];
     coroutine_t *coro = sv_async_active_coro(js);

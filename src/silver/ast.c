@@ -2,7 +2,6 @@
 #include "silver/lexer.h"
 #include "silver/directives.h"
 
-#include "ascii.h"
 #include "escape.h"
 #include "debug.h"
 #include "errors.h"
@@ -204,7 +203,7 @@ static inline const char *decode_ident_into_arena(ant_t *js, const char *src, ui
   
   while (i < len) {
     if (in[i] == '\\' && i + 1 < len && in[i + 1] == 'u') {
-      size_t adv = decode_escape(in, i, len, out, &di, 0);
+      size_t adv = decode_escape(in, i, len, out, &di, 0, NULL);
       if (adv > 0) { i += 2 + adv; continue; }
     }
     out[di++] = in[i++];
@@ -561,28 +560,6 @@ static void push_arrow_params_from_expr(P, sv_ast_t *fn, sv_ast_t *expr) {
   sv_ast_list_push(JS, &fn->args, expr);
 }
 
-static bool template_hex_run(const uint8_t *p, size_t avail, size_t n) {
-  if (avail < n) return false;
-  for (size_t k = 0; k < n; k++) if (!ant_ascii_is_xdigit(p[k])) return false;
-  return true;
-}
-
-static bool template_escape_is_cookable(const uint8_t *p, size_t avail, uint8_t c) {
-  if (c >= '1' && c <= '9') return false;
-  if (c == '0') return !(avail > 0 && ant_ascii_is_digit(p[0]));
-  if (c == 'x') return template_hex_run(p, avail, 2);
-  if (c != 'u') return true;
-  if (avail == 0 || p[0] != '{') return template_hex_run(p, avail, 4);
-
-  uint32_t cp = 0;
-  size_t j = 1;
-  for (; j < avail && ant_ascii_is_xdigit(p[j]); j++) {
-    cp = (cp << 4) | unhex(p[j]);
-    if (cp > 0x10FFFF) return false;
-  }
-  return j > 1 && j < avail && p[j] == '}';
-}
-
 static void template_set_raw(P, sv_ast_t *s, const uint8_t *in, size_t start, size_t end) {
   s->aux = (const char *)&in[start];
   s->aux_len = (uint32_t)(end - start);
@@ -633,12 +610,13 @@ static sv_tpl_cooked_t decode_template_segment(P, const uint8_t *in, size_t star
       continue;
     }
     
-    if (!template_escape_is_cookable(in + i + 2, end - i - 2, in[i + 1])) {
+    uint8_t flags = 0;
+    i += 1 + decode_escape(in, i, end, out, &out_len, '`', &flags);
+    
+    if (flags) {
       outv.valid_cooked = false;
       return outv;
     }
-    
-    i += 1 + decode_escape(in, i, end, out, &out_len, '`');
   }
 
   outv.str = (const char *)out;

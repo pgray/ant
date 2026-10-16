@@ -244,6 +244,7 @@ OP_DEF(  DESTRUCTURE_CLOSE, 2,   3,   0, u8)        /* close destructuring itera
 
 OP_DEF(  AWAIT,             1,   1,   1, none)      /* promise -> resolved value */
 OP_DEF(  YIELD,             1,   1,   1, none)      /* val -> received */
+OP_DEF(  ASYNC_YIELD,       1,   1,   1, none)      /* val -> awaited val, or yields a primitive and skips the next YIELD */
 OP_DEF(  YIELD_STAR_INIT,   3,   1,   0, loc)       /* iterable -> delegate locals */
 OP_DEF(  YIELD_STAR_NEXT,   3,   1,   1, loc)       /* sent -> final value | suspend */
 OP_DEF(  YIELD_STAR_THROW,  3,   1,   1, loc)       /* thrown -> final value | suspend */

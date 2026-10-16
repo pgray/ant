@@ -807,6 +807,24 @@ static char *esm_replace_star(const char *pattern, const char *capture, size_t c
   return out;
 }
 
+const char *esm_platform_condition(ant_t *js) {
+  return js && (js->runtime.flags & ANT_RUNTIME_WEB_COMPAT) ? "browser" : "node";
+}
+
+static bool esm_condition_active(ant_t *js, const char *key, bool prefer_require) {
+  if (!key) return false;
+  if (strcmp(key, "default") == 0) return true;
+
+  ant_esm_state_t *st = js ? js->modules.state : NULL;
+  if (st && st->active_conditions) {
+    for (int i = 0; i < st->active_condition_count; i++)
+      if (strcmp(st->active_conditions[i], key) == 0) return true;
+    return false;
+  }
+
+  return strcmp(key, prefer_require ? "require" : "import") == 0 || strcmp(key, esm_platform_condition(js)) == 0;
+}
+
 static char *esm_resolve_exports_target(
   ant_t *js,
   yyjson_val *target,
@@ -852,42 +870,12 @@ static char *esm_resolve_exports_target(
   }
 
   if (yyjson_is_obj(target)) {
-    ant_esm_state_t *st = js ? js->modules.state : NULL;
-    if (st && st->active_conditions) {
-      for (int i = 0; i < st->active_condition_count; i++) {
-        yyjson_val *cond_target = yyjson_obj_get(target, st->active_conditions[i]);
-        if (!cond_target) continue;
-        char *resolved = esm_resolve_exports_target(
-          js, cond_target, package_dir, capture,
-          capture_len, base_path, allow_bare_specifiers, prefer_require
-        );
-        if (resolved) return resolved;
-      }
-
-      yyjson_val *default_target = yyjson_obj_get(target, "default");
-      if (default_target) return esm_resolve_exports_target(
-        js, default_target, package_dir, capture,
-        capture_len, base_path, allow_bare_specifiers, prefer_require
-      );
-      return NULL;
-    }
-
-    static const char *const import_conditions[] = {"import", "node", "default"};
-    static const char *const require_conditions[] = {"require", "node", "default"};
-
-    const char *const *conditions = prefer_require
-      ? require_conditions
-      : import_conditions;
-
-    size_t condition_count = prefer_require
-      ? sizeof(require_conditions) / sizeof(require_conditions[0])
-      : sizeof(import_conditions) / sizeof(import_conditions[0]);
-
-    for (size_t i = 0; i < condition_count; i++) {
-      yyjson_val *cond_target = yyjson_obj_get(target, conditions[i]);
-      if (!cond_target) continue;
+    size_t idx, max;
+    yyjson_val *key, *value;
+    yyjson_obj_foreach(target, idx, max, key, value) {
+      if (!esm_condition_active(js, yyjson_get_str(key), prefer_require)) continue;
       char *resolved = esm_resolve_exports_target(
-        js, cond_target, package_dir, capture,
+        js, value, package_dir, capture,
         capture_len, base_path, allow_bare_specifiers, prefer_require
       );
       if (resolved) return resolved;
@@ -952,7 +940,8 @@ static char *esm_resolve_package_map(
 static char *esm_resolve_package_main_entry(ant_t *js, yyjson_val *root, const char *package_dir) {
   if (!root || !yyjson_is_obj(root)) return NULL;
 
-  yyjson_val *main = yyjson_obj_get(root, "main");
+  yyjson_val *browser = js && (js->runtime.flags & ANT_RUNTIME_WEB_COMPAT) ? yyjson_obj_get(root, "browser") : NULL;
+  yyjson_val *main = browser && yyjson_is_str(browser) ? browser : yyjson_obj_get(root, "main");
   if (!main || !yyjson_is_str(main)) return NULL;
 
   const char *main_str = yyjson_get_str(main);
@@ -1031,6 +1020,130 @@ static yyjson_doc *esm_find_nearest_package_json(ant_t *js, const char *start_di
 
   *out_owned = false;
   return NULL;
+}
+
+static char *esm_resolve_node_module_cond(ant_t *js, const char *specifier, const char *base_path, bool prefer_require);
+static const char esm_browser_empty_module[] = "ant:internal/empty";
+
+static bool esm_web_compat(ant_t *js) {
+  return js && (js->runtime.flags & ANT_RUNTIME_WEB_COMPAT);
+}
+
+static bool esm_is_browser_empty(const char *path) {
+  return path && strcmp(path, esm_browser_empty_module) == 0;
+}
+
+static yyjson_val *esm_browser_map_find(yyjson_val *map, const char *key, size_t key_len) {
+  size_t idx, max;
+  yyjson_val *k, *v;
+  yyjson_obj_foreach(map, idx, max, k, v) {
+    const char *name = yyjson_get_str(k);
+    if (name && yyjson_get_len(k) == key_len && memcmp(name, key, key_len) == 0) return v;
+  }
+  return NULL;
+}
+
+static char *esm_browser_map_apply(ant_t *js, yyjson_val *target, const char *scope_dir) {
+  if (yyjson_is_false(target)) return strdup(esm_browser_empty_module);
+  if (!yyjson_is_str(target)) return NULL;
+
+  const char *value = yyjson_get_str(target);
+  if (!esm_is_relative_specifier(value)) return strdup(value);
+
+  const char *spec = strncmp(value, "./", 2) == 0 ? value + 2 : value;
+  char *resolved = esm_try_resolve_with_exts(js, scope_dir, spec, esm_has_extension(spec));
+  if (!resolved) resolved = esm_try_resolve_index_with_exts(js, scope_dir, spec);
+  return resolved;
+}
+
+typedef struct {
+  yyjson_doc *doc;
+  yyjson_val *map;
+  bool owned;
+  char scope_dir[PATH_MAX];
+} esm_browser_scope_t;
+
+static bool esm_browser_scope_open(ant_t *js, const char *start_dir, esm_browser_scope_t *scope) {
+  scope->doc = esm_find_nearest_package_json(js, start_dir, scope->scope_dir, sizeof(scope->scope_dir), false, &scope->owned);
+  yyjson_val *root = scope->doc ? yyjson_doc_get_root(scope->doc) : NULL;
+  yyjson_val *map = root && yyjson_is_obj(root) ? yyjson_obj_get(root, "browser") : NULL;
+  scope->map = map && yyjson_is_obj(map) ? map : NULL;
+  if (!scope->map && scope->owned) yyjson_doc_free(scope->doc);
+  return scope->map != NULL;
+}
+
+static void esm_browser_scope_close(esm_browser_scope_t *scope) {
+  if (scope->owned && scope->doc) yyjson_doc_free(scope->doc);
+}
+
+static char *esm_browser_remap_specifier(ant_t *js, char *specifier, const char *base_path) {
+  if (!esm_web_compat(js) || !specifier || !specifier[0]) return specifier;
+  if (esm_is_relative_specifier(specifier) || esm_path_is_absolute(specifier) || specifier[0] == '#' || esm_is_url(specifier)) return specifier;
+
+  char *start_dir = esm_get_base_dir(js, base_path);
+  if (!start_dir) return specifier;
+
+  esm_browser_scope_t scope;
+  bool has_map = esm_browser_scope_open(js, start_dir, &scope);
+  free(start_dir);
+  if (!has_map) return specifier;
+
+  yyjson_val *target = esm_browser_map_find(scope.map, specifier, strlen(specifier));
+  char *mapped = target ? esm_browser_map_apply(js, target, scope.scope_dir) : NULL;
+  esm_browser_scope_close(&scope);
+
+  if (!mapped) return specifier;
+  free(specifier);
+  return mapped;
+}
+
+static char *esm_browser_remap_file(ant_t *js, char *resolved, bool prefer_require) {
+  if (!resolved || esm_is_browser_empty(resolved)) return resolved;
+
+  char *start_dir = strdup(resolved);
+  if (!start_dir) return resolved;
+  char *sep = esm_path_last_sep(start_dir);
+  if (sep) *sep = '\0';
+
+  esm_browser_scope_t scope;
+  bool has_map = esm_browser_scope_open(js, start_dir, &scope);
+  free(start_dir);
+  if (!has_map) return resolved;
+
+  size_t scope_len = strlen(scope.scope_dir);
+  const char *rel = strncmp(resolved, scope.scope_dir, scope_len) == 0 && resolved[scope_len] == '/'
+    ? resolved + scope_len + 1 : NULL;
+
+  yyjson_val *target = NULL;
+  if (rel) {
+    const char *ext = strrchr(rel, '.');
+    const char *slash = strrchr(rel, '/');
+    size_t full = strlen(rel);
+    size_t stem = ext && (!slash || ext > slash) ? (size_t)(ext - rel) : full;
+    char key[PATH_MAX];
+
+    for (int variant = 0; variant < 4 && !target; variant++) {
+      bool dotted = variant % 2 == 0;
+      size_t len = variant < 2 ? full : stem;
+      if (variant >= 2 && stem == full) break;
+      int n = snprintf(key, sizeof(key), "%s%.*s", dotted ? "./" : "", (int)len, rel);
+      if (n > 0 && (size_t)n < sizeof(key)) target = esm_browser_map_find(scope.map, key, (size_t)n);
+    }
+  }
+
+  char *mapped = target ? esm_browser_map_apply(js, target, scope.scope_dir) : NULL;
+  if (mapped && !esm_is_browser_empty(mapped) && !esm_path_is_absolute(mapped)) {
+    char base[PATH_MAX];
+    snprintf(base, sizeof(base), "%s/package.json", scope.scope_dir);
+    char *bare = esm_resolve_node_module_cond(js, mapped, base, prefer_require);
+    free(mapped);
+    mapped = bare;
+  }
+
+  esm_browser_scope_close(&scope);
+  if (!mapped) return resolved;
+  free(resolved);
+  return mapped;
 }
 
 static char *esm_resolve_package_imports(ant_t *js, const char *specifier, const char *base_path, bool prefer_require) {
@@ -1152,7 +1265,7 @@ static char *esm_resolve_relative_path(ant_t *js, const char *specifier, const c
   }
 }
 
-static char *esm_resolve_path_cond_uncached(ant_t *js, const char *specifier, const char *base_path, bool prefer_require) {
+static char *esm_resolve_path_cond_unmapped(ant_t *js, const char *specifier, const char *base_path, bool prefer_require) {
   if (!specifier || !specifier[0]) return NULL;
 
   const ant_bundle_t *vfs = js && js->modules.state ? js->modules.state->bundle : NULL;
@@ -1176,6 +1289,11 @@ static char *esm_resolve_path_cond_uncached(ant_t *js, const char *specifier, co
   }
 
   return esm_resolve_node_module_cond(js, specifier, base_path, prefer_require);
+}
+
+static char *esm_resolve_path_cond_uncached(ant_t *js, const char *specifier, const char *base_path, bool prefer_require) {
+  char *resolved = esm_resolve_path_cond_unmapped(js, specifier, base_path, prefer_require);
+  return esm_web_compat(js) ? esm_browser_remap_file(js, resolved, prefer_require) : resolved;
 }
 
 static char *esm_resolve_path_cond(ant_t *js, const char *specifier, const char *base_path, bool prefer_require) {
@@ -1803,6 +1921,7 @@ static ant_value_t esm_load_static_dependency(
     free(specifier);
     specifier = file_url_path;
   }
+  specifier = esm_browser_remap_specifier(js, specifier, parent->resolved_path);
 
   esm_builtin_t builtin = esm_find_builtin(specifier, strlen(specifier));
   if (builtin.kind != ANT_BUILTIN_NAME_NONE) {
@@ -1816,6 +1935,13 @@ static ant_value_t esm_load_static_dependency(
     ant_value_t err = js_mkerr(js, "Cannot resolve module: %s", specifier);
     free(specifier);
     return err;
+  }
+  
+  if (esm_is_browser_empty(resolved_path)) {
+    ant_value_t ns = esm_load_builtin(js, resolved_path, esm_find_builtin(resolved_path, strlen(resolved_path)));
+    free(resolved_path);
+    free(specifier);
+    return ns;
   }
 
   esm_module_t *dep = esm_find_module(js, resolved_path);
@@ -2134,6 +2260,8 @@ static ant_value_t esm_import_cstr_attrs(
     spec_copy = file_url_path;
     spec_len = strlen(spec_copy);
   }
+  spec_copy = esm_browser_remap_specifier(js, spec_copy, base_path);
+  spec_len = strlen(spec_copy);
 
   esm_builtin_t builtin = esm_find_builtin(spec_copy, spec_len);
   if (builtin.kind != ANT_BUILTIN_NAME_NONE) {
@@ -2148,6 +2276,13 @@ static ant_value_t esm_import_cstr_attrs(
     ant_value_t err = js_mkerr(js, "Cannot resolve module: %s", spec_copy);
     free(spec_copy);
     return err;
+  }
+  
+  if (esm_is_browser_empty(resolved_path)) {
+    ant_value_t ns = esm_load_builtin(js, resolved_path, esm_find_builtin(resolved_path, strlen(resolved_path)));
+    free(resolved_path);
+    free(spec_copy);
+    return ns;
   }
 
   ant_value_t ns = esm_get_or_load(
@@ -2221,6 +2356,8 @@ ant_value_t js_esm_import_sync_cstr_from_require(
     spec_copy = file_url_path;
     spec_len = strlen(spec_copy);
   }
+  spec_copy = esm_browser_remap_specifier(js, spec_copy, base_path);
+  spec_len = strlen(spec_copy);
 
   esm_builtin_t builtin = esm_find_builtin(spec_copy, spec_len);
   if (builtin.kind == ANT_BUILTIN_NAME_BARE) {
@@ -2244,6 +2381,13 @@ ant_value_t js_esm_import_sync_cstr_from_require(
     ant_value_t err = esm_module_not_found_error(js, spec_copy);
     free(spec_copy);
     return err;
+  }
+
+  if (esm_is_browser_empty(resolved_path)) {
+    ant_value_t ns = esm_load_builtin(js, resolved_path, esm_find_builtin(resolved_path, strlen(resolved_path)));
+    free(resolved_path);
+    free(spec_copy);
+    return ns;
   }
 
   ant_value_t cached = esm_require_cache_lookup(js, resolved_path);
@@ -2459,6 +2603,8 @@ ant_value_t js_esm_resolve_specifier(ant_t *js, ant_value_t specifier, const cha
     spec_copy = file_url_path;
     spec_len = strlen(spec_copy);
   }
+  spec_copy = esm_browser_remap_specifier(js, spec_copy, base_path);
+  spec_len = strlen(spec_copy);
 
   esm_builtin_t builtin = esm_find_builtin(spec_copy, (size_t)spec_len);
   if (builtin.kind != ANT_BUILTIN_NAME_NONE) {
@@ -2476,7 +2622,7 @@ ant_value_t js_esm_resolve_specifier(ant_t *js, ant_value_t specifier, const cha
     return js_mkerr(js, "Cannot resolve module");
   }
 
-  if (esm_is_url(resolved_path)) {
+  if (esm_is_url(resolved_path) || esm_is_browser_empty(resolved_path)) {
     ant_value_t result = js_mkstr(js, resolved_path, strlen(resolved_path));
     free(resolved_path);
     return result;
@@ -2508,6 +2654,8 @@ ant_value_t js_esm_resolve_specifier_require(ant_t *js, ant_value_t specifier, c
     spec_copy = file_url_path;
     spec_len = strlen(spec_copy);
   }
+  spec_copy = esm_browser_remap_specifier(js, spec_copy, base_path);
+  spec_len = strlen(spec_copy);
 
   if (esm_find_builtin(spec_copy, (size_t)spec_len).kind != ANT_BUILTIN_NAME_NONE) {
     ant_value_t result = js_mkstr(js, spec_copy, (size_t)spec_len);
@@ -2525,7 +2673,7 @@ ant_value_t js_esm_resolve_specifier_require(ant_t *js, ant_value_t specifier, c
   }
   free(spec_copy);
 
-  if (esm_is_url(resolved_path)) {
+  if (esm_is_url(resolved_path) || esm_is_browser_empty(resolved_path)) {
     ant_value_t result = js_mkstr(js, resolved_path, strlen(resolved_path));
     free(resolved_path);
     return result;

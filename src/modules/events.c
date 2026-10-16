@@ -18,6 +18,7 @@
 #include "gc/modules.h"
 #include "modules/abort.h"
 #include "modules/events.h"
+#include "modules/iterator.h"
 #include "modules/timer.h"
 
 typedef struct {
@@ -1855,13 +1856,6 @@ static ant_value_t js_events_get_event_listeners(ant_params_t) {
   return eventemitter_call_listener(js, listeners_method, target, &key, 1);
 }
 
-static ant_value_t events_on_iter_result(ant_t *js, ant_value_t value, bool done) {
-  ant_value_t result = js_mkobj(js);
-  js_set(js, result, "done", js_bool(done));
-  js_set(js, result, "value", value);
-  return result;
-}
-
 static void events_on_queue_compact(ant_t *js, ant_value_t state, const char *arr_name, const char *head_name) {
   ant_value_t arr = js_get(js, state, arr_name);
   ant_value_t head_val = js_get(js, state, head_name);
@@ -1941,7 +1935,7 @@ static void events_on_finish_parked(ant_t *js, ant_value_t state) {
   for (;;) {
     ant_value_t parked = events_on_queue_shift(js, state, "parked", "parkedHead");
     if (vtype(parked) != kTypePromise) return;
-    js_resolve_promise(js, parked, events_on_iter_result(js, js_mkundef(), true));
+    js_resolve_promise(js, parked, Ant_Iterator_CreateResult(js, js_mkundef(), true));
   }
 }
 
@@ -1964,7 +1958,7 @@ static ant_value_t js_events_on_event_cb(ant_params_t) {
 
   ant_value_t parked = events_on_queue_shift(js, state, "parked", "parkedHead");
   if (vtype(parked) == kTypePromise)
-    js_resolve_promise(js, parked, events_on_iter_result(js, values, false));
+    js_resolve_promise(js, parked, Ant_Iterator_CreateResult(js, values, false));
   else js_arr_push(js, js_get(js, state, "buffer"), values);
 
   return js_mkundef();
@@ -1992,7 +1986,7 @@ static ant_value_t js_events_on_next(ant_params_t) {
   // drain what arrived before the failure; the error surfaces after
   ant_value_t buffered = events_on_queue_shift(js, state, "buffer", "bufferHead");
   if (!is_undefined(buffered)) {
-    js_resolve_promise(js, promise, events_on_iter_result(js, buffered, false));
+    js_resolve_promise(js, promise, Ant_Iterator_CreateResult(js, buffered, false));
     return promise;
   }
 
@@ -2004,7 +1998,7 @@ static ant_value_t js_events_on_next(ant_params_t) {
   }
 
   if (js_truthy(js, js_get(js, state, "finished"))) {
-    js_resolve_promise(js, promise, events_on_iter_result(js, js_mkundef(), true));
+    js_resolve_promise(js, promise, Ant_Iterator_CreateResult(js, js_mkundef(), true));
     return promise;
   }
 
@@ -2021,7 +2015,7 @@ static ant_value_t js_events_on_return(ant_params_t) {
     events_on_finish_parked(js, state);
   }
 
-  js_resolve_promise(js, promise, events_on_iter_result(js, nargs > 0 ? args[0] : js_mkundef(), true));
+  js_resolve_promise(js, promise, Ant_Iterator_CreateResult(js, nargs > 0 ? args[0] : js_mkundef(), true));
   return promise;
 }
 

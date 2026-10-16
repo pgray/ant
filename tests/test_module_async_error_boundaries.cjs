@@ -108,7 +108,7 @@ const cases = {
     const fs = require('node:fs');
     const { Worker } = require('node:worker_threads');
     const filename = require('node:path').join(__dirname, 'worker-fallback.cjs');
-    fs.writeFileSync(filename, "process.stdout.write('ANT_WT_MSG:not-json\\n');");
+    fs.writeFileSync(filename, "process.stdout.write('ANT_WT_MSG:not-json\\\\n');");
     const worker = new Worker(filename);
     let message;
     worker.on('message', value => { message = value; });

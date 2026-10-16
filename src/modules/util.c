@@ -118,9 +118,11 @@ static bool util_sb_append_jsval(ant_t *js, util_sb_t *sb, ant_value_t v) {
   return ok;
 }
 
-static bool util_sb_append_inspect(ant_t *js, util_sb_t *sb, ant_value_t v) {
+static bool util_sb_append_inspect(ant_t *js, util_sb_t *sb, ant_value_t v, bool show_hidden) {
   char cbuf[512];
-  js_cstr_t cstr = js_inspect_cstr(js, v, cbuf, sizeof(cbuf));
+  js_cstr_t cstr = show_hidden
+    ? js_inspect_cstr_opts(js, v, cbuf, sizeof(cbuf), 4, true)
+    : js_inspect_cstr(js, v, cbuf, sizeof(cbuf));
   bool ok = util_sb_append_n(sb, cstr.ptr, strlen(cstr.ptr));
   if (cstr.needs_free) free((void *)cstr.ptr);
   return ok;
@@ -541,7 +543,7 @@ static bool util_format_value(void *ctx, ant_value_t value, char spec) {
   util_format_ctx_t *c = (util_format_ctx_t *)ctx;
   return spec == 's'
     ? util_sb_append_jsval(c->js, c->sb, value)
-    : util_sb_append_inspect(c->js, c->sb, value);
+    : util_sb_append_inspect(c->js, c->sb, value, spec == 'o');
 }
 
 static const ant_format_sink_t util_format_sink = { 
@@ -590,10 +592,19 @@ static int util_inspect_depth(ant_t *js, ant_value_t *args, int nargs) {
   return d >= MAX_STRINGIFY_DEPTH ? MAX_STRINGIFY_DEPTH : (int)d;
 }
 
+static bool util_inspect_show_hidden(ant_t *js, ant_value_t *args, int nargs) {
+  if (nargs < 2) return false;
+  if (is_object_type(args[1])) return js_truthy(js, js_get(js, args[1], "showHidden"));
+  return vtype(args[1]) == kTypeBool && js_truthy(js, args[1]);
+}
+
 static ant_value_t util_inspect(ant_params_t) {
   if (nargs < 1) return js_mkstr(js, "undefined", 9);
   char cbuf[512];
-  js_cstr_t cstr = js_inspect_cstr_depth(js, args[0], cbuf, sizeof(cbuf), util_inspect_depth(js, args, nargs));
+  js_cstr_t cstr = js_inspect_cstr_opts(
+    js, args[0], cbuf, sizeof(cbuf),
+    util_inspect_depth(js, args, nargs), util_inspect_show_hidden(js, args, nargs)
+  );
   ant_value_t out = js_mkstr(js, cstr.ptr, strlen(cstr.ptr));
   if (cstr.needs_free) free((void *)cstr.ptr);
   return out;

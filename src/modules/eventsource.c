@@ -22,6 +22,7 @@
 #include "modules/eventsource.h"
 #include "modules/http.h"
 #include "modules/timer.h"
+#include "modules/url.h"
 
 typedef struct eventsource_timer_s {
   uv_timer_t handle;
@@ -354,9 +355,27 @@ static ant_value_t js_eventsource_ctor(ant_params_t) {
 
   ant_value_t url_val = js_tostring_val(js, args[0]);
   if (is_err(url_val)) return url_val;
-  const char *url = js_getstr(js, url_val, NULL);
-  if (!eventsource_is_http_url(url))
+  
+  const char *input = js_getstr(js, url_val, NULL);
+  url_state_t parsed = {0};
+  
+  if (!input || Ant_URL_ParseDocumentRelative(js, input, &parsed) != 0) {
+    url_state_clear(&parsed);
+    return js_mkerr_typed(js, JS_ERR_SYNTAX, "Failed to construct 'EventSource': Cannot open an EventSource to '%s'. The URL is invalid.", input ? input : "");
+  }
+  
+  char *href = build_href(&parsed);
+  url_state_clear(&parsed);
+  if (!href) return js_mkerr(js, "oom");
+  
+  if (!eventsource_is_http_url(href)) {
+    free(href);
     return js_mkerr_typed(js, JS_ERR_SYNTAX, "EventSource URL must use http: or https:");
+  }
+  
+  url_val = js_mkstr(js, href, strlen(href));
+  free(href);
+  const char *url = js_getstr(js, url_val, NULL);
 
   ant_value_t obj = eventsource_create_object(js);
   eventsource_state_t *es = calloc(1, sizeof(*es));

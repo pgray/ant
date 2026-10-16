@@ -23,6 +23,7 @@ static inline void ant_stringify_enter(ant_t *js, ant_stringify_ctx_t *ctx, int 
   ctx->max_depth = max_depth;
   ctx->multiref_count = 0;
   ctx->multiref_next_id = 0;
+  ctx->show_hidden = false;
   Ant_List_Insert(&js->stringify, ctx);
 }
 
