@@ -1,4 +1,5 @@
 #include "compile.h"
+#include "../silver/ops/globals.h"
 
 void jit_setup_prototypes(jit_compile_t *c, MIR_type_t ret_type) {
   c->self_proto = MIR_new_proto(c->ctx, "jit_proto",
@@ -453,6 +454,15 @@ void jit_setup_prototypes(jit_compile_t *c, MIR_type_t ret_type) {
 
   if (c->cold_tier) c->cold_ns_item = MIR_new_bss(c->ctx, "cold_ns", 3 * sizeof(int64_t));
 
+  ant_object_t *global = sv_global_obj_ptr(c->js->global);
+  if (c->ctx == c->jc->ctx_hot && global && !global->flags.is_exotic && global->shape &&
+      jit_loop_reads_global(c->func)) {
+    uint64_t words[2] = { (uint64_t)(uintptr_t)global, (uint64_t)(uintptr_t)global->shape };
+    c->global_hoist_item = MIR_new_data(c->ctx, "global_hoist", MIR_T_U64, 2, words);
+    c->global_hoist.global = global;
+    c->global_hoist.shape = global->shape;
+  }
+
   MIR_type_t tier_ret = MIR_T_I64;
   c->tier_up_proto = MIR_new_proto(c->ctx, "tier_up_proto",
                                    1, &tier_ret, 3,
@@ -748,8 +758,10 @@ void jit_setup_prototypes(jit_compile_t *c, MIR_type_t ret_type) {
   c->imp_sne = MIR_new_import(c->ctx, "jit_helper_sne");
   c->imp_put_field = MIR_new_import(c->ctx, "jit_helper_put_field_ic");
   c->imp_shape_transition = MIR_new_import(c->ctx, "jit_helper_shape_transition");
+  c->imp_protector_store = MIR_new_import(c->ctx, "jit_helper_protector_store");
   c->imp_remember_obj = MIR_new_import(c->ctx, "gc_remember_props");
   c->imp_get_elem = MIR_new_import(c->ctx, "jit_helper_get_elem");
+  c->imp_realm_reenter = MIR_new_import(c->ctx, "jit_helper_realm_reenter");
   c->imp_get_index_fast = MIR_new_import(c->ctx, "js_get_index_fast");
   c->imp_put_elem = MIR_new_import(c->ctx, c->func->is_strict ? "jit_helper_put_elem_strict" : "jit_helper_put_elem");
   c->imp_get_private = MIR_new_import(c->ctx, "jit_helper_get_private");
@@ -764,6 +776,7 @@ void jit_setup_prototypes(jit_compile_t *c, MIR_type_t ret_type) {
   c->imp_define_slot = MIR_new_import(c->ctx, "jit_helper_define_slot");
   c->imp_array = MIR_new_import(c->ctx, "jit_helper_array");
   c->imp_catch_value = MIR_new_import(c->ctx, "jit_helper_catch_value");
+  c->imp_interrupt = MIR_new_import(c->ctx, "jit_helper_interrupt");
   c->imp_throw = MIR_new_import(c->ctx, "jit_helper_throw");
   c->imp_throw_error = MIR_new_import(c->ctx, "jit_helper_throw_error");
   c->imp_set_proto = MIR_new_import(c->ctx, "jit_helper_set_proto");

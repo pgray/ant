@@ -2,6 +2,8 @@
 #define SILVER_CALL_H
 
 #include "silver/engine.h"
+#include "handles.h"
+#include "interrupt.h"
 #include "silver/feedback.h"
 #include "modules/timer.h"
 #include "../../src/silver/ops/async.h"
@@ -46,6 +48,21 @@ static inline ant_value_t sv_invoke_native(
 
   ant_value_t result = fn(js, args, nargs, new_target);
   return Ant_Silver_FinishNativeCall(js, result);
+}
+
+ant_value_t sv_invoke_builtin_in_realm(
+  ant_t *js, const ant_cfunc_meta_t *meta, ant_value_t *args,
+  int nargs, ant_value_t new_target
+);
+
+static inline ant_value_t sv_invoke_builtin(
+  ant_t *js, ant_value_t builtin, ant_value_t *args,
+  int nargs, ant_value_t new_target
+) {
+  const ant_cfunc_meta_t *meta = js_as_cfunc_meta(builtin);
+  if (__builtin_expect(ant_cfunc_meta_realm(meta) != js->builtin_realm, 0))
+    return sv_invoke_builtin_in_realm(js, meta, args, nargs, new_target);
+  return sv_invoke_native(js, meta->fn, args, nargs, new_target);
 }
 
 static inline void sv_vm_maybe_checkpoint_microtasks(ant_t *js) {
@@ -279,6 +296,40 @@ ant_value_t sv_vm_call_explicit_this(
   ant_value_t this_val, ant_value_t *args, int argc
 );
 
+static inline ant_value_t sv_call_native_this(
+  ant_t *js, ant_cfunc_t fn, ant_value_t this_val,
+  ant_value_t *args, int nargs
+) {
+  ant_value_t saved_this = js->this_val;
+  js->this_val = this_val;
+  
+  ant_value_t result = fn(js, args, nargs, js_mkundef());
+  js->this_val = saved_this;
+  
+  return result;
+}
+
+static inline ant_value_t sv_call_builtin_this(
+  ant_t *js, ant_value_t builtin, ant_value_t this_val,
+  ant_value_t *args, int nargs, ant_value_t new_target
+) {
+  ant_value_t saved_this = js->this_val;
+  js->this_val = this_val;
+  
+  ant_value_t result = sv_invoke_builtin(js, builtin, args, nargs, new_target);
+  js->this_val = saved_this;
+  
+  return result;
+}
+
+static inline ant_value_t sv_call_value(
+  ant_t *js, ant_value_t fn, ant_value_t this_val,
+  ant_value_t *args, int nargs
+) {
+  if (vtype(fn) == kTypeBuiltin) return sv_call_builtin_this(js, fn, this_val, args, nargs, js_mkundef());
+  return sv_vm_call(js->vm, js, fn, this_val, args, nargs, NULL, js_mkundef());
+}
+
 static inline bool sv_closure_is_plain_sync(const sv_closure_t *closure) {
   return 
     closure && closure->call_flags == 0 && closure->func &&
@@ -305,6 +356,7 @@ static inline sv_callback_t sv_callback_prepare(ant_t *js, ant_value_t func, ant
 
   sv_closure_t *closure = js_func_closure(func);
   if (!closure->func || closure->func->is_async || closure->func->is_generator) return cb;
+  if (closure->func->realm != js->realm) return cb;
   if (closure->call_flags & ~SV_CALLBACK_DIRECT_FLAGS) return cb;
 
   cb.closure = closure;
@@ -324,6 +376,8 @@ static inline ant_value_t sv_callback_call(
   
   if (cb->stack_overflow) 
     return js_mkerr_typed(js, JS_ERR_RANGE | JS_ERR_NO_STACK, "Maximum call stack size exceeded");
+  
+  if (js_interrupt_pending(js)) return js_interrupt_raise(js);
 
   sv_call_ctx_t ctx = {
     .this_val = cb->this_val,
@@ -338,7 +392,7 @@ static inline ant_value_t sv_callback_call(
   ant_value_t result;
   
   if (fn->jit_code) {
-    result = sv_jit_invoke(js, SV_JIT_FROM_C, fn->jit_code, vm, &ctx, cb->closure);
+    result = sv_jit_invoke_same_realm(js, SV_JIT_FROM_C, fn->jit_code, vm, &ctx, cb->closure);
     if (!sv_is_jit_bailout(result)) goto done;
     sv_jit_on_bailout(fn);
   }
@@ -400,8 +454,14 @@ static inline ant_value_t sv_call_resolve_closure(
 ) {
   sv_func_t *fn = closure->func;
   
-  if (fn->is_generator) return sv_call_generator_closure(vm, js, closure, callee_func, ctx);
-  if (fn->is_async) return sv_call_async_closure(vm, js, closure, callee_func, ctx);
+  if (fn->is_generator || fn->is_async) {
+    ant_realm_t *prev_realm = ant_realm_switch(js, fn->realm);
+    ant_value_t result = fn->is_generator
+      ? sv_call_generator_closure(vm, js, closure, callee_func, ctx)
+      : sv_call_async_closure(vm, js, closure, callee_func, ctx);
+    ant_realm_restore(js, prev_realm);
+    return result;
+  }
 
   if (fn->jit_code) {
     ant_value_t result = sv_jit_invoke(js, SV_JIT_FROM_C, fn->jit_code, vm, ctx, closure);

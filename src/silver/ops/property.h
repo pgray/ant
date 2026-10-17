@@ -6,6 +6,8 @@
 
 #include "utf8.h"
 #include "shapes.h"
+#include "cfunc.h"
+#include "protectors.h"
 
 #include "modules/regex.h"
 #include "modules/symbol.h"

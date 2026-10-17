@@ -7,6 +7,7 @@
 typedef unsigned long long u64;
 
 typedef struct ant_isolate_t      ant_t;
+typedef struct ant_realm          ant_realm_t;
 typedef struct ant_pool_block     ant_pool_block_t;
 typedef struct ant_http_request_s ant_http_request_t;
 typedef struct ant_process_state  ant_process_state_t;
@@ -31,10 +32,12 @@ typedef struct sv_upvalue   sv_upvalue_t;
 typedef struct sv_closure   sv_closure_t;
 typedef struct sv_frame     sv_frame_t;
 typedef struct sv_code_unit sv_code_unit_t;
+typedef struct vm_interrupt vm_interrupt_t;
 
-typedef struct sv_eval_env_state    sv_eval_env_state_t;
-typedef struct sv_map_template_desc sv_map_template_desc_t;
-typedef struct sv_gf_mega_cache     sv_gf_mega_cache_t;
+typedef struct sv_eval_env_state      sv_eval_env_state_t;
+typedef struct sv_map_template_desc   sv_map_template_desc_t;
+typedef struct sv_gf_mega_cache       sv_gf_mega_cache_t;
+typedef struct wasm_import_func_env_s wasm_import_func_env_t;
 
 typedef struct sv_gf_poly sv_gf_poly_t;
 typedef struct sv_pf_poly sv_pf_poly_t;
@@ -53,6 +56,10 @@ typedef struct dns_request_s    dns_request_t;
 typedef struct net_server_s     net_server_t;
 typedef struct net_socket_s     net_socket_t;
 typedef struct ant_tls_socket_s ant_tls_socket_t;
+typedef struct fs_watcher_s     fs_watcher_t;
+typedef struct fs_request_s     fs_request_t;
+typedef struct fetch_request_s  fetch_request_t;
+typedef struct rl_interface_s   rl_interface_t;
 
 typedef uint64_t ant_offset_t;
 typedef uint64_t ant_value_t;

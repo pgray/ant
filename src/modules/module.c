@@ -136,6 +136,14 @@ static ant_value_t builtin_module_registerHooks(ant_params_t) {
   return out;
 }
 
+static ant_value_t builtin_module_node_module_paths(ant_params_t) {
+  ant_value_t from = nargs > 0 ? args[0] : js_mkundef();
+  if (vtype(from) != kTypeString) return Ant_Error_CreateInvalidArgType(js, "paths[0]", "of type string", from);
+  
+  const char *directory = js_getstr(js, from, NULL);
+  return esm_node_module_paths(js, *directory ? directory : ".");
+}
+
 static ant_value_t builtin_module_constructor(ant_params_t) {
   if (nargs && vtype(args[0]) != kTypeUndefined && vtype(args[0]) != kTypeString)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Module id must be a string");
@@ -172,6 +180,7 @@ ant_value_t module_library(ant_t *js) {
   
   js_set(js, lib, "builtinModules", modules_arr);
   js_set(js, lib, "_resolveFilename", Ant_Function_CreateWithArity(builtin_resolveFilename, 4));
+  js_set(js, lib, "_nodeModulePaths", Ant_Function_CreateWithArity(builtin_module_node_module_paths, 1));
   js_set_tostringtag(js, lib, js_mkstr(js, "Module", 6));
 
   return lib;

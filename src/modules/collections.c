@@ -388,8 +388,7 @@ static weakset_entry_t **get_weakset_from_obj(ant_value_t obj) {
 map_iterator_state_t *get_map_iter_state(ant_value_t obj) {
   if (vtype(obj) == kTypeObject) {
     ant_object_t *ptr = (ant_object_t *)vptr(obj);
-    if (ptr && ptr->native.tag == MAP_ITER_NATIVE_TAG)
-      return (map_iterator_state_t *)ptr->native.ptr;
+    if (ptr && ptr->native_tag == MAP_ITER_NATIVE_TAG) return (map_iterator_state_t *)ptr->native_ptr;
   }
   
   return (map_iterator_state_t *)js_get_native(obj, MAP_ITER_NATIVE_TAG);
@@ -398,8 +397,7 @@ map_iterator_state_t *get_map_iter_state(ant_value_t obj) {
 set_iterator_state_t *get_set_iter_state(ant_value_t obj) {
   if (vtype(obj) == kTypeObject) {
     ant_object_t *ptr = (ant_object_t *)vptr(obj);
-    if (ptr && ptr->native.tag == SET_ITER_NATIVE_TAG)
-      return (set_iterator_state_t *)ptr->native.ptr;
+    if (ptr && ptr->native_tag == SET_ITER_NATIVE_TAG) return (set_iterator_state_t *)ptr->native_ptr;
   }
 
   return (set_iterator_state_t *)js_get_native(obj, SET_ITER_NATIVE_TAG);
@@ -1464,6 +1462,29 @@ static void weakref_finalize(ant_t *js, ant_object_t *obj) {
   js_clear_native(value, WEAKREF_NATIVE_TAG);
 }
 
+static ant_value_t weakref_attach(ant_t *js, ant_value_t wr_obj, ant_value_t target) {
+  weakref_state_t *state = calloc(1, sizeof(*state));
+  if (!state) return js_mkerr(js, "out of memory");
+  
+  state->target = target;
+  js_set_native(wr_obj, state, WEAKREF_NATIVE_TAG);
+  js_set_finalizer(wr_obj, weakref_finalize);
+  gc_weak_register(js, js_obj_ptr(wr_obj));
+  
+  return wr_obj;
+}
+
+ant_value_t js_weakref_create(ant_t *js, ant_value_t target) {
+  ant_value_t wr_obj = Ant_Object_CreateBare(js);
+  return is_err(wr_obj) ? wr_obj : weakref_attach(js, wr_obj, target);
+}
+
+bool js_weakref_target(ant_value_t ref, ant_value_t *target) {
+  weakref_state_t *state = vtype(ref) == kTypeObject ? js_get_native(ref, WEAKREF_NATIVE_TAG) : NULL;
+  if (state) *target = state->target;
+  return state != NULL;
+}
+
 static ant_value_t builtin_WeakRef(ant_params_t) {
   if (vtype(call_new_target) == kTypeUndefined)
     return js_mkerr_typed(js, JS_ERR_TYPE, "WeakRef constructor requires 'new'");
@@ -1479,19 +1500,13 @@ static ant_value_t builtin_WeakRef(ant_params_t) {
   ant_value_t instance_proto = js_instance_proto_from_new_target(js, wr_proto, call_new_target);
   if (is_special_object(instance_proto)) js_set_proto_init(wr_obj, instance_proto);
 
-  weakref_state_t *state = calloc(1, sizeof(*state));
-
-  if (!state) return js_mkerr(js, "out of memory");
-  state->target = args[0];
-
   if (vtype(call_new_target) == kTypeFunction || vtype(call_new_target) == kTypeBuiltin)
     js_set_slot(wr_obj, SLOT_CTOR, call_new_target);
-  js_set_native(wr_obj, state, WEAKREF_NATIVE_TAG);
-  js_set_finalizer(wr_obj, weakref_finalize);
-  gc_weak_register(js, js_obj_ptr(wr_obj));
-  gc_weak_keep_alive(js, args[0]);
   
-  return wr_obj;
+  ant_value_t attached = weakref_attach(js, wr_obj, args[0]);
+  if (!is_err(attached)) gc_weak_keep_alive(js, args[0]);
+  
+  return attached;
 }
 
 static ant_value_t weakref_deref(ant_params_t) {

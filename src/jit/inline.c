@@ -141,6 +141,7 @@ static bool jit_inline_targets_aligned(const uint8_t *boundaries, int len) {
 
 bool jit_inlineable(sv_func_t *f) {
   if (!f) return false;
+  if (jit_compile_owner && f->realm != jit_compile_owner->realm) return false;
   if (f->is_async || f->is_generator) return false;
   // derived ctors need the super-rebound `this` returned from RETURN/
   // RETURN_UNDEF (see the main emission); the inline path doesn't model it
@@ -931,6 +932,9 @@ void jit_emit_inline_body(
                         MIR_new_insn(ctx, MIR_MOV,
                                      MIR_new_reg_op(ctx, dst),
                                      MIR_new_mem_op(ctx, MIR_JSVAL, 0, r_loc, 0, 1)));
+        if (jit_upvalue_may_tdz(callee, idx))
+          MIR_append_insn(ctx, jit_func, MIR_new_insn(ctx, MIR_BEQ,
+              MIR_new_label_op(ctx, slow), MIR_new_reg_op(ctx, dst), MIR_new_uint_op(ctx, SV_TDZ)));
         if (jit_upvalue_is_builder_target(callee, idx))
           mir_emit_branch_if_string_builder(ctx, jit_func, dst, r_bool, slow);
         break;
@@ -1650,7 +1654,7 @@ void jit_emit_inline_body(
         bool gg_fast = r_ic_epoch != 0 &&
                        mir_emit_get_global_ic_fastpath(
                            ctx, jit_func, js, callee, gg_site,
-                           r_js, dst, slow, r_ic_epoch, ip, NULL);
+                           r_js, dst, slow, r_ic_epoch, ip, NULL, NULL);
         if (!gg_fast)
           MIR_append_insn(ctx, jit_func,
                           MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, slow)));
@@ -1700,7 +1704,7 @@ void jit_emit_inline_body(
                            pf_name_off, pf_ic_idx, pf_atom,
                            r_js, pf_obj, pf_val, pf_slow, r_ic_epoch,
                            ext->shape_transition_proto, ext->imp_shape_transition,
-                           ext->remember_obj_proto, ext->imp_remember_obj,
+                           ext->imp_protector_store, ext->remember_obj_proto, ext->imp_remember_obj,
                            ext->fresh_this && jit_inline_receiver_is_this(callee, inl_bc_off));
         if (pf_fast) {
           MIR_append_insn(ctx, jit_func,
@@ -2070,6 +2074,7 @@ void jit_emit_inline_body(
                                        MIR_new_label_op(ctx, dv_generic),
                                        MIR_new_reg_op(ctx, r_dv_fn),
                                        MIR_new_int_op(ctx, 0)));
+          mir_emit_realm_guard(ctx, jit_func, r_dv_fn, r_dv_jp, js, dv_generic);
           MIR_append_insn(ctx, jit_func,
                           MIR_new_insn(ctx, MIR_MOV,
                                        MIR_new_reg_op(ctx, r_dv_jp),

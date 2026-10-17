@@ -1,6 +1,8 @@
 #ifndef ANT_ISOLATE_H
 #define ANT_ISOLATE_H
 
+#include <stdatomic.h>
+
 #include "arena.h"
 #include "errors.h"
 #include "pool.h"
@@ -15,6 +17,13 @@
 #include "modules/math.h"
 #include "modules/timer.h"
 #include "modules/buffer.h"
+#include "modules/regex.h"
+
+typedef struct ant_iterator_registry {
+  struct ant_iterator_entry *entries;
+  size_t len;
+  size_t cap;
+} ant_iterator_registry_t;
 
 typedef struct {
   ant_object_t *base;
@@ -69,6 +78,11 @@ typedef enum {
   ANT_INSPECT_SORTED      = 1 << 2,
 } ant_inspect_flags_t;
 
+typedef enum: uint8_t {
+  ANT_CODEGEN_NO_STRINGS = 1 << 0,
+  ANT_CODEGEN_NO_WASM    = 1 << 1,
+} ant_codegen_flags_t;
+
 typedef struct ant_stringify_ctx {
   struct ant_stringify_ctx *next;
   struct ant_stringify_ctx **pprev;
@@ -84,6 +98,18 @@ typedef struct ant_stringify_ctx {
   ant_value_t multiref_objs[MAX_MULTIREF_OBJS];
   int multiref_ids[MAX_MULTIREF_OBJS];
 } ant_stringify_ctx_t;
+
+typedef struct {
+  uintptr_t key_a;
+  uintptr_t key_b;
+  ant_value_t value;
+} ant_ptr_pair_entry_t;
+
+typedef struct {
+  ant_ptr_pair_entry_t *entries;
+  uint32_t len;
+  uint32_t mask;
+} ant_ptr_pair_map_t;
 
 struct ant_isolate_t {
   sv_vm_t *vm;
@@ -111,10 +137,20 @@ struct ant_isolate_t {
   dns_channel_t *dns_default_channel;
   dns_request_t *dns_requests;
   uint8_t dns_result_order;
-  
+  ant_regexp_realm_t regexp;
+  ant_iterator_registry_t iterators;
   net_server_t *net_servers;
   net_socket_t *net_sockets;
   ant_tls_socket_t *tls_sockets;
+  wasm_import_func_env_t *wasm_import_envs;
+  ant_ptr_pair_map_t wasm_instance_owners;
+  bool wasm_pending_import_throw;
+  fetch_request_t *fetch_requests;
+  fs_request_t *fs_requests;
+  fs_watcher_t *fs_watchers;
+  rl_interface_t *rl_interfaces;
+  uint64_t rl_next_interface_id;
+  // END TODO
 
   ant_fixed_arena_t obj_arena;
   ant_fixed_arena_t closure_arena;
@@ -149,8 +185,28 @@ struct ant_isolate_t {
   const char *code;
   const char *filename;
 
+  // globalThis.Ant
   ant_value_t Ant;
+  
+  ant_realm_t *realm;
+  ant_realm_t *realms;
+  
+  ant_realm_t *main_realm;
+  ant_realm_t *builtin_realm;
+  ant_realm_t *error_realm;
+  
   ant_value_t global;
+  ant_value_t global_this;
+  ant_value_t global_sandbox;
+  ant_realm_t *microtask_realm;
+  
+  ant_codegen_flags_t codegen_blocked;
+  _Atomic uint8_t interrupt_pending;
+  
+  bool interrupts_armed;
+  bool terminating;
+  vm_interrupt_t *interrupt_run;
+  
   ant_value_t this_val;
   ant_value_t current_func;
   ant_value_t length_str;
@@ -241,6 +297,7 @@ struct ant_isolate_t {
     ant_value_t array_iterator_next;
     ant_value_t string_ctor;
     ant_value_t number_to_string_fn;
+    ant_value_t eval_fn;
     ant_value_t math_fns[ANT_MATH_INTRINSIC_COUNT];
     ant_value_t iterator_proto;
     ant_value_t array_iterator_proto;
@@ -264,12 +321,6 @@ struct ant_isolate_t {
     #define ANT_MUTABLE_ROOT_ARR(name, n) ant_value_t name[n];
     #include "isolate_values.h"
   } mutable_roots;
-
-  struct {
-    struct ant_iterator_entry *entries;
-    size_t len;
-    size_t cap;
-  } iterators;
 
   struct {
     ArrayBufferData **entries;
@@ -334,7 +385,10 @@ struct ant_isolate_t {
   
     uint64_t epoch;
     uint8_t obj_epoch;
+    
     bool minor;
+    bool realm_reach;
+    
     ant_object_t **mark_stack;
     size_t mark_sp;
     size_t mark_cap;
@@ -464,20 +518,8 @@ struct ant_isolate_t {
     size_t cap;
   } pending_rejections;
 
-  struct {
-    uintptr_t *cfunc_ptr;
-    ant_value_t *promoted;
-    uint8_t len;
-    uint8_t cap;
-  } cfunc_promote_cache;
-
-  struct {
-    const ant_cfunc_meta_t **base_meta;
-    const char **name_ptr;
-    ant_value_t *named;
-    uint16_t len;
-    uint16_t cap;
-  } cfunc_name_cache;
+  ant_ptr_pair_map_t cfunc_promoted;
+  ant_ptr_pair_map_t cfunc_named;
 
   struct {
     ant_with_unscopables_cache_t with_unscopables_absent;

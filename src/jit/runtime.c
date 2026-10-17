@@ -2,6 +2,7 @@
 #include <time.h>
 
 #include "gc/roots.h"
+#include "interrupt.h"
 #include "jit_internal.h"
 #include "modules/regex.h"
 
@@ -122,8 +123,10 @@ void jit_load_externals_once(sv_jit_ctx_t *jc) {
   LOAD_EXT(jit_helper_put_field);
   LOAD_EXT(jit_helper_put_field_ic);
   LOAD_EXT(jit_helper_shape_transition);
+  LOAD_EXT(jit_helper_protector_store);
   LOAD_EXT(gc_remember_props);
   LOAD_EXT(jit_helper_get_elem);
+  LOAD_EXT(jit_helper_realm_reenter);
   LOAD_EXT(js_get_index_fast);
   LOAD_EXT(jit_helper_get_elem2);
   LOAD_EXT(jit_helper_get_elem_inline);
@@ -141,6 +144,7 @@ void jit_load_externals_once(sv_jit_ctx_t *jc) {
   LOAD_EXT(jit_helper_define_slot);
   LOAD_EXT(jit_helper_array);
   LOAD_EXT(jit_helper_catch_value);
+  LOAD_EXT(jit_helper_interrupt);
   LOAD_EXT(jit_helper_throw);
   LOAD_EXT(jit_helper_throw_error);
   LOAD_EXT(jit_helper_set_proto);
@@ -326,6 +330,10 @@ __attribute__((noinline)) ant_value_t sv_jit_try_osr(
     sv_jit_tier_t tier = sv_jit_promote_pending(func) ? SV_JIT_TIER_HOT
      : func->code_len > JIT_OSR_COLD_COMPILE_MIN_BYTES 
      ? SV_JIT_TIER_COLD : SV_JIT_TIER_AUTO;
+
+    if (func->local_type_feedback) for (int i = 0; i < func->max_locals; i++)
+      if (!func->local_type_feedback[i] && vtype(frame->lp[i]) == kTypeNumber)
+        sv_tfb_record_local(func, i, frame->lp[i]);
     
     jit = sv_jit_compile_tier(js, func, closure, tier);
     
@@ -385,4 +393,10 @@ __attribute__((noinline)) ant_value_t sv_jit_try_osr(
   }
 
   return result;
+}
+
+void sv_jit_arm_interrupts(ant_t *js) {
+  if (js->interrupts_armed) return;
+  js->interrupts_armed = true;
+  jit_drop_all_code(js->jit_ctx);
 }

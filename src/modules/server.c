@@ -42,11 +42,9 @@
 #include "modules/domexception.h"
 #include "modules/websocket.h"
 
-enum {
-  SERVER_REQUEST_NATIVE_TAG = 0x53524551u, // SREQ
-  SERVER_RUNTIME_NATIVE_TAG = 0x5352544du, // SRTM
-  SERVER_SSE_NATIVE_TAG     = 0x53534552u  // SSER
-};
+static constexpr uint32_t SERVER_REQUEST_NATIVE_TAG = Ant_NativeTag("SREQ");
+static constexpr uint32_t SERVER_RUNTIME_NATIVE_TAG = Ant_NativeTag("SRTM");
+static constexpr uint32_t SERVER_SSE_NATIVE_TAG = Ant_NativeTag("SSER");
 
 typedef struct stop_waiter_s {
   ant_value_t promise;
@@ -525,15 +523,7 @@ static bool server_capture_response_headers(
 static ant_value_t server_call_fetch(server_runtime_t *server, ant_value_t request_obj) {
   ant_t *js = server->js;
   ant_value_t args[2] = { request_obj, server->server_ctx };
-  ant_value_t saved_this = js->this_val;
-  ant_value_t result = js_mkundef();
-
-  js->this_val = server->export_obj;
-  if (vtype(server->fetch_fn) == kTypeBuiltin) result = sv_invoke_native(js, js_as_cfunc(server->fetch_fn), args, 2, js_mkundef());
-  else result = sv_vm_call(js->vm, js, server->fetch_fn, server->export_obj, args, 2, NULL, js_mkundef());
-  js->this_val = saved_this;
-  
-  return result;
+  return sv_call_value(js, server->fetch_fn, server->export_obj, args, 2);
 }
 
 static server_sse_state_t *server_sse_data(ant_value_t value) {

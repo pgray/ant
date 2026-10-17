@@ -1,3 +1,4 @@
+#include "realm.h"
 #include "compile.h"
 #include "debug.h"
 #include <time.h>
@@ -177,7 +178,9 @@ static void jit_sink_cold_blocks(jit_compile_t *c, MIR_insn_t body_tail) {
     // `bt body, cond; jmp exit; body:` is an inverted branch, not a slow path
     MIR_insn_t branch = DLIST_PREV(MIR_insn_t, jump);
     bool inverted = branch && MIR_branch_code_p(branch->code) && branch->ops[0].u.label == first;
-    if (!block_last || block_last == jump || inverted || !jit_insn_ends_flow(block_last)) {
+    bool bail_stub = block_last && block_last->code == MIR_JMP &&
+                     block_last->ops[0].u.label == c->bailout_ctx.spill;
+    if (!block_last || block_last == jump || (inverted && !bail_stub) || !jit_insn_ends_flow(block_last)) {
       jump = first;
       continue;
     }
@@ -203,7 +206,9 @@ sv_jit_func_t sv_jit_compile_tier(ant_t *js, sv_func_t *func, sv_closure_t *hint
   sv_func_t *outer = jit_compile_owner;
   jit_call_tagging_t *outer_tagging = jit_call_tagging;
   jit_compile_owner = func;
+  ant_realm_t *prev_realm = ant_realm_switch(js, func->realm);
   sv_jit_func_t code = jit_compile_tier(js, func, hint_closure, tier);
+  ant_realm_restore(js, prev_realm);
   jit_compile_owner = outer;
   jit_call_tagging = outer_tagging;
   return code;
@@ -581,6 +586,7 @@ static sv_jit_func_t jit_compile_tier(ant_t *js, sv_func_t *func, sv_closure_t *
 
   MIR_insn_t body_tail = DLIST_TAIL(MIR_insn_t, c->jit_func->u.func->insns);
   if (c->stale_site_count) jit_emit_stale_exits(c);
+  jit_emit_interrupt_exit(c);
   if (c->needs_bailout) jit_emit_resume_tramp(c, &c->bailout_ctx, c->imp_resume, "resume_res");
   if (c->needs_promote) jit_emit_resume_tramp(c, &c->promote_ctx, c->imp_promote_resume, "promote_res");
   jit_call_tagging = NULL;

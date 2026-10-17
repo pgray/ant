@@ -107,10 +107,8 @@ struct net_write_args_s {
 static bool g_default_auto_select_family = true;
 static double g_default_auto_select_family_attempt_timeout = 250.0;
 
-enum {
-  NET_SERVER_NATIVE_TAG = 0x4e455453u, // NETS
-  NET_SOCKET_NATIVE_TAG = 0x4e45544bu, // NETK
-};
+static constexpr uint32_t NET_SERVER_NATIVE_TAG = Ant_NativeTag("NETS");
+static constexpr uint32_t NET_SOCKET_NATIVE_TAG = Ant_NativeTag("NETK");
 
 static net_server_t *net_server_data(ant_value_t value) {
   return (net_server_t *)js_get_native(value, NET_SERVER_NATIVE_TAG);
@@ -134,23 +132,6 @@ static void net_add_active_socket(net_socket_t *socket) {
 
 static void net_remove_active_socket(net_socket_t *socket) {
   Ant_List_Remove(socket);
-}
-
-static ant_value_t net_call_value(
-  ant_t *js,
-  ant_value_t fn,
-  ant_value_t this_val,
-  ant_value_t *args,
-  int nargs
-) {
-  ant_value_t saved_this = js->this_val;
-  ant_value_t result = js_mkundef();
-
-  js->this_val = this_val;
-  if (vtype(fn) == kTypeBuiltin) result = sv_invoke_native(js, js_as_cfunc(fn), args, nargs, js_mkundef());
-  else result = sv_vm_call(js->vm, js, fn, this_val, args, nargs, NULL, js_mkundef());
-  js->this_val = saved_this;
-  return result;
 }
 
 static bool net_emit(ant_t *js, ant_value_t target, const char *event, ant_value_t *args, int nargs) {
@@ -830,7 +811,7 @@ static ant_value_t js_net_socket_write(ant_params_t) {
   GC_ROOT_PIN(js, parsed.callback);
   net_socket_sync_state(socket);
   
-  if (is_callable(parsed.callback)) net_call_value(js, parsed.callback, js_mkundef(), NULL, 0);
+  if (is_callable(parsed.callback)) sv_call_value(js, parsed.callback, js_mkundef(), NULL, 0);
   GC_ROOT_RESTORE(js, root_mark);
   
   return js_true;
@@ -856,7 +837,7 @@ static ant_value_t js_net_socket_end(ant_params_t) {
   }}
   
   ant_conn_shutdown(socket->conn);
-  if (is_callable(parsed.callback)) net_call_value(js, parsed.callback, js_mkundef(), NULL, 0);
+  if (is_callable(parsed.callback)) sv_call_value(js, parsed.callback, js_mkundef(), NULL, 0);
   GC_ROOT_RESTORE(js, root_mark);
   
   return result;
@@ -1032,7 +1013,7 @@ static ant_value_t js_net_server_listen(ant_params_t) {
   net_server_sync_state(server);
   net_add_active_server(server);
 
-  if (is_callable(parsed.callback)) net_call_value(js, parsed.callback, js_mkundef(), NULL, 0);
+  if (is_callable(parsed.callback)) sv_call_value(js, parsed.callback, js_mkundef(), NULL, 0);
   net_emit(js, server->obj, "listening", NULL, 0);
   GC_ROOT_RESTORE(js, root_mark);
   
@@ -1048,7 +1029,7 @@ static ant_value_t js_net_server_close(ant_params_t) {
   if (!server->listening && !server->closing) {
     if (nargs > 0 && is_callable(args[0])) {
       ant_value_t err = Ant_Error_Create(js, JS_ERR_TYPE, "Server is not running");
-      net_call_value(js, args[0], js_mkundef(), &err, 1);
+      sv_call_value(js, args[0], js_mkundef(), &err, 1);
     }
     return js_getthis(js);
   }
@@ -1118,7 +1099,7 @@ static ant_value_t js_net_server_getConnections(ant_params_t) {
   ant_value_t argv[2] = { js_mknull(), js_mknum((double)net_server_socket_count(server)) };
 
   if (!server) return Ant_Exception_Current(js);
-  if (is_callable(cb)) net_call_value(js, cb, js_mkundef(), argv, 2);
+  if (is_callable(cb)) sv_call_value(js, cb, js_mkundef(), argv, 2);
   return js_getthis(js);
 }
 

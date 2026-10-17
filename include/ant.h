@@ -17,6 +17,7 @@
 static constexpr uint8_t CFUNC_HAS_PROTOTYPE  = 0x01u;
 static constexpr uint8_t CFUNC_IS_CONSTRUCTOR = 0x02u;
 static constexpr uint8_t CFUNC_NATIVE_GETTER  = 0x04u;
+static constexpr uint8_t CFUNC_REALM_FREE     = 0x08u;
 
 #define ANT_ASSERT(cond, msg) ({                                            \
 if (!(cond)) {                                                              \
@@ -40,6 +41,7 @@ ant_value_t js_glob(ant_t *);
 
 void init_intrinsic_symbols(ant_t *js);
 void js_init_function_has_instance(ant_t *js);
+bool js_realm_init_intrinsics(ant_t *js);
 void js_mark_constructor(ant_value_t value, bool is_constructor);
 
 typedef enum: uint8_t {
