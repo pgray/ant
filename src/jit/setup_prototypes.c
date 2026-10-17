@@ -51,6 +51,16 @@ void jit_setup_prototypes(jit_compile_t *c, MIR_type_t ret_type) {
                                 MIR_JSVAL, "this_val",
                                 MIR_T_P, "args",
                                 MIR_T_I32, "argc");
+  c->apply_proto = MIR_new_proto(c->ctx, "apply_proto",
+                                 1, &call_ret,
+                                 7,
+                                 MIR_T_I64, "vm",
+                                 MIR_T_I64, "js_p",
+                                 MIR_JSVAL, "func",
+                                 MIR_JSVAL, "this_val",
+                                 MIR_T_P, "args",
+                                 MIR_T_I32, "argc",
+                                 MIR_T_I32, "cap");
 
   c->call_string_intrinsic_proto = MIR_new_proto(
       c->ctx, "call_string_intrinsic_proto",
@@ -701,6 +711,7 @@ void jit_setup_prototypes(jit_compile_t *c, MIR_type_t ret_type) {
   c->imp_load_stable_builtin = MIR_new_import(c->ctx, "jit_helper_load_stable_builtin");
   c->imp_call_stable_builtin = MIR_new_import(c->ctx, "jit_helper_call_stable_builtin");
   c->imp_apply = MIR_new_import(c->ctx, "jit_helper_apply");
+  c->imp_call_spread = MIR_new_import(c->ctx, "jit_helper_call_spread");
   c->imp_call_call = MIR_new_import(c->ctx, "jit_helper_call_call");
   c->imp_call_call_slot = MIR_new_import(c->ctx, "jit_helper_call_call_slot");
   c->imp_rest = MIR_new_import(c->ctx, "jit_helper_rest");
@@ -761,7 +772,7 @@ void jit_setup_prototypes(jit_compile_t *c, MIR_type_t ret_type) {
   c->imp_protector_store = MIR_new_import(c->ctx, "jit_helper_protector_store");
   c->imp_remember_obj = MIR_new_import(c->ctx, "gc_remember_props");
   c->imp_get_elem = MIR_new_import(c->ctx, "jit_helper_get_elem");
-  c->imp_realm_reenter = MIR_new_import(c->ctx, "jit_helper_realm_reenter");
+  c->imp_realm_reenter = ant_realm_multiple(c->js) ? MIR_new_import(c->ctx, "jit_helper_realm_reenter") : NULL;
   c->imp_get_index_fast = MIR_new_import(c->ctx, "js_get_index_fast");
   c->imp_put_elem = MIR_new_import(c->ctx, c->func->is_strict ? "jit_helper_put_elem_strict" : "jit_helper_put_elem");
   c->imp_get_private = MIR_new_import(c->ctx, "jit_helper_get_private");
@@ -776,7 +787,7 @@ void jit_setup_prototypes(jit_compile_t *c, MIR_type_t ret_type) {
   c->imp_define_slot = MIR_new_import(c->ctx, "jit_helper_define_slot");
   c->imp_array = MIR_new_import(c->ctx, "jit_helper_array");
   c->imp_catch_value = MIR_new_import(c->ctx, "jit_helper_catch_value");
-  c->imp_interrupt = MIR_new_import(c->ctx, "jit_helper_interrupt");
+  c->imp_interrupt = c->js->interrupts_armed ? MIR_new_import(c->ctx, "jit_helper_interrupt") : NULL;
   c->imp_throw = MIR_new_import(c->ctx, "jit_helper_throw");
   c->imp_throw_error = MIR_new_import(c->ctx, "jit_helper_throw_error");
   c->imp_set_proto = MIR_new_import(c->ctx, "jit_helper_set_proto");

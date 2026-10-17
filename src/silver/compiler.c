@@ -895,6 +895,30 @@ static int resolve_local_at_depth(sv_compiler_t *c, const char *name, uint32_t l
   return -1;
 }
 
+static void ensure_slot_type_cap(sv_compiler_t *c, int slot) {
+  if (slot < 0) return;
+  if (slot < c->slot_type_cap) return;
+  
+  int new_cap = c->slot_type_cap ? c->slot_type_cap : 16;
+  while (new_cap <= slot) new_cap *= 2;
+  
+  sv_type_info_t *next = realloc(c->slot_types, (size_t)new_cap * sizeof(sv_type_info_t));
+  if (!next) return;
+  
+  memset(next + c->slot_type_cap, 0, (size_t)(new_cap - c->slot_type_cap) * sizeof(sv_type_info_t));
+  c->slot_types = next;
+  c->slot_type_cap = new_cap;
+}
+
+static void mark_slot_bound(sv_compiler_t *c, int slot) {
+  if (slot < 0) return;
+  ensure_slot_type_cap(c, slot);
+  if (!c->slot_types || slot >= c->slot_type_cap) return;
+  sv_type_info_t *info = &c->slot_types[slot];
+  if (info->bound) info->shared_slot = true;
+  info->bound = true;
+}
+
 static int add_local(
   sv_compiler_t *c, const char *name, uint32_t len,
   bool is_const, int depth
@@ -907,6 +931,7 @@ static int add_local(
   int idx = c->local_count++;
   if (c->local_count > c->max_local_count)
     c->max_local_count = c->local_count;
+  mark_slot_bound(c, idx - c->param_locals);
   c->locals[idx] = (sv_local_t){
     .name = name, .name_len = len,
     .name_hash = sv_compile_ctx_hash_local_name(name, len),
@@ -935,18 +960,6 @@ static inline bool sv_type_is_known(uint8_t t) {
 
 static inline bool sv_type_is_num(uint8_t t) {
   return t == SV_TI_NUM;
-}
-
-static void ensure_slot_type_cap(sv_compiler_t *c, int slot) {
-  if (slot < 0) return;
-  if (slot < c->slot_type_cap) return;
-  int new_cap = c->slot_type_cap ? c->slot_type_cap : 16;
-  while (new_cap <= slot) new_cap *= 2;
-  sv_type_info_t *next = realloc(c->slot_types, (size_t)new_cap * sizeof(sv_type_info_t));
-  if (!next) return;
-  memset(next + c->slot_type_cap, 0, (size_t)(new_cap - c->slot_type_cap) * sizeof(sv_type_info_t));
-  c->slot_types = next;
-  c->slot_type_cap = new_cap;
 }
 
 static void mark_slot_type(sv_compiler_t *c, int slot, uint8_t type) {
@@ -3912,6 +3925,19 @@ void compile_template(sv_compiler_t *c, sv_ast_t *node) {
   compile_template_items(c, node, 0);
 }
 
+static bool call_spread_is_last_only(const sv_ast_t *node) {
+  int argc = node->args.count;
+  if (argc <= 0 || argc > UINT16_MAX) return false;
+  
+  for (int i = 0; i < argc - 1; i++) {
+    sv_ast_t *arg = node->args.items[i];
+    if (arg && arg->type == N_SPREAD) return false;
+  }
+  
+  sv_ast_t *last = node->args.items[argc - 1];
+  return last && last->type == N_SPREAD;
+}
+
 static bool call_has_spread_arg(const sv_ast_t *node) {
   if (!node) return false;
   for (int i = 0; i < node->args.count; i++) {
@@ -4069,12 +4095,26 @@ static void compile_call_emit_invoke(
   int argc = node->args.count;
   if (has_spread) {
     if (kind == SV_CALL_METHOD) emit_op(c, OP_SWAP);
-    else if (kind == SV_CALL_DIRECT) emit_op(c, OP_GLOBAL);
+    else if (kind == SV_CALL_DIRECT) emit_op(c, OP_UNDEF);
+    
+    if (kind != SV_CALL_SUPER && call_spread_is_last_only(node)) {
+      for (int i = 0; i < argc - 1; i++) compile_expr(c, node->args.items[i]);
+      compile_expr(c, node->args.items[argc - 1]->right);
+      
+      emit_call_srcpos(c, node);
+      emit_op(c, OP_CALL_SPREAD);
+      emit_u16(c, (uint16_t)argc);
+      
+      return;
+    }
+    
     compile_call_args_array(c, node);
     emit_call_srcpos(c, node);
     emit_op(c, kind == SV_CALL_SUPER ? OP_SUPER_APPLY : OP_APPLY);
     emit_u16(c, 1);
+    
     if (kind == SV_CALL_SUPER) emit_derived_field_inits(c);
+    
     return;
   }
 
@@ -6440,7 +6480,18 @@ static void for_collect_var_decl_slots(sv_compiler_t *c, sv_ast_t *init_var, int
   }
 }
 
-static void hoist_loop_head_lexicals(sv_compiler_t *c, sv_ast_t *var_node) {
+static bool loop_head_reads_own_bindings(sv_compiler_t *c, sv_ast_t *var_node, int lb) {
+  for (int i = 0; i < var_node->args.count; i++) {
+    sv_ast_t *decl = var_node->args.items[i];
+    if (!decl || decl->type != N_VARDECL) continue;
+    if (decl->left && decl->left->type != N_IDENT) return true;
+    for (int l = lb; l < c->local_count; l++)
+      if (ast_mentions_name(decl->right, c->locals[l].name, c->locals[l].name_len)) return true;
+  }
+  return false;
+}
+
+static void hoist_loop_head_lexicals(sv_compiler_t *c, sv_ast_t *var_node, bool always_tdz) {
   bool is_const =
     var_node->var_kind == SV_VAR_CONST ||
     var_node->var_kind == SV_VAR_USING ||
@@ -6451,6 +6502,7 @@ static void hoist_loop_head_lexicals(sv_compiler_t *c, sv_ast_t *var_node) {
     if (!decl || decl->type != N_VARDECL || !decl->left) continue;
     hoist_lexical_pattern(c, decl->left, is_const);
   }
+  if (!always_tdz && !loop_head_reads_own_bindings(c, var_node, lb)) return;
   for (int i = lb; i < c->local_count; i++) {
     c->locals[i].is_tdz = true;
     set_local_inferred_type(c, i, SV_TI_UNKNOWN);
@@ -6459,15 +6511,15 @@ static void hoist_loop_head_lexicals(sv_compiler_t *c, sv_ast_t *var_node) {
   }
 }
 
-static bool for_may_capture_bindings(sv_ast_t *node) {
-  return 
-    ast_may_capture_bindings(node->init)   || ast_may_capture_bindings(node->cond) ||
-    ast_may_capture_bindings(node->update) || ast_may_capture_bindings(node->body);
+static bool for_captures_name(sv_ast_t *node, const char *name, uint32_t len) {
+  return
+    ast_closure_captures_name(node->init, name, len)   || ast_closure_captures_name(node->cond, name, len) ||
+    ast_closure_captures_name(node->update, name, len) || ast_closure_captures_name(node->body, name, len);
 }
 
 static int for_iteration_close_slot(sv_compiler_t *c, sv_ast_t *node) {
   sv_var_kind_t kind = node->init->var_kind;
-  if ((kind != SV_VAR_LET && kind != SV_VAR_CONST) || !for_may_capture_bindings(node)) return -1;
+  if (kind != SV_VAR_LET && kind != SV_VAR_CONST) return -1;
 
   int *iter_slots = NULL;
   int iter_count = 0, iter_cap = 0;
@@ -6475,6 +6527,8 @@ static int for_iteration_close_slot(sv_compiler_t *c, sv_ast_t *node) {
 
   int close_slot = -1;
   for (int i = 0; i < iter_count; i++) {
+    sv_local_t *local = &c->locals[iter_slots[i]];
+    if (!for_captures_name(node, local->name, local->name_len)) continue;
     int slot = local_to_frame_slot(c, iter_slots[i]);
     if (close_slot < 0 || slot < close_slot) close_slot = slot;
   }
@@ -6489,7 +6543,7 @@ static int compile_for_init(sv_compiler_t *c, sv_ast_t *node) {
     emit_op(c, OP_POP);
     return -1;
   }
-  if (node->init->var_kind != SV_VAR_VAR) hoist_loop_head_lexicals(c, node->init);
+  if (node->init->var_kind != SV_VAR_VAR) hoist_loop_head_lexicals(c, node->init, false);
   compile_var_decl(c, node->init);
   return for_iteration_close_slot(c, node);
 }
@@ -6632,7 +6686,7 @@ static void compile_for_each(sv_compiler_t *c, sv_ast_t *node, bool is_for_of) {
 
   if (node->left && node->left->type == N_VAR &&
       node->left->var_kind != SV_VAR_VAR) {
-    hoist_loop_head_lexicals(c, node->left);
+    hoist_loop_head_lexicals(c, node->left, true);
     for_collect_var_decl_slots(c, node->left, &iter_slots, &iter_count, &iter_cap);
   }
 
@@ -7391,10 +7445,7 @@ void compile_class(sv_compiler_t *c, sv_ast_t *node) {
       emit(&comp, SV_SPECIAL_SUPER);
       emit_op(&comp, OP_SPECIAL_OBJ);
       emit(&comp, SV_SPECIAL_NEW_TARGET);
-      emit_op(&comp, OP_SPECIAL_OBJ);
-      emit(&comp, SV_SPECIAL_ARGUMENTS);
-      emit_op(&comp, OP_SUPER_APPLY);
-      emit_u16(&comp, 1);
+      emit_op(&comp, OP_SUPER_FORWARD);
       emit_op(&comp, OP_POP);
     }
 
