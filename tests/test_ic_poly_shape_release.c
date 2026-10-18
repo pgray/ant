@@ -22,7 +22,7 @@ static void run(ant_t *js, const char *source) {
 
 int main(void) {
   char stack_base;
-  ant_t *js = ant_create();
+  ant_t *js = ant_create(nullptr);
   assert(js);
   js_setstackbase(js, &stack_base);
   init_symbol_module(js);

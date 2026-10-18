@@ -377,6 +377,33 @@ symbol_iterator_isolates_test = executable(
 )
 test('symbol-iterator-isolates', symbol_iterator_isolates_test)
 
+isolate_libraries_test = executable(
+  'test-isolate-libraries',
+  files('tests/test_isolate_libraries.c'),
+  dependencies: libant_dep,
+  c_args: ['-UNDEBUG'],
+  build_by_default: false
+)
+test('isolate-libraries', isolate_libraries_test)
+
+isolate_threads_test = executable(
+  'test-isolate-threads',
+  files('tests/test_isolate_threads.c'),
+  dependencies: libant_dep,
+  c_args: ['-UNDEBUG'],
+  build_by_default: false
+)
+test('isolate-threads', isolate_threads_test, timeout: 300)
+
+isolate_teardown_test = executable(
+  'test-isolate-teardown',
+  files('tests/test_isolate_teardown.c'),
+  dependencies: libant_dep,
+  c_args: ['-UNDEBUG'],
+  build_by_default: false
+)
+test('isolate-teardown', isolate_teardown_test, timeout: 300, workdir: meson.project_source_root())
+
 error_handoffs_test = executable(
   'test-error-handoffs',
   files('tests/test_error_handoffs.c'),

@@ -1,1063 +1,1037 @@
-// stub: minimal node:worker_threads implementation, just enough for rolldown to run
-// transforms. Worker.postMessage is explicitly unimplemented, so anything needing real
-// worker messaging or lifecycle cannot use this surface yet.
-//
-// scope and replacement plan: docs/exec-plans/tech-debt.md, "src/modules/worker_threads.c"
-
 #include <compat.h> // IWYU pragma: keep
 
-#include <uv.h>
-#include <stdio.h>
+#include <libgen.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
-#include <signal.h>
-
-#ifdef _WIN32
-#include <io.h>
-#define WT_WRITE _write
-#define WT_STDOUT_FD 1
-extern char **_environ;
-#define environ _environ
-#else
-#include <unistd.h>
-#define WT_WRITE write
-#define WT_STDOUT_FD STDOUT_FILENO
-extern char **environ;
-#endif
+#include <uv.h>
 
 #include "ant.h"
+#include "arena.h"
+#include "bootstrap.h"
 #include "cfunc.h"
-#include "ptr.h"
+#include "errors.h"
 #include "internal.h"
-#include "descriptors.h"
-#include "esm/loader.h"
+#include "interrupt.h"
+#include "list.h"
+#include "ptr.h"
+#include "reactor.h"
+#include "runtime.h"
+#include "sync.h"
 #include "silver/call.h"
-#include "modules/json.h"
-#include "modules/worker_threads.h"
+
+#include "esm/commonjs.h"
+#include "esm/loader.h"
+#include "esm/remote.h"
 #include "gc/modules.h"
+#include "modules/events.h"
+#include "modules/atomics.h"
+#include "modules/message_port.h"
+#include "modules/process.h"
+#include "modules/stream.h"
+#include "output.h"
+#include "modules/timer.h"
+#include "modules/wire.h"
+#include "modules/worker_threads.h"
 
-#define WT_ENV_MODE "ANT_WORKER_THREADS_MODE"
-#define WT_ENV_DATA_JSON "ANT_WORKER_DATA_JSON"
-#define WT_ENV_STORE_JSON "ANT_WORKER_ENV_DATA_JSON"
-#define WT_MSG_PREFIX "ANT_WT_MSG:"
+typedef enum {
+  WORKER_EVENT_ONLINE,
+  WORKER_EVENT_ERROR,
+  WORKER_EVENT_STDOUT,
+  WORKER_EVENT_STDERR,
+  WORKER_EVENT_EXIT,
+} worker_event_kind_t;
 
-typedef struct ant_worker_thread {
-  ant_t *js;
-  uv_process_t process;
-  uv_pipe_t stdout_pipe;
-  bool spawned;
-  bool exited;
-  bool closing;
-  bool closed;
+typedef enum {
+  WORKER_ERROR_THROWN,
+  WORKER_ERROR_INIT,
+  WORKER_ERROR_OOM,
+} worker_error_kind_t;
+
+typedef struct worker_event {
+  struct worker_event *next;
+  worker_event_kind_t kind;
+  int code;
+  ant_wire_t *wire;
+  size_t len;
+  char bytes[];
+} worker_event_t;
+
+enum {
+  WORKER_LIMIT_OLD,
+  WORKER_LIMIT_YOUNG,
+  WORKER_LIMIT_CODE,
+  WORKER_LIMIT_STACK,
+  WORKER_LIMIT_COUNT,
+};
+
+struct ant_worker {
+  _Atomic int refs;
+  ant_mutex_t lock;
+  uint64_t thread_id;
+
+  ant_t *parent;
+  ant_value_t obj;
+  ant_value_t exit_promise;
+  uv_async_t parent_async;
+  bool parent_async_open;
   bool refed;
-  int close_pending;
-  int64_t exit_status;
-  int term_signal;
-  char *line_buf;
-  size_t line_len;
-  size_t line_cap;
-  ant_value_t self_val;
-  ant_value_t terminate_val;
-  bool has_terminate_val;
-  struct ant_worker_thread *next;
-  struct ant_worker_thread *prev;
-} ant_worker_thread_t;
+  bool exited;
+  bool pipe_stdout;
+  bool pipe_stderr;
+  int exit_code;
+  ant_value_t stdout_obj;
+  ant_value_t stderr_obj;
+  ant_port_binding_t *binding;
+  worker_event_t *events_head;
+  worker_event_t *events_tail;
+  ant_worker_t *next;
+  ant_worker_t **pprev;
 
-static ant_worker_thread_t *active_workers_head = NULL;
+  uv_thread_t thread;
+  bool thread_started;
+  ant_t *child;
+  uv_async_t child_async;
+  bool child_async_open;
+  bool terminate_requested;
+  int requested_exit_code;
+  ant_port_end_t *child_end;
+
+  char *entry;
+  bool is_eval;
+  int argc;
+  char **argv;
+  char *name;
+  char **env;
+  bool share_env;
+  ant_wire_t *worker_data;
+  ant_wire_t *environment_data;
+  double limits[WORKER_LIMIT_COUNT];
+};
 
 static constexpr uint32_t WORKER_NATIVE_TAG = Ant_NativeTag("WRKR");
+static _Atomic uint64_t next_thread_id = 1;
+static constexpr double WORKER_DEFAULT_STACK_MB = 4.0;
+static constexpr double WORKER_DEFAULT_OLD_MB = 512.0;
 
-static bool wt_is_worker_mode(void) {
-  const char *mode = getenv(WT_ENV_MODE);
-  return mode && strcmp(mode, "1") == 0;
-}
-
-static ant_value_t wt_get_or_create_env_store(ant_t *js) {
-  ant_value_t store = js_get_slot(js->global, SLOT_WT_ENV_STORE);
-  if (!is_object_type(store)) {
-    store = Ant_Object_CreateBare(js);
-    js_set_slot(js->global, SLOT_WT_ENV_STORE, store);
+static void worker_release(ant_worker_t *w) {
+  if (atomic_fetch_sub_explicit(&w->refs, 1, memory_order_acq_rel) != 1) return;
+  for (worker_event_t *e = w->events_head, *next; e; e = next) {
+    next = e->next;
+    ant_wire_release(e->wire);
+    free(e);
   }
-  return store;
+  
+  if (w->child_end) ant_port_end_release(w->child_end);
+  ant_wire_release(w->worker_data);
+  ant_wire_release(w->environment_data);
+  for (int i = 0; i < w->argc; i++) free(w->argv[i]);
+  
+  free(w->argv);
+  for (char **e = w->env; e && *e; e++) free(*e);
+  
+  free(w->env);
+  free(w->entry);
+  free(w->name);
+  free(w);
 }
 
-static void wt_init_env_store(ant_t *js, bool is_worker) {
-  ant_value_t store = Ant_Object_CreateBare(js);
-  if (is_worker) {
-    const char *raw = getenv(WT_ENV_STORE_JSON);
-    if (raw && raw[0]) {
-      ant_value_t input = js_mkstr(js, raw, strlen(raw));
-      ant_value_t parsed = json_parse_value(js, input);
-      if (is_object_type(parsed)) store = parsed;
-    }
+static void worker_post_event(ant_worker_t *w, worker_event_t *e) {
+  ant_mutex_lock(&w->lock);
+  if (w->events_tail) w->events_tail->next = e;
+  else w->events_head = e;
+  w->events_tail = e;
+  if (w->parent_async_open) uv_async_send(&w->parent_async);
+  ant_mutex_unlock(&w->lock);
+}
+
+static void worker_post(ant_worker_t *w, worker_event_kind_t kind, int code, ant_wire_t *wire) {
+  worker_event_t *e = calloc(1, sizeof(*e));
+  if (!e) {
+    ant_wire_release(wire);
+    return;
   }
-  js_set_slot(js->global, SLOT_WT_ENV_STORE, store);
+  e->kind = kind;
+  e->code = code;
+  e->wire = wire;
+  worker_post_event(w, e);
 }
 
-static ant_worker_thread_t *wt_get_worker(ant_t *js, ant_value_t this_obj) {
-  if (!is_object_type(this_obj)) return NULL;
-  return (ant_worker_thread_t *)js_get_native(this_obj, WORKER_NATIVE_TAG);
-}
-
-static bool wt_is_message_port(ant_t *js, ant_value_t obj) {
-  if (!is_object_type(obj)) return false;
-  ant_value_t tag = js_get_slot(obj, SLOT_WT_PORT_TAG);
-  return js_truthy(js, tag);
-}
-
-static ant_value_t wt_get_message_port_proto(ant_t *js) {
-  ant_value_t proto = js_get_slot(js->global, SLOT_WT_PORT_PROTO);
-  if (!is_object_type(proto)) proto = Ant_Object_CreateBare(js);
-  return proto;
-}
-
-static ant_value_t wt_make_message_port(ant_t *js) {
-  ant_value_t port = Ant_Object_CreateBare(js);
-  js_set_proto_init(port, wt_get_message_port_proto(js));
-  js_set_slot(port, SLOT_WT_PORT_TAG, js_true);
-  js_set_slot(port, SLOT_WT_PORT_QUEUE, js_mkarr(js));
-  js_set_slot(port, SLOT_WT_PORT_HEAD, js_mknum(0));
-  js_set_slot(port, SLOT_WT_PORT_PEER, js_mknull());
-  js_set_slot(port, SLOT_WT_PORT_CLOSED, js_false);
-  js_set_slot(port, SLOT_WT_PORT_STARTED, js_false);
-  js_set_slot(port, SLOT_WT_PORT_ON_MESSAGE, js_mkundef());
-  js_set_slot(port, SLOT_WT_PORT_ONCE_MESSAGE, js_mkundef());
-  js_set(js, port, "onmessage", js_mkundef());
-  return port;
-}
-
-static bool wt_port_is_closed(ant_t *js, ant_value_t port) {
-  return js_truthy(js, js_get_slot(port, SLOT_WT_PORT_CLOSED));
-}
-
-static void wt_port_set_closed(ant_t *js, ant_value_t port, bool closed) {
-  js_set_slot(port, SLOT_WT_PORT_CLOSED, js_bool(closed));
-}
-
-static bool wt_port_queue_dequeue(ant_t *js, ant_value_t port, ant_value_t *out) {
-  ant_value_t queue = js_get_slot(port, SLOT_WT_PORT_QUEUE);
-  if (vtype(queue) != kTypeArray) return false;
-
-  ant_value_t head_val = js_get_slot(port, SLOT_WT_PORT_HEAD);
-  ant_offset_t head = (vtype(head_val) == kTypeNumber) ? (ant_offset_t)js_getnum(head_val) : 0;
-  ant_offset_t len = js_arr_len(js, queue);
-  if (len <= 0 || head >= len) {
-    js_set_slot(port, SLOT_WT_PORT_QUEUE, js_mkarr(js));
-    js_set_slot(port, SLOT_WT_PORT_HEAD, js_mknum(0));
-    return false;
-  }
-
-  if (out) *out = js_arr_get(js, queue, head);
-  ant_offset_t next_head = head + 1;
-
-  if (next_head >= len) {
-    js_set_slot(port, SLOT_WT_PORT_QUEUE, js_mkarr(js));
-    js_set_slot(port, SLOT_WT_PORT_HEAD, js_mknum(0));
-    return true;
-  }
-
-  if (next_head > 32 && next_head * 2 >= len) {
-    ant_value_t compact = js_mkarr(js);
-    for (ant_offset_t i = next_head; i < len; i++) js_arr_push(js, compact, js_arr_get(js, queue, i));
-    js_set_slot(port, SLOT_WT_PORT_QUEUE, compact);
-    js_set_slot(port, SLOT_WT_PORT_HEAD, js_mknum(0));
-    return true;
-  }
-
-  js_set_slot(port, SLOT_WT_PORT_HEAD, js_mknum((double)next_head));
+static bool worker_stdio_writer(FILE *stream, const void *data, size_t len, void *user) {
+  worker_event_t *e = malloc(sizeof(*e) + len);
+  if (!e) return false;
+  *e = (worker_event_t){ .kind = stream == stderr ? WORKER_EVENT_STDERR : WORKER_EVENT_STDOUT, .len = len };
+  memcpy(e->bytes, data, len);
+  worker_post_event(user, e);
   return true;
 }
 
-static void wt_port_queue_push(ant_t *js, ant_value_t port, ant_value_t value) {
-  ant_value_t queue = js_get_slot(port, SLOT_WT_PORT_QUEUE);
-  if (vtype(queue) != kTypeArray) {
-    queue = js_mkarr(js);
-    js_set_slot(port, SLOT_WT_PORT_QUEUE, queue);
-    js_set_slot(port, SLOT_WT_PORT_HEAD, js_mknum(0));
+static void worker_child_wake(uv_async_t *handle) {
+  ant_worker_t *w = handle->data;
+  ant_t *js = w->child;
+  if (!js) return;
+  js->terminating = true;
+  atomic_store_explicit(&js->interrupt_pending, 1, memory_order_relaxed);
+  uv_stop(js->loop);
+}
+
+static void worker_request_stop(ant_worker_t *w, int code) {
+  ant_mutex_lock(&w->lock);
+  if (!w->terminate_requested) {
+    w->terminate_requested = true;
+    w->requested_exit_code = code;
   }
-  js_arr_push(js, queue, value);
-}
-
-static void wt_port_call_listener(ant_t *js, ant_value_t this_obj, ant_value_t fn, ant_value_t arg) {
-  if (!is_callable(fn)) return;
-  ant_value_t argv[1] = {arg};
-  
-  sv_vm_call(js->vm, js, fn, this_obj, argv, 1, NULL, js_mkundef());
-}
-
-static bool wt_port_should_deliver(ant_t *js, ant_value_t port) {
-  if (wt_port_is_closed(js, port)) return false;
-  bool started = js_truthy(js, js_get_slot(port, SLOT_WT_PORT_STARTED));
-  ant_value_t on_fn = js_get_slot(port, SLOT_WT_PORT_ON_MESSAGE);
-  ant_value_t once_fn = js_get_slot(port, SLOT_WT_PORT_ONCE_MESSAGE);
-  ant_value_t onmessage = js_get(js, port, "onmessage");
-
-  bool has_event_listener = is_callable(on_fn) || is_callable(once_fn);
-  if (is_callable(onmessage)) return true;
-  return started && has_event_listener;
-}
-
-static void wt_port_drain(ant_t *js, ant_value_t port) {
-  if (!wt_is_message_port(js, port)) return;
-
-  while (wt_port_should_deliver(js, port)) {
-    ant_value_t msg = js_mkundef();
-    if (!wt_port_queue_dequeue(js, port, &msg)) break;
-
-    ant_value_t on_fn = js_get_slot(port, SLOT_WT_PORT_ON_MESSAGE);
-    wt_port_call_listener(js, port, on_fn, msg);
-
-    ant_value_t once_fn = js_get_slot(port, SLOT_WT_PORT_ONCE_MESSAGE);
-    if (is_callable(once_fn)) {
-      wt_port_call_listener(js, port, once_fn, msg);
-      js_set_slot(port, SLOT_WT_PORT_ONCE_MESSAGE, js_mkundef());
-    }
-
-    ant_value_t onmessage = js_get(js, port, "onmessage");
-    if (is_callable(onmessage)) {
-      ant_value_t event_obj = Ant_Object_CreateBare(js);
-      js_set(js, event_obj, "data", msg);
-      wt_port_call_listener(js, port, onmessage, event_obj);
-    }
-
-    if (wt_port_is_closed(js, port)) break;
+  if (w->child) {
+    atomic_store_explicit(&w->child->interrupt_pending, 1, memory_order_relaxed);
+    atomics_wake_isolate(w->child);
+    if (w->child_async_open) uv_async_send(&w->child_async);
   }
+  ant_mutex_unlock(&w->lock);
 }
 
-static ant_value_t wt_make_resolved_promise(ant_t *js, ant_value_t value) {
-  ant_value_t p = js_mkpromise(js);
-  js_resolve_promise(js, p, value);
-  return p;
+static bool worker_stop_requested(ant_worker_t *w, int *code) {
+  ant_mutex_lock(&w->lock);
+  bool requested = w->terminate_requested;
+  if (requested && code) *code = w->requested_exit_code;
+  ant_mutex_unlock(&w->lock);
+  return requested;
 }
 
-static void wt_call_listener(ant_t *js, ant_value_t this_obj, ant_value_t fn, ant_value_t arg) {
-  if (!is_callable(fn)) return;
-  ant_value_t argv[1] = {arg};
+static ant_wire_t *worker_serialize_error(ant_t *js, ant_value_t error) {
+  ant_wire_t *wire = NULL;
+  ant_value_t r = ant_wire_serialize(js, error, js_mkundef(), js_mkundef(), &wire);
+  if (!is_err(r)) return wire;
 
-  sv_vm_call(js->vm, js, fn, this_obj, argv, 1, NULL, js_mkundef());
-}
-
-static void wt_emit(ant_worker_thread_t *wt, const char *event, ant_value_t arg) {
-  if (!wt || !wt->js) return;
-  ant_t *js = wt->js;
-  ant_value_t this_obj = wt->self_val;
-  if (!is_object_type(this_obj)) return;
-
-  internal_slot_t on_slot, once_slot;
-  if (strcmp(event, "message") == 0) {
-    on_slot = SLOT_WT_ON_MESSAGE;
-    once_slot = SLOT_WT_ONCE_MESSAGE;
-  } else if (strcmp(event, "exit") == 0) {
-    on_slot = SLOT_WT_ON_EXIT;
-    once_slot = SLOT_WT_ONCE_EXIT;
-  } else return;
-
-  ant_value_t on_fn = js_get_slot(this_obj, on_slot);
-  wt_call_listener(js, this_obj, on_fn, arg);
-
-  ant_value_t once_fn = js_get_slot(this_obj, once_slot);
-  if (is_callable(once_fn)) {
-    wt_call_listener(js, this_obj, once_fn, arg);
-    js_set_slot(this_obj, once_slot, js_mkundef());
+  js_take_thrown(js, r);
+  ant_value_t text = js_tostring_val(js, error);
+  if (is_err(text)) {
+    js_take_thrown(js, text);
+    text = js_mkstr(js, "Uncaught exception in worker", 28);
   }
-}
-
-static void wt_free_env(char **env) {
-  if (!env) return;
-  for (char **p = env; *p; p++) free(*p);
-  free(env);
-}
-
-static char **wt_build_worker_env(const char *worker_data_json, const char *env_store_json) {
-  size_t count = 0;
-  if (environ) {
-    while (environ[count]) count++;
-  }
-
-  size_t extra = 2;
-  if (worker_data_json) extra++;
-  if (env_store_json) extra++;
-  char **env = (char **)calloc(count + extra, sizeof(char *));
-  if (!env) return NULL;
-
-  size_t out = 0;
-  for (size_t i = 0; i < count; i++) {
-    env[out] = strdup(environ[i]);
-    if (!env[out]) {
-      wt_free_env(env);
-      return NULL;
-    }
-    out++;
-  }
-
-  env[out++] = strdup(WT_ENV_MODE "=1");
-  if (!env[out - 1]) {
-    wt_free_env(env);
+  r = ant_wire_serialize(js, text, js_mkundef(), js_mkundef(), &wire);
+  if (is_err(r)) {
+    js_take_thrown(js, r);
     return NULL;
   }
+  return wire;
+}
 
-  if (worker_data_json) {
-    size_t key_len = strlen(WT_ENV_DATA_JSON);
-    size_t val_len = strlen(worker_data_json);
-    char *entry = (char *)malloc(key_len + 1 + val_len + 1);
-    if (!entry) {
-      wt_free_env(env);
-      return NULL;
-    }
-    memcpy(entry, WT_ENV_DATA_JSON, key_len);
-    entry[key_len] = '=';
-    memcpy(entry + key_len + 1, worker_data_json, val_len);
-    entry[key_len + 1 + val_len] = '\0';
-    env[out++] = entry;
+bool ant_worker_report_uncaught(ant_t *js, ant_value_t reason) {
+  ant_worker_t *w = js->worker;
+  if (!w) return false;
+  int code = 0;
+  if (worker_stop_requested(w, &code)) return true;
+
+  bool oom = is_err(js->exception_oom) && reason == Ant_Exception_Value(js, js->exception_oom);
+  ant_wire_t *wire = NULL;
+  if (!oom) {
+    GC_ROOT_SAVE(mark, js);
+    GC_ROOT_PIN(js, reason);
+    wire = worker_serialize_error(js, reason);
+    GC_ROOT_RESTORE(js, mark);
   }
 
-  if (env_store_json) {
-    size_t key_len = strlen(WT_ENV_STORE_JSON);
-    size_t val_len = strlen(env_store_json);
-    char *entry = (char *)malloc(key_len + 1 + val_len + 1);
-    if (!entry) {
-      wt_free_env(env);
-      return NULL;
-    }
-    memcpy(entry, WT_ENV_STORE_JSON, key_len);
-    entry[key_len] = '=';
-    memcpy(entry + key_len + 1, env_store_json, val_len);
-    entry[key_len + 1 + val_len] = '\0';
-    env[out++] = entry;
-  }
-
-  env[out] = NULL;
-  return env;
-}
-
-static void wt_cleanup(ant_worker_thread_t *wt) {
-  if (!wt) return;
-  free(wt->line_buf);
-  free(wt);
-}
-
-static void wt_detach(ant_worker_thread_t *wt) {
-  if (!wt) return;
-
-  if (wt->prev) wt->prev->next = wt->next;
-  else active_workers_head = wt->next;
-  if (wt->next) wt->next->prev = wt->prev;
-  wt->prev = NULL;
-  wt->next = NULL;
-
-  wt->self_val = js_mkundef();
-  wt->terminate_val = js_mkundef();
-  wt->has_terminate_val = false;
-  free(wt->line_buf);
-  wt->line_buf = NULL;
-  wt->line_len = 0;
-  wt->line_cap = 0;
-  wt->spawned = false;
-  wt->refed = false;
-  wt->closed = true;
-  wt->js = NULL;
-}
-
-static void wt_on_handle_closed(uv_handle_t *h) {
-  ant_worker_thread_t *wt = (ant_worker_thread_t *)h->data;
-  if (!wt) return;
-  if (wt->close_pending > 0) wt->close_pending--;
-  if (wt->close_pending == 0) wt_detach(wt);
-}
-
-static void wt_finish_exit(ant_worker_thread_t *wt) {
-  if (!wt) return;
-  if (wt->closed || wt->closing) return;
-  wt->closing = true;
-  wt->spawned = false;
-  wt->refed = false;
-  wt->close_pending = 0;
-
-  if (!uv_is_closing((uv_handle_t *)&wt->stdout_pipe)) {
-    wt->close_pending++;
-    uv_close((uv_handle_t *)&wt->stdout_pipe, wt_on_handle_closed);
-  }
-  if (!uv_is_closing((uv_handle_t *)&wt->process)) {
-    wt->close_pending++;
-    uv_close((uv_handle_t *)&wt->process, wt_on_handle_closed);
-  }
-
-  if (wt->close_pending == 0) wt_detach(wt);
-}
-
-static void wt_on_process_exit(uv_process_t *proc, int64_t exit_status, int term_signal) {
-  ant_worker_thread_t *wt = (ant_worker_thread_t *)proc->data;
-  if (!wt || !wt->js) return;
-
-  wt->exited = true;
-  wt->exit_status = exit_status;
-  wt->term_signal = term_signal;
-
-  if (wt->has_terminate_val) {
-    ant_value_t p = wt->terminate_val;
-    js_resolve_promise(wt->js, p, js_mknum((double)exit_status));
-    wt->terminate_val = js_mkundef();
-    wt->has_terminate_val = false;
-  }
-
-  wt_emit(wt, "exit", js_mknum((double)exit_status));
-  wt_finish_exit(wt);
-}
-
-static void wt_alloc_cb(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
-  buf->base = (char *)malloc(suggested_size);
-  buf->len = buf->base ? suggested_size : 0;
-}
-
-static void wt_emit_message_from_json(ant_worker_thread_t *wt, const char *json, size_t len) {
-  if (!wt || !wt->js) return;
-  ant_t *js = wt->js;
-
-  ant_value_t s = js_mkstr(js, json, len);
-  ant_value_t msg = json_parse_value(js, s);
-
-  if (is_err(msg)) {
-    js_take_thrown(js, msg);
-    msg = s;
-  }
-
-  wt_emit(wt, "message", msg);
-}
-
-static void wt_process_lines(ant_worker_thread_t *wt) {
-  if (!wt || !wt->line_buf) return;
-
-  for (;;) {
-    char *nl = memchr(wt->line_buf, '\n', wt->line_len);
-    if (!nl) break;
-
-    size_t line_len = (size_t)(nl - wt->line_buf);
-    if (line_len > 0 && wt->line_buf[line_len - 1] == '\r') line_len--;
-
-    size_t prefix_len = strlen(WT_MSG_PREFIX);
-    if (line_len >= prefix_len && memcmp(wt->line_buf, WT_MSG_PREFIX, prefix_len) == 0) {
-      const char *payload = wt->line_buf + prefix_len;
-      size_t payload_len = line_len - prefix_len;
-      wt_emit_message_from_json(wt, payload, payload_len);
-    }
-
-    size_t consumed = (size_t)(nl - wt->line_buf) + 1;
-    size_t remain = wt->line_len - consumed;
-    memmove(wt->line_buf, wt->line_buf + consumed, remain);
-    wt->line_len = remain;
-  }
-}
-
-static bool wt_append_stdout(ant_worker_thread_t *wt, const char *data, size_t len) {
-  if (!wt || !data || len == 0) return true;
-
-  size_t needed = wt->line_len + len;
-  if (needed + 1 > wt->line_cap) {
-    size_t cap = wt->line_cap ? wt->line_cap : 1024;
-    while (cap < needed + 1) cap *= 2;
-    char *next = (char *)realloc(wt->line_buf, cap);
-    if (!next) return false;
-    wt->line_buf = next;
-    wt->line_cap = cap;
-  }
-
-  memcpy(wt->line_buf + wt->line_len, data, len);
-  wt->line_len += len;
-  wt->line_buf[wt->line_len] = '\0';
+  worker_post(w, WORKER_EVENT_ERROR, oom ? WORKER_ERROR_OOM : WORKER_ERROR_THROWN, wire);
+  worker_request_stop(w, 1);
+  js->terminating = true;
   return true;
 }
 
-static void wt_read_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
-  ant_worker_thread_t *wt = (ant_worker_thread_t *)stream->data;
-  if (!wt) {
-    free(buf->base);
+ant_value_t ant_worker_exit(ant_t *js, int code) {
+  ant_worker_t *w = js->worker;
+  if (w) worker_request_stop(w, code);
+  return js_interrupt_raise(js);
+}
+
+bool ant_worker_is_worker(ant_t *js) {
+  return js->worker != NULL;
+}
+
+static ant_value_t worker_run_entry(ant_t *js, ant_worker_t *w) {
+  if (w->is_eval) {
+    const char *tag = "[worker eval]";
+    js_set_filename(js, tag);
+    js_setup_import_meta(js, tag);
+    ant_value_t ns = Ant_Object_CreateBare(js);
+    if (is_err(ns)) return ns;
+    return esm_load_commonjs_module(js, tag, w->entry, strlen(w->entry), ns, js_mkundef());
+  }
+
+  ant_value_t specifier;
+  if (strncmp(w->entry, "data:", 5) == 0) {
+    js_set_global_builtin(js, "__dirname", js_mkundef());
+    specifier = js_mkstr(js, w->entry, strlen(w->entry));
+    js_set_filename(js, w->entry);
+    js_setup_import_meta(js, w->entry);
+  } else {
+    char *copy = strdup(w->entry);
+    if (copy) {
+      char *dir = dirname(copy);
+      js_set_global_builtin(js, "__dirname", js_mkstr(js, dir, strlen(dir)));
+      free(copy);
+    }
+    const char *interned = intern_string(w->entry, strlen(w->entry));
+    js_set_filename(js, interned ? interned : w->entry);
+    js_setup_import_meta(js, interned ? interned : w->entry);
+    specifier = js_esm_make_file_url(js, w->entry);
+  }
+  js_set_global_builtin(js, "__filename", js_mkstr(js, w->entry, strlen(w->entry)));
+  return js_esm_import_sync(js, specifier);
+}
+
+static void worker_report_pending(ant_t *js) {
+  if (!Ant_Exception_Pending(js)) return;
+  ant_value_t thrown = js_take_thrown(js, js_mkundef());
+  if (js_is_termination(thrown)) return;
+  ant_worker_report_uncaught(js, thrown);
+}
+
+static void worker_thread_main(void *arg) {
+  ant_worker_t *w = arg;
+  volatile char stack_base;
+  int exit_code = 1;
+
+  ant_t *js = ant_create(&(ant_isolate_options_t){
+    .object_arena_bytes = (size_t)(w->limits[WORKER_LIMIT_OLD] * 1024 * 1024),
+  });
+  
+  if (!js) {
+    worker_post(w, WORKER_EVENT_ERROR, WORKER_ERROR_INIT, NULL);
+    worker_post(w, WORKER_EVENT_EXIT, 1, NULL);
+    worker_release(w);
     return;
   }
 
-  if (nread > 0) {
-    if (wt_append_stdout(wt, buf->base, (size_t)nread)) wt_process_lines(wt);
-  } else if (nread < 0) {
-    uv_read_stop(stream);
+  js->worker = w;
+  js->interrupts_armed = true;
+  js_setstackbase(js, (void *)&stack_base);
+  js_setstacklimit(js, (size_t)(w->limits[WORKER_LIMIT_STACK] * 1024 * 1024) * 3 / 4);
+
+  if (uv_async_init(js->loop, &w->child_async, worker_child_wake) == 0) {
+    w->child_async.data = w;
+    uv_unref((uv_handle_t *)&w->child_async);
+    ant_mutex_lock(&w->lock);
+    w->child = js;
+    w->child_async_open = true;
+    if (w->terminate_requested) atomic_store_explicit(&js->interrupt_pending, 1, memory_order_relaxed);
+    ant_mutex_unlock(&w->lock);
   }
 
-  free(buf->base);
-}
-
-static char *wt_path_from_specifier(ant_t *js, ant_value_t spec) {
-  const char *raw = NULL;
-  size_t len = 0;
-
-  if (vtype(spec) == kTypeString) {
-    raw = js_getstr(js, spec, &len);
-  } else if (is_object_type(spec)) {
-    ant_value_t pathname = js_get(js, spec, "pathname");
-    if (vtype(pathname) == kTypeString) raw = js_getstr(js, pathname, &len);
-    if (!raw) {
-      ant_value_t href = js_get(js, spec, "href");
-      if (vtype(href) == kTypeString) raw = js_getstr(js, href, &len);
-    }
-  }
-
-  if (!raw || len == 0) return NULL;
-
-  if (len >= 7 && strncmp(raw, "file://", 7) == 0) {
-    const char *p = raw + 7;
-    if (strncmp(p, "localhost/", 10) == 0) p += 9;
-    if (*p == '\0') return NULL;
-    return strndup(p, len - (size_t)(p - raw));
-  }
-
-  return strndup(raw, len);
-}
-
-static int wt_spawn_worker(
-  ant_worker_thread_t *wt,
-  const char *script_path,
-  const char *worker_data_json,
-  const char *env_store_json
-) {
-  if (!wt || !wt->js || !script_path || !wt->js->runtime.argv || wt->js->runtime.argc <= 0) return UV_EINVAL;
-
-  uv_loop_t *loop = wt->js->loop;
-  uv_pipe_init(loop, &wt->stdout_pipe, 0);
-
-  uv_stdio_container_t stdio[3];
-  stdio[0].flags = UV_IGNORE;
-  stdio[1].flags = UV_CREATE_PIPE | UV_WRITABLE_PIPE;
-  stdio[1].data.stream = (uv_stream_t *)&wt->stdout_pipe;
-  stdio[2].flags = UV_INHERIT_FD;
-  stdio[2].data.fd = 2;
-
-  char *argv0 = strdup(wt->js->runtime.argv[0]);
-  char *argv1 = strdup(script_path);
-  if (!argv0 || !argv1) {
-    free(argv0);
-    free(argv1);
-    uv_close((uv_handle_t *)&wt->stdout_pipe, NULL);
-    return UV_ENOMEM;
-  }
-
-  char *args[3] = {argv0, argv1, NULL};
-  char **env = wt_build_worker_env(worker_data_json, env_store_json);
-  if (!env) {
-    free(argv0);
-    free(argv1);
-    uv_close((uv_handle_t *)&wt->stdout_pipe, NULL);
-    return UV_ENOMEM;
-  }
-
-  uv_process_options_t options;
-  memset(&options, 0, sizeof(options));
-  options.file = argv0;
-  options.args = args;
-  options.env = env;
-  options.stdio_count = 3;
-  options.stdio = stdio;
-  options.exit_cb = wt_on_process_exit;
-
-  wt->process.data = wt;
-  wt->stdout_pipe.data = wt;
-
-  int rc = uv_spawn(loop, &wt->process, &options);
-
-  wt_free_env(env);
-  free(argv0);
-  free(argv1);
-
-  if (rc != 0) {
-    uv_close((uv_handle_t *)&wt->stdout_pipe, NULL);
-    return rc;
-  }
-
-  wt->spawned = true;
-  wt->refed = true;
-
-  rc = uv_read_start((uv_stream_t *)&wt->stdout_pipe, wt_alloc_cb, wt_read_cb);
-  if (rc != 0) {
-    uv_process_kill(&wt->process, SIGTERM);
-  }
-  return rc;
-}
-
-static ant_value_t worker_threads_worker_on(ant_params_t) {
-  if (nargs < 2 || vtype(args[0]) != kTypeString || !is_callable(args[1])) {
-    return js_mkerr(js, "Worker.on(event, listener) requires (string, function)");
-  }
-
-  ant_value_t this_obj = js_getthis(js);
-  if (!is_object_type(this_obj)) return js_mkerr(js, "invalid Worker receiver");
-
-  size_t len = 0;
-  const char *event = js_getstr(js, args[0], &len);
-  if (!event) return js_mkerr(js, "invalid event name");
-
-  if (len == 7 && memcmp(event, "message", 7) == 0) {
-    js_set_slot(this_obj, SLOT_WT_ON_MESSAGE, args[1]);
-  } else if (len == 4 && memcmp(event, "exit", 4) == 0) {
-    js_set_slot(this_obj, SLOT_WT_ON_EXIT, args[1]);
-  }
-
-  return this_obj;
-}
-
-static ant_value_t worker_threads_worker_once(ant_params_t) {
-  if (nargs < 2 || vtype(args[0]) != kTypeString || !is_callable(args[1])) {
-    return js_mkerr(js, "Worker.once(event, listener) requires (string, function)");
-  }
-
-  ant_value_t this_obj = js_getthis(js);
-  if (!is_object_type(this_obj)) return js_mkerr(js, "invalid Worker receiver");
-
-  size_t len = 0;
-  const char *event = js_getstr(js, args[0], &len);
-  if (!event) return js_mkerr(js, "invalid event name");
-
-  if (len == 7 && memcmp(event, "message", 7) == 0) {
-    js_set_slot(this_obj, SLOT_WT_ONCE_MESSAGE, args[1]);
-  } else if (len == 4 && memcmp(event, "exit", 4) == 0) {
-    js_set_slot(this_obj, SLOT_WT_ONCE_EXIT, args[1]);
-  }
-
-  return this_obj;
-}
-
-static ant_value_t worker_threads_worker_unref(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  ant_worker_thread_t *wt = wt_get_worker(js, this_obj);
-  if (!wt) return js_mkerr(js, "invalid Worker receiver");
-  if (wt->spawned && wt->refed) {
-    if (!uv_is_closing((uv_handle_t *)&wt->process)) uv_unref((uv_handle_t *)&wt->process);
-    if (!uv_is_closing((uv_handle_t *)&wt->stdout_pipe)) uv_unref((uv_handle_t *)&wt->stdout_pipe);
-    wt->refed = false;
-  }
-  return this_obj;
-}
-
-static ant_value_t worker_threads_worker_ref(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  ant_worker_thread_t *wt = wt_get_worker(js, this_obj);
-  if (!wt) return js_mkerr(js, "invalid Worker receiver");
-  if (wt->spawned && !wt->refed) {
-    if (!uv_is_closing((uv_handle_t *)&wt->process)) uv_ref((uv_handle_t *)&wt->process);
-    if (!uv_is_closing((uv_handle_t *)&wt->stdout_pipe)) uv_ref((uv_handle_t *)&wt->stdout_pipe);
-    wt->refed = true;
-  }
-  return this_obj;
-}
-
-static ant_value_t worker_threads_worker_terminate(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  ant_worker_thread_t *wt = wt_get_worker(js, this_obj);
-  if (!wt) return js_mkerr(js, "invalid Worker receiver");
-
-  if (wt->exited) return wt_make_resolved_promise(js, js_mknum((double)wt->exit_status));
-
-  if (!wt->has_terminate_val) {
-    ant_value_t p = js_mkpromise(js);
-    wt->terminate_val = p;
-    wt->has_terminate_val = true;
-  }
-
-  int rc = uv_process_kill(&wt->process, SIGTERM);
-  if (rc != 0) {
-    ant_value_t p = wt->terminate_val;
-    js_reject_promise(js, p, js_mkerr(js, "terminate failed: %s", uv_strerror(rc)));
-    wt->terminate_val = js_mkundef();
-    wt->has_terminate_val = false;
-    return p;
-  }
-
-  return wt->terminate_val;
-}
-
-static ant_value_t worker_threads_worker_post_message(ant_params_t) {
-  return js_mkerr(js, "Worker.postMessage is not implemented yet");
-}
-
-static ant_value_t worker_threads_message_port_post_message(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  if (!wt_is_message_port(js, this_obj)) return js_mkerr(js, "invalid MessagePort receiver");
-  if (wt_port_is_closed(js, this_obj)) return js_mkundef();
-
-  ant_value_t peer = js_get_slot(this_obj, SLOT_WT_PORT_PEER);
-  if (!wt_is_message_port(js, peer) || wt_port_is_closed(js, peer)) return js_mkundef();
-
-  ant_value_t value = (nargs > 0) ? args[0] : js_mkundef();
-  wt_port_queue_push(js, peer, value);
-  wt_port_drain(js, peer);
-  return js_mkundef();
-}
-
-static ant_value_t worker_threads_message_port_on(ant_params_t) {
-  if (nargs < 2 || vtype(args[0]) != kTypeString || !is_callable(args[1])) {
-    return js_mkerr(js, "MessagePort.on(event, listener) requires (string, function)");
-  }
-  ant_value_t this_obj = js_getthis(js);
-  if (!wt_is_message_port(js, this_obj)) return js_mkerr(js, "invalid MessagePort receiver");
-
-  size_t len = 0;
-  const char *event = js_getstr(js, args[0], &len);
-  if (!event) return js_mkerr(js, "invalid event name");
-  if (len == 7 && memcmp(event, "message", 7) == 0) {
-    js_set_slot(this_obj, SLOT_WT_PORT_ON_MESSAGE, args[1]);
-    js_set_slot(this_obj, SLOT_WT_PORT_STARTED, js_true);
-    wt_port_drain(js, this_obj);
-  }
-  return this_obj;
-}
-
-static ant_value_t worker_threads_message_port_once(ant_params_t) {
-  if (nargs < 2 || vtype(args[0]) != kTypeString || !is_callable(args[1])) {
-    return js_mkerr(js, "MessagePort.once(event, listener) requires (string, function)");
-  }
-  ant_value_t this_obj = js_getthis(js);
-  if (!wt_is_message_port(js, this_obj)) return js_mkerr(js, "invalid MessagePort receiver");
-
-  size_t len = 0;
-  const char *event = js_getstr(js, args[0], &len);
-  if (!event) return js_mkerr(js, "invalid event name");
-  if (len == 7 && memcmp(event, "message", 7) == 0) {
-    js_set_slot(this_obj, SLOT_WT_PORT_ONCE_MESSAGE, args[1]);
-    js_set_slot(this_obj, SLOT_WT_PORT_STARTED, js_true);
-    wt_port_drain(js, this_obj);
-  }
-  return this_obj;
-}
-
-static ant_value_t worker_threads_message_port_start(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  if (!wt_is_message_port(js, this_obj)) return js_mkerr(js, "invalid MessagePort receiver");
-  js_set_slot(this_obj, SLOT_WT_PORT_STARTED, js_true);
-  wt_port_drain(js, this_obj);
-  return js_mkundef();
-}
-
-static ant_value_t worker_threads_message_port_close(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  if (!wt_is_message_port(js, this_obj)) return js_mkerr(js, "invalid MessagePort receiver");
-  wt_port_set_closed(js, this_obj, true);
-
-  ant_value_t peer = js_get_slot(this_obj, SLOT_WT_PORT_PEER);
-  js_set_slot(this_obj, SLOT_WT_PORT_PEER, js_mknull());
-  if (wt_is_message_port(js, peer)) js_set_slot(peer, SLOT_WT_PORT_PEER, js_mknull());
-  return js_mkundef();
-}
-
-static ant_value_t worker_threads_message_port_ref(ant_params_t) {
-  return js_mkundef();
-}
-
-static ant_value_t worker_threads_message_port_unref(ant_params_t) {
-  return js_mkundef();
-}
-
-static ant_value_t worker_threads_message_port_ctor(ant_params_t) {
-  return js_mkerr(js, "MessagePort constructor is not public");
-}
-
-static ant_value_t worker_threads_message_channel_ctor(ant_params_t) {
-  if (vtype(call_new_target) == kTypeUndefined) {
-    return js_mkerr(js, "MessageChannel constructor requires 'new'");
-  }
-
-  ant_value_t this_obj = js_getthis(js);
-  ant_value_t port1 = wt_make_message_port(js);
-  ant_value_t port2 = wt_make_message_port(js);
-  js_set_slot(port1, SLOT_WT_PORT_PEER, port2);
-  js_set_slot(port2, SLOT_WT_PORT_PEER, port1);
-  js_set(js, this_obj, "port1", port1);
-  js_set(js, this_obj, "port2", port2);
-  return this_obj;
-}
-
-static ant_value_t worker_threads_worker_ctor(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  ant_value_t proto = js_instance_proto_from_new_target(js, js_mkundef(), call_new_target);
-
-  if (vtype(call_new_target) == kTypeUndefined)
-    return js_mkerr(js, "Worker constructor requires 'new'");
+  ant_output_set_thread_writer(worker_stdio_writer, w);
+  ant_runtime_init(js, w->argc, w->argv, NULL);
   
-  if (nargs < 1) return js_mkerr(js, "Worker() requires a filename or URL");
-  // workers are disabled in compiled executables until isolates are fully done
-  if (js_esm_bundle_active(js)) return js_mkerr(js, "Worker is not available in compiled executables");
-  if (is_object_type(this_obj) && is_object_type(proto)) js_set_proto_init(this_obj, proto);
+  if (!w->share_env) process_set_private_env(js, w->env);
+  ant_bootstrap_modules(js);
 
-  char *script_path = wt_path_from_specifier(js, args[0]);
-  if (!script_path) return js_mkerr(js, "Invalid Worker filename/URL");
-
-  const char *worker_data_json = NULL;
-  const char *env_store_json = NULL;
-  char *worker_data_heap = NULL;
-  char *env_store_heap = NULL;
-  if (nargs >= 2 && is_object_type(args[1])) {
-    ant_value_t worker_data = js_get(js, args[1], "workerData");
-    if (!is_undefined(worker_data)) {
-      ant_value_t stringify_args[1] = {worker_data};
-      ant_value_t json = js_json_stringify(js, stringify_args, 1, js_mkundef());
-      if (vtype(json) != kTypeString) {
-        free(script_path);
-        return js_mkerr(js, "Worker options.workerData must be JSON-serializable");
-      }
-      size_t len = 0;
-      const char *raw = js_getstr(js, json, &len);
-      if (!raw) {
-        free(script_path);
-        return js_mkerr(js, "Failed to stringify workerData");
-      }
-      worker_data_heap = strndup(raw, len);
-      if (!worker_data_heap) {
-        free(script_path);
-        return js_mkerr(js, "Out of memory");
-      }
-      worker_data_json = worker_data_heap;
+  int stop_code = 0;
+  bool started = !worker_stop_requested(w, &stop_code);
+  if (started) {
+    worker_post(w, WORKER_EVENT_ONLINE, 0, NULL);
+    ant_value_t result = worker_run_entry(js, w);
+    if (is_err(result) && !Ant_Exception_Pending(js)) ant_worker_report_uncaught(js, result);
+    worker_report_pending(js);
+    if (!worker_stop_requested(w, NULL)) {
+      js_run_event_loop(js);
+      worker_report_pending(js);
     }
   }
 
-  ant_value_t env_store = wt_get_or_create_env_store(js);
-  ant_value_t env_stringify_args[1] = {env_store};
-  ant_value_t env_json = js_json_stringify(js, env_stringify_args, 1, js_mkundef());
-  if (vtype(env_json) != kTypeString) {
-    free(script_path);
-    free(worker_data_heap);
-    return js_mkerr(js, "setEnvironmentData values must be JSON-serializable");
-  }
-  size_t env_len = 0;
-  const char *env_raw = js_getstr(js, env_json, &env_len);
-  if (!env_raw) {
-    free(script_path);
-    free(worker_data_heap);
-    return js_mkerr(js, "Failed to snapshot environment data");
-  }
-  env_store_heap = strndup(env_raw, env_len);
-  if (!env_store_heap) {
-    free(script_path);
-    free(worker_data_heap);
-    return js_mkerr(js, "Out of memory");
-  }
-  env_store_json = env_store_heap;
-
-  ant_worker_thread_t *wt = (ant_worker_thread_t *)calloc(1, sizeof(*wt));
-  if (!wt) {
-    free(script_path);
-    free(worker_data_heap);
-    free(env_store_heap);
-    return js_mkerr(js, "Out of memory");
+  if (!started) exit_code = 0;
+  else if (worker_stop_requested(w, &stop_code)) exit_code = stop_code;
+  else {
+    exit_code = process_run_exit_handlers(js, process_exit_code(js));
+    if (worker_stop_requested(w, &stop_code)) exit_code = stop_code;
   }
 
-  wt->js = js;
-  wt->self_val = this_obj;
-  js_set_native(this_obj, wt, WORKER_NATIVE_TAG);
+  ant_mutex_lock(&w->lock);
+  w->child = NULL;
+  bool close_async = w->child_async_open;
+  w->child_async_open = false;
+  ant_mutex_unlock(&w->lock);
+  if (close_async) uv_close((uv_handle_t *)&w->child_async, NULL);
 
-  wt->prev = NULL;
-  wt->next = active_workers_head;
-  if (active_workers_head) active_workers_head->prev = wt;
-  active_workers_head = wt;
+  js->terminating = false;
+  atomic_store_explicit(&js->interrupt_pending, 0, memory_order_relaxed);
+  js_destroy(js);
+  ant_output_set_thread_writer(NULL, NULL);
+  ant_thread_cleanup();
 
-  int rc = wt_spawn_worker(wt, script_path, worker_data_json, env_store_json);
-  free(script_path);
-  free(worker_data_heap);
-  free(env_store_heap);
+  worker_post(w, WORKER_EVENT_EXIT, exit_code, NULL);
+  worker_release(w);
+}
 
-  if (rc != 0) {
-    js_set_slot(this_obj, SLOT_DATA, js_mkundef());
-    wt_cleanup(wt);
-    return js_mkerr(js, "Failed to spawn Worker: %s", uv_strerror(rc));
+static ant_worker_t *worker_data(ant_value_t obj) {
+  return is_object_type(obj) ? (ant_worker_t *)js_get_native(obj, WORKER_NATIVE_TAG) : NULL;
+}
+
+static void worker_finalize(ant_t *js, ant_object_t *obj) {
+  ant_value_t value = js_obj_from_ptr(obj);
+  ant_worker_t *w = worker_data(value);
+  if (!w) return;
+  js_clear_native(value, WORKER_NATIVE_TAG);
+  w->obj = js_mkundef();
+  if (w->binding) {
+    ant_port_binding_free(w->binding);
+    w->binding = NULL;
+  }
+  worker_release(w);
+}
+
+static void worker_emit(ant_t *js, ant_worker_t *w, const char *event, ant_value_t *args, int nargs) {
+  if (!is_object_type(w->obj)) return;
+  eventemitter_emit_args(js, w->obj, event, args, nargs);
+  process_microtasks(js);
+}
+
+static void worker_flush_online(ant_t *js, ant_worker_t *w) {
+  for (;;) {
+    ant_mutex_lock(&w->lock);
+    worker_event_t *e = w->events_head;
+    bool online = e && e->kind == WORKER_EVENT_ONLINE;
+    if (online) {
+      w->events_head = e->next;
+      if (!w->events_head) w->events_tail = NULL;
+    }
+    ant_mutex_unlock(&w->lock);
+    if (!online) return;
+    free(e);
+    worker_emit(js, w, "online", NULL, 0);
+  }
+}
+
+static void worker_on_message(ant_t *js, ant_value_t target, ant_value_t value, ant_value_t ports) {
+  ant_worker_t *w = worker_data(target);
+  if (!w) return;
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, value);
+  worker_flush_online(js, w);
+  worker_emit(js, w, vtype(ports) == kTypeNull ? "messageerror" : "message", &value, 1);
+  GC_ROOT_RESTORE(js, mark);
+}
+
+static ant_value_t worker_stdio_noop(ant_params_t) {
+  return js_mkundef();
+}
+
+static ant_value_t worker_make_readable(ant_t *js) {
+  ant_value_t obj = Ant_Object_CreateBare(js);
+  if (is_err(obj)) return obj;
+  js_set_proto_init(obj, stream_readable_prototype(js));
+  stream_init_readable_object(js, obj, js_mkundef());
+  js_set(js, obj, "_read", Ant_Function_Create(worker_stdio_noop));
+  return obj;
+}
+
+static void worker_forward_stdio(ant_t *js, ant_worker_t *w, worker_event_t *e) {
+  bool is_stderr = e->kind == WORKER_EVENT_STDERR;
+  ant_value_t stream = is_stderr ? w->stderr_obj : w->stdout_obj;
+  bool pipe = is_stderr ? w->pipe_stderr : w->pipe_stdout;
+
+  if (pipe) {
+    ant_output_stream_t *out = ant_output_stream(is_stderr ? stderr : stdout);
+    ant_output_stream_begin(out);
+    if (ant_output_stream_append(out, e->bytes, e->len)) ant_output_stream_flush(out);
   }
 
+  if (!is_object_type(stream) || (pipe && eventemitter_listener_count(js, stream, "data") == 0)) return;
+  ArrayBufferData *ab = create_array_buffer_data(js, e->len);
+  if (!ab) return;
+  if (e->len) memcpy(ab->data, e->bytes, e->len);
+  ant_value_t chunk = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, e->len, js->builtins.buffer_proto);
+  if (is_err(chunk)) return;
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, chunk);
+  stream_readable_push(js, stream, chunk, js_mkundef());
+  GC_ROOT_RESTORE(js, mark);
+  process_microtasks(js);
+}
+
+static void worker_end_stdio(ant_t *js, ant_worker_t *w) {
+  if (is_object_type(w->stdout_obj)) stream_readable_push(js, w->stdout_obj, js_mknull(), js_mkundef());
+  if (is_object_type(w->stderr_obj)) stream_readable_push(js, w->stderr_obj, js_mknull(), js_mkundef());
+}
+
+static void worker_parent_async_closed(uv_handle_t *handle) {
+  worker_release(handle->data);
+}
+
+static void worker_finish(ant_t *js, ant_worker_t *w, int code) {
+  if (w->exited) return;
+  w->exited = true;
+  w->exit_code = code;
+
+  if (w->binding) {
+    ant_port_binding_drain(w->binding);
+    ant_port_binding_free(w->binding);
+    w->binding = NULL;
+  }
+
+  if (w->thread_started) {
+    uv_thread_join(&w->thread);
+    w->thread_started = false;
+  }
+
+  ant_mutex_lock(&w->lock);
+  bool close_async = w->parent_async_open;
+  w->parent_async_open = false;
+  ant_mutex_unlock(&w->lock);
+  if (close_async) uv_close((uv_handle_t *)&w->parent_async, worker_parent_async_closed);
+
+  GC_ROOT_SAVE(mark, js);
+  ant_value_t obj = w->obj;
+  ant_value_t promise = w->exit_promise;
+  GC_ROOT_PIN(js, obj);
+  GC_ROOT_PIN(js, promise);
+  Ant_List_Remove(w);
+
+  worker_end_stdio(js, w);
+  ant_value_t code_val = js_mknum(code);
+  if (is_object_type(obj)) {
+    js_set(js, obj, "threadId", js_mknum(-1));
+    worker_emit(js, w, "exit", &code_val, 1);
+  }
+  if (vtype(promise) == kTypePromise) js_resolve_promise(js, promise, code_val);
+  w->exit_promise = js_mkundef();
+  GC_ROOT_RESTORE(js, mark);
+}
+
+static void worker_event_free(worker_event_t *e) {
+  ant_wire_release(e->wire);
+  free(e);
+}
+
+static ant_value_t worker_error_value(ant_t *js, worker_event_t *e) {
+  if (e->wire) return ant_wire_deserialize(js, e->wire, NULL);
+  if (e->code == WORKER_ERROR_OOM) return js_mkerr_code(
+    js, JS_ERR_GENERIC, "ERR_WORKER_OUT_OF_MEMORY",
+    "Worker terminated due to reaching memory limit: JS heap out of memory"
+  );
+  return js_mkerr_code(js, JS_ERR_GENERIC, "ERR_WORKER_INIT_FAILED", "Worker initialization failure: out of memory");
+}
+
+static void worker_dispatch_error(ant_t *js, ant_worker_t *w, worker_event_t *e) {
+  ant_value_t error = worker_error_value(js, e);
+  if (is_err(error)) error = js_take_thrown(js, error);
+
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, error);
+  if (is_object_type(w->obj) && eventemitter_listener_count(js, w->obj, "error") > 0)
+    worker_emit(js, w, "error", &error, 1);
+  else {
+    js_throw(js, error);
+    process_report_uncaught_exception(js);
+  }
+  
+  GC_ROOT_RESTORE(js, mark);
+}
+
+static void worker_parent_wake(uv_async_t *handle) {
+  ant_worker_t *w = handle->data;
+  ant_t *js = w->parent;
+
+  for (;;) {
+    ant_mutex_lock(&w->lock);
+    worker_event_t *e = w->events_head;
+    if (e) {
+      w->events_head = e->next;
+      if (!w->events_head) w->events_tail = NULL;
+    }
+    ant_mutex_unlock(&w->lock);
+    if (!e) break;
+
+    if (e->kind == WORKER_EVENT_EXIT) {
+      int code = e->code;
+      worker_event_free(e);
+      worker_finish(js, w, code);
+      return;
+    }
+
+    switch (e->kind) {
+      case WORKER_EVENT_ONLINE: worker_emit(js, w, "online", NULL, 0); break;
+      case WORKER_EVENT_STDOUT:
+      case WORKER_EVENT_STDERR: worker_forward_stdio(js, w, e); break;
+      case WORKER_EVENT_ERROR: worker_dispatch_error(js, w, e); break;
+      default: break;
+    }
+    worker_event_free(e);
+  }
+}
+
+static char *worker_resolve_entry(ant_t *js, ant_value_t spec, bool is_eval, ant_value_t *error) {
+  *error = js_mkundef();
+  if (is_eval) {
+    if (vtype(spec) != kTypeString) {
+      *error = js_mkerr_typed(js, JS_ERR_TYPE, "The \"filename\" argument must be of type string when eval is true");
+      return NULL;
+    }
+    size_t len = 0;
+    const char *code = js_getstr(js, spec, &len);
+    return strndup(code, len);
+  }
+
+  ant_value_t href = spec;
+  if (is_object_type(spec)) {
+    href = js_get(js, spec, "href");
+    if (vtype(href) != kTypeString) {
+      *error = js_mkerr_typed(js, JS_ERR_TYPE, "The \"filename\" argument must be of type string or an instance of URL");
+      return NULL;
+    }
+  } else if (vtype(spec) != kTypeString) {
+    *error = js_mkerr_typed(js, JS_ERR_TYPE, "The \"filename\" argument must be of type string or an instance of URL");
+    return NULL;
+  }
+
+  size_t len = 0;
+  const char *str = js_getstr(js, href, &len);
+  char *path = strndup(str, len);
+  if (!path) return NULL;
+  if (strncmp(path, "data:", 5) == 0) return path;
+  if (strncmp(path, "file:", 5) == 0) {
+    char *file = esm_file_url_to_path(js, path);
+    free(path);
+    if (!file) *error = js_mkerr_typed(js, JS_ERR_TYPE, "Invalid file URL");
+    return file;
+  }
+  if (esm_is_url(path)) {
+    *error = js_mkerr_typed(js, JS_ERR_TYPE, "The URL must be of scheme file or data. Received \"%s\"", path);
+    free(path);
+    return NULL;
+  }
+
+  bool relative = strncmp(path, "./", 2) == 0 || strncmp(path, "../", 3) == 0;
+  if (path[0] != '/' && !relative) {
+    *error = js_mkerr_typed(
+      js, JS_ERR_TYPE, 
+      "The worker script or module filename must be an absolute path or a relative path starting with './' or '../'. Received \"%s\"", path
+    );
+    free(path);
+    return NULL;
+  }
+
+  char *resolved = realpath(path, NULL);
+  if (resolved) {
+    free(path);
+    return resolved;
+  }
+  return path;
+}
+
+static char **worker_env_from_object(ant_t *js, ant_value_t env_obj) {
+  ant_value_t keys = js_own_property_keys(js, env_obj, false, true);
+  if (is_err(keys) || vtype(keys) != kTypeArray) return NULL;
+  
+  ant_offset_t len = js_arr_len(js, keys);
+  char **env = calloc((size_t)len + 1, sizeof(char *));
+  if (!env) return NULL;
+
+  size_t out = 0;
+  for (ant_offset_t i = 0; i < len; i++) {
+    ant_value_t key = js_arr_get(js, keys, i);
+    if (vtype(key) != kTypeString) continue;
+    ant_value_t value = js_tostring_val(js, js_getprop_fallback(js, env_obj, js_getstr(js, key, NULL)));
+    
+    if (is_err(value)) {
+      js_take_thrown(js, value);
+      continue;
+    }
+    
+    size_t klen = 0, vlen = 0;
+    const char *k = js_getstr(js, key, &klen);
+    const char *v = js_getstr(js, value, &vlen);
+    
+    char *entry = malloc(klen + vlen + 2);
+    if (!entry) continue;
+    
+    memcpy(entry, k, klen);
+    entry[klen] = '=';
+    memcpy(entry + klen + 1, v, vlen);
+    entry[klen + vlen + 1] = '\0';
+    env[out++] = entry;
+  }
+  
+  return env;
+}
+
+static ant_value_t worker_environment_map(ant_t *js) {
+  if (!is_object_type(js->mutable_roots.worker_environment_data)) {
+    ant_value_t ctor = js_get(js, js->global, "Map");
+    ant_value_t map = sv_vm_call(js->vm, js, ctor, js_mkundef(), NULL, 0, NULL, ctor);
+    if (is_err(map)) return map;
+    js->mutable_roots.worker_environment_data = map;
+  }
+  return js->mutable_roots.worker_environment_data;
+}
+
+static ant_value_t worker_read_limits(ant_t *js, ant_worker_t *w, ant_value_t limits) {
+  static const char *names[WORKER_LIMIT_COUNT] = {
+    "maxOldGenerationSizeMb", "maxYoungGenerationSizeMb", "codeRangeSizeMb", "stackSizeMb",
+  };
+  for (int i = 0; i < WORKER_LIMIT_COUNT; i++) w->limits[i] = -1;
+  w->limits[WORKER_LIMIT_OLD] = WORKER_DEFAULT_OLD_MB;
+  w->limits[WORKER_LIMIT_STACK] = WORKER_DEFAULT_STACK_MB;
+  if (!is_object_type(limits)) return js_mkundef();
+
+  for (int i = 0; i < WORKER_LIMIT_COUNT; i++) {
+    ant_value_t v = js_get(js, limits, names[i]);
+    if (vtype(v) == kTypeUndefined) continue;
+    if (vtype(v) != kTypeNumber) return js_mkerr_typed(js, JS_ERR_TYPE, "The \"options.resourceLimits.%s\" property must be of type number", names[i]);
+    if (js_getnum(v) > 0) w->limits[i] = js_getnum(v);
+  }
+
+  double old_min = (double)(ANT_ARENA_MIN >> 20), old_max = (double)(ANT_ARENA_MAX >> 20);
+  if (w->limits[WORKER_LIMIT_OLD] < old_min) w->limits[WORKER_LIMIT_OLD] = old_min;
+  if (w->limits[WORKER_LIMIT_OLD] > old_max) w->limits[WORKER_LIMIT_OLD] = old_max;
+  return js_mkundef();
+}
+
+static ant_value_t worker_limits_object(ant_t *js, const double limits[WORKER_LIMIT_COUNT]) {
+  static const char *names[WORKER_LIMIT_COUNT] = {
+    "maxOldGenerationSizeMb", "maxYoungGenerationSizeMb", "codeRangeSizeMb", "stackSizeMb",
+  };
+  ant_value_t obj = Ant_Object_Create(js);
+  for (int i = 0; i < WORKER_LIMIT_COUNT; i++)
+    js_set(js, obj, names[i], js_mknum(limits[i] > 0 ? limits[i] : (i == WORKER_LIMIT_STACK ? WORKER_DEFAULT_STACK_MB : 0)));
+  return obj;
+}
+
+static ant_value_t worker_build_argv(ant_t *js, ant_worker_t *w, ant_value_t argv_opt) {
+  ant_offset_t extra = vtype(argv_opt) == kTypeArray ? js_arr_len(js, argv_opt) : 0;
+  w->argv = calloc((size_t)extra + 3, sizeof(char *));
+  if (!w->argv) return js_mkerr(js, "out of memory");
+
+  const char *exe = js->runtime.argc > 0 && js->runtime.argv ? js->runtime.argv[0] : "ant";
+  w->argv[w->argc++] = strdup(exe);
+  w->argv[w->argc++] = strdup(w->is_eval ? "[worker eval]" : w->entry);
+  
+  for (ant_offset_t i = 0; i < extra; i++) {
+    ant_value_t s = js_tostring_val(js, js_arr_get(js, argv_opt, i));
+    if (is_err(s)) return s;
+    size_t len = 0;
+    const char *str = js_getstr(js, s, &len);
+    w->argv[w->argc++] = strndup(str, len);
+  }
+  
+  return js_mkundef();
+}
+
+static ant_value_t js_worker_ctor(ant_params_t) {
+  if (vtype(call_new_target) == kTypeUndefined)
+    return js_mkerr_typed(js, JS_ERR_TYPE, "Class constructor Worker cannot be invoked without 'new'");
+  if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "The \"filename\" argument must be of type string or an instance of URL");
+  if (js_esm_bundle_active(js)) return js_mkerr(js, "Worker is not available in compiled executables");
+
+  ant_value_t this_obj = js_getthis(js);
+  ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.worker_proto, call_new_target);
+  if (is_object_type(proto)) js_set_proto_init(this_obj, proto);
+
+  ant_value_t options = nargs > 1 && is_object_type(args[1]) ? args[1] : js_mkundef();
+  bool is_eval = is_object_type(options) && js_truthy(js, js_get(js, options, "eval"));
+
+  ant_worker_t *w = calloc(1, sizeof(*w));
+  if (!w) return js_mkerr(js, "out of memory");
+  w->lock = (ant_mutex_t)ANT_MUTEX_INIT;
+  atomic_init(&w->refs, 1);
+  w->obj = this_obj;
+  w->exit_promise = js_mkundef();
+  w->stdout_obj = js_mkundef();
+  w->stderr_obj = js_mkundef();
+  w->pipe_stdout = !(is_object_type(options) && js_truthy(js, js_get(js, options, "stdout")));
+  w->pipe_stderr = !(is_object_type(options) && js_truthy(js, js_get(js, options, "stderr")));
+  w->is_eval = is_eval;
+  w->parent = js;
+
+  ant_value_t error = js_mkundef();
+  w->entry = worker_resolve_entry(js, args[0], is_eval, &error);
+  if (!w->entry) {
+    worker_release(w);
+    return is_err(error) ? error : js_mkerr(js, "out of memory");
+  }
+
+  ant_value_t r = worker_read_limits(js, w, is_object_type(options) ? js_get(js, options, "resourceLimits") : js_mkundef());
+  if (!is_err(r)) r = worker_build_argv(js, w, is_object_type(options) ? js_get(js, options, "argv") : js_mkundef());
+  if (is_err(r)) {
+    worker_release(w);
+    return r;
+  }
+
+  ant_value_t env_opt = is_object_type(options) ? js_get(js, options, "env") : js_mkundef();
+  if (vtype(env_opt) == kTypeSymbol && env_opt == js->builtins.worker_share_env) w->share_env = true;
+  else if (is_object_type(env_opt)) w->env = worker_env_from_object(js, env_opt);
+  else w->env = process_env_snapshot(js);
+
+  ant_value_t name = is_object_type(options) ? js_get(js, options, "name") : js_mkundef();
+  if (vtype(name) == kTypeString) {
+    size_t len = 0;
+    const char *s = js_getstr(js, name, &len);
+    w->name = strndup(s, len);
+  }
+
+  ant_value_t data = is_object_type(options) ? js_get(js, options, "workerData") : js_mkundef();
+  ant_value_t transfer = is_object_type(options) ? js_get(js, options, "transferList") : js_mkundef();
+  r = ant_wire_serialize(js, data, transfer, js_mkundef(), &w->worker_data);
+  if (!is_err(r)) {
+    ant_value_t map = worker_environment_map(js);
+    r = is_err(map) ? map : ant_wire_serialize(js, map, js_mkundef(), js_mkundef(), &w->environment_data);
+  }
+  if (is_err(r)) {
+    worker_release(w);
+    return r;
+  }
+
+  ant_port_end_t *parent_end = NULL;
+  if (!ant_port_end_pair(&parent_end, &w->child_end)) {
+    worker_release(w);
+    return js_mkerr(js, "out of memory");
+  }
+  w->binding = ant_port_end_bind(js, parent_end, this_obj, worker_on_message);
+  if (!w->binding) {
+    ant_port_end_release(parent_end);
+    worker_release(w);
+    return js_mkerr(js, "out of memory");
+  }
+
+  if (uv_async_init(js->loop, &w->parent_async, worker_parent_wake) != 0) {
+    worker_release(w);
+    return js_mkerr(js, "failed to initialize Worker");
+  }
+  w->parent_async.data = w;
+  w->parent_async_open = true;
+  w->refed = true;
+  atomic_fetch_add_explicit(&w->refs, 1, memory_order_relaxed);
+  w->thread_id = atomic_fetch_add_explicit(&next_thread_id, 1, memory_order_relaxed);
+
+  js_set_native(this_obj, w, WORKER_NATIVE_TAG);
+  js_set_finalizer(this_obj, worker_finalize);
+  js_set(js, this_obj, "threadId", js_mknum((double)w->thread_id));
+  js_set(js, this_obj, "resourceLimits", worker_limits_object(js, w->limits));
+  w->stdout_obj = worker_make_readable(js);
+  w->stderr_obj = worker_make_readable(js);
+  js_set(js, this_obj, "stdin", js_mknull());
+  js_set(js, this_obj, "stdout", w->stdout_obj);
+  js_set(js, this_obj, "stderr", w->stderr_obj);
+  Ant_List_Insert(&js->workers, w);
+
+  uv_thread_options_t opts = { .flags = UV_THREAD_HAS_STACK_SIZE, .stack_size = (size_t)(w->limits[WORKER_LIMIT_STACK] * 1024 * 1024) };
+  atomic_fetch_add_explicit(&w->refs, 1, memory_order_relaxed);
+  if (uv_thread_create_ex(&w->thread, &opts, worker_thread_main, w) != 0) {
+    atomic_fetch_sub_explicit(&w->refs, 1, memory_order_relaxed);
+    worker_post(w, WORKER_EVENT_EXIT, 1, NULL);
+    return this_obj;
+  }
+  w->thread_started = true;
   return this_obj;
 }
 
-static ant_value_t worker_threads_parent_post_message(ant_params_t) {
-  ant_value_t value = (nargs > 0) ? args[0] : js_mkundef();
-  ant_value_t stringify_args[1] = {value};
-  ant_value_t json = js_json_stringify(js, stringify_args, 1, js_mkundef());
-  if (vtype(json) != kTypeString) return js_mkerr(js, "parentPort.postMessage payload must be JSON-serializable");
+static ant_worker_t *worker_this(ant_t *js) {
+  return worker_data(js_getthis(js));
+}
 
-  size_t json_len = 0;
-  const char *json_str = js_getstr(js, json, &json_len);
-  if (!json_str) return js_mkerr(js, "Failed to serialize message");
+static ant_value_t js_worker_post_message(ant_params_t) {
+  ant_worker_t *w = worker_this(js);
+  if (!w) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
+  if (w->exited || !w->binding) return js_mkundef();
 
-  size_t prefix_len = strlen(WT_MSG_PREFIX);
-  size_t line_len = prefix_len + json_len + 1;
-  char *line = (char *)malloc(line_len + 1);
-  if (!line) return js_mkerr(js, "Out of memory");
+  ant_value_t transfer = js_mkundef();
+  if (nargs > 1) {
+    ant_value_t opt = args[1];
+    if (is_object_type(opt) && vtype(opt) != kTypeArray) {
+      transfer = js_get(js, opt, "transfer");
+      if (vtype(transfer) == kTypeUndefined) transfer = js_get(js, opt, "transferList");
+    } else transfer = opt;
+  }
+  return ant_port_binding_post(js, w->binding, nargs > 0 ? args[0] : js_mkundef(), transfer);
+}
 
-  memcpy(line, WT_MSG_PREFIX, prefix_len);
-  memcpy(line + prefix_len, json_str, json_len);
-  line[prefix_len + json_len] = '\n';
-  line[prefix_len + json_len + 1] = '\0';
+static ant_value_t js_worker_terminate(ant_params_t) {
+  ant_worker_t *w = worker_this(js);
+  if (!w) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
 
-  ssize_t wrote = WT_WRITE(WT_STDOUT_FD, line, (unsigned int)line_len);
-  free(line);
-  if (wrote < 0) return js_mkerr(js, "parentPort.postMessage failed");
+  ant_value_t promise = js_mkpromise(js);
+  if (w->exited) {
+    js_resolve_promise(js, promise, js_mkundef());
+    return promise;
+  }
+  if (vtype(w->exit_promise) == kTypePromise) return w->exit_promise;
+  w->exit_promise = promise;
+  worker_request_stop(w, 1);
+  return promise;
+}
+
+static ant_value_t js_worker_ref(ant_params_t) {
+  ant_worker_t *w = worker_this(js);
+  if (w && w->parent_async_open) {
+    w->refed = true;
+    uv_ref((uv_handle_t *)&w->parent_async);
+  }
   return js_mkundef();
 }
 
-static ant_value_t worker_threads_parent_unref(ant_params_t) {
+static ant_value_t js_worker_unref(ant_params_t) {
+  ant_worker_t *w = worker_this(js);
+  if (w && w->parent_async_open) {
+    w->refed = false;
+    uv_unref((uv_handle_t *)&w->parent_async);
+  }
   return js_mkundef();
 }
 
-static ant_value_t worker_threads_mark_as_untransferable(ant_params_t) {
+static ant_value_t js_worker_has_ref(ant_params_t) {
+  ant_worker_t *w = worker_this(js);
+  return js_bool(w && !w->exited && w->refed);
+}
+
+static ant_value_t js_worker_get_heap_snapshot(ant_params_t) {
+  ant_value_t promise = js_mkpromise(js);
+  js_reject_promise(js, promise, js_mkerr(js, "Worker.getHeapSnapshot is not supported"));
+  return promise;
+}
+
+static ant_value_t js_mark_as_untransferable(ant_params_t) {
   if (nargs < 1) return js_mkundef();
+  return ant_wire_mark_untransferable(js, args[0]);
+}
+
+static ant_value_t js_mark_as_uncloneable(ant_params_t) {
+  if (nargs < 1) return js_mkundef();
+  return ant_wire_mark_uncloneable(js, args[0]);
+}
+
+static ant_value_t js_is_marked_as_untransferable(ant_params_t) {
+  return js_bool(nargs > 0 && ant_wire_is_untransferable(js, args[0]));
+}
+
+static ant_value_t js_receive_message_on_port(ant_params_t) {
+  if (nargs < 1 || !ant_message_port_is(args[0]))
+    return js_mkerr_typed(js, JS_ERR_TYPE, "The \"port\" argument must be a MessagePort instance");
+  return ant_message_port_receive(js, args[0]);
+}
+
+static ant_value_t js_move_message_port_to_context(ant_params_t) {
+  if (nargs < 1 || !ant_message_port_is(args[0]))
+    return js_mkerr_typed(js, JS_ERR_TYPE, "The \"port\" argument must be a MessagePort instance");
   return args[0];
 }
 
-static ant_value_t worker_threads_receive_message_on_port(ant_params_t) {
-  if (nargs < 1 || !wt_is_message_port(js, args[0])) {
-    return js_mkerr(js, "receiveMessageOnPort(port) requires a MessagePort");
-  }
-  ant_value_t msg = js_mkundef();
-  if (!wt_port_queue_dequeue(js, args[0], &msg)) return js_mkundef();
-
-  ant_value_t out = Ant_Object_CreateBare(js);
-  js_set(js, out, "message", msg);
-  return out;
-}
-
-static ant_value_t worker_threads_set_environment_data(ant_params_t) {
-  if (nargs < 2) return js_mkerr(js, "setEnvironmentData(key, value) requires 2 arguments");
-
-  ant_value_t key_stringify_args[1] = {args[0]};
-  ant_value_t key_json = js_json_stringify(js, key_stringify_args, 1, js_mkundef());
-  if (vtype(key_json) != kTypeString) return js_mkerr(js, "setEnvironmentData key must be JSON-serializable");
-
-  ant_value_t value_stringify_args[1] = {args[1]};
-  ant_value_t value_json = js_json_stringify(js, value_stringify_args, 1, js_mkundef());
-  if (vtype(value_json) != kTypeString) return js_mkerr(js, "setEnvironmentData value must be JSON-serializable");
-
-  ant_value_t cloned = json_parse_value(js, value_json);
-  if (is_err(cloned)) return js_mkerr(js, "setEnvironmentData value must be JSON-serializable");
-
-  size_t key_len = 0;
-  const char *key_ptr = js_getstr(js, key_json, &key_len);
-  if (!key_ptr) return js_mkerr(js, "Failed to serialize environment data key");
-
-  char *key = strndup(key_ptr, key_len);
-  if (!key) return js_mkerr(js, "Out of memory");
-  js_set(js, wt_get_or_create_env_store(js), key, cloned);
-  free(key);
-  return js_mkundef();
-}
-
-static ant_value_t worker_threads_get_environment_data(ant_params_t) {
+static ant_value_t js_set_environment_data(ant_params_t) {
   if (nargs < 1) return js_mkundef();
-
-  ant_value_t key_stringify_args[1] = {args[0]};
-  ant_value_t key_json = js_json_stringify(js, key_stringify_args, 1, js_mkundef());
-  if (vtype(key_json) != kTypeString) return js_mkundef();
-
-  size_t key_len = 0;
-  const char *key_ptr = js_getstr(js, key_json, &key_len);
-  if (!key_ptr) return js_mkundef();
-
-  char *key = strndup(key_ptr, key_len);
-  if (!key) return js_mkerr(js, "Out of memory");
-
-  ant_value_t store = wt_get_or_create_env_store(js);
-  ant_prop_loc_t off = lkp(js, store, key, key_len);
-  if (!off.obj) {
-    free(key);
-    return js_mkundef();
-  }
-
-  ant_value_t value = js_get(js, store, key);
-  free(key);
-  return value;
+  ant_value_t map = worker_environment_map(js);
+  if (is_err(map)) return map;
+  bool remove = nargs < 2 || vtype(args[1]) == kTypeUndefined;
+  ant_value_t method = js_get(js, map, remove ? "delete" : "set");
+  return sv_vm_call(js->vm, js, method, map, args, remove ? 1 : 2, NULL, js_mkundef());
 }
 
-static ant_value_t worker_threads_move_message_port_to_context(ant_params_t) {
-  if (nargs < 1 || !wt_is_message_port(js, args[0])) {
-    return js_mkerr(js, "moveMessagePortToContext(port, context) requires a MessagePort");
-  }
-  return args[0];
+static ant_value_t js_get_environment_data(ant_params_t) {
+  if (nargs < 1) return js_mkundef();
+  ant_value_t map = worker_environment_map(js);
+  if (is_err(map)) return map;
+  ant_value_t method = js_get(js, map, "get");
+  return sv_vm_call(js->vm, js, method, map, args, 1, NULL, js_mkundef());
 }
 
-void gc_mark_worker_threads(ant_t *js, gc_mark_fn mark) {
-  for (ant_worker_thread_t *wt = active_workers_head; wt; wt = wt->next) {
-    mark(js, wt->self_val);
-    if (wt->has_terminate_val) mark(js, wt->terminate_val);
+static void worker_setup_child_state(ant_t *js, ant_value_t lib) {
+  ant_worker_t *w = js->worker;
+
+  ant_value_t data = w->worker_data ? ant_wire_deserialize(js, w->worker_data, NULL) : js_mkundef();
+  if (is_err(data)) data = js_take_thrown(js, data);
+  js_set(js, lib, "workerData", data);
+
+  if (w->environment_data) {
+    ant_value_t map = ant_wire_deserialize(js, w->environment_data, NULL);
+    if (is_err(map)) js_take_thrown(js, map);
+    else js->mutable_roots.worker_environment_data = map;
   }
+
+  ant_port_end_t *end = w->child_end;
+  w->child_end = NULL;
+  ant_value_t port = end ? ant_message_port_adopt(js, end) : js_mknull();
+  if (is_err(port)) port = js_take_thrown(js, port);
+  js_set(js, lib, "parentPort", port);
+  js_set(js, lib, "threadId", js_mknum((double)w->thread_id));
+  js_set(js, lib, "resourceLimits", worker_limits_object(js, w->limits));
+  js_set(js, lib, "threadName", w->name ? js_mkstr(js, w->name, strlen(w->name)) : js_mkstr(js, "", 0));
 }
 
 ant_value_t worker_threads_library(ant_t *js) {
   ant_value_t lib = Ant_Object_CreateBare(js);
-  bool is_worker = wt_is_worker_mode();
+  bool is_worker = js->worker != NULL
+  if (!js->builtins.worker_share_env) js->builtins.worker_share_env = js_mksym(js, "nodejs.worker_threads.SHARE_ENV");
 
-  wt_init_env_store(js, is_worker);
-
-  js_set(js, lib, "isMainThread", js_bool(!is_worker));
-  js_set(js, lib, "threadId", js_mknum((double)(is_worker ? js->runtime.pid : 0)));
-  js_set(js, lib, "SHARE_ENV", js_mksym(js, "SHARE_ENV"));
-
-  ant_value_t message_port_ctor_obj = Ant_Object_CreateBare(js);
-  ant_value_t message_port_proto = Ant_Object_CreateBare(js);
-  js_set(js, message_port_proto, "postMessage", Ant_Function_Create(worker_threads_message_port_post_message));
-  js_set(js, message_port_proto, "on", Ant_Function_Create(worker_threads_message_port_on));
-  js_set(js, message_port_proto, "once", Ant_Function_Create(worker_threads_message_port_once));
-  js_set(js, message_port_proto, "start", Ant_Function_Create(worker_threads_message_port_start));
-  js_set(js, message_port_proto, "close", Ant_Function_Create(worker_threads_message_port_close));
-  js_set(js, message_port_proto, "ref", Ant_Function_Create(worker_threads_message_port_ref));
-  js_set(js, message_port_proto, "unref", Ant_Function_Create(worker_threads_message_port_unref));
-  js_set_tostringtag(js, message_port_proto, js_mkstr(js, "MessagePort", 11));
-
-  js_set_slot(message_port_ctor_obj, SLOT_CFUNC, Ant_Function_Create(worker_threads_message_port_ctor));
-  js_mkprop_fast(js, message_port_ctor_obj, "prototype", 9, message_port_proto);
-  js_set_function_name(js, message_port_ctor_obj, "MessagePort", sizeof("MessagePort") - 1);
-  js_set(js, lib, "MessagePort", js_obj_to_func(js, message_port_ctor_obj));
-  js_set_slot(js->global, SLOT_WT_PORT_PROTO, message_port_proto);
-
-  ant_value_t message_channel_ctor_obj = Ant_Object_CreateBare(js);
-  ant_value_t message_channel_proto = Ant_Object_CreateBare(js);
-  js_set_tostringtag(js, message_channel_proto, js_mkstr(js, "MessageChannel", 14));
-  js_set_slot(message_channel_ctor_obj, SLOT_CFUNC, Ant_Function_Create(worker_threads_message_channel_ctor));
-  js_mkprop_fast(js, message_channel_ctor_obj, "prototype", 9, message_channel_proto);
-  js_set_function_name(js, message_channel_ctor_obj, "MessageChannel", sizeof("MessageChannel") - 1);
-  js_set(js, lib, "MessageChannel", js_obj_to_func(js, message_channel_ctor_obj));
-
-  if (is_worker) {
-    ant_value_t parent_port = Ant_Object_CreateBare(js);
-    js_set(js, parent_port, "postMessage", Ant_Function_Create(worker_threads_parent_post_message));
-    js_set(js, parent_port, "unref", Ant_Function_Create(worker_threads_parent_unref));
-    js_set(js, parent_port, "ref", Ant_Function_Create(worker_threads_parent_unref));
-    js_set(js, lib, "parentPort", parent_port);
-
-    const char *worker_data_json = getenv(WT_ENV_DATA_JSON);
-    if (worker_data_json && worker_data_json[0]) {
-      ant_value_t raw = js_mkstr(js, worker_data_json, strlen(worker_data_json));
-      ant_value_t parsed = json_parse_value(js, raw);
-      if (is_err(parsed)) {
-        js_take_thrown(js, parsed);
-        parsed = js_mkundef();
-      }
-      js_set(js, lib, "workerData", parsed);
-    } else js_set(js, lib, "workerData", js_mkundef());
-  } else {
-    js_set(js, lib, "parentPort", js_mknull());
-    js_set(js, lib, "workerData", js_mkundef());
+  if (!is_object_type(js->builtins.worker_proto)) {
+    ant_value_t proto = Ant_Object_CreateBare(js);
+    js_set_proto_init(proto, js->builtins.eventemitter_proto);
+    js_set(js, proto, "postMessage", Ant_Function_CreateWithArity(js_worker_post_message, 1));
+    js_set(js, proto, "terminate", Ant_Function_Create(js_worker_terminate));
+    js_set(js, proto, "ref", Ant_Function_Create(js_worker_ref));
+    js_set(js, proto, "unref", Ant_Function_Create(js_worker_unref));
+    js_set(js, proto, "hasRef", Ant_Function_Create(js_worker_has_ref));
+    js_set(js, proto, "getHeapSnapshot", Ant_Function_Create(js_worker_get_heap_snapshot));
+    js_set_tostringtag(js, proto, js_mkstr(js, "Worker", 6));
+    js->builtins.worker_proto = proto;
+    js->builtins.worker_ctor = Ant_Function_CreateConstructor(js, js_worker_ctor, proto, "Worker", 1);
   }
 
-  ant_value_t worker_ctor_obj = Ant_Object_CreateBare(js);
-  ant_value_t worker_proto = Ant_Object_CreateBare(js);
+  js_set(js, lib, "Worker", js->builtins.worker_ctor);
+  js_set(js, lib, "MessageChannel", js_get(js, js->global, "MessageChannel"));
+  js_set(js, lib, "MessagePort", js_get(js, js->global, "MessagePort"));
+  js_set(js, lib, "BroadcastChannel", js_get(js, js->global, "BroadcastChannel"));
+  js_set(js, lib, "isMainThread", js_bool(!is_worker));
+  js_set(js, lib, "SHARE_ENV", js->builtins.worker_share_env);
+  js_set(js, lib, "markAsUntransferable", Ant_Function_CreateWithArity(js_mark_as_untransferable, 1));
+  js_set(js, lib, "isMarkedAsUntransferable", Ant_Function_CreateWithArity(js_is_marked_as_untransferable, 1));
+  js_set(js, lib, "markAsUncloneable", Ant_Function_CreateWithArity(js_mark_as_uncloneable, 1));
+  js_set(js, lib, "isInternalThread", js_false);
+  js_set(js, lib, "receiveMessageOnPort", Ant_Function_CreateWithArity(js_receive_message_on_port, 1));
+  js_set(js, lib, "moveMessagePortToContext", Ant_Function_CreateWithArity(js_move_message_port_to_context, 2));
+  js_set(js, lib, "setEnvironmentData", Ant_Function_CreateWithArity(js_set_environment_data, 2));
+  js_set(js, lib, "getEnvironmentData", Ant_Function_CreateWithArity(js_get_environment_data, 1));
 
-  js_set(js, worker_proto, "on", Ant_Function_Create(worker_threads_worker_on));
-  js_set(js, worker_proto, "once", Ant_Function_Create(worker_threads_worker_once));
-  js_set(js, worker_proto, "terminate", Ant_Function_Create(worker_threads_worker_terminate));
-  js_set(js, worker_proto, "unref", Ant_Function_Create(worker_threads_worker_unref));
-  js_set(js, worker_proto, "ref", Ant_Function_Create(worker_threads_worker_ref));
-  js_set(js, worker_proto, "postMessage", Ant_Function_Create(worker_threads_worker_post_message));
-  js_set_tostringtag(js, worker_proto, js_mkstr(js, "Worker", 6));
+  if (is_worker) worker_setup_child_state(js, lib);
+  else {
+    js_set(js, lib, "parentPort", js_mknull());
+    js_set(js, lib, "workerData", js_mknull());
+    js_set(js, lib, "threadId", js_mknum(0));
+    js_set(js, lib, "threadName", js_mkstr(js, "", 0));
+    js_set(js, lib, "resourceLimits", Ant_Object_Create(js));
+  }
 
-  js_set_slot(worker_ctor_obj, SLOT_CFUNC, Ant_Function_CreateWithArity(worker_threads_worker_ctor, 1));
-  js_mkprop_fast(js, worker_ctor_obj, "prototype", 9, worker_proto);
-  js_set_function_name(js, worker_ctor_obj, "Worker", sizeof("Worker") - 1);
-  js_set(js, lib, "Worker", js_obj_to_func(js, worker_ctor_obj));
-
-  js_set(js, lib, "markAsUntransferable", Ant_Function_CreateWithArity(worker_threads_mark_as_untransferable, 1));
-  js_set(js, lib, "receiveMessageOnPort", Ant_Function_CreateWithArity(worker_threads_receive_message_on_port, 1));
-  js_set(js, lib, "setEnvironmentData", Ant_Function_CreateWithArity(worker_threads_set_environment_data, 2));
-  js_set(js, lib, "getEnvironmentData", Ant_Function_CreateWithArity(worker_threads_get_environment_data, 1));
-  js_set(js, lib, "moveMessagePortToContext", Ant_Function_Create(worker_threads_move_message_port_to_context));
-
+  js_set(js, lib, "default", lib);
+  js_set_slot_wb(js, lib, SLOT_DEFAULT, lib);
   js_set_tostringtag(js, lib, js_mkstr(js, "worker_threads", 14));
+  
   return lib;
+}
+
+void cleanup_worker_threads_module(ant_t *js) {
+  while (js->workers) {
+    ant_worker_t *w = js->workers;
+    Ant_List_Remove(w);
+    worker_request_stop(w, 1);
+
+    ant_mutex_lock(&w->lock);
+    bool close_async = w->parent_async_open;
+    w->parent_async_open = false;
+    ant_mutex_unlock(&w->lock);
+
+    if (w->thread_started) {
+      uv_thread_join(&w->thread);
+      w->thread_started = false;
+    }
+    w->exited = true;
+    w->exit_promise = js_mkundef();
+    if (w->binding) {
+      ant_port_binding_free(w->binding);
+      w->binding = NULL;
+    }
+    if (close_async) uv_close((uv_handle_t *)&w->parent_async, worker_parent_async_closed);
+  }
+}
+
+void gc_mark_worker_threads(ant_t *js, gc_mark_fn mark) {
+  for (ant_worker_t *w = js->workers; w; w = w->next) {
+    if (is_object_type(w->obj)) mark(js, w->obj);
+    if (vtype(w->exit_promise) == kTypePromise) mark(js, w->exit_promise);
+    if (is_object_type(w->stdout_obj)) mark(js, w->stdout_obj);
+    if (is_object_type(w->stderr_obj)) mark(js, w->stderr_obj);
+  }
 }

@@ -49,8 +49,8 @@ static inline bool ant_shape_may_have_index_keys(const ant_shape_t *shape) {
   return shape && *(const bool *)((const char *)shape + ANT_SHAPE_INDEX_KEYS_OFFSET);
 }
 
-ant_shape_t *ant_shape_new(void);
-ant_shape_t *ant_shape_new_with_inobj_limit(uint8_t inobj_limit);
+ant_shape_t *ant_shape_new(ant_t *js);
+ant_shape_t *ant_shape_new_with_inobj_limit(ant_t *js, uint8_t inobj_limit);
 ant_shape_t *ant_shape_clone(const ant_shape_t *shape);
 ant_shape_t *shape_clone_reserve(const ant_shape_t *shape, uint32_t extra);
 ant_shape_t *ant_shape_clone_bulk(const ant_shape_t *shape, uint32_t extra);
@@ -102,9 +102,12 @@ bool ant_shape_set_attrs_interned(ant_t *js, ant_shape_t *shape, const char *int
 bool ant_shape_set_attrs_symbol(ant_t *js, ant_shape_t *shape, ant_offset_t sym_off, uint8_t attrs);
 bool ant_shape_clear_accessor_slot(ant_t *js, ant_shape_t *shape, uint32_t slot);
 
-void ant_gc_shapes_begin(void);
-void ant_gc_shapes_mark(ant_shape_t *shape);
-bool ant_gc_shapes_sweep(void);
+void ant_gc_shapes_begin(ant_t *js);
+void ant_gc_shapes_mark(ant_t *js, ant_shape_t *shape);
+bool ant_gc_shapes_sweep(ant_t *js);
+
+void ant_shapes_destroy(ant_t *js);
+void ant_shapes_thread_cleanup(void);
 
 size_t ant_shape_total_bytes(void);
 size_t ant_shape_storage_bytes(const ant_shape_t *shape);

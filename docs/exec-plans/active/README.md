@@ -11,6 +11,7 @@ Store in-progress execution plans here.
 - [Realms](realms.md)
 - [Per-Error Capture and Lazy Error Stacks](per-error-capture-lazy-stack.md)
 - [Per-Isolate Event Loops](per-isolate-event-loops.md)
+- [Worker Threads on In-Process Isolates](worker-threads-isolates.md)
 - [Shared I/O Formatting in Wasm](wasm-shared-io.md)
 - [TypeScript Captured-variable Cleanup](tsc-upvalue-cleanup.md)
 - [Symbol Description Accessor IC](symbol-description-accessor-ic.md)

@@ -59,7 +59,7 @@ static ant_object_t *old_array(ant_t *js, const char *name, unsigned length) {
 
 int main(void) {
   char stack_base;
-  ant_t *js = ant_create();
+  ant_t *js = ant_create(nullptr);
   assert(js);
   js_setstackbase(js, &stack_base);
 

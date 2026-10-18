@@ -1614,6 +1614,7 @@ static void server_on_conn_close(ant_conn_t *conn, void *user_data) {
       server_cancel_response_body(cs->active_req, "Client disconnected");
       cs->active_req->conn = NULL;
       cs->active_req = NULL;
+      if (server && server->js->destroying) cs->request.refs = 1;
       server_request_release(&cs->request);
       cs = NULL;
     }
@@ -2004,8 +2005,11 @@ ant_value_t server_start_from_export(ant_t *js, ant_value_t default_export) {
   }
 
   server->port = ant_listener_port(&server->listener);
-  uv_signal_start(&server->sigint_handle, server_signal_cb, SIGINT);
-  uv_signal_start(&server->sigterm_handle, server_signal_cb, SIGTERM);
+  
+  if (!js->worker) {
+    uv_signal_start(&server->sigint_handle, server_signal_cb, SIGINT);
+    uv_signal_start(&server->sigterm_handle, server_signal_cb, SIGTERM);
+  }
 
   server->server_ctx = Ant_Object_CreateBare(js);
   js_set_native(server->server_ctx, server, SERVER_RUNTIME_NATIVE_TAG);
@@ -2037,6 +2041,13 @@ ant_value_t server_start_from_export(ant_t *js, ant_value_t default_export) {
   js_set(js, server->server_ctx, "eventSource", Ant_Function_Create(server_event_source));
 
   return server->server_ctx;
+}
+
+void cleanup_server_module(ant_t *js) {
+  for (server_runtime_t *server = js->server_runtimes, *next; server; server = next) {
+    next = server->next;
+    server_begin_stop(server, true);
+  }
 }
 
 void gc_mark_server(ant_t *js, gc_mark_fn mark) {

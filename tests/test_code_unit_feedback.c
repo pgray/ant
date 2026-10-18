@@ -31,7 +31,7 @@ int main(void) {
   char stack_base;
   // compiled code would make the unit immortal (sv_code_unit_make_immortal)
   sv_debug_enable(SV_DEBUG_JITLESS);
-  ant_t *js = ant_create();
+  ant_t *js = ant_create(nullptr);
   assert(js);
   js_setstackbase(js, &stack_base);
 

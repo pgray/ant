@@ -97,7 +97,7 @@ static void activation_order(void) {
 }
 
 static void close_barrier(void) {
-  ant_t *js = ant_create();
+  ant_t *js = ant_create(nullptr);
   assert(js);
   ant_value_t value = Ant_Object_CreateBare(js);
   sv_upvalue_t *uv = js_upvalue_alloc(js);

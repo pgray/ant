@@ -68,7 +68,7 @@ static void collect_without_rope_table(ant_t *js) {
 }
 
 int main(void) {
-  ant_t *js = ant_create();
+  ant_t *js = ant_create(nullptr);
   assert(js);
   js_setstackbase(js, NULL);
   init_symbol_module(js);

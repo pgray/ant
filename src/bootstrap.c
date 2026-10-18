@@ -73,6 +73,7 @@
 #include "modules/v8.h"
 #include "modules/vm.h"
 #include "modules/worker_threads.h"
+#include "modules/message_port.h"
 #include "modules/headers.h"
 #include "modules/blob.h"
 #include "modules/formdata.h"
@@ -152,6 +153,7 @@ void ant_bootstrap_modules(ant_t *js) {
   init_events_module(js);
   init_abort_module(js);
   init_websocket_module(js);
+  init_message_port_module(js);
   init_performance_module(js);
   init_uri_module(js);
   init_url_module(js);

@@ -2500,7 +2500,6 @@ static ant_value_t cron_call(ant_params_t) {
 void init_cron_module(ant_t *js) {
   js->builtins.cron_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.cron_proto, js->sym.object_proto);
-  gc_register_root(&js->builtins.cron_proto);
 
   ant_value_t cron_getter = js_cfunc_promote(js, Ant_Function_Create(cron_job_get_cron));
   js_set_function_name(js, cron_getter, "get cron", 8);

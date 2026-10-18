@@ -99,6 +99,7 @@ void Ant_EventTarget_SetHandler(ant_t *js, ant_value_t target, const char *type,
 
 bool Ant_EventTarget_AddListener(ant_t *js, ant_value_t target, ant_value_t type, ant_value_t listener);
 bool Ant_EventTarget_RemoveListener(ant_t *js, ant_value_t target, ant_value_t type, ant_value_t listener);
+bool Ant_EventTarget_AddDataListener(ant_t *js, ant_value_t target, ant_value_t type, ant_value_t listener, bool once, bool prepend);
 
 #define ANT_EVENT_HANDLER_ACCESSORS(prefix, type, invalid_this)              \
   static ant_value_t prefix##_get_on##type(ant_params_t) {                   \

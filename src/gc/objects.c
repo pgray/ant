@@ -334,6 +334,12 @@ static inline void gc_release_closure_payload(sv_closure_t *c) {
   c->u.bound.argv = NULL;
 }
 
+void gc_closures_destroy(ant_t *js) {
+  ant_fixed_arena_t *ca = &js->closure_arena;
+  for (size_t off = 0; off < ca->watermark; off += ca->elem_size)
+    gc_release_closure_payload((sv_closure_t *)(ca->base + off));
+}
+
 static void gc_sweep_young_closures(ant_t *js) {
   ant_fixed_arena_t *ca = &js->closure_arena;
   for (size_t i = 0; i < js->young_closure_len; i++) {
@@ -490,7 +496,7 @@ static void gc_func_trace(ant_t *js, sv_func_t *func) {
 
   for (uint32_t i = 0; i < func->obj_site_count; i++) {
     if (!func->obj_sites) continue;
-    ant_gc_shapes_mark(func->obj_sites[i].shared_shape);
+    ant_gc_shapes_mark(js, func->obj_sites[i].shared_shape);
     gc_mark_value(js, func->obj_sites[i].literal_template);
   }
 
@@ -645,7 +651,7 @@ void gc_mark_value(ant_t *js, ant_value_t v) {
 }
 
 static void gc_scan_obj(ant_t *js, ant_object_t *obj) {
-  ant_gc_shapes_mark(obj->shape);
+  ant_gc_shapes_mark(js, obj->shape);
   gc_mark_value(js, obj->proto);
 
   if (obj->type_tag == kTypeError) {
@@ -1247,20 +1253,19 @@ static void gc_mark_roots(ant_t *js) {
   gc_mark_readline(js, gc_mark_value);
   gc_mark_process(js, gc_mark_value);
   gc_mark_navigator(js, gc_mark_value);
+  gc_mark_message_ports(js, gc_mark_value);
   gc_mark_net(js, gc_mark_value);
   gc_mark_tls(js, gc_mark_value);
   gc_mark_server(js, gc_mark_value);
   gc_mark_websocket(js, gc_mark_value);
   gc_mark_eventsource(js, gc_mark_value);
   gc_mark_events(js, gc_mark_value);
-  gc_mark_lmdb(js, gc_mark_value);
   gc_mark_symbols(js, gc_mark_value);
   gc_mark_iterators(js, gc_mark_value);
   gc_mark_esm(js, gc_mark_value);
   gc_mark_worker_threads(js, gc_mark_value);
   gc_mark_sandbox(js, gc_mark_value);
   gc_mark_abort(js, gc_mark_value);
-  gc_mark_zlib(js, gc_mark_value);
   gc_mark_wasm(js, gc_mark_value);
   gc_mark_napi(js, gc_mark_value);
   gc_mark_rpc(js, gc_mark_value);
@@ -1376,6 +1381,11 @@ ant_promise_state_t *gc_promise_state_alloc(ant_t *js) {
 }
 
 static void gc_promise_state_release(ant_t *js, ant_promise_state_t *pd) {
+  if (js->destroying) {
+    if (pd->has_inline_handler) coroutine_abandon_await(pd->inline_handler.await_coro);
+    if (pd->handlers) for (promise_handler_t *h = utarray_front(pd->handlers); h; h = utarray_next(pd->handlers, h))
+      coroutine_abandon_await(h->await_coro);
+  }
   if (pd->handlers) utarray_free(pd->handlers);
   fixed_arena_free_elem(&js->promise_arena, pd);
 }
@@ -1635,11 +1645,13 @@ uint64_t gc_objects_run(ant_t *js, gc_extra_roots_fn extra_roots) {
     gc_obj_epoch_wrapped(js);
   }
 
-  ant_gc_shapes_begin();
+  ant_gc_shapes_begin(js);
+  
   for (size_t i = 0; i < js->remember_set_len; i++) {
     js->remember_set[i]->flags.in_remember_set = 0;
     gc_cards_clear(js->remember_set[i]);
   }
+  
   js->remember_set_len = 0;
   
   gc_clear_remembered_upvalues(js);
@@ -1668,7 +1680,7 @@ uint64_t gc_objects_run(ant_t *js, gc_extra_roots_fn extra_roots) {
   gc_sweep(js);
   gc_promote_pending_promises(js);
   
-  if (ant_gc_shapes_sweep()) ant_ic_epoch_bump(js);
+  if (ant_gc_shapes_sweep(js)) ant_ic_epoch_bump(js);
   js->permanent_root_traced = js->permanent_root_len;
   js->code_units.young_len = 0;
 

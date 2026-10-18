@@ -1229,8 +1229,6 @@ void init_timer_module(ant_t *js) {
 
   js->builtins.timeout_proto = Ant_Object_CreateBare(js);
   js->builtins.interval_proto = Ant_Object_CreateBare(js);
-  gc_register_root(&js->builtins.timeout_proto);
-  gc_register_root(&js->builtins.interval_proto);
 
   js_set_proto_init(js->builtins.timeout_proto, js->sym.object_proto);
   js_set(js, js->builtins.timeout_proto, "ref", Ant_Function_Create(js_timer_ref));
@@ -1242,7 +1240,6 @@ void init_timer_module(ant_t *js) {
   js_set_sym(js, js->builtins.timeout_proto, js->sym.toPrimitive_sym, Ant_Function_Create(timer_to_primitive));
 
   js->builtins.immediate_proto = Ant_Object_CreateBare(js);
-  gc_register_root(&js->builtins.immediate_proto);
   js_set_proto_init(js->builtins.immediate_proto, js->sym.object_proto);
   js_set(js, js->builtins.immediate_proto, "ref", Ant_Function_Create(js_immediate_ref));
   js_set(js, js->builtins.immediate_proto, "unref", Ant_Function_Create(js_immediate_unref));
@@ -1252,7 +1249,6 @@ void init_timer_module(ant_t *js) {
   js_set_sym(js, js->builtins.immediate_proto, js->sym.inspect_sym, Ant_Function_Create(timer_inspect));
 
   js->builtins.immediate_template = Ant_Object_CreateBare(js);
-  gc_register_root(&js->builtins.immediate_template);
   js_set_proto_init(js->builtins.immediate_template, js->builtins.immediate_proto);
   js_set(js, js->builtins.immediate_template, "callback", js_mkundef());
   js_set_descriptor(js, js->builtins.immediate_template, "callback", 8, JS_DESC_W | JS_DESC_C);
@@ -1268,8 +1264,6 @@ void init_timer_module(ant_t *js) {
   
   js->builtins.timeout_template = timer_make_template(js, js->builtins.timeout_proto, js_mknull());
   js->builtins.interval_template = timer_make_template(js, js->builtins.interval_proto, js_mknum(0));
-  gc_register_root(&js->builtins.timeout_template);
-  gc_register_root(&js->builtins.interval_template);
 
   timers_define_common(js, js_glob(js));
 }

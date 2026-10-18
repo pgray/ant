@@ -1,5 +1,7 @@
 #include "cage.h"
+#include "value.h"
 
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -37,6 +39,11 @@ void ant_cage_free(void *ptr, size_t size) {
   free(ptr);
 }
 
+bool ant_cage_set_size(size_t size) {
+  (void)size;
+  return false;
+}
+
 _Noreturn void ant_cage_reject_pointer(const void *ptr) {
   (void)ptr;
   __builtin_trap();
@@ -51,6 +58,7 @@ typedef struct ant_cage_range {
 } ant_cage_range_t;
 
 static ant_cage_range_t *cage_free_ranges = NULL;
+static size_t cage_requested_size = ANT_CAGE_MAX_SIZE;
 
 #ifdef _WIN32
 static SRWLOCK cage_lock = SRWLOCK_INIT;
@@ -63,7 +71,8 @@ static void cage_lock_release(void) { pthread_mutex_unlock(&cage_lock); }
 #endif
 
 static size_t cage_page_size(void) {
-  static size_t value = 0;
+  static _Atomic size_t cached = 0;
+  size_t value = atomic_load_explicit(&cached, memory_order_relaxed);
   if (value) return value;
 #ifdef _WIN32
   SYSTEM_INFO info;
@@ -73,6 +82,7 @@ static size_t cage_page_size(void) {
   long page = sysconf(_SC_PAGESIZE);
   value = page > 0 ? (size_t)page : 4096u;
 #endif
+  atomic_store_explicit(&cached, value, memory_order_relaxed);
   return value;
 }
 
@@ -88,7 +98,7 @@ static bool cage_initialize_locked(void) {
   if (ant_cage_base_address) return true;
 
   void *base = NULL;
-  size_t reserved = ANT_CAGE_MAX_SIZE;
+  size_t reserved = cage_requested_size;
   while (reserved >= ANT_CAGE_MIN_SIZE) {
 #ifdef _WIN32
     base = VirtualAlloc(NULL, reserved, MEM_RESERVE, PAGE_NOACCESS);
@@ -269,6 +279,18 @@ void ant_cage_free(void *ptr, size_t size) {
   cage_lock_acquire();
   if (cage_decommit(ptr, rounded)) cage_put_locked(offset, rounded);
   cage_lock_release();
+}
+
+bool ant_cage_set_size(size_t size) {
+  if (size < ANT_CAGE_MIN_SIZE || size - 1 > NANBOX_DATA_MASK || size % cage_page_size()) return false;
+  
+  cage_lock_acquire();
+  bool ok = ant_cage_base_address == 0;
+  
+  if (ok) cage_requested_size = size;
+  cage_lock_release();
+  
+  return ok;
 }
 
 _Noreturn void ant_cage_reject_pointer(const void *ptr) {

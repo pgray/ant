@@ -4389,6 +4389,20 @@ match_string_pattern:;
   return result;
 }
 
+static const ant_cfunc_meta_t regexp_static_getters[REGEXP_STATIC_VALUE_COUNT] = {
+  { regexp_static_get_d1, NULL, 0, 0 }, { regexp_static_get_d2, NULL, 0, 0 }, { regexp_static_get_d3, NULL, 0, 0 },
+  { regexp_static_get_d4, NULL, 0, 0 }, { regexp_static_get_d5, NULL, 0, 0 }, { regexp_static_get_d6, NULL, 0, 0 },
+  { regexp_static_get_d7, NULL, 0, 0 }, { regexp_static_get_d8, NULL, 0, 0 }, { regexp_static_get_d9, NULL, 0, 0 },
+  { regexp_static_get_last_match, NULL, 0, 0 }, { regexp_static_get_amp, NULL, 0, 0 },
+};
+
+static const ant_cfunc_meta_t regexp_static_setters[REGEXP_STATIC_VALUE_COUNT] = {
+  { regexp_static_set_d1, NULL, 1, 0 }, { regexp_static_set_d2, NULL, 1, 0 }, { regexp_static_set_d3, NULL, 1, 0 },
+  { regexp_static_set_d4, NULL, 1, 0 }, { regexp_static_set_d5, NULL, 1, 0 }, { regexp_static_set_d6, NULL, 1, 0 },
+  { regexp_static_set_d7, NULL, 1, 0 }, { regexp_static_set_d8, NULL, 1, 0 }, { regexp_static_set_d9, NULL, 1, 0 },
+  { regexp_static_set_last_match, NULL, 1, 0 }, { regexp_static_set_amp, NULL, 1, 0 },
+};
+
 void init_regex_module(ant_t *js) {
   if (!js->regex_state) js->regex_state = calloc(1, sizeof(*js->regex_state));
   
@@ -4434,56 +4448,29 @@ void init_regex_module(ant_t *js) {
   for (size_t i = 0; i < sizeof(js->mutable_roots.regexp_static_values) / sizeof(js->mutable_roots.regexp_static_values[0]); i++)
     js->mutable_roots.regexp_static_values[i] = empty;
 
-  static ant_cfunc_meta_t stat_getters[REGEXP_STATIC_VALUE_COUNT];
-  static ant_cfunc_meta_t stat_setters[REGEXP_STATIC_VALUE_COUNT];
-  ant_cfunc_t getter_fns[REGEXP_STATIC_VALUE_COUNT] = {
-    regexp_static_get_d1, regexp_static_get_d2, regexp_static_get_d3,
-    regexp_static_get_d4, regexp_static_get_d5, regexp_static_get_d6,
-    regexp_static_get_d7, regexp_static_get_d8, regexp_static_get_d9,
-    regexp_static_get_last_match, regexp_static_get_amp
-  };
-  ant_cfunc_t setter_fns[REGEXP_STATIC_VALUE_COUNT] = {
-    regexp_static_set_d1, regexp_static_set_d2, regexp_static_set_d3,
-    regexp_static_set_d4, regexp_static_set_d5, regexp_static_set_d6,
-    regexp_static_set_d7, regexp_static_set_d8, regexp_static_set_d9,
-    regexp_static_set_last_match, regexp_static_set_amp
-  };
   for (int i = 1; i <= ANT_REGEXP_STATIC_CAPTURE_COUNT; i++) {
     char key[3] = {'$', (char)('0' + i), '\0'};
-    stat_getters[i - 1] = (ant_cfunc_meta_t){ getter_fns[i - 1], NULL, 0, 0 };
-    stat_setters[i - 1] = (ant_cfunc_meta_t){ setter_fns[i - 1], NULL, 1, 0 };
     js_set_accessor_desc(
       js, regexp_ctor, key, 2,
-      js_mkfun_meta(&stat_getters[i - 1]),
-      js_mkfun_meta(&stat_setters[i - 1]),
+      js_mkfun_meta(&regexp_static_getters[i - 1]),
+      js_mkfun_meta(&regexp_static_setters[i - 1]),
       JS_DESC_C
     );
   }
   
-  stat_getters[REGEXP_STATIC_IDX_LAST_MATCH] = (ant_cfunc_meta_t){
-    getter_fns[REGEXP_STATIC_IDX_LAST_MATCH], NULL, 0, 0
-  };
-  stat_setters[REGEXP_STATIC_IDX_LAST_MATCH] = (ant_cfunc_meta_t){
-    setter_fns[REGEXP_STATIC_IDX_LAST_MATCH], NULL, 1, 0
-  };
   js_set_accessor_desc(
     js, regexp_ctor, "lastMatch", 9,
-    js_mkfun_meta(&stat_getters[REGEXP_STATIC_IDX_LAST_MATCH]),
-    js_mkfun_meta(&stat_setters[REGEXP_STATIC_IDX_LAST_MATCH]), JS_DESC_C
+    js_mkfun_meta(&regexp_static_getters[REGEXP_STATIC_IDX_LAST_MATCH]),
+    js_mkfun_meta(&regexp_static_setters[REGEXP_STATIC_IDX_LAST_MATCH]), JS_DESC_C
   );
-  stat_getters[REGEXP_STATIC_IDX_AMP] = (ant_cfunc_meta_t){
-    getter_fns[REGEXP_STATIC_IDX_AMP], NULL, 0, 0
-  };
-  stat_setters[REGEXP_STATIC_IDX_AMP] = (ant_cfunc_meta_t){
-    setter_fns[REGEXP_STATIC_IDX_AMP], NULL, 1, 0
-  };
+  
   js_set_accessor_desc(
     js, regexp_ctor, "$&", 2,
-    js_mkfun_meta(&stat_getters[REGEXP_STATIC_IDX_AMP]),
-    js_mkfun_meta(&stat_setters[REGEXP_STATIC_IDX_AMP]), JS_DESC_C
+    js_mkfun_meta(&regexp_static_getters[REGEXP_STATIC_IDX_AMP]),
+    js_mkfun_meta(&regexp_static_setters[REGEXP_STATIC_IDX_AMP]), JS_DESC_C
   );
+  
   js_set_global_builtin(js, "RegExp", regexp_func);
-
   ant_value_t string_ctor = js_get(js, glob, "String");
   ant_value_t string_proto = js_get(js, string_ctor, "prototype");
   
@@ -4501,7 +4488,7 @@ void init_regex_module(ant_t *js) {
 void gc_age_regex_cache(ant_t *js, bool minor) {
   ant_regex_state_t *state = js->regex_state;
   if (!state || minor) return;
-  ant_gc_shapes_mark(state->instance_shape.base);
+  ant_gc_shapes_mark(js, state->instance_shape.base);
   compiled_regex_cache_rotate(state);
 }
 

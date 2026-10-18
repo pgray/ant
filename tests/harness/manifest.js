@@ -81,6 +81,7 @@ export function targets() {
     'test_timer_this.cjs',
     'test_string_append_mixed.cjs',
     'test_builtin_receiver_ic.cjs',
+    'test_cage_size_flag.cjs',
     'test_caught_exception_stack.cjs',
     'test_child_process_exec_sync_options.cjs',
     'test_child_process_sigpipe_reset.cjs',
@@ -245,6 +246,7 @@ export function targets() {
     'test_json_lone_surrogates.cjs',
     'test_lock_error_boundaries.cjs',
     'test_map_get_template_intrinsic.cjs',
+    'test_message_port.mjs',
     'test_module_async_error_boundaries.cjs',
     'test_napi_clear_exception.cjs',
     'test_native_completion_errors.cjs',
@@ -308,6 +310,7 @@ export function targets() {
     'test_string_surrogate_join.cjs',
     'test_string_wrapper_index_semantics.cjs',
     'test_structured_clone_detached.cjs',
+    'test_structured_clone_props.mjs',
     'test_super_forward.cjs',
     'test_symbol_set_semantics.cjs',
     'test_syntax.cjs',
@@ -340,6 +343,7 @@ export function targets() {
     'test_websocket_close_during_connect.cjs',
     'test_websocket_handlers.cjs',
     'test_with_scopes.cjs',
+    'test_worker_threads.mjs',
     'test_zlib_callback_throws.cjs',
   ];
   for (const f of REGRESSION_TESTS) list.push({ group: 'tests', type: 'test', name: `tests/${f}`, entry: `tests/${f}` });

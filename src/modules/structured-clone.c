@@ -16,6 +16,7 @@
 #include "modules/domexception.h"
 #include "modules/blob.h"
 #include "modules/structured-clone.h"
+#include "modules/wire.h"
 #include "modules/iterator.h"
 
 typedef struct sc_entry {
@@ -38,16 +39,15 @@ static void sc_add(sc_entry_t **table, ant_value_t key, ant_value_t value) {
   HASH_ADD(hh, *table, key, sizeof(ant_value_t), e);
 }
 
-static ant_value_t sc_lookup(sc_entry_t **table, ant_value_t key) {
-  sc_entry_t *e;
-  HASH_FIND(hh, *table, &key, sizeof(ant_value_t), e);
-  return e ? e->value : js_mkundef();
-}
-
 static sc_entry_t *sc_find(sc_entry_t **table, ant_value_t key) {
   sc_entry_t *e;
   HASH_FIND(hh, *table, &key, sizeof(ant_value_t), e);
   return e;
+}
+
+static ant_value_t sc_lookup(sc_entry_t **table, ant_value_t key) {
+  sc_entry_t *e = sc_find(table, key);
+  return e ? e->value : js_mkundef();
 }
 
 static ant_value_t sc_transfer_target(ant_t *js, sc_entry_t *entry) {
@@ -108,6 +108,22 @@ static ant_value_t sc_clone_typed_array(
   return clone;
 }
 
+static ant_value_t sc_clone_arraybuffer(
+  ant_t *js, ant_value_t key, ArrayBufferData *abd, sc_entry_t **seen, sc_entry_t **transfer
+) {
+  if (abd->is_detached) return sc_detached_error(js);
+
+  sc_entry_t *transferred = sc_find(transfer, key);
+  ant_value_t clone;
+
+  if (transferred) clone = sc_transfer_target(js, transferred);
+  else if (abd->is_shared) clone = create_shared_arraybuffer_obj(js, abd);
+  else clone = create_arraybuffer_copy(js, abd->data, abd->length);
+
+  if (!is_err(clone)) sc_add(seen, key, clone);
+  return clone;
+}
+
 static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, sc_entry_t **transfer) {
   uint8_t t = vtype(val);
   TypedArrayData *ta_data = NULL;
@@ -131,20 +147,12 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
 
   ant_value_t existing = sc_lookup(seen, val);
   if (vtype(existing) != kTypeUndefined) return existing;
+  
+  if (is_object_type(js->mutable_roots.uncloneable) && ant_wire_is_uncloneable(js, val))
+    return js_throw(js, make_dom_exception(js, "Cannot clone object of unsupported type.", "DataCloneError"));
 
   ArrayBufferData *abd = buffer_get_arraybuffer_data(val);
-  if (abd && abd->is_detached) return sc_detached_error(js);
-  
-  if (abd) {
-    sc_entry_t *transferred = sc_find(transfer, val);
-    ant_value_t clone = transferred
-      ? sc_transfer_target(js, transferred)
-      : create_arraybuffer_copy(js, abd->data, abd->length);
-    if (is_err(clone)) return clone;
-    
-    sc_add(seen, val, clone);
-    return clone;
-  }
+  if (abd) return sc_clone_arraybuffer(js, val, abd, seen, transfer);
 
   if (buffer_is_dataview(val)) {
     DataViewData *dv = buffer_get_dataview_data(val);
@@ -327,14 +335,30 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
   }
 
   ant_iter_t iter = js_prop_iter_begin(js, val);
-  const char *key;
-  size_t key_len;
+  ant_iter_key_t key;
   ant_value_t pval;
 
-  while (js_prop_iter_next(&iter, &key, &key_len, &pval)) {
+  while (js_prop_iter_next_key(&iter, &key, &pval)) {
+    if (key.is_symbol || !js_is_own_enumerable_prop(js, val, obj_ptr, &key)) continue;
+    const ant_shape_prop_t *meta = ant_shape_prop_at(obj_ptr->shape, key.slot);
+    
+    if (obj_ptr->flags.is_exotic || !meta || meta->has_getter || meta->has_setter) {
+      pval = js_get(js, val, key.str);
+      if (is_err(pval)) { js_prop_iter_end(&iter); return pval; }
+    }
+    
+    GC_ROOT_SAVE(mark, js);
+    GC_ROOT_PIN(js, pval);
+    
     ant_value_t pc = sc_clone_rec(js, pval, seen, transfer);
-    if (is_err(pc)) { js_prop_iter_end(&iter); return pc; }
-    js_set(js, clone, key, pc);
+    GC_ROOT_RESTORE(js, mark);
+    
+    if (is_err(pc)) { 
+      js_prop_iter_end(&iter); 
+      return pc;
+    }
+    
+    js_set(js, clone, key.str, pc);
   }
 
   js_prop_iter_end(&iter);

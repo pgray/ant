@@ -1,6 +1,7 @@
 #ifndef BUFFER_H
 #define BUFFER_H
 
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stddef.h>
 #include "types.h"
@@ -17,11 +18,12 @@ typedef struct ArrayBufferData {
   size_t length;
   size_t capacity;
   struct ArrayBufferData *owner;
-  int ref_count;
+  _Atomic int ref_count;
   uint32_t registry_slot;
   uint8_t is_shared;
   uint8_t is_detached;
   uint8_t storage;
+  uint8_t untransferable;
 } ArrayBufferData;
 
 #if UINTPTR_MAX == UINT64_MAX
@@ -77,6 +79,7 @@ void buffer_detach(ant_t *js, ArrayBufferData *data);
 
 ant_value_t create_arraybuffer_obj(ant_t *js, ArrayBufferData *buffer);
 ant_value_t create_arraybuffer_copy(ant_t *js, const void *bytes, size_t length);
+ant_value_t create_shared_arraybuffer_obj(ant_t *js, ArrayBufferData *buffer);
 const char *buffer_typedarray_type_name(TypedArrayType type);
 
 ArrayBufferData *create_array_buffer_data(ant_t *js, size_t length);

@@ -49,6 +49,8 @@
 #include "modules/tty.h"
 #include "modules/buffer.h"
 #include "modules/napi.h"
+#include "modules/worker_threads.h"
+#include "sync.h"
 #include "modules/timer.h"
 #include "modules/string_decoder.h"
 #include "modules/fs.h"
@@ -79,7 +81,15 @@ typedef struct {
   char escape_buf[16];
 } stdin_state_t;
 
+typedef struct env_entry {
+  char *key;
+  char *value;
+  UT_hash_handle hh;
+} env_entry_t;
+
 struct ant_process_state {
+  env_entry_t *private_env;
+  bool has_private_env;
   ant_value_t process_obj;
   ant_value_t cached_cwd;
   uint64_t cwd_epoch;
@@ -115,6 +125,7 @@ struct ant_process_state {
   #endif
 };
 
+static void private_env_free(env_entry_t **table);
 static atomic_uint_fast64_t process_cwd_epoch;
 
 uint64_t process_cwd_epoch_get(void) {
@@ -147,10 +158,9 @@ typedef struct {
 static SignalEntry *signals_by_name = NULL;
 static SignalEntry *signals_by_num = NULL;
 
-static void init_signal_map(void) {
-  static bool initialized = false;
-  if (initialized) return;
-  
+static uv_once_t signal_map_once = UV_ONCE_INIT;
+
+static void build_signal_map(void) {
   #define S(sig) { #sig, sig, {0}, {0} }
   static SignalEntry entries[] = {
     S(SIGINT),    S(SIGILL),    S(SIGABRT),   S(SIGFPE),
@@ -249,8 +259,10 @@ static void init_signal_map(void) {
     HASH_FIND(hh_num, signals_by_num, &entries[i].signum, sizeof(int), existing);
     if (!existing) HASH_ADD(hh_num, signals_by_num, signum, sizeof(int), &entries[i]);
   }
-  
-  initialized = true;
+}
+
+static void init_signal_map(void) {
+  uv_once(&signal_map_once, build_signal_map);
 }
 
 int process_signal_number(const char *name) {
@@ -278,6 +290,7 @@ static void uv_signal_handler(uv_signal_t *handle, int signum) {
 }
 
 static void start_signal_watch(ant_t *js, int signum) {
+  if (js->worker) return;
   ant_process_state_t *ps = process_state(js);
   SignalHandle *sh = NULL;
   if (!ps) return;
@@ -346,10 +359,17 @@ bool process_report_uncaught_exception(ant_t *js) {
     emit_process_event(js, "uncaughtException", event_args, 2);
 
     if (Ant_Exception_Pending(js)) {
-      js_take_thrown(js, js_mkundef());
-      if (!js->uncaught_nonfatal) exit(7);
+      ant_value_t thrown = js_take_thrown(js, js_mkundef());
+      if (js->worker) ant_worker_report_uncaught(js, thrown);
+      else if (!js->uncaught_nonfatal) exit(7);
     }
 
+    GC_ROOT_RESTORE(js, root_mark);
+    return true;
+  }
+
+  if (js->worker) {
+    ant_worker_report_uncaught(js, reason);
     GC_ROOT_RESTORE(js, root_mark);
     return true;
   }
@@ -808,6 +828,7 @@ cleanup:
 }
 
 static void stdin_start_reading(ant_t *js) {
+  if (js->worker) return;
   ant_process_state_t *ps = process_state(js);
   if (!ps) return;
   if (ps->stdin_state.reading) return;
@@ -913,6 +934,37 @@ static void stop_sigwinch_handler(ant_t *js) {
   ps->sigwinch_closing = true;
   uv_close((uv_handle_t *)&ps->sigwinch_handle, on_sigwinch_close);
 #endif
+}
+
+void cleanup_process_module(ant_t *js) {
+  ant_process_state_t *ps = js->process_state;
+  if (!ps) return;
+
+  SignalHandle *sh, *tmp;
+  HASH_ITER(hh, ps->signal_handles, sh, tmp) {
+    HASH_DEL(ps->signal_handles, sh);
+    uv_signal_stop(&sh->handle);
+    uv_close((uv_handle_t *)&sh->handle, on_signal_handle_close);
+  }
+
+  uv_handle_t *tty = (uv_handle_t *)&ps->stdin_state.tty;
+  if (ps->stdin_state.tty_initialized && !uv_is_closing(tty)) {
+    if (ps->stdin_state.reading) uv_read_stop((uv_stream_t *)tty);
+    ps->stdin_state.reading = false;
+    uv_close(tty, NULL);
+  }
+
+  stop_sigwinch_handler(js);
+}
+
+void free_process_module(ant_t *js) {
+  ant_process_state_t *ps = js->process_state;
+  if (!ps) return;
+  private_env_free(&ps->private_env);
+  free(ps->sandbox_no_color);
+  free(ps->sandbox_force_color);
+  free(ps);
+  js->process_state = NULL;
 }
 
 static ant_value_t js_stdin_set_raw_mode(ant_params_t) {
@@ -1212,6 +1264,7 @@ static ant_value_t process_abort(ant_params_t) {
 }
 
 static ant_value_t process_chdir(ant_params_t) {
+  if (js->worker) return js_mkerr_code(js, JS_ERR_TYPE, "ERR_WORKER_UNSUPPORTED_OPERATION", "process.chdir() is not supported in workers");
   if (nargs < 1) return js_mkerr(js, "process.chdir requires 1 argument");
   
   char *dir = js_getstr(js, args[0], NULL);
@@ -1416,18 +1469,114 @@ static bool env_name_ok(const char *key, size_t key_len) {
   return key_len > 0 && !memchr(key, '=', key_len) && !memchr(key, '\0', key_len);
 }
 
+static ant_mutex_t env_lock = ANT_MUTEX_INIT;
+
+static env_entry_t **private_env(ant_t *js) {
+  ant_process_state_t *ps = js->process_state;
+  return ps && ps->has_private_env ? &ps->private_env : NULL;
+}
+
+static bool private_env_put(env_entry_t **table, const char *key, size_t key_len, const char *value, size_t val_len) {
+  env_entry_t *entry = NULL;
+  HASH_FIND(hh, *table, key, key_len, entry);
+  char *copy = strndup(value, val_len);
+  
+  if (!copy) return false;
+  if (entry) {
+    free(entry->value);
+    entry->value = copy;
+    return true;
+  }
+  
+  if (!(entry = calloc(1, sizeof(*entry))) || !(entry->key = strndup(key, key_len))) {
+    free(entry);
+    free(copy);
+    return false;
+  }
+  
+  entry->value = copy;
+  HASH_ADD_KEYPTR(hh, *table, entry->key, key_len, entry);
+  
+  return true;
+}
+
+static void private_env_free(env_entry_t **table) {
+  env_entry_t *entry, *tmp;
+  HASH_ITER(hh, *table, entry, tmp) {
+    HASH_DEL(*table, entry);
+    free(entry->key);
+    free(entry->value);
+    free(entry);
+  }
+}
+
+void process_set_private_env(ant_t *js, char **entries) {
+  ant_process_state_t *ps = process_state(js);
+  if (!ps) return;
+  
+  private_env_free(&ps->private_env);
+  ps->has_private_env = true;
+  
+  for (char **it = entries; it && *it; it++) {
+    const char *eq = strchr(*it, '=');
+    if (eq) private_env_put(&ps->private_env, *it, (size_t)(eq - *it), eq + 1, strlen(eq + 1));
+  }
+}
+
+static char *env_join(const char *key, size_t key_len, const char *value) {
+  size_t val_len = strlen(value);
+  char *out = malloc(key_len + val_len + 2);
+  if (!out) return NULL;
+  memcpy(out, key, key_len);
+  out[key_len] = '=';
+  memcpy(out + key_len + 1, value, val_len + 1);
+  return out;
+}
+
+char **process_env_snapshot(ant_t *js) {
+  env_entry_t **table = private_env(js);
+  size_t count = 0, i = 0;
+  char **out = NULL;
+
+  if (table) {
+    count = HASH_COUNT(*table);
+    if (!(out = calloc(count + 1, sizeof(*out)))) return NULL;
+    for (env_entry_t *e = *table; e; e = e->hh.next) out[i++] = env_join(e->key, strlen(e->key), e->value);
+    return out;
+  }
+
+  ant_mutex_lock(&env_lock);
+  for (char **env = environ; env && *env; env++) count++;
+  if ((out = calloc(count + 1, sizeof(*out)))) for (char **env = environ; env && *env && i < count; env++) out[i++] = strdup(*env);
+  ant_mutex_unlock(&env_lock);
+  return out;
+}
+
+char **process_private_env_snapshot(ant_t *js) {
+  return private_env(js) ? process_env_snapshot(js) : NULL;
+}
+
 static ant_value_t env_get(ant_t *js, ant_value_t target, const char *key, size_t key_len) {
   if (!env_name_ok(key, key_len)) return js_mkundef();
+
+  env_entry_t **table = private_env(js);
+  if (table) {
+    env_entry_t *entry = NULL;
+    HASH_FIND(hh, *table, key, key_len, entry);
+    return entry ? js_mkstr(js, entry->value, strlen(entry->value)) : js_mkundef();
+  }
   
   CSTR_BUF(buf, 256);
   char *key_str = CSTR_INIT(buf, key, key_len);
   if (!key_str) return js_mkundef();
   
+  ant_mutex_lock(&env_lock);
   char *value = getenv(key_str);
+  ant_value_t result = value ? js_mkstr(js, value, strlen(value)) : js_mkundef();
+  ant_mutex_unlock(&env_lock);
   cstr_free(&buf);
   
-  if (value == NULL) return js_mkundef();
-  return js_mkstr(js, value, strlen(value));
+  return result;
 }
 
 static ant_value_t env_set(ant_t *js, ant_value_t target, const char *key, size_t key_len, ant_value_t value) {
@@ -1442,14 +1591,19 @@ static ant_value_t env_set(ant_t *js, ant_value_t target, const char *key, size_
   
   if (!val_str) return js_mkerr(js, "out of memory");
   if (!env_name_ok(key, key_len)) return js_true;
+
+  env_entry_t **table = private_env(js);
+  if (table) return private_env_put(table, key, key_len, val_str, val_len) ? js_true : js_mkerr(js, "out of memory");
   
   CSTR_BUF(buf, 256);
   char *key_str = CSTR_INIT(buf, key, key_len);
   if (!key_str) return js_mkerr(js, "out of memory");
   
+  ant_mutex_lock(&env_lock);
   const char *current = getenv(key_str);
   bool changed = !current || strlen(current) != val_len || memcmp(current, val_str, val_len) != 0;
   bool stored = !changed || setenv(key_str, val_str, 1) == 0;
+  ant_mutex_unlock(&env_lock);
   
   cstr_free(&buf);
   return stored ? js_true : js_mkerr(js, "out of memory");
@@ -1457,12 +1611,27 @@ static ant_value_t env_set(ant_t *js, ant_value_t target, const char *key, size_
 
 static ant_value_t env_del(ant_t *js, ant_value_t target, const char *key, size_t key_len) {
   if (!env_name_ok(key, key_len)) return js_true;
+
+  env_entry_t **table = private_env(js);
+  if (table) {
+    env_entry_t *entry = NULL;
+    HASH_FIND(hh, *table, key, key_len, entry);
+    if (entry) {
+      HASH_DEL(*table, entry);
+      free(entry->key);
+      free(entry->value);
+      free(entry);
+    }
+    return js_true;
+  }
   
   CSTR_BUF(buf, 256);
   char *key_str = CSTR_INIT(buf, key, key_len);
   if (!key_str) return js_mkerr(js, "out of memory");
   
+  ant_mutex_lock(&env_lock);
   unsetenv(key_str);
+  ant_mutex_unlock(&env_lock);
   cstr_free(&buf);
   
   return js_true;
@@ -1595,7 +1764,9 @@ int process_run_exit_handlers(ant_t *js, int status) {
 }
 
 void process_exit_with(ant_t *js, int status) {
-  exit(process_run_exit_handlers(js, status));
+  int code = process_run_exit_handlers(js, status);
+  if (js->worker) ant_worker_exit(js, code);
+  else exit(code);
 }
 
 static ant_value_t process_exit(ant_params_t) {
@@ -1606,7 +1777,9 @@ static ant_value_t process_exit(ant_params_t) {
     if (is_err(result)) return result;
   }
   
+  if (js->worker) return ant_worker_exit(js, process_run_exit_handlers(js, EXIT_SUCCESS));
   process_exit_with(js, EXIT_SUCCESS);
+  return js_mkundef();
 }
 
 typedef struct {
@@ -1625,7 +1798,8 @@ typedef void (*env_iter_cb)(
 );
 
 static void env_foreach(ant_t *js, env_iter_cb cb, void *ctx) {
-  for (char **env = environ; *env != NULL; env++) {
+  char **snapshot = process_env_snapshot(js);
+  for (char **env = snapshot; env && *env != NULL; env++) {
     char *entry = *env;
     char *equals = strchr(entry, '=');
     if (equals == NULL) continue;
@@ -1634,6 +1808,8 @@ static void env_foreach(ant_t *js, env_iter_cb cb, void *ctx) {
     char *value = equals + 1;
     cb(js, entry, key_len, value, strlen(value), ctx);
   }
+  for (char **env = snapshot; env && *env; env++) free(*env);
+  free(snapshot);
 }
 
 static void env_to_object_cb(ant_t *js, const char *key, size_t key_len, const char *value, size_t val_len, void *ctx) {
@@ -2026,7 +2202,7 @@ void init_process_module(ant_t *js) {
     Ant_Function_Create(process_exit_code_getter), Ant_Function_Create(process_exit_code_setter), JS_DESC_E
   );
 
-  load_dotenv_file();
+  if (!js->worker) load_dotenv_file();
   defmethod(js, env_obj, "toObject", 8, Ant_Function_Create(env_to_object));
   defmethod(js, env_obj, "toString", 8, Ant_Function_Create(env_toString));
   

@@ -6,9 +6,6 @@
 #include "modules/napi.h"
 #include "napi_internal.h"
 
-static ant_napi_env_t *g_napi_env = NULL;
-static int64_t g_napi_external_memory = 0;
-
 static const napi_node_version g_napi_node_version = {
   .major = 25,
   .minor = 9,
@@ -69,23 +66,72 @@ napi_status ant_napi_set_last(napi_env env, napi_status status, const char *mess
 }
 
 ant_napi_env_t *ant_napi_get_or_create_env(ant_t *js) {
-  if (!g_napi_env) {
-    g_napi_env = (ant_napi_env_t *)calloc(1, sizeof(*g_napi_env));
-    if (!g_napi_env) return NULL;
-    g_napi_env->version = 8;
-    napi_set_last((napi_env)g_napi_env, napi_ok, NULL);
+  if (!js->napi_env) {
+    ant_napi_env_t *nenv = calloc(1, sizeof(*nenv));
+    if (!nenv) return NULL;
+    nenv->js = js;
+    nenv->version = 8;
+    nenv->external_next_id = 1;
+    nenv->wrap_next_id = 1;
+    js->napi_env = nenv;
+    napi_set_last((napi_env)nenv, napi_ok, NULL);
   }
-  g_napi_env->js = js;
-  return g_napi_env;
+  return js->napi_env;
 }
 
 napi_env ant_napi_get_env(ant_t *js) {
   return (napi_env)ant_napi_get_or_create_env(js);
 }
 
+void cleanup_napi_module(ant_t *js) {
+  ant_napi_env_t *nenv = js->napi_env;
+  if (!nenv) return;
+
+  while (nenv->cleanup_hooks) {
+    napi_cleanup_hook_entry_t *entry = nenv->cleanup_hooks;
+    nenv->cleanup_hooks = entry->next;
+    entry->hook(entry->arg);
+    free(entry);
+  }
+
+  ant_napi_tsfns_close(nenv);
+}
+
+void free_napi_module(ant_t *js) {
+  ant_napi_env_t *nenv = js->napi_env;
+  if (!nenv) return;
+
+  if (nenv->instance_data_finalize_cb)
+    nenv->instance_data_finalize_cb((napi_env)nenv, nenv->instance_data, nenv->instance_data_finalize_hint);
+
+  for (struct napi_ref__ *r = nenv->refs, *next; r; r = next) {
+    next = r->next;
+    free(r);
+  }
+  for (struct napi_deferred__ *d = nenv->deferreds, *next; d; d = next) {
+    next = d->next;
+    free(d);
+  }
+
+  napi_external_entry_t *ext, *ext_tmp;
+  HASH_ITER(hh, nenv->externals, ext, ext_tmp) {
+    HASH_DEL(nenv->externals, ext);
+    free(ext);
+  }
+  napi_wrap_entry_t *wrap, *wrap_tmp;
+  HASH_ITER(hh, nenv->wraps, wrap, wrap_tmp) {
+    HASH_DEL(nenv->wraps, wrap);
+    free(wrap);
+  }
+
+  free(nenv->handle_slots);
+  free(nenv);
+  js->napi_env = NULL;
+}
+
 void gc_mark_napi(ant_t *js, gc_mark_fn mark) {
-  if (!g_napi_env || g_napi_env->js != js) return;
-  ant_napi_env_t *nenv = g_napi_env;
+  ant_napi_env_t *nenv = js->napi_env;
+  if (!nenv) return;
 
   if (is_err(nenv->exception))
     mark(js, nenv->exception);
@@ -103,8 +149,8 @@ void gc_mark_napi(ant_t *js, gc_mark_fn mark) {
 }
 
 void gc_clear_napi_weak_refs(ant_t *js, bool minor) {
-  if (!g_napi_env || g_napi_env->js != js) return;
-  ant_napi_env_t *nenv = g_napi_env;
+  ant_napi_env_t *nenv = js->napi_env;
+  if (!nenv) return;
 
   for (struct napi_ref__ *r = nenv->refs; r; r = r->next) {
     if (r->refcount > 0 || !r->value) continue;
@@ -324,8 +370,9 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_adjust_external_memory(
   int64_t *adjusted_value
 ) {
   if (!env) return napi_invalid_arg;
-  g_napi_external_memory += change_in_bytes;
-  if (adjusted_value) *adjusted_value = g_napi_external_memory;
+  ant_napi_env_t *nenv = (ant_napi_env_t *)env;
+  nenv->external_memory += change_in_bytes;
+  if (adjusted_value) *adjusted_value = nenv->external_memory;
   return napi_set_last((napi_env)env, napi_ok, NULL);
 }
 

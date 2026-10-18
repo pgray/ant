@@ -67,6 +67,7 @@ void coroutine_pool_destroy(ant_t *js);
 void coroutine_retain(coroutine_t *coro);
 void coroutine_release(coroutine_t *coro);
 void coroutine_clear_await_registration(coroutine_t *coro);
+void coroutine_abandon_await(coroutine_t *coro);
 
 void coroutine_hold(coroutine_t *coro, uint8_t hold);
 void coroutine_unhold(coroutine_t *coro, uint8_t hold);

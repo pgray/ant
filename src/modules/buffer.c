@@ -1066,6 +1066,19 @@ ant_value_t create_arraybuffer_obj(ant_t *js, ArrayBufferData *buffer) {
   return ab_obj;
 }
 
+ant_value_t create_shared_arraybuffer_obj(ant_t *js, ArrayBufferData *buffer) {
+  ant_value_t obj = Ant_Object_CreateBare(js);
+  if (is_err(obj)) return obj;
+  ant_value_t proto = js->builtins.sharedarraybuffer_proto;
+  if (is_special_object(proto)) js_set_proto_init(obj, proto);
+  
+  js_set_native(obj, buffer, BUFFER_ARRAYBUFFER_NATIVE_TAG);
+  js_set_finalizer(obj, arraybuffer_finalize);
+  buffer->ref_count++;
+  
+  return obj;
+}
+
 ant_value_t create_arraybuffer_copy(ant_t *js, const void *bytes, size_t length) {
   ArrayBufferData *buffer = create_array_buffer_data(js, length);
   if (!buffer) return js_mkerr(js, "out of memory");

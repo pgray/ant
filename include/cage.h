@@ -19,6 +19,7 @@ extern size_t ant_cage_reserved_size;
 void *ant_cage_alloc(size_t size, size_t align);
 void *ant_cage_reserve(size_t size, size_t align);
 void ant_cage_free(void *ptr, size_t size);
+bool ant_cage_set_size(size_t size);
 
 _Noreturn void ant_cage_reject_pointer(const void *ptr);
 

@@ -25,9 +25,17 @@
 #include "silver/call.h"
 #include "esm/commonjs.h"
 #include "gc/roots.h"
+#include "sync.h"
 
 static napi_native_lib_t *g_napi_native_libs = NULL;
-static napi_module *g_pending_napi_module = NULL;
+static ant_mutex_t g_napi_native_libs_lock = ANT_MUTEX_INIT;
+static _Thread_local napi_module *g_pending_napi_module = NULL;
+
+static napi_native_lib_t *napi_native_lib_find(void *handle) {
+  for (napi_native_lib_t *lib = g_napi_native_libs; lib; lib = lib->next)
+    if (lib->handle == handle) return lib;
+  return NULL;
+}
 
 static void napi_link_exports(void) {
   ant_napi_link_async();
@@ -52,6 +60,18 @@ static ant_value_t napi_dlopen_common(ant_t *js, ant_value_t module_obj, const c
     return js_mkerr(js, "Failed to load native module '%s': %s", filename, msg ? msg : "unknown");
   }
 
+  ant_mutex_lock(&g_napi_native_libs_lock);
+  napi_native_lib_t *lib = napi_native_lib_find(handle);
+  if (!lib && (lib = calloc(1, sizeof(*lib)))) {
+    lib->handle = handle;
+    lib->module = g_pending_napi_module;
+    lib->next = g_napi_native_libs;
+    g_napi_native_libs = lib;
+  }
+  
+  napi_module *module = lib ? lib->module : g_pending_napi_module;
+  ant_mutex_unlock(&g_napi_native_libs_lock);
+
   napi_register_module_v1_fn reg_fn = (napi_register_module_v1_fn)NAPI_DLSYM(handle, "napi_register_module_v1");
   ant_value_t exports = js_get(js, module_obj, "exports");
 
@@ -62,8 +82,8 @@ static ant_value_t napi_dlopen_common(ant_t *js, ant_value_t module_obj, const c
 
   ant_value_t ret = js_mkundef();
   if (reg_fn) ret = (ant_value_t)reg_fn(env, (napi_value)exports);
-  else if (g_pending_napi_module && g_pending_napi_module->nm_register_func) {
-    ret = (ant_value_t)g_pending_napi_module->nm_register_func(env, (napi_value)exports);
+  else if (module && module->nm_register_func) {
+    ret = (ant_value_t)module->nm_register_func(env, (napi_value)exports);
   } else return js_mkerr(js, "No N-API registration entrypoint found in '%s'", filename);
 
   ant_napi_env_t *nenv = (ant_napi_env_t *)env;
@@ -78,13 +98,6 @@ static ant_value_t napi_dlopen_common(ant_t *js, ant_value_t module_obj, const c
   if (is_object_type(ret)) exports = ret;
   js_set(js, module_obj, "exports", exports);
   js_set(js, module_obj, "loaded", js_true);
-
-  napi_native_lib_t *node = (napi_native_lib_t *)calloc(1, sizeof(*node));
-  if (node) {
-    node->handle = handle;
-    node->next = g_napi_native_libs;
-    g_napi_native_libs = node;
-  }
 
   return exports;
 }

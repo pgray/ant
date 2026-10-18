@@ -103,10 +103,6 @@ struct net_write_args_s {
   ant_value_t error;
 };
 
-
-static bool g_default_auto_select_family = true;
-static double g_default_auto_select_family_attempt_timeout = 250.0;
-
 static constexpr uint32_t NET_SERVER_NATIVE_TAG = Ant_NativeTag("NETS");
 static constexpr uint32_t NET_SOCKET_NATIVE_TAG = Ant_NativeTag("NETK");
 
@@ -411,6 +407,28 @@ static void net_socket_detach(net_socket_t *socket) {
   free(socket);
 }
 
+static void net_server_finalize(ant_t *js, ant_object_t *obj) {
+  ant_value_t value = js_obj_from_ptr(obj);
+  net_server_t *server = net_server_data(value);
+  if (!server) return;
+  
+  js_clear_native(value, NET_SERVER_NATIVE_TAG);
+  server->obj = js_mkundef();
+  if (server->listener.started && !ant_listener_is_closed(&server->listener)) return;
+  
+  for (net_socket_t *socket = server->sockets; socket; socket = socket->next_in_server) socket->server = NULL;
+  Ant_List_Remove(server);
+  
+  free(server->host);
+  free(server->path);
+  free(server);
+}
+
+static void net_socket_finalize(ant_t *js, ant_object_t *obj) {
+  net_socket_t *socket = net_socket_data(js_obj_from_ptr(obj));
+  if (socket && !socket->conn) net_socket_detach(socket);
+}
+
 static ant_value_t net_socket_emit_connect_error(ant_params_t) {
   ant_value_t state = js_get_slot(js_getcurrentfunc(js), SLOT_DATA);
   ant_value_t socket_obj = is_object_type(state) ? js_get(js, state, "socket") : js_mkundef();
@@ -453,7 +471,9 @@ static net_socket_t *net_socket_create(ant_t *js, bool allow_half_open, ant_valu
   socket->allow_half_open = allow_half_open;
 
   js_set_native(obj, socket, NET_SOCKET_NATIVE_TAG);
+  js_set_finalizer(obj, net_socket_finalize);
   stream_init_duplex_object(js, obj, js_mkundef());
+  
   js_set(js, obj, "remoteAddress", js_mkundef());
   js_set(js, obj, "remotePort", js_mkundef());
   js_set(js, obj, "remoteFamily", js_mkundef());
@@ -501,6 +521,7 @@ static net_server_t *net_server_create(ant_t *js, ant_value_t new_target) {
   }
 
   js_set_native(obj, server, NET_SERVER_NATIVE_TAG);
+  js_set_finalizer(obj, net_server_finalize);
   net_server_sync_state(server);
   return server;
 }
@@ -965,6 +986,13 @@ static ant_value_t net_server_bind_listener(
   return js_mkundef();
 }
 
+static ant_value_t net_server_emit_listening(ant_params_t) {
+  ant_value_t obj = js_get_slot(js->current_func, SLOT_DATA);
+  net_server_t *server = net_server_data(obj);
+  if (server && server->listening) net_emit(js, obj, "listening", NULL, 0);
+  return js_mkundef();
+}
+
 static ant_value_t js_net_server_listen(ant_params_t) {
   net_server_t *server = net_require_server(js, js_getthis(js));
   ant_listener_callbacks_t callbacks = {0};
@@ -1013,8 +1041,9 @@ static ant_value_t js_net_server_listen(ant_params_t) {
   net_server_sync_state(server);
   net_add_active_server(server);
 
-  if (is_callable(parsed.callback)) sv_call_value(js, parsed.callback, js_mkundef(), NULL, 0);
-  net_emit(js, server->obj, "listening", NULL, 0);
+  if (is_callable(parsed.callback)) net_add_listener(js, server->obj, "listening", parsed.callback, true);
+  ant_value_t emit = js_make_data_cfunc(js, server->obj, net_server_emit_listening);
+  if (!is_err(emit)) queue_next_tick(js, emit);
   GC_ROOT_RESTORE(js, root_mark);
   
   return js_getthis(js);
@@ -1137,23 +1166,23 @@ static ant_value_t js_net_connect(ant_params_t) {
 }
 
 static ant_value_t js_net_getDefaultAutoSelectFamily(ant_params_t) {
-  return js_bool(g_default_auto_select_family);
+  return js_bool(js->defaults.net_auto_select_family);
 }
 
 static ant_value_t js_net_setDefaultAutoSelectFamily(ant_params_t) {
-  if (nargs > 0) g_default_auto_select_family = js_truthy(js, args[0]);
+  if (nargs > 0) js->defaults.net_auto_select_family = js_truthy(js, args[0]);
   return js_mkundef();
 }
 
 static ant_value_t js_net_getDefaultAutoSelectFamilyAttemptTimeout(ant_params_t) {
-  return js_mknum(g_default_auto_select_family_attempt_timeout);
+  return js_mknum(js->defaults.net_auto_select_family_timeout);
 }
 
 static ant_value_t js_net_setDefaultAutoSelectFamilyAttemptTimeout(ant_params_t) {
   if (nargs > 0 && vtype(args[0]) == kTypeNumber) {
     double value = js_getnum(args[0]);
     if (value > 0 && value < 10) value = 10;
-    if (value > 0) g_default_auto_select_family_attempt_timeout = value;
+    if (value > 0) js->defaults.net_auto_select_family_timeout = value;
   }
   return js_mkundef();
 }
@@ -1221,6 +1250,16 @@ ant_value_t net_library(ant_t *js) {
   js_set_tostringtag(js, lib, js_mkstr(js, "net", 3));
   
   return lib;
+}
+
+void cleanup_net_module(ant_t *js) {
+  for (net_socket_t *socket = js->net_sockets; socket; socket = socket->next)
+    if (socket->conn && !ant_conn_is_closing(socket->conn)) ant_conn_close(socket->conn);
+
+  for (net_server_t *server = js->net_servers; server; server = server->next) {
+    server->closing = true;
+    ant_listener_stop(&server->listener, true);
+  }
 }
 
 void gc_mark_net(ant_t *js, gc_mark_fn mark) {

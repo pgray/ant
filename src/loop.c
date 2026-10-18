@@ -24,7 +24,9 @@ bool Ant_Loop_Init(ant_t *js) {
 
 void Ant_Loop_Drain(ant_t *js) {
   uv_loop_t *loop = js->loop;
-  for (int pass = 0; loop && pass < 64 && uv_loop_alive(loop); pass++) uv_run(loop, UV_RUN_NOWAIT);
+  if (!loop) return;
+  for (int pass = 0; pass < 64 && uv_loop_alive(loop); pass++) uv_run(loop, UV_RUN_NOWAIT);
+  if (js->owns_loop) while (loop->active_reqs.count > 0) uv_run(loop, UV_RUN_ONCE);
 }
 
 static void loop_close_handle(uv_handle_t *handle, void *arg) {

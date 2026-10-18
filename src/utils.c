@@ -44,6 +44,12 @@ static int ensure_ts_strip_context(const char **error_detail) {
   return 0;
 }
 
+void ts_strip_thread_cleanup(void) {
+  if (!ts_strip_context_ready) return;
+  skim_context_deinit(&ts_strip_context);
+  ts_strip_context_ready = false;
+}
+
 static const char *ant_home_dir(void) {
 #ifdef _WIN32
   const char *home = getenv("USERPROFILE");

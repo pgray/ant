@@ -151,7 +151,7 @@ static void check_shape_metadata_writes_need_one_owner(ant_t *js) {
   const char *key = intern_string("snapshot", 8);
   const char *extra = intern_string("extra", 5);
   for (unsigned operation = 0; operation < 4; operation++) {
-    ant_shape_t *root = ant_shape_new();
+    ant_shape_t *root = ant_shape_new(js);
     ant_shape_t *shape = ant_shape_clone(root);
     ant_shape_release(root);
     uint32_t slot;
@@ -182,7 +182,7 @@ static void check_shape_metadata_writes_need_one_owner(ant_t *js) {
 
 int main(void) {
   char stack_base;
-  ant_t *js = ant_create();
+  ant_t *js = ant_create(nullptr);
   assert(js);
   js_setstackbase(js, &stack_base);
   check_shape_metadata_writes_need_one_owner(js);

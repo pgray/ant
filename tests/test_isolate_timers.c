@@ -62,8 +62,8 @@ static bool b_has_timers(void) { return has_pending_timers(b); }
 
 int main(void) {
   char stack_base;
-  a = ant_create();
-  b = ant_create();
+  a = ant_create(nullptr);
+  b = ant_create(nullptr);
   assert(a && b);
   js_setstackbase(a, &stack_base);
   js_setstackbase(b, &stack_base);

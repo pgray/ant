@@ -674,7 +674,7 @@ ant_wasm_runtime_t *ant_wasm_create(void) {
   ant_wasm_runtime_t *runtime = calloc(1, sizeof(*runtime));
   if (!runtime) return NULL;
 
-  ant_t *js = ant_create();
+  ant_t *js = ant_create(nullptr);
   if (!js) {
     free(runtime);
     return NULL;

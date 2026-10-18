@@ -40,8 +40,15 @@ typedef struct lock_request {
   struct lock_request *next;
 } lock_request_t;
 
-static lock_entry_t *locks = NULL;
-static lock_request_t *pending_requests = NULL;
+struct navigator_locks {
+  lock_entry_t *held;
+  lock_request_t *pending;
+};
+
+static navigator_locks_t *nav_locks(ant_t *js) {
+  if (!js->navigator_locks) js->navigator_locks = calloc(1, sizeof(*js->navigator_locks));
+  return js->navigator_locks;
+}
 
 static int get_hardware_concurrency(void) {
 #ifdef __APPLE__
@@ -77,13 +84,13 @@ static const char *get_platform_string(void) {
 #endif
 }
 
-static lock_entry_t *find_lock(const char *name) {
+static lock_entry_t *find_lock(ant_t *js, const char *name) {
   lock_entry_t *entry = NULL;
-  HASH_FIND_STR(locks, name, entry);
+  HASH_FIND_STR(nav_locks(js)->held, name, entry);
   return entry;
 }
 
-static lock_entry_t *create_lock(const char *name, lock_mode_t mode) {
+static lock_entry_t *create_lock(ant_t *js, const char *name, lock_mode_t mode) {
   lock_entry_t *entry = calloc(1, sizeof(lock_entry_t));
   if (!entry) return NULL;
   
@@ -91,19 +98,19 @@ static lock_entry_t *create_lock(const char *name, lock_mode_t mode) {
   entry->mode = mode;
   entry->shared_count = (mode == LOCK_MODE_SHARED) ? 1 : 0;
   
-  HASH_ADD_STR(locks, name, entry);
+  HASH_ADD_STR(nav_locks(js)->held, name, entry);
   return entry;
 }
 
-static bool can_acquire_lock(const char *name, lock_mode_t mode) {
-  lock_entry_t *entry = find_lock(name);
+static bool can_acquire_lock(ant_t *js, const char *name, lock_mode_t mode) {
+  lock_entry_t *entry = find_lock(js, name);
   if (!entry) return true;
   if (mode == LOCK_MODE_SHARED && entry->mode == LOCK_MODE_SHARED) return true;
   return false;
 }
 
-static void release_lock(const char *name) {
-  lock_entry_t *entry = find_lock(name);
+static void release_lock(ant_t *js, const char *name) {
+  lock_entry_t *entry = find_lock(js, name);
   if (!entry) return;
   
   if (entry->mode == LOCK_MODE_SHARED) {
@@ -111,7 +118,7 @@ static void release_lock(const char *name) {
     if (entry->shared_count > 0) return;
   }
   
-  HASH_DEL(locks, entry);
+  HASH_DEL(nav_locks(js)->held, entry);
   free(entry->name);
   free(entry);
 }
@@ -124,7 +131,7 @@ static void reject_lock_callback(ant_t *js, const char *name, ant_value_t promis
 
   GC_ROOT_PIN(js, reason);
   GC_ROOT_PIN(js, promise);
-  release_lock(name);
+  release_lock(js, name);
 
   js_reject_promise(js, promise, reason);
   process_pending_requests(js);
@@ -161,7 +168,7 @@ static ant_value_t lock_then_handler(ant_params_t) {
   size_t name_len;
   char *name = js_getstr(js, lock_name_val, &name_len);
   
-  if (name) release_lock(name);
+  if (name) release_lock(js, name);
   js_resolve_promise(js, outer_promise, result_val);
   process_pending_requests(js);
   
@@ -179,7 +186,7 @@ static ant_value_t lock_catch_handler(ant_params_t) {
   size_t name_len;
   char *name = js_getstr(js, lock_name_val, &name_len);
   
-  if (name) release_lock(name);
+  if (name) release_lock(js, name);
   
   js_reject_promise(js, outer_promise, error_val);
   process_pending_requests(js);
@@ -221,23 +228,23 @@ static void execute_lock_callback(ant_t *js, const char *name, lock_mode_t mode,
     return;
   }
   
-  release_lock(name);
+  release_lock(js, name);
   js_resolve_promise(js, outer_promise, result);
   process_pending_requests(js);
 }
 
 static void process_pending_requests(ant_t *js) {
   lock_request_t *prev = NULL;
-  lock_request_t *req = pending_requests;
+  lock_request_t *req = nav_locks(js)->pending;
   
   while (req) {
-    if (can_acquire_lock(req->name, req->mode)) {
-      lock_entry_t *entry = find_lock(req->name);
+    if (can_acquire_lock(js, req->name, req->mode)) {
+      lock_entry_t *entry = find_lock(js, req->name);
       
       if (entry && entry->mode == LOCK_MODE_SHARED && req->mode == LOCK_MODE_SHARED) {
         entry->shared_count++;
       } else {
-        create_lock(req->name, req->mode);
+        create_lock(js, req->name, req->mode);
       }
       
       lock_request_t *to_process = req;
@@ -245,7 +252,7 @@ static void process_pending_requests(ant_t *js) {
       if (prev) {
         prev->next = req->next;
       } else {
-        pending_requests = req->next;
+        nav_locks(js)->pending = req->next;
       }
       req = req->next;
       
@@ -304,7 +311,7 @@ static ant_value_t locks_request(ant_params_t) {
   
   ant_value_t promise = js_mkpromise(js);
   
-  if (if_available && !can_acquire_lock(name, mode)) {
+  if (if_available && !can_acquire_lock(js, name, mode)) {
     ant_value_t null_val = js_mknull();
     ant_value_t result = sv_vm_call(js->vm, js, callback, js_mkundef(), &null_val, 1, NULL, js_mkundef());
     
@@ -342,11 +349,11 @@ static ant_value_t locks_request(ant_params_t) {
     return promise;
   }
   
-  if (can_acquire_lock(name, mode)) {
-    lock_entry_t *entry = find_lock(name);
+  if (can_acquire_lock(js, name, mode)) {
+    lock_entry_t *entry = find_lock(js, name);
     
     if (entry && entry->mode == LOCK_MODE_SHARED && mode == LOCK_MODE_SHARED) entry->shared_count++;
-    else create_lock(name, mode);
+    else create_lock(js, name, mode);
     
     execute_lock_callback(js, name, mode, callback, promise);
   } else {
@@ -358,8 +365,8 @@ static ant_value_t locks_request(ant_params_t) {
     req->promise = promise;
     req->next = NULL;
     
-    lock_request_t *tail = pending_requests;
-    if (!tail) pending_requests = req;
+    lock_request_t *tail = nav_locks(js)->pending;
+    if (!tail) nav_locks(js)->pending = req;
     else {
       while (tail->next) tail = tail->next;
       tail->next = req;
@@ -375,7 +382,7 @@ static ant_value_t locks_query(ant_params_t) {
   ant_value_t pending_arr = js_mkarr(js);
   
   lock_entry_t *entry, *tmp;
-  HASH_ITER(hh, locks, entry, tmp) {
+  HASH_ITER(hh, nav_locks(js)->held, entry, tmp) {
     ant_value_t lock_info = Ant_Object_CreateBare(js);
     js_set(js, lock_info, "name", js_mkstr(js, entry->name, strlen(entry->name)));
     js_set(js, lock_info, "mode", js_mkstr(js, entry->mode == LOCK_MODE_EXCLUSIVE
@@ -383,7 +390,7 @@ static ant_value_t locks_query(ant_params_t) {
     js_arr_push(js, held_arr, lock_info);
   }
   
-  lock_request_t *req = pending_requests;
+  lock_request_t *req = nav_locks(js)->pending;
   while (req) {
     ant_value_t req_info = Ant_Object_CreateBare(js);
     js_set(js, req_info, "name", js_mkstr(js, req->name, strlen(req->name)));
@@ -429,8 +436,30 @@ void init_navigator_module(ant_t *js) {
   js_set(js, js_glob(js), "navigator", navigator_obj);
 }
 
+void free_navigator_module(ant_t *js) {
+  navigator_locks_t *state = js->navigator_locks;
+  if (!state) return;
+  lock_entry_t *entry, *tmp;
+  
+  HASH_ITER(hh, state->held, entry, tmp) {
+    HASH_DEL(state->held, entry);
+    free(entry->name);
+    free(entry);
+  }
+  
+  for (lock_request_t *req = state->pending, *next; req; req = next) {
+    next = req->next;
+    free(req->name);
+    free(req);
+  }
+  
+  free(state);
+  js->navigator_locks = NULL;
+}
+
 void gc_mark_navigator(ant_t *js, gc_mark_fn mark) {
-  for (lock_request_t *req = pending_requests; req; req = req->next) {
+  if (!js->navigator_locks) return;
+  for (lock_request_t *req = js->navigator_locks->pending; req; req = req->next) {
     mark(js, req->callback);
     mark(js, req->promise);
   }

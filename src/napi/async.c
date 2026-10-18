@@ -66,6 +66,22 @@ static void napi_tsfn_maybe_finish(struct napi_threadsafe_function__ *tsfn) {
   uv_close((uv_handle_t *)&tsfn->async, napi_tsfn_close_cb);
 }
 
+void ant_napi_tsfns_close(ant_napi_env_t *nenv) {
+  for (struct napi_threadsafe_function__ *tsfn = nenv->tsfns; tsfn; tsfn = tsfn->next) {
+    uv_mutex_lock(&tsfn->mutex);
+    tsfn->aborted = true;
+    tsfn->closing = true;
+    for (napi_tsfn_item_t *item = tsfn->head, *next; item; item = next) {
+      next = item->next;
+      free(item);
+    }
+    tsfn->head = tsfn->tail = NULL;
+    tsfn->queue_size = 0;
+    uv_mutex_unlock(&tsfn->mutex);
+    if (!uv_is_closing((uv_handle_t *)&tsfn->async)) napi_tsfn_maybe_finish(tsfn);
+  }
+}
+
 static void napi_async_work_execute_cb(uv_work_t *req) {
   napi_async_work_impl_t *work = (napi_async_work_impl_t *)req->data;
   if (!work || !work->execute) return;

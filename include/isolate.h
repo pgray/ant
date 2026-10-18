@@ -121,6 +121,9 @@ struct ant_isolate_t {
   ant_object_t *objects;
   ant_object_t *permanent_objects;
   
+  ant_worker_t *worker;
+  ant_worker_t *workers;
+  
   // TODO: registry struct
   descriptor_entry_t *desc_registry;
   ant_process_state_t *process_state;
@@ -142,6 +145,14 @@ struct ant_isolate_t {
   net_server_t *net_servers;
   net_socket_t *net_sockets;
   ant_tls_socket_t *tls_sockets;
+  rpc_server_t *rpc_servers;
+  rpc_client_t *rpc_clients;
+  sandbox_state_t *sandboxes;
+  lmdb_state_t *lmdb;
+  ant_napi_env_t *napi_env;
+  ant_port_binding_t *port_bindings;
+  broadcast_member_t *broadcast_members;
+  navigator_locks_t *navigator_locks;
   wasm_import_func_env_t *wasm_import_envs;
   ant_ptr_pair_map_t wasm_instance_owners;
   bool wasm_pending_import_throw;
@@ -151,6 +162,13 @@ struct ant_isolate_t {
   rl_interface_t *rl_interfaces;
   uint64_t rl_next_interface_id;
   // END TODO
+  
+  struct {
+    double stream_high_water_mark;
+    double stream_object_high_water_mark;
+    double net_auto_select_family_timeout;
+    bool net_auto_select_family;
+  } defaults;
 
   ant_fixed_arena_t obj_arena;
   ant_fixed_arena_t closure_arena;
@@ -183,6 +201,16 @@ struct ant_isolate_t {
   ant_value_t **c_roots;
   size_t c_root_count;
   size_t c_root_cap;
+
+  struct {
+    struct ant_library_ns *entries;
+    uint32_t cap;
+  } libraries;
+
+  struct {
+    ant_shape_t *roots[ANT_INOBJ_MAX_SLOTS + 1];
+    uint16_t gc_epoch;
+  } shapes;
 
   const char *code;
   const char *filename;

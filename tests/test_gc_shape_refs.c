@@ -8,7 +8,7 @@
 #include <stdio.h>
 
 static void check_prefix_copy(ant_t *js) {
-  ant_shape_t *shape = ant_shape_new();
+  ant_shape_t *shape = ant_shape_new(js);
   assert(ant_shape_add_interned_tr(js, &shape, "gc_plain_prefix", ANT_PROP_ATTR_DEFAULT, NULL));
   assert(!ant_shape_may_have_gc_refs(shape));
   ant_shape_t *prefix = shape;
@@ -34,7 +34,7 @@ static void check_prefix_copy(ant_t *js) {
 }
 
 int main(void) {
-  ant_t *js = ant_create();
+  ant_t *js = ant_create(nullptr);
   assert(js);
   check_prefix_copy(js);
   // Only explicit roots keep these objects alive. Conservative C-stack copies

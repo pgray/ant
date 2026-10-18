@@ -68,10 +68,7 @@ typedef struct zlib_stream_s {
   bool initialized;
   bool ended;
   bool destroyed;
-  struct zlib_stream_s *next_active;
 } zlib_stream_t;
-
-static zlib_stream_t *g_active_streams = NULL;
 
 static bool zlib_kind_is_compress(zlib_kind_t k) {
   return 
@@ -232,11 +229,6 @@ static zlib_stream_t *zlib_stream_ptr(ant_value_t obj) {
   return (zlib_stream_t *)js_get_native(obj, ZLIB_STREAM_TAG);
 }
 
-static void zlib_add_active(zlib_stream_t *st) {
-  st->next_active = g_active_streams;
-  g_active_streams = st;
-}
-
 static void zlib_stream_release(zlib_stream_t *st) {
   if (!st) return;
   
@@ -253,6 +245,17 @@ static void zlib_stream_release(zlib_stream_t *st) {
     else inflateEnd(&st->strm);
     st->initialized = false;
   }
+}
+
+static void zlib_stream_finalizer(ant_t *js, ant_object_t *obj) {
+  ant_value_t value = js_obj_from_ptr(obj);
+  zlib_stream_t *st = zlib_stream_ptr(value);
+  if (!st) return;
+  
+  js_clear_native(value, ZLIB_STREAM_TAG);
+  zlib_stream_release(st);
+  
+  free(st);
 }
 
 static ant_value_t zlib_make_buffer(ant_t *js, const uint8_t *data, size_t len) {
@@ -694,7 +697,8 @@ static ant_value_t zlib_create_stream(ant_t *js, zlib_kind_t kind, ant_value_t o
   js_set(js, obj, "_handle", handle_obj);
 
   st->obj = obj;
-  zlib_add_active(st);
+  js_set_finalizer(obj, zlib_stream_finalizer);
+  
   return obj;
 }
 
@@ -1241,8 +1245,4 @@ ant_value_t zlib_library(ant_t *js) {
   js_set_tostringtag(js, lib, js_mkstr(js, "zlib", 4));
   
   return lib;
-}
-
-void gc_mark_zlib(ant_t *js, void (*mark)(ant_t *, ant_value_t)) {
-  for (zlib_stream_t *st = g_active_streams; st; st = st->next_active) mark(js, st->obj);
 }

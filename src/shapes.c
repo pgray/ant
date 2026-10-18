@@ -1,5 +1,6 @@
 #include "shapes.h"
 #include "ant.h"
+#include "internal.h"
 #include "gc.h"
 #include "hash.h"
 #include "gc/strings.h"
@@ -10,20 +11,20 @@
 #include <stdatomic.h>
 #include <uthash.h>
 
-static _Atomic size_t g_shape_bytes = 0;
-static size_t g_shape_entry_pool_len = 0;
-static void *g_shape_entry_pool = NULL;
+static _Thread_local size_t g_shape_bytes = 0;
+static _Thread_local size_t g_shape_entry_pool_len = 0;
+static _Thread_local void *g_shape_entry_pool = NULL;
 
 static inline void shape_bytes_add(size_t bytes) {
-  atomic_fetch_add_explicit(&g_shape_bytes, bytes, memory_order_relaxed);
+  g_shape_bytes += bytes;
 }
 
 static inline void shape_bytes_sub(size_t bytes) {
-  atomic_fetch_sub_explicit(&g_shape_bytes, bytes, memory_order_relaxed);
+  g_shape_bytes -= bytes;
 }
 
 static inline size_t shape_bytes(void) {
-  return atomic_load_explicit(&g_shape_bytes, memory_order_relaxed);
+  return g_shape_bytes;
 }
 
 typedef struct shape_index_entry {
@@ -176,7 +177,6 @@ static void shape_refresh_descriptor_pointers(shape_descriptors_t *descriptors) 
   }
 }
 
-static ant_shape_t *g_root_shapes[ANT_INOBJ_MAX_SLOTS + 1];
 static inline uint8_t shape_clamp_inobj_limit(uint8_t limit) {
   return (limit > ANT_INOBJ_MAX_SLOTS) ? (uint8_t)ANT_INOBJ_MAX_SLOTS : limit;
 }
@@ -649,27 +649,48 @@ bool ant_shape_add_symbol_keyed_tr(ant_t *js, ant_shape_t **shape_pp, ant_offset
   return shape_add_tr(js, shape_pp, ANT_SHAPE_KEY_SYMBOL, NULL, sym_off, attrs, NULL, out_slot, SHAPE_KEYED_TRANSITION_MAX_PROPS);
 }
 
-ant_shape_t *ant_shape_new_with_inobj_limit(uint8_t inobj_limit) {
+ant_shape_t *ant_shape_new_with_inobj_limit(ant_t *js, uint8_t inobj_limit) {
   uint8_t clamped = shape_clamp_inobj_limit(inobj_limit);
+  ant_shape_t **roots = js->shapes.roots;
 
-  if (!g_root_shapes[clamped]) {
+  if (!roots[clamped]) {
     ant_shape_t *s = calloc(1, sizeof(*s));
     if (!s) return NULL;
+    
     s->descriptors = shape_descriptors_new();
     if (!s->descriptors) { free(s); return NULL; }
+    
     shape_link_descriptors(s, s->descriptors);
     shape_bytes_add(sizeof(*s));
+    
     s->inobj_limit = clamped;
     s->ref_count = 1;
-    g_root_shapes[clamped] = s;
+    
+    roots[clamped] = s;
   }
 
-  ant_shape_retain(g_root_shapes[clamped]);
-  return g_root_shapes[clamped];
+  ant_shape_retain(roots[clamped]);
+  return roots[clamped];
 }
 
-ant_shape_t *ant_shape_new(void) {
-  return ant_shape_new_with_inobj_limit((uint8_t)ANT_INOBJ_MAX_SLOTS);
+ant_shape_t *ant_shape_new(ant_t *js) {
+  return ant_shape_new_with_inobj_limit(js, (uint8_t)ANT_INOBJ_MAX_SLOTS);
+}
+
+void ant_shapes_destroy(ant_t *js) {
+  for (int i = 0; i <= (int)ANT_INOBJ_MAX_SLOTS; i++) {
+    ant_shape_release(js->shapes.roots[i]);
+    js->shapes.roots[i] = NULL;
+  }
+}
+
+void ant_shapes_thread_cleanup(void) {
+  while (g_shape_entry_pool) {
+    void *p = g_shape_entry_pool;
+    g_shape_entry_pool = *(void **)p;
+    free(p);
+  }
+  g_shape_entry_pool_len = 0;
 }
 
 ant_shape_t *shape_clone_reserve(const ant_shape_t *shape, uint32_t extra) {
@@ -680,8 +701,10 @@ ant_shape_t *shape_clone_reserve(const ant_shape_t *shape, uint32_t extra) {
 
   shape_descriptors_t *descriptors = shape_descriptors_copy_prefix(shape, extra);
   if (!descriptors) { free(copy); return NULL; }
+  
   shape_link_descriptors(copy, descriptors);
   shape_bytes_add(sizeof(*copy));
+  
   copy->ref_count = 1;
   copy->count = shape->count;
   copy->deleted_count = shape->deleted_count;
@@ -807,31 +830,32 @@ void ant_shape_transition_existing(ant_shape_t **shape_pp, ant_shape_t *to_shape
   ant_shape_release(from_shape);
 }
 
-size_t ant_shape_total_bytes(void) { return shape_bytes(); }
-static uint16_t gc_shape_epoch = 0;
-
-void ant_gc_shapes_begin(void) {
-  gc_shape_epoch++;
-  if (gc_shape_epoch == 0) gc_shape_epoch = 1;
+size_t ant_shape_total_bytes(void) { 
+  return shape_bytes(); 
 }
 
-void ant_gc_shapes_mark(ant_shape_t *shape) {
-for (; shape; shape = shape->parent) {
-  if (shape->gc_mark == gc_shape_epoch) break;
-  shape->gc_mark = gc_shape_epoch;
-}}
-
-static inline bool shape_child_is_dead(const ant_shape_t *child) {
-  return child->gc_mark != gc_shape_epoch && !shape_has_children(child);
+void ant_gc_shapes_begin(ant_t *js) {
+  if (++js->shapes.gc_epoch == 0) js->shapes.gc_epoch = 1;
 }
 
-static bool shape_prune_dead_children(ant_shape_t *shape) {
+void ant_gc_shapes_mark(ant_t *js, ant_shape_t *shape) {
+  for (uint16_t epoch = js->shapes.gc_epoch; shape; shape = shape->parent) {
+    if (shape->gc_mark == epoch) break;
+    shape->gc_mark = epoch;
+  }
+}
+
+static inline bool shape_child_is_dead(const ant_shape_t *child, uint16_t epoch) {
+  return child->gc_mark != epoch && !shape_has_children(child);
+}
+
+static bool shape_prune_dead_children(ant_shape_t *shape, uint16_t epoch) {
   bool freed_any = false;
 
   if (shape->first_child) {
     ant_shape_t *child = shape->first_child;
-    if (shape_prune_dead_children(child)) freed_any = true;
-    if (shape_child_is_dead(child)) {
+    if (shape_prune_dead_children(child, epoch)) freed_any = true;
+    if (shape_child_is_dead(child, epoch)) {
       shape_detach_child(shape, child);
       ant_shape_release(child);
       freed_any = true;
@@ -839,26 +863,34 @@ static bool shape_prune_dead_children(ant_shape_t *shape) {
   }
 
   shape_child_entry_t *ce, *ctmp;
-  HASH_ITER(hh, shape->children, ce, ctmp) {
-  ant_shape_t *child = ce->child;
-  if (shape_prune_dead_children(child)) freed_any = true;
-  if (shape_child_is_dead(child)) {
-    child->parent = NULL;
-    HASH_DEL(shape->children, ce);
-    shape_entry_free(ce);
-    ant_shape_release(child);
-    freed_any = true;
-  }}
+    HASH_ITER(hh, shape->children, ce, ctmp) {
+    ant_shape_t *child = ce->child;
+    
+    if (shape_prune_dead_children(child, epoch)) freed_any = true;
+    
+    if (shape_child_is_dead(child, epoch)) {
+      child->parent = NULL;
+      HASH_DEL(shape->children, ce);
+      shape_entry_free(ce);
+      ant_shape_release(child);
+      freed_any = true;
+    }
+  }
 
   return freed_any;
 }
 
-bool ant_gc_shapes_sweep(void) {
+bool ant_gc_shapes_sweep(ant_t *js) {
   bool freed_any = false;
+  uint16_t epoch = js->shapes.gc_epoch;
+  
   for (int i = 0; i <= (int)ANT_INOBJ_MAX_SLOTS; i++) {
-    if (g_root_shapes[i] && shape_prune_dead_children(g_root_shapes[i])) freed_any = true;
+    ant_shape_t *root = js->shapes.roots[i];
+    if (root && shape_prune_dead_children(root, epoch)) freed_any = true;
   }
+  
   shape_entry_pool_trim();
+  
   return freed_any;
 }
 

@@ -6,8 +6,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#define GC_MAX_STATIC_ROOTS 128
-
 typedef struct gc_temp_root_scope {
   ant_t *js;
   ant_value_t *items;
@@ -33,7 +31,6 @@ bool gc_pin_permanent(ant_t *js, ant_value_t value);
 bool gc_temp_root_set(gc_temp_root_handle_t handle, ant_value_t value);
 bool gc_temp_root_push(gc_temp_root_scope_t *scope, ant_value_t value);
 
-void gc_register_root(ant_value_t *slot);
 void gc_pop_roots(ant_t *js, size_t mark);
 void gc_visit_roots(ant_t *js, gc_root_visitor_t visitor);
 void gc_temp_root_scope_begin(ant_t *js, gc_temp_root_scope_t *scope);

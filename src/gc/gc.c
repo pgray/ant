@@ -510,6 +510,12 @@ bool gc_alloc_due(ant_t *js) {
   return js->obj_arena.live_count >= js->gc.alloc_limit;
 }
 
+__attribute__((noinline)) bool gc_reclaim_arena(ant_t *js) {
+  if (__builtin_expect(gc_disabled, 0) || js->gc_running) return false;
+  gc_run(js);
+  return true;
+}
+
 void gc_alloc_check(ant_t *js) {
   GC_VERIFY_STRESS(js);
   if (gc_alloc_due(js)) gc_decide(js);

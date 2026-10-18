@@ -285,7 +285,7 @@ static void CheckAwaitValueRoots(ant_t *js) {
 
 static void RegisterTestAwait(ant_t *js, coroutine_t *coro, ant_value_t value) {
   if (vtype(value) == kTypePromise) {
-    js_await_result_t result = js_promise_await_coroutine(js, value, coro);
+    js_await_result_t result = js_promise_await_coroutine(js, value, coro, false);
     assert(result.state == JS_AWAIT_PENDING);
   } else {
     assert(queue_await_resume_job(coro, value));
@@ -666,7 +666,7 @@ static void CheckLongErrorMessages(ant_t *js) {
 
 int main(void) {
   char stack_base;
-  ant_t *js = ant_create();
+  ant_t *js = ant_create(nullptr);
   assert(js);
   Ant_Exception_Set(js, js_true);
   assert(!Ant_Exception_Pending(js) && Ant_Exception_Peek(js) == js_mkundef());

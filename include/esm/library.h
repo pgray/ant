@@ -2,13 +2,18 @@
 #define ESM_LIBRARY_H
 
 #include "types.h"
-
+#include <uthash.h>
 #include <stdbool.h>
 #include <stddef.h>
 
-typedef struct ant_library_entry ant_library_entry_t;
 typedef ant_value_t (*ant_library_init_fn)(ant_t *js);
 typedef void (*ant_library_iter_fn)(const char *name, void *userdata);
+
+typedef struct ant_library_ns {
+  ant_value_t ns;
+  ant_value_t esm_ns;
+  bool loaded;
+} ant_library_ns_t;
 
 typedef enum {
   ANT_BUILTIN_NAME_NONE,
@@ -17,6 +22,18 @@ typedef enum {
   ANT_BUILTIN_NAME_BARE,  // x
 } ant_builtin_name_kind_t;
 
+// TODO: optimize
+typedef struct ant_library_entry {
+  char name[256];
+  char display_name[256];
+  ant_library_init_fn init_fn;
+  ant_builtin_name_kind_t kind;
+  uint32_t slot;
+  struct ant_library_entry *canonical;
+  UT_hash_handle hh;
+} ant_library_entry_t;
+
+void ant_library_cache_free(ant_t *js);
 void ant_library_foreach(ant_library_iter_fn cb, void *userdata);
 void ant_register_library(ant_library_init_fn init_fn, const char *name);
 void ant_register_standard_library(ant_library_init_fn init_fn, const char *bare, const char *ant_name, const char *node_name);

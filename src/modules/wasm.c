@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <uv.h>
 #include <string.h>
 #include <inttypes.h>
 #include <limits.h>
@@ -93,6 +94,7 @@ typedef struct {
 } wasm_func_handle_t;
 
 static wasm_engine_t *g_wasm_engine = NULL;
+static uv_once_t g_wasm_engine_once = UV_ONCE_INIT;
 
 static constexpr uint32_t WASM_FUNC_STATE_TAG = Ant_NativeTag("WFST");
 static constexpr uint32_t WASM_MODULE_NATIVE_TAG = Ant_NativeTag("WMOD");
@@ -162,10 +164,13 @@ static ant_value_t wasm_wrap_func(
   ant_value_t owner, bool own_func
 );
 
-static bool ensure_wasm_engine(void) {
-  if (g_wasm_engine) return true;
+static void create_wasm_engine(void) {
   g_wasm_engine = wasm_engine_new();
   if (g_wasm_engine) wasm_runtime_set_log_level(WASM_LOG_LEVEL_FATAL);
+}
+
+static bool ensure_wasm_engine(void) {
+  uv_once(&g_wasm_engine_once, create_wasm_engine);
   return g_wasm_engine != NULL;
 }
 

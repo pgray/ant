@@ -243,6 +243,12 @@ int ant_http_request_cancel(ant_http_request_t *req) {
   return tlsuv_http_req_cancel(&req->client, req->req);
 }
 
+void ant_http_request_abort(ant_http_request_t *req) {
+  if (!req || req->completed) return;
+  req->canceled = true;
+  ant_http_complete(req, UV_ECANCELED, "request aborted");
+}
+
 int ant_http_request_write(ant_http_request_t *req, const uint8_t *chunk, size_t len) {
   uint8_t *copy = NULL;
   int rc = 0;

@@ -17,7 +17,7 @@ static void CheckRoot(ant_t *js, ant_value_t value) {
 }
 
 static ant_t *Create(void) {
-  ant_t *js = ant_create();
+  ant_t *js = ant_create(nullptr);
   assert(js);
   js_setstackbase(js, NULL);
   init_symbol_module(js);

@@ -16,7 +16,7 @@ console.log('Worker Threads Tests\n');
 async function run() {
   test('isMainThread in main context', isMainThread, true);
   test('parentPort is null in main context', parentPort, null);
-  test('workerData is undefined in main context', workerData, undefined);
+  test('workerData is null in main context', workerData, null);
 
   const ch1 = new MessageChannel();
   test('MessageChannel has port1', typeof ch1.port1, 'object');
@@ -38,14 +38,18 @@ async function run() {
   });
   ch2.port1.postMessage('next');
   ch2.port1.postMessage('final');
-  testDeep('MessagePort queue drains in FIFO order', seen, ['on:queued-before-listener', 'on:next', 'once:next', 'on:final']);
+  testDeep('MessagePort delivers asynchronously', seen, []);
+  await new Promise(resolve => setTimeout(resolve, 20));
+  testDeep('MessagePort queue drains in FIFO order', seen, ['on:queued-before-listener', 'once:queued-before-listener', 'on:next', 'on:final']);
 
   let onmessageData = undefined;
   ch2.port2.onmessage = event => {
     onmessageData = event.data;
   };
   ch2.port1.postMessage('event-data');
+  await new Promise(resolve => setTimeout(resolve, 20));
   test('MessagePort onmessage receives event.data', onmessageData, 'event-data');
+  ch2.port1.close();
 
   const moved = moveMessagePortToContext(ch2.port1, globalThis);
   test('moveMessagePortToContext returns same port', moved, ch2.port1);

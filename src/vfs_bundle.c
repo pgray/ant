@@ -108,7 +108,7 @@ typedef struct {
   const ant_bundle_edge_rec_t *recs;
 } edge_sort_ctx_t;
 
-static edge_sort_ctx_t edge_sort_ctx;
+static _Thread_local edge_sort_ctx_t edge_sort_ctx;
 
 static int edge_rec_cmp(const void *a, const void *b) {
   const ant_bundle_edge_rec_t *ea = a, *eb = b;

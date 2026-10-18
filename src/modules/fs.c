@@ -974,7 +974,7 @@ static void fs_watcher_on_handle_closed(uv_handle_t *handle) {
   if (!watcher) return;
   watcher->handle_closed = true;
   watcher->closing = false;
-  if (watcher->finalized) fs_watcher_free(watcher);
+  if (watcher->finalized || !is_object_type(watcher->obj)) fs_watcher_free(watcher);
 }
 
 static void fs_watcher_close_native(fs_watcher_t *watcher) {
@@ -5661,6 +5661,15 @@ static ant_value_t builtin_fs_watchFile(ant_params_t) {
     if (handle) uv_unref(handle);
   }
   return js_mkundef();
+}
+
+void cleanup_fs_module(ant_t *js) {
+  for (fs_watcher_t *watcher = js->fs_watchers, *next; watcher; watcher = next) {
+    next = watcher->next;
+    fs_watcher_close_native(watcher);
+  }
+  for (fs_request_t *req = js->fs_requests; req; req = req->next)
+    uv_cancel((uv_req_t *)&req->uv_req);
 }
 
 static ant_value_t builtin_fs_unwatchFile(ant_params_t) {

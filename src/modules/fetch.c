@@ -995,6 +995,13 @@ void init_fetch_module(ant_t *js) {
   js_set(js, js->global, "fetch", Ant_Function_CreateEx(ant_fetch, 1, CFUNC_HAS_PROTOTYPE));
 }
 
+void cleanup_fetch_module(ant_t *js) {
+  for (fetch_request_t *req = js->fetch_requests; req; req = req->next) {
+    req->restart_pending = false;
+    if (req->http_req) ant_http_request_abort(req->http_req);
+  }
+}
+
 int has_pending_fetches(ant_t *js) {
   return js->fetch_requests != NULL;
 }

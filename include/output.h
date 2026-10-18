@@ -30,6 +30,8 @@ void ant_output_init_console(void);
 #endif
 
 bool ant_output_has_writer(void);
+void ant_output_thread_cleanup(void);
+void ant_output_set_thread_writer(ant_output_writer_t writer, void *user);
 void ant_output_set_writer(ant_output_writer_t writer, void *user);
 
 ant_output_stream_t *ant_output_stream(FILE *stream);

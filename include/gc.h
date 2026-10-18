@@ -40,6 +40,7 @@ void gc_array_limits_init(ant_t *js);
 void gc_alloc_check(ant_t *js);
 void gc_pressure(ant_t *js);
 bool gc_alloc_due(ant_t *js);
+bool gc_reclaim_arena(ant_t *js);
 bool gc_idle_wanted(ant_t *js);
 size_t gc_alloc_marker(ant_t *js);
 void gc_idle(ant_t *js, int64_t budget_ms);

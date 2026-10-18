@@ -2,6 +2,7 @@
 #include "internal.h"
 #include "gc/verify.h"
 
+#include <stdatomic.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -92,19 +93,21 @@ static inline void pool_stats_add(ant_pool_stats_t *dst, ant_pool_stats_t src) {
 }
 
 static inline size_t pool_page_size(void) {
-  static size_t cached = 0;
-  if (cached) return cached;
+  static _Atomic size_t cached = 0;
+  size_t size = atomic_load_explicit(&cached, memory_order_relaxed);
+  if (size) return size;
 #ifdef ANT_WASM_EMBED
-  cached = 4096u;
+  size = 4096u;
 #elif defined(_WIN32)
   SYSTEM_INFO info;
   GetSystemInfo(&info);
-  cached = info.dwPageSize ? (size_t)info.dwPageSize : 4096u;
+  size = info.dwPageSize ? (size_t)info.dwPageSize : 4096u;
 #else
   long page = sysconf(_SC_PAGESIZE);
-  cached = page > 0 ? (size_t)page : 4096u;
+  size = page > 0 ? (size_t)page : 4096u;
 #endif
-  return cached;
+  atomic_store_explicit(&cached, size, memory_order_relaxed);
+  return size;
 }
 
 static inline void large_string_unlink(ant_large_string_alloc_t **head, ant_large_string_alloc_t *alloc) {

@@ -148,7 +148,7 @@ int main(int argc, char *argv[]) {
   ant_t *js;
   volatile char stack_base;
 
-  if (!(js = ant_create())) {
+  if (!(js = ant_create(nullptr))) {
     fprintf(stderr, "ant-runtime: failed to allocate runtime\n");
     free(proc_argv);
     ant_bundle_close(&bundle);

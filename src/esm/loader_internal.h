@@ -55,7 +55,6 @@ bool esm_is_json(const char *path);
 const char *esm_default_base_path(ant_t *js);
 char *esm_path_to_file_url(const char *path);
 char *esm_path_dirname(const char *path);
-char *esm_file_url_to_path(ant_t *js, const char *specifier);
 char *esm_resolve_path(ant_t *js, const char *specifier, const char *base_path);
 char *esm_resolve_path_require(ant_t *js, const char *specifier, const char *base_path);
 

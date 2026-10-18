@@ -25,6 +25,7 @@
 #include "base64.h"
 #include "errors.h"
 #include "gc/roots.h"
+#include "sync.h"
 #include "gc/strings.h"
 #include "modules/crypto.h"
 #include "modules/buffer.h"
@@ -279,18 +280,23 @@ static inline ant_value_t crypto_random_error(ant_t *js) {
   return js_mkerr(js, "secure random generation failed");
 }
 
-static inline void crypto_format_uuid_v4(const uint8_t uuid[16], char out[37]) {
-  static char lut[256][2];
-  static bool lut_init = false;
+#define UUID_HEX_DIGIT(n) ((char)((n) < 10 ? '0' + (n) : 'a' - 10 + (n)))
+#define UUID_HEX2(i) { UUID_HEX_DIGIT((i) >> 4), UUID_HEX_DIGIT((i) & 15) }
+#define UUID_HEX16(h) \
+  UUID_HEX2((h) * 16 + 0), UUID_HEX2((h) * 16 + 1), UUID_HEX2((h) * 16 + 2), UUID_HEX2((h) * 16 + 3),   \
+  UUID_HEX2((h) * 16 + 4), UUID_HEX2((h) * 16 + 5), UUID_HEX2((h) * 16 + 6), UUID_HEX2((h) * 16 + 7),   \
+  UUID_HEX2((h) * 16 + 8), UUID_HEX2((h) * 16 + 9), UUID_HEX2((h) * 16 + 10), UUID_HEX2((h) * 16 + 11), \
+  UUID_HEX2((h) * 16 + 12), UUID_HEX2((h) * 16 + 13), UUID_HEX2((h) * 16 + 14), UUID_HEX2((h) * 16 + 15)
 
-  if (!lut_init) {
-    static const char hex[] = "0123456789abcdef";
-    for (int i = 0; i < 256; i++) {
-      lut[i][0] = hex[(unsigned)i >> 4];
-      lut[i][1] = hex[(unsigned)i & 0x0f];
-    }
-    lut_init = true;
-  }
+static const char uuid_hex_lut[256][2] = {
+  UUID_HEX16(0), UUID_HEX16(1), UUID_HEX16(2), UUID_HEX16(3),
+  UUID_HEX16(4), UUID_HEX16(5), UUID_HEX16(6), UUID_HEX16(7),
+  UUID_HEX16(8), UUID_HEX16(9), UUID_HEX16(10), UUID_HEX16(11),
+  UUID_HEX16(12), UUID_HEX16(13), UUID_HEX16(14), UUID_HEX16(15),
+};
+
+static inline void crypto_format_uuid_v4(const uint8_t uuid[16], char out[37]) {
+  const char (*lut)[2] = uuid_hex_lut;
 
   memcpy(out + 0,  lut[uuid[0]], 2);
   memcpy(out + 2,  lut[uuid[1]], 2);
@@ -619,24 +625,33 @@ static ant_value_t crypto_digest_result(
   return crypto_make_buffer(js, digest, digest_len);
 }
 
+static ant_mutex_t uuidv7_lock = ANT_MUTEX_INIT;
+static uint8_t uuidv7_prev[16] = {0};
+static uint8_t uuidv7_rand[256] = {0};
+static size_t uuidv7_rand_consumed = sizeof(uuidv7_rand);
+
 int uuidv7_new(uint8_t *uuid_out) {
-  static uint8_t uuid_prev[16] = {0};
-  static uint8_t rand_bytes[256] = {0};
-  static size_t n_rand_consumed = sizeof(rand_bytes);
-  
   struct timespec tp;
+  
   clock_gettime(CLOCK_REALTIME, &tp);
   uint64_t unix_ts_ms = (uint64_t)tp.tv_sec * 1000 + tp.tv_nsec / 1000000;
   
-  if (n_rand_consumed > sizeof(rand_bytes) - 10) {
-    if (crypto_fill_random(rand_bytes, sizeof(rand_bytes)) < 0) return -1;
-    n_rand_consumed = 0;
+  ant_mutex_lock(&uuidv7_lock);
+  if (uuidv7_rand_consumed > sizeof(uuidv7_rand) - 10) {
+    if (crypto_fill_random(uuidv7_rand, sizeof(uuidv7_rand)) < 0) {
+      ant_mutex_unlock(&uuidv7_lock);
+      return -1;
+    }
+    
+    uuidv7_rand_consumed = 0;
   }
   
-  int8_t status = uuidv7_generate(uuid_prev, unix_ts_ms, &rand_bytes[n_rand_consumed], uuid_prev);
-  n_rand_consumed += uuidv7_status_n_rand_consumed(status);
+  int8_t status = uuidv7_generate(uuidv7_prev, unix_ts_ms, &uuidv7_rand[uuidv7_rand_consumed], uuidv7_prev);
+  uuidv7_rand_consumed += uuidv7_status_n_rand_consumed(status);
   
-  memcpy(uuid_out, uuid_prev, 16);
+  memcpy(uuid_out, uuidv7_prev, 16);
+  ant_mutex_unlock(&uuidv7_lock);
+  
   return status;
 }
 

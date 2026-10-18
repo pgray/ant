@@ -159,18 +159,13 @@ static bool rt_capture(rt_ctx_t *c) {
 }
 
 typedef bool (*rt_handler_t)(rt_ctx_t *);
-static rt_handler_t rt_dispatch[128];
-static bool rt_dispatch_init = false;
-
-static void rt_init_dispatch(void) {
-  if (rt_dispatch_init) return;
-  rt_dispatch['$'] = rt_dollar;
-  rt_dispatch['&'] = rt_match;
-  rt_dispatch['`'] = rt_prefix;
-  rt_dispatch['\''] = rt_suffix;
-  for (int i = '0'; i <= '9'; i++) rt_dispatch[i] = rt_capture;
-  rt_dispatch_init = true;
-}
+static const rt_handler_t rt_dispatch[128] = {
+  ['$'] = rt_dollar,
+  ['&'] = rt_match,
+  ['`'] = rt_prefix,
+  ['\''] = rt_suffix,
+  ['0' ... '9'] = rt_capture,
+};
 
 bool repl_template(
   const char *repl, size_t repl_len,
@@ -179,7 +174,6 @@ bool repl_template(
   const repl_capture_t *caps, int ncaptures,
   char **buf, size_t *buf_len, size_t *buf_cap
 ) {
-  rt_init_dispatch();
   rt_ctx_t c = {
     repl, repl_len, NULL,
     matched, matched_len,

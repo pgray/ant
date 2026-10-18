@@ -1,17 +1,10 @@
 #include "gc.h"
 #include "gc/roots.h"
+#include "esm/library.h"
 #include "internal.h" // IWYU pragma: keep
 
 #include <stddef.h>
 #include <stdlib.h>
-
-static ant_value_t *g_roots[GC_MAX_STATIC_ROOTS];
-static size_t g_root_count = 0;
-
-void gc_register_root(ant_value_t *slot) {
-  if (g_root_count < GC_MAX_STATIC_ROOTS)
-    g_roots[g_root_count++] = slot;
-}
 
 size_t gc_root_scope(ant_t *js) {
   return js ? js->c_root_count : 0;
@@ -153,12 +146,15 @@ static void gc_visit_isolate_values(ant_t *js, gc_root_visitor_t visitor) {
   #define ANT_MUTABLE_ROOT(name)        gc_visit_value_slots(js, visitor, &js->mutable_roots.name, 1);
   #define ANT_MUTABLE_ROOT_ARR(name, n) gc_visit_value_slots(js, visitor, js->mutable_roots.name, n);
   #include "isolate_values.h"
+
+  for (uint32_t i = 0; i < js->libraries.cap; i++) {
+    ant_library_ns_t *lib = &js->libraries.entries[i];
+    if (lib->ns) visitor(js, lib->ns);
+    if (lib->esm_ns) visitor(js, lib->esm_ns);
+  }
 }
 
 void gc_visit_roots(ant_t *js, gc_root_visitor_t visitor) {
-  for (size_t i = 0; i < g_root_count; i++)
-    if (g_roots[i] && *g_roots[i]) visitor(js, *g_roots[i]);
-
   if (!js) return;
   gc_visit_isolate_values(js, visitor);
 

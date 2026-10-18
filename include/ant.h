@@ -33,8 +33,15 @@ if (!(cond)) {                                                              \
 #define JS_INF     ((double)INFINITY)
 #define JS_NEG_INF ((double)(-INFINITY))
 
+typedef struct ant_isolate_options {
+  size_t object_arena_bytes;
+} ant_isolate_options_t;
+
 // create a new ant isolate
-ant_t *ant_create();
+ant_t *ant_create(const ant_isolate_options_t *options);
+
+// clean up after a thread
+void ant_thread_cleanup(void);
 
 // globalThis
 ant_value_t js_glob(ant_t *);

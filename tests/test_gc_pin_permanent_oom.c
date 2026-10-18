@@ -14,7 +14,7 @@
 #include <stdio.h>
 
 int main(void) {
-  ant_t *js = ant_create();
+  ant_t *js = ant_create(nullptr);
   assert(js);
   js_setstackbase(js, NULL);
 

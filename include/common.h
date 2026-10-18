@@ -52,20 +52,6 @@
   X(SLOT_ITER_STATE)              \
   X(SLOT_ENTRIES)                 \
   X(SLOT_SETTLED)                 \
-  X(SLOT_WT_ON_MESSAGE)           \
-  X(SLOT_WT_ONCE_MESSAGE)         \
-  X(SLOT_WT_ON_EXIT)              \
-  X(SLOT_WT_ONCE_EXIT)            \
-  X(SLOT_WT_PORT_TAG)             \
-  X(SLOT_WT_PORT_QUEUE)           \
-  X(SLOT_WT_PORT_HEAD)            \
-  X(SLOT_WT_PORT_PEER)            \
-  X(SLOT_WT_PORT_CLOSED)          \
-  X(SLOT_WT_PORT_STARTED)         \
-  X(SLOT_WT_PORT_ON_MESSAGE)      \
-  X(SLOT_WT_PORT_ONCE_MESSAGE)    \
-  X(SLOT_WT_PORT_PROTO)           \
-  X(SLOT_WT_ENV_STORE)            \
   X(SLOT_NAPI_EXTERNAL_ID)        \
   X(SLOT_NAPI_WRAP_ID)            \
   X(SLOT_RS_PULL)                 \

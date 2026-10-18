@@ -19,6 +19,7 @@
 
 #include "gc/modules.h"
 #include "gc/roots.h"
+#include "list.h"
 #include "modules/assert.h"
 #include "modules/bigint.h"
 #include "modules/buffer.h"
@@ -32,10 +33,8 @@ static constexpr uint32_t RPC_SERVER_NATIVE_TAG = Ant_NativeTag("RPCS");
 static constexpr uint32_t RPC_CLIENT_NATIVE_TAG = Ant_NativeTag("RPCC");
 static constexpr uint32_t RPC_TASK_NATIVE_TAG = Ant_NativeTag("RPCT");
 
-typedef struct rpc_server rpc_server_t;
 typedef struct rpc_route rpc_route_t;
 typedef struct rpc_deferred_task rpc_deferred_task_t;
-typedef struct rpc_client rpc_client_t;
 typedef struct rpc_client_op rpc_client_op_t;
 
 typedef enum {
@@ -87,8 +86,8 @@ struct rpc_server {
   pthread_mutex_t task_mutex;
   rpc_deferred_task_t *pending_head;
   rpc_deferred_task_t *pending_tail;
-  rpc_server_t *next_active;
-  rpc_server_t *prev_active;
+  rpc_server_t *next;
+  rpc_server_t **pprev;
 };
 
 struct rpc_client_op {
@@ -127,45 +126,12 @@ struct rpc_client {
   rpc_client_op_t *tail;
   rpc_client_op_t *done_head;
   rpc_client_op_t *done_tail;
-  rpc_client_t *next_active;
-  rpc_client_t *prev_active;
+  rpc_client_t *next;
+  rpc_client_t **pprev;
 };
-
-static rpc_server_t *g_active_servers = NULL;
-static rpc_client_t *g_active_clients = NULL;
 
 static void rpc_server_close_impl(rpc_server_t *server);
 static void rpc_client_close_impl(rpc_client_t *client);
-
-static void rpc_add_active_server(rpc_server_t *server) {
-  server->next_active = g_active_servers;
-  server->prev_active = NULL;
-  if (g_active_servers) g_active_servers->prev_active = server;
-  g_active_servers = server;
-}
-
-static void rpc_remove_active_server(rpc_server_t *server) {
-  if (server->prev_active) server->prev_active->next_active = server->next_active;
-  else if (g_active_servers == server) g_active_servers = server->next_active;
-  if (server->next_active) server->next_active->prev_active = server->prev_active;
-  server->next_active = NULL;
-  server->prev_active = NULL;
-}
-
-static void rpc_add_active_client(rpc_client_t *client) {
-  client->next_active = g_active_clients;
-  client->prev_active = NULL;
-  if (g_active_clients) g_active_clients->prev_active = client;
-  g_active_clients = client;
-}
-
-static void rpc_remove_active_client(rpc_client_t *client) {
-  if (client->prev_active) client->prev_active->next_active = client->next_active;
-  else if (g_active_clients == client) g_active_clients = client->next_active;
-  if (client->next_active) client->next_active->prev_active = client->prev_active;
-  client->next_active = NULL;
-  client->prev_active = NULL;
-}
 
 static rpc_server_t *rpc_server_data(ant_value_t value) {
   return (rpc_server_t *)js_get_native(value, RPC_SERVER_NATIVE_TAG);
@@ -875,7 +841,7 @@ static void rpc_server_close_impl(rpc_server_t *server) {
   server->routes = NULL;
   if (server->async_initialized && !uv_is_closing((uv_handle_t *)&server->async))
     uv_close((uv_handle_t *)&server->async, rpc_server_async_close_cb);
-  rpc_remove_active_server(server);
+  Ant_List_Remove(server);
   server->listening = false;
   server->closed = true;
   server->closing = false;
@@ -910,7 +876,7 @@ static ant_value_t rpc_server_ctor(ant_params_t) {
 
   js_set_native(server->obj, server, RPC_SERVER_NATIVE_TAG);
   js_set_finalizer(server->obj, rpc_server_finalizer);
-  rpc_add_active_server(server);
+  Ant_List_Insert(&server->js->rpc_servers, server);
 
   if (nargs > 0 && is_object_type(args[0])) {
     ant_iter_t iter = js_prop_iter_begin(js, args[0]);
@@ -1202,7 +1168,7 @@ static void rpc_client_close_impl(rpc_client_t *client) {
   }
   if (client->async_initialized && !uv_is_closing((uv_handle_t *)&client->async))
     uv_close((uv_handle_t *)&client->async, rpc_client_async_close_cb);
-  rpc_remove_active_client(client);
+  Ant_List_Remove(client);
   client->connected = false;
   client->closed = true;
   client->closing = false;
@@ -1289,7 +1255,7 @@ static ant_value_t rpc_client_ctor(ant_params_t) {
 
   js_set_native(client->obj, client, RPC_CLIENT_NATIVE_TAG);
   js_set_finalizer(client->obj, rpc_client_finalizer);
-  rpc_add_active_client(client);
+  Ant_List_Insert(&client->js->rpc_clients, client);
   return client->obj;
 }
 
@@ -1331,7 +1297,7 @@ ant_value_t rpc_library(ant_t *js) {
 
 void gc_mark_rpc(ant_t *js, gc_mark_fn mark) {
 
-  for (rpc_server_t *server = g_active_servers; server; server = server->next_active) {
+  for (rpc_server_t *server = js->rpc_servers; server; server = server->next) {
     mark(js, server->obj);
     if (vtype(server->listen_promise) == kTypePromise) mark(js, server->listen_promise);
     for (rpc_route_t *route = server->routes; route; route = route->next)
@@ -1340,7 +1306,7 @@ void gc_mark_rpc(ant_t *js, gc_mark_fn mark) {
       if (task->route && is_callable(task->route->handler)) mark(js, task->route->handler);
   }
 
-  for (rpc_client_t *client = g_active_clients; client; client = client->next_active) {
+  for (rpc_client_t *client = js->rpc_clients; client; client = client->next) {
     mark(js, client->obj);
     pthread_mutex_lock(&client->mutex);
     for (rpc_client_op_t *op = client->head; op; op = op->next)
@@ -1351,7 +1317,7 @@ void gc_mark_rpc(ant_t *js, gc_mark_fn mark) {
   }
 }
 
-void cleanup_rpc_module(void) {
-  while (g_active_servers) rpc_server_close_impl(g_active_servers);
-  while (g_active_clients) rpc_client_close_impl(g_active_clients);
+void cleanup_rpc_module(ant_t *js) {
+  while (js->rpc_servers) rpc_server_close_impl(js->rpc_servers);
+  while (js->rpc_clients) rpc_client_close_impl(js->rpc_clients);
 }

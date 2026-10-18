@@ -853,18 +853,12 @@ static void tty_init_stream_constructors(ant_t *js) {
   js->builtins.tty_readstream_ctor = Ant_Function_CreateConstructor(js, tty_read_stream_constructor, js->builtins.tty_readstream_proto, "ReadStream", 2);
   js_set_proto_init(js->builtins.tty_readstream_ctor, stream_readable_constructor(js));
   
-  gc_register_root(&js->builtins.tty_readstream_proto);
-  gc_register_root(&js->builtins.tty_readstream_ctor);
-
   js->builtins.tty_writestream_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->builtins.tty_writestream_proto, stream_writable_prototype(js));
   setup_writestream_proto(js, js->builtins.tty_writestream_proto);
   
   js->builtins.tty_writestream_ctor = Ant_Function_CreateConstructor(js, tty_write_stream_constructor, js->builtins.tty_writestream_proto, "WriteStream", 1);
   js_set_proto_init(js->builtins.tty_writestream_ctor, stream_writable_constructor(js));
-  
-  gc_register_root(&js->builtins.tty_writestream_proto);
-  gc_register_root(&js->builtins.tty_writestream_ctor);
 }
 
 void init_tty_module(ant_t *js) {

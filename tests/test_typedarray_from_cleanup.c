@@ -94,7 +94,7 @@ static void CheckCleanup(ant_t *js, int failure, int close_kind) {
 }
 
 int main(void) {
-  ant_t *js = ant_create();
+  ant_t *js = ant_create(nullptr);
   assert(js);
   init_symbol_module(js);
   init_intrinsic_symbols(js);

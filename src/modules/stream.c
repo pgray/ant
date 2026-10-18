@@ -21,9 +21,6 @@
 
 static constexpr uint32_t STREAM_NATIVE_TAG = Ant_NativeTag("STRM");
 
-static double g_default_high_water_mark = 16384.0;
-static double g_default_object_high_water_mark = 16.0;
-
 static ant_value_t stream_noop(ant_params_t) {
   return js_mkundef();
 }
@@ -351,15 +348,17 @@ static ant_value_t stream_get_option(ant_t *js, ant_value_t options, const char 
   return js_get(js, options, name);
 }
 
-static double stream_default_high_water_mark(bool object_mode) {
-  return object_mode ? g_default_object_high_water_mark : g_default_high_water_mark;
+static double stream_default_high_water_mark(ant_t *js, bool object_mode) {
+  return object_mode 
+    ? js->defaults.stream_object_high_water_mark 
+    : js->defaults.stream_high_water_mark;
 }
 
 static double stream_high_water_mark_from_options(ant_t *js, ant_value_t options, bool object_mode) {
   ant_value_t hwm = stream_get_option(js, options, "highWaterMark");
   return (vtype(hwm) == kTypeNumber && js_getnum(hwm) > 0)
     ? js_getnum(hwm)
-    : stream_default_high_water_mark(object_mode);
+    : stream_default_high_water_mark(js, object_mode);
 }
 
 static ant_value_t stream_make_base_object(ant_t *js, ant_value_t proto) {
@@ -1427,7 +1426,7 @@ static ant_value_t stream_writable_write_impl(
   length = (vtype(length_value) == kTypeNumber ? js_getnum(length_value) : 0) + chunk_size;
   hwm = vtype(high_water_mark) == kTypeNumber
     ? js_getnum(high_water_mark)
-    : stream_default_high_water_mark(object_mode);
+    : stream_default_high_water_mark(js, object_mode);
   accepted = length < hwm;
 
   stream_writable_set_length(js, stream_obj, state, length);
@@ -2324,21 +2323,7 @@ void stream_init_constructors(ant_t *js) {
   js_set(js, js->builtins.passthrough_proto, "_transform", Ant_Function_CreateWithArity(js_passthrough__transform, 3));
   js_set_tostringtag(js, js->builtins.passthrough_proto, js_mkstr(js, "PassThrough", 11));
   js->builtins.passthrough_ctor = Ant_Function_CreateConstructor(js, js_passthrough_ctor, js->builtins.passthrough_proto, "PassThrough", 1);
-
   js->builtins.stream_utf8 = js_mkstr(js, "utf8", 4);
-  gc_register_root(&js->builtins.stream_utf8);
-  gc_register_root(&js->builtins.stream_proto);
-  gc_register_root(&js->builtins.stream_ctor);
-  gc_register_root(&js->builtins.readable_proto);
-  gc_register_root(&js->builtins.readable_ctor);
-  gc_register_root(&js->builtins.writable_proto);
-  gc_register_root(&js->builtins.writable_ctor);
-  gc_register_root(&js->builtins.duplex_proto);
-  gc_register_root(&js->builtins.duplex_ctor);
-  gc_register_root(&js->builtins.stream_transform_proto);
-  gc_register_root(&js->builtins.stream_transform_ctor);
-  gc_register_root(&js->builtins.passthrough_proto);
-  gc_register_root(&js->builtins.passthrough_ctor);
 }
 
 ant_value_t stream_readable_constructor(ant_t *js) {
@@ -2405,7 +2390,7 @@ ant_value_t stream_readable_push(ant_t *js, ant_value_t stream_obj, ant_value_t 
 
 static ant_value_t js_stream_get_default_high_water_mark(ant_params_t) {
   bool object_mode = nargs > 0 && js_truthy(js, args[0]);
-  return js_mknum(stream_default_high_water_mark(object_mode));
+  return js_mknum(stream_default_high_water_mark(js, object_mode));
 }
 
 static ant_value_t js_stream_set_default_high_water_mark(ant_params_t) {
@@ -2413,8 +2398,8 @@ static ant_value_t js_stream_set_default_high_water_mark(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_RANGE, "setDefaultHighWaterMark requires a non-negative number");
 
   bool object_mode = js_truthy(js, args[0]);
-  if (object_mode) g_default_object_high_water_mark = js_getnum(args[1]);
-  else g_default_high_water_mark = js_getnum(args[1]);
+  if (object_mode) js->defaults.stream_object_high_water_mark = js_getnum(args[1]);
+  else js->defaults.stream_high_water_mark = js_getnum(args[1]);
 
   return js_mkundef();
 }

@@ -9,6 +9,7 @@
 #include "descriptors.h"
 
 #include "modules/sessionstorage.h"
+#include "sync.h"
 
 typedef struct storage_entry {
   char *key;
@@ -17,6 +18,7 @@ typedef struct storage_entry {
 } storage_entry_t;
 
 static storage_entry_t *session_storage = NULL;
+static ant_mutex_t session_storage_lock = ANT_MUTEX_INIT;
 
 static void storage_set_item(const char *key, size_t key_len, const char *value, size_t value_len) {
   storage_entry_t *entry = NULL;
@@ -92,7 +94,9 @@ static ant_value_t js_sessionstorage_setItem(ant_params_t) {
   char *key = js_getstr(js, args[0], &key_len);
   char *value = js_getstr(js, js_tostring_val(js, args[1]), &value_len);
   
+  ant_mutex_lock(&session_storage_lock);
   storage_set_item(key, key_len, value, value_len);
+  ant_mutex_unlock(&session_storage_lock);
   
   return js_mkundef();
 }
@@ -105,11 +109,13 @@ static ant_value_t js_sessionstorage_getItem(ant_params_t) {
   
   size_t key_len;
   char *key = js_getstr(js, args[0], &key_len);
+  ant_mutex_lock(&session_storage_lock);
+  
   char *value = storage_get_item(key, key_len);
+  ant_value_t result = value ? js_mkstr(js, value, strlen(value)) : js_mknull();
+  ant_mutex_unlock(&session_storage_lock);
   
-  if (!value) return js_mknull();
-  
-  return js_mkstr(js, value, strlen(value));
+  return result;
 }
 
 // sessionStorage.removeItem(key)
@@ -120,14 +126,19 @@ static ant_value_t js_sessionstorage_removeItem(ant_params_t) {
   
   size_t key_len;
   char *key = js_getstr(js, args[0], &key_len);
+  ant_mutex_lock(&session_storage_lock);
+  
   storage_remove_item(key, key_len);
+  ant_mutex_unlock(&session_storage_lock);
   
   return js_mkundef();
 }
 
 // sessionStorage.clear()
 static ant_value_t js_sessionstorage_clear(ant_params_t) {
+  ant_mutex_lock(&session_storage_lock);
   storage_clear();
+  ant_mutex_unlock(&session_storage_lock);
   return js_mkundef();
 }
 
@@ -145,16 +156,22 @@ static ant_value_t js_sessionstorage_key(ant_params_t) {
   if (idx < 0) return js_mknull();
   
   size_t index = (size_t)idx;
+  ant_mutex_lock(&session_storage_lock);
+  
   char *key = storage_key(index);
+  ant_value_t result = key ? js_mkstr(js, key, strlen(key)) : js_mknull();
+  ant_mutex_unlock(&session_storage_lock);
   
-  if (!key) return js_mknull();
-  
-  return js_mkstr(js, key, strlen(key));
+  return result;
 }
 
 // sessionStorage.length
 static ant_value_t js_sessionstorage_length(ant_params_t) {
-  return js_mknum((double)storage_length());
+  ant_mutex_lock(&session_storage_lock);
+  size_t length = storage_length();
+  
+  ant_mutex_unlock(&session_storage_lock);
+  return js_mknum((double)length);
 }
 
 void init_sessionstorage_module(ant_t *js) {
