@@ -2,32 +2,85 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <uthash.h>
 #include <tlsuv/http.h>
+#include <tlsuv/tlsuv.h>
 
 #include "modules/http.h"
 #include "streams/brotli.h"
 
-struct ant_http_request_s {
-  tlsuv_http_t client;
+static constexpr int HTTP_POOL_MAX_CONNS_PER_HOST = 256;
+static constexpr uint64_t HTTP_POOL_IDLE_MS = 4000;
+
+typedef struct ant_http_host ant_http_host_t;
+typedef struct ant_http_conn ant_http_conn_t;
+
+struct ant_http_pool {
   uv_loop_t *loop;
-  ant_http_response_t response;
+  ant_http_host_t *hosts;
+  bool closing;
+};
+
+struct ant_http_host {
+  char *key;
+  ant_http_pool_t *pool;
+  ant_http_conn_t *conns;
+  int conn_count;
+  ant_http_request_t *pending_head;
+  ant_http_request_t *pending_tail;
+  UT_hash_handle hh;
+};
+
+struct ant_http_conn {
+  tlsuv_http_t client;
+  uv_timer_t idle_timer;
+  ant_http_host_t *host;
+  ant_http_request_t *req;
+  ant_http_conn_t *next;
+  int open_handles;
+  bool closing;
+};
+
+struct ant_http_request_s {
+  uv_loop_t *loop;
+  ant_http_pool_t *pool;
+  ant_http_conn_t *conn;
+  ant_http_host_t *host;
   tlsuv_http_req_t *req;
-  
+  ant_http_request_t *next_pending;
+  ant_http_response_t response;
+
   ant_http_response_cb on_response;
   ant_http_body_cb on_body;
   ant_http_complete_cb on_complete;
-  
+
   void *user_data;
   char *error_message;
   brotli_stream_state_t *brotli_decoder;
-  
+
+  char *host_url;
+  char *method;
+  char *path;
+  ant_http_header_t *headers;
+  uint8_t *body;
+  size_t body_len;
+  uv_timer_t done_timer;
+
   ant_http_result_t result;
   int error_code;
-  
+
   bool completed;
   bool canceled;
   bool decode_brotli;
+  bool chunked;
+  bool pending;
+  bool reused;
+  bool retried;
+  bool got_response;
 };
+
+static void ant_http_resp_cb(tlsuv_http_resp_t *resp, void *data);
+static void ant_http_finish(ant_http_request_t *req, int error_code, const char *error_message);
 
 void ant_http_headers_free(ant_http_header_t *headers) {
 while (headers) {
@@ -44,7 +97,12 @@ static void ant_http_request_free(ant_http_request_t *req) {
   if (!req) return;
   free((char *)req->response.status_text);
   ant_http_headers_free((ant_http_header_t *)req->response.headers);
+  ant_http_headers_free(req->headers);
   free(req->error_message);
+  free(req->host_url);
+  free(req->method);
+  free(req->path);
+  free(req->body);
   if (req->brotli_decoder) brotli_stream_state_destroy(req->brotli_decoder);
   free(req);
 }
@@ -69,7 +127,7 @@ static char *ant_http_build_host_url(const struct tlsuv_url_s *url) {
     (int)url->hostname_len, url->hostname,
     port_buf
   );
-  
+
   return host_url;
 }
 
@@ -96,7 +154,7 @@ static ant_http_header_t *ant_http_header_dup(const char *name, const char *valu
 
   hdr->name = strdup(name ? name : "");
   hdr->value = strdup(value ? value : "");
-  
+
   if (!hdr->name || !hdr->value) {
     free(hdr->name);
     free(hdr->value);
@@ -118,7 +176,7 @@ static ant_http_header_t *ant_http_copy_headers(tlsuv_http_resp_t *resp) {
       ant_http_headers_free(head);
       return NULL;
     }
-    
+
     *tail = copy;
     tail = &copy->next;
   }
@@ -126,6 +184,17 @@ static ant_http_header_t *ant_http_copy_headers(tlsuv_http_resp_t *resp) {
   return head;
 }
 
+static bool ant_http_copy_request_headers(ant_http_request_t *req, const ant_http_header_t *headers) {
+  ant_http_header_t **tail = &req->headers;
+  for (const ant_http_header_t *hdr = headers; hdr; hdr = hdr->next) {
+    if (hdr->name && strcasecmp(hdr->name, "host") == 0) continue;
+    ant_http_header_t *copy = ant_http_header_dup(hdr->name, hdr->value);
+    if (!copy) return false;
+    *tail = copy;
+    tail = &copy->next;
+  }
+  return true;
+}
 
 static const char *ant_http_find_header(const ant_http_header_t *headers, const char *name) {
   for (const ant_http_header_t *entry = headers; entry; entry = entry->next) {
@@ -134,24 +203,214 @@ static const char *ant_http_find_header(const ant_http_header_t *headers, const 
   return NULL;
 }
 
-static void ant_http_on_close(tlsuv_http_t *client) {
-  ant_http_request_t *req = (ant_http_request_t *)client->data;
-  if (!req) return;
+static bool ant_http_method_idempotent(const char *method) {
+  static const char *const methods[] = { "GET", "HEAD", "OPTIONS", "PUT", "DELETE", "TRACE" };
+  for (size_t i = 0; i < sizeof(methods) / sizeof(methods[0]); i++)
+    if (strcasecmp(method, methods[i]) == 0) return true;
+  return false;
+}
 
+static uv_handle_t *ant_http_conn_io(ant_http_conn_t *conn) {
+  uv_handle_t *tr = conn->client.tr;
+  if (!tr) return NULL;
+  if (!conn->client.ssl) return tr;
+  uv_handle_t *watcher = (uv_handle_t *)&((tlsuv_stream_t *)tr)->watcher;
+  return uv_handle_get_type(watcher) == UV_UNKNOWN_HANDLE ? NULL : watcher;
+}
+
+static void ant_http_host_maybe_free(ant_http_host_t *host) {
+  if (!host || host->pool->closing || host->conns || host->pending_head) return;
+  HASH_DEL(host->pool->hosts, host);
+  free(host->key);
+  free(host);
+}
+
+static ant_http_conn_t *ant_http_conn_new(uv_loop_t *loop, ant_http_host_t *host, const char *host_url);
+static void ant_http_start_or_fail(ant_http_request_t *req, ant_http_conn_t *conn);
+
+static ant_http_request_t *ant_http_host_dequeue(ant_http_host_t *host) {
+  ant_http_request_t *next = host->pending_head;
+  if (!next) return NULL;
+  host->pending_head = next->next_pending;
+  if (!host->pending_head) host->pending_tail = NULL;
+  next->next_pending = NULL;
+  next->pending = false;
+  return next;
+}
+
+static void ant_http_host_kick(ant_http_host_t *host) {
+  while (!host->pool->closing && host->pending_head && host->conn_count < HTTP_POOL_MAX_CONNS_PER_HOST) {
+    ant_http_conn_t *conn = ant_http_conn_new(host->pool->loop, host, host->pending_head->host_url);
+    ant_http_request_t *next = ant_http_host_dequeue(host);
+    if (!conn) {
+      ant_http_finish(next, UV_ENOMEM, "out of memory");
+      continue;
+    }
+    ant_http_start_or_fail(next, conn);
+  }
+}
+
+static void ant_http_conn_handle_closed(ant_http_conn_t *conn) {
+  if (--conn->open_handles == 0) free(conn);
+}
+
+static void ant_http_conn_timer_closed(uv_handle_t *handle) {
+  ant_http_conn_handle_closed(handle->data);
+}
+
+static void ant_http_conn_client_closed(tlsuv_http_t *client) {
+  ant_http_conn_handle_closed(client->data);
+}
+
+static void ant_http_conn_close(ant_http_conn_t *conn) {
+  if (conn->closing) return;
+  conn->closing = true;
+
+  ant_http_host_t *host = conn->host;
+  if (host) {
+    for (ant_http_conn_t **it = &host->conns; *it; it = &(*it)->next) {
+      if (*it != conn) continue;
+      *it = conn->next;
+      break;
+    }
+    host->conn_count--;
+    conn->host = NULL;
+  }
+
+  if (conn->req) {
+    ant_http_request_t *req = conn->req;
+    conn->req = NULL;
+    req->conn = NULL;
+    if (req->req) req->req->data = NULL;
+    req->req = NULL;
+  }
+
+  uv_close((uv_handle_t *)&conn->idle_timer, ant_http_conn_timer_closed);
+  if (tlsuv_http_close(&conn->client, ant_http_conn_client_closed) != 0) ant_http_conn_handle_closed(conn);
+
+  if (host) {
+    ant_http_host_kick(host);
+    ant_http_host_maybe_free(host);
+  }
+}
+
+static void ant_http_conn_idle_cb(uv_timer_t *timer) {
+  ant_http_conn_t *conn = timer->data;
+  if (!conn->req) ant_http_conn_close(conn);
+}
+
+static ant_http_conn_t *ant_http_conn_new(uv_loop_t *loop, ant_http_host_t *host, const char *host_url) {
+  ant_http_conn_t *conn = calloc(1, sizeof(*conn));
+  if (!conn) return NULL;
+
+  if (tlsuv_http_init(loop, &conn->client, host_url) != 0) {
+    free(conn);
+    return NULL;
+  }
+
+  conn->client.data = conn;
+  tlsuv_http_header(&conn->client, "Accept-Encoding", NULL);
+  uv_timer_init(loop, &conn->idle_timer);
+  uv_unref((uv_handle_t *)&conn->idle_timer);
+  conn->idle_timer.data = conn;
+  conn->open_handles = 2;
+
+  if (host) {
+    tlsuv_http_idle_keepalive(&conn->client, -1);
+    conn->host = host;
+    conn->next = host->conns;
+    host->conns = conn;
+    host->conn_count++;
+  }
+  return conn;
+}
+
+static int ant_http_dispatch(ant_http_request_t *req, ant_http_conn_t *conn) {
+  conn->req = req;
+  req->conn = conn;
+  req->reused = conn->client.tr != NULL;
+  uv_timer_stop(&conn->idle_timer);
+
+  uv_handle_t *io = ant_http_conn_io(conn);
+  if (io) uv_ref(io);
+
+  req->req = tlsuv_http_req(&conn->client, req->method, req->path, ant_http_resp_cb, req);
+  if (!req->req) return UV_ENOMEM;
+
+  req->req->data = req;
+  if (req->chunked) tlsuv_http_req_header(req->req, "transfer-encoding", "chunked");
+  for (const ant_http_header_t *hdr = req->headers; hdr; hdr = hdr->next)
+    tlsuv_http_req_header(req->req, hdr->name, hdr->value);
+
+  if (req->body && req->body_len > 0)
+    return tlsuv_http_req_data(req->req, (const char *)req->body, req->body_len, NULL);
+  return 0;
+}
+
+static ant_http_conn_t *ant_http_host_idle_conn(ant_http_host_t *host) {
+  ant_http_conn_t *fallback = NULL;
+  for (ant_http_conn_t *conn = host->conns; conn; conn = conn->next) {
+    if (conn->req || conn->closing) continue;
+    if (conn->client.tr) return conn;
+    if (!fallback) fallback = conn;
+  }
+  return fallback;
+}
+
+static void ant_http_start_or_fail(ant_http_request_t *req, ant_http_conn_t *conn) {
+  int rc = ant_http_dispatch(req, conn);
+  if (rc != 0) ant_http_finish(req, rc, uv_strerror(rc));
+}
+
+static void ant_http_conn_release(ant_http_conn_t *conn) {
+  ant_http_host_t *host = conn->host;
+  ant_http_request_t *next = host ? ant_http_host_dequeue(host) : NULL;
+
+  if (next) {
+    ant_http_start_or_fail(next, conn);
+    return;
+  }
+
+  uv_handle_t *io = ant_http_conn_io(conn);
+  if (io) uv_unref(io);
+  uv_timer_start(&conn->idle_timer, ant_http_conn_idle_cb, HTTP_POOL_IDLE_MS, 0);
+}
+
+static void ant_http_pending_remove(ant_http_request_t *req) {
+  ant_http_host_t *host = req->host;
+  if (!req->pending || !host) return;
+  ant_http_request_t *prev = NULL;
+  for (ant_http_request_t *it = host->pending_head; it; prev = it, it = it->next_pending) {
+    if (it != req) continue;
+    if (prev) prev->next_pending = it->next_pending;
+    else host->pending_head = it->next_pending;
+    if (host->pending_tail == it) host->pending_tail = prev;
+    break;
+  }
+  req->pending = false;
+  req->next_pending = NULL;
+  ant_http_host_maybe_free(host);
+}
+
+static void ant_http_done_closed(uv_handle_t *handle) {
+  ant_http_request_t *req = handle->data;
   if (req->on_complete) req->on_complete(
     req, req->result, req->error_code,
     req->error_message,
     req->user_data
   );
-  
   ant_http_request_free(req);
 }
 
-static void ant_http_complete(ant_http_request_t *req, int error_code, const char *error_message) {
+static void ant_http_done_cb(uv_timer_t *timer) {
+  uv_close((uv_handle_t *)timer, ant_http_done_closed);
+}
+
+static void ant_http_finish(ant_http_request_t *req, int error_code, const char *error_message) {
   if (!req || req->completed) return;
-  req->completed = 1;
+  req->completed = true;
   req->error_code = error_code;
-  
+
   if (error_code == 0) req->result = ANT_HTTP_RESULT_OK;
   else if (req->canceled) req->result = ANT_HTTP_RESULT_ABORTED;
   else req->result = ANT_HTTP_RESULT_NETWORK_ERROR;
@@ -159,7 +418,41 @@ static void ant_http_complete(ant_http_request_t *req, int error_code, const cha
   free(req->error_message);
   req->error_message = error_message ? strdup(error_message) : NULL;
 
-  tlsuv_http_close(&req->client, ant_http_on_close);
+  if (req->pending) ant_http_pending_remove(req);
+
+  ant_http_conn_t *conn = req->conn;
+  if (conn) {
+    conn->req = NULL;
+    req->conn = NULL;
+    if (req->req) req->req->data = NULL;
+    req->req = NULL;
+    if (error_code != 0 || !conn->host) ant_http_conn_close(conn);
+    else ant_http_conn_release(conn);
+  }
+
+  uv_timer_init(req->loop, &req->done_timer);
+  req->done_timer.data = req;
+  uv_timer_start(&req->done_timer, ant_http_done_cb, 0, 0);
+}
+
+static bool ant_http_should_retry(const ant_http_request_t *req, int code) {
+  if (!req->reused || req->retried || req->chunked || req->got_response || req->canceled) return false;
+  if (!req->conn || !req->conn->host || req->conn->host->pool->closing) return false;
+  if (!ant_http_method_idempotent(req->method)) return false;
+  return code == UV_EOF || code == UV_ECONNRESET || code == UV_EPIPE || code == UV_ECONNABORTED;
+}
+
+static void ant_http_retry(ant_http_request_t *req) {
+  ant_http_conn_t *old = req->conn;
+  ant_http_conn_t *conn = ant_http_conn_new(req->loop, old->host, req->host_url);
+  req->retried = true;
+  ant_http_conn_close(old);
+
+  if (!conn) {
+    ant_http_finish(req, UV_ENOMEM, "out of memory");
+    return;
+  }
+  ant_http_start_or_fail(req, conn);
 }
 
 static int ant_http_brotli_body_cb(void *ctx, const uint8_t *chunk, size_t len) {
@@ -169,22 +462,22 @@ static int ant_http_brotli_body_cb(void *ctx, const uint8_t *chunk, size_t len) 
 }
 
 static void ant_http_tlsuv_body_cb(tlsuv_http_req_t *http_req, char *body, ssize_t len) {
-  ant_http_request_t *req = (ant_http_request_t *)http_req->data;
+  ant_http_request_t *req = http_req ? (ant_http_request_t *)http_req->data : NULL;
   if (!req) return;
 
   if (len == UV_EOF) {
     if (req->decode_brotli && req->brotli_decoder &&
       brotli_stream_finish(req->brotli_decoder, ant_http_brotli_body_cb, req) != 0) {
-      ant_http_complete(req, UV_EINVAL, "brotli decompression failed");
+      ant_http_finish(req, UV_EINVAL, "brotli decompression failed");
       return;
     }
-    
-    ant_http_complete(req, 0, NULL);
+
+    ant_http_finish(req, 0, NULL);
     return;
   }
 
   if (len < 0) {
-    ant_http_complete(req, (int)len, uv_strerror((int)len));
+    ant_http_finish(req, (int)len, uv_strerror((int)len));
     return;
   }
 
@@ -192,7 +485,7 @@ static void ant_http_tlsuv_body_cb(tlsuv_http_req_t *http_req, char *body, ssize
     if (brotli_stream_process(
       req->brotli_decoder, (const uint8_t *)body, (size_t)len,
       ant_http_brotli_body_cb, req) != 0
-    ) ant_http_complete(req, UV_EINVAL, "brotli decompression failed");
+    ) ant_http_finish(req, UV_EINVAL, "brotli decompression failed");
     return;
   }
 
@@ -201,21 +494,23 @@ static void ant_http_tlsuv_body_cb(tlsuv_http_req_t *http_req, char *body, ssize
 
 static void ant_http_resp_cb(tlsuv_http_resp_t *resp, void *data) {
   ant_http_request_t *req = (ant_http_request_t *)resp->req->data;
-  
+
   const char *content_encoding = NULL;
   if (!req) return;
 
   if (resp->code < 0) {
-    ant_http_complete(req, resp->code, uv_strerror(resp->code));
+    if (ant_http_should_retry(req, resp->code)) ant_http_retry(req);
+    else ant_http_finish(req, resp->code, uv_strerror(resp->code));
     return;
   }
 
+  req->got_response = true;
   req->response.status = resp->code;
   req->response.status_text = resp->status ? strdup(resp->status) : strdup("");
   req->response.headers = ant_http_copy_headers(resp);
-  
+
   if (!req->response.status_text || (resp->headers.lh_first && !req->response.headers)) {
-    ant_http_complete(req, UV_ENOMEM, "out of memory");
+    ant_http_finish(req, UV_ENOMEM, "out of memory");
     return;
   }
 
@@ -223,7 +518,7 @@ static void ant_http_resp_cb(tlsuv_http_resp_t *resp, void *data) {
   if (content_encoding && strcasecmp(content_encoding, "br") == 0) {
     req->brotli_decoder = brotli_stream_state_new(true);
     if (!req->brotli_decoder) {
-      ant_http_complete(req, UV_ENOMEM, "out of memory");
+      ant_http_finish(req, UV_ENOMEM, "out of memory");
       return;
     }
     req->decode_brotli = 1;
@@ -238,15 +533,19 @@ uv_loop_t *Ant_Http_RequestLoop(const ant_http_request_t *req) {
 }
 
 int ant_http_request_cancel(ant_http_request_t *req) {
-  if (!req || !req->req || req->completed) return 0;
+  if (!req || req->completed) return 0;
   req->canceled = true;
-  return tlsuv_http_req_cancel(&req->client, req->req);
+  if (!req->req || !req->conn) {
+    ant_http_finish(req, UV_ECANCELED, uv_strerror(UV_ECANCELED));
+    return 0;
+  }
+  return tlsuv_http_req_cancel(&req->conn->client, req->req);
 }
 
 void ant_http_request_abort(ant_http_request_t *req) {
   if (!req || req->completed) return;
   req->canceled = true;
-  ant_http_complete(req, UV_ECANCELED, "request aborted");
+  ant_http_finish(req, UV_ECANCELED, "request aborted");
 }
 
 int ant_http_request_write(ant_http_request_t *req, const uint8_t *chunk, size_t len) {
@@ -270,6 +569,54 @@ void ant_http_request_end(ant_http_request_t *req) {
   tlsuv_http_req_end(req->req);
 }
 
+ant_http_pool_t *ant_http_pool_create(uv_loop_t *loop) {
+  ant_http_pool_t *pool = calloc(1, sizeof(*pool));
+  if (pool) pool->loop = loop;
+  return pool;
+}
+
+void ant_http_pool_free(ant_http_pool_t *pool) {
+  if (!pool) return;
+  pool->closing = true;
+
+  ant_http_host_t *host, *tmp;
+  HASH_ITER(hh, pool->hosts, host, tmp) {
+    while (host->pending_head) {
+      ant_http_request_t *req = host->pending_head;
+      req->canceled = true;
+      ant_http_finish(req, UV_ECANCELED, "request aborted");
+    }
+    while (host->conns) {
+      ant_http_conn_t *conn = host->conns;
+      if (conn->req) {
+        conn->req->canceled = true;
+        ant_http_finish(conn->req, UV_ECANCELED, "request aborted");
+      } else ant_http_conn_close(conn);
+    }
+    HASH_DEL(pool->hosts, host);
+    free(host->key);
+    free(host);
+  }
+  free(pool);
+}
+
+static ant_http_host_t *ant_http_pool_host(ant_http_pool_t *pool, const char *key) {
+  ant_http_host_t *host = NULL;
+  HASH_FIND_STR(pool->hosts, key, host);
+  if (host) return host;
+
+  host = calloc(1, sizeof(*host));
+  if (!host) return NULL;
+  host->key = strdup(key);
+  if (!host->key) {
+    free(host);
+    return NULL;
+  }
+  host->pool = pool;
+  HASH_ADD_KEYPTR(hh, pool->hosts, host->key, strlen(host->key), host);
+  return host;
+}
+
 int ant_http_request_start(
   uv_loop_t *loop,
   const ant_http_request_options_t *options,
@@ -281,9 +628,6 @@ int ant_http_request_start(
 ) {
   struct tlsuv_url_s parsed = {0};
   ant_http_request_t *req = NULL;
-  char *host_url = NULL;
-  char *request_path = NULL;
-  int rc = 0;
 
   if (out_req) *out_req = NULL;
   if (!loop || !options || !options->method || !options->url) return UV_EINVAL;
@@ -298,56 +642,49 @@ int ant_http_request_start(
   req->on_complete = on_complete;
   req->user_data = user_data;
   req->loop = loop;
+  req->chunked = options->chunked_body;
+  req->pool = options->pool && !options->pool->closing ? options->pool : NULL;
 
-  host_url = ant_http_build_host_url(&parsed);
-  request_path = ant_http_build_path(&parsed);
-  if (!host_url || !request_path) {
-    free(host_url);
-    free(request_path);
+  req->host_url = ant_http_build_host_url(&parsed);
+  req->path = ant_http_build_path(&parsed);
+  req->method = strdup(options->method);
+  bool ok = req->host_url && req->path && req->method && ant_http_copy_request_headers(req, options->headers);
+
+  if (ok && options->body && options->body_len > 0) {
+    req->body = malloc(options->body_len);
+    if (req->body) {
+      memcpy(req->body, options->body, options->body_len);
+      req->body_len = options->body_len;
+    } else ok = false;
+  }
+
+  if (!ok) {
     ant_http_request_free(req);
     return UV_ENOMEM;
   }
 
-  rc = tlsuv_http_init(loop, &req->client, host_url);
-  free(host_url);
-  if (rc != 0) {
-    free(request_path);
-    ant_http_request_free(req);
-    return rc;
-  }
+  ant_http_host_t *host = req->pool ? ant_http_pool_host(req->pool, req->host_url) : NULL;
+  ant_http_conn_t *conn = host ? ant_http_host_idle_conn(host) : NULL;
 
-  req->client.data = req;
-  tlsuv_http_header(&req->client, "Accept-Encoding", NULL);
-  
-  req->req = tlsuv_http_req(
-    &req->client,
-    options->method,
-    request_path, ant_http_resp_cb, req
-  );
-  free(request_path);
-
-  if (!req->req) {
-    tlsuv_http_close(&req->client, NULL);
-    ant_http_request_free(req);
-    return UV_ENOMEM;
-  }
-
-  req->req->data = req;
-  if (options->chunked_body) tlsuv_http_req_header(req->req, "transfer-encoding", "chunked");
-  for (const ant_http_header_t *hdr = options->headers; hdr; hdr = hdr->next) {
-    if (hdr->name && strcasecmp(hdr->name, "host") == 0) continue;
-    tlsuv_http_req_header(req->req, hdr->name, hdr->value);
-  }
-
-  if (options->body && options->body_len > 0) {
-  rc = tlsuv_http_req_data(req->req, (const char *)options->body, options->body_len, NULL);
-  
-  if (rc != 0) {
-    ant_http_complete(req, rc, uv_strerror(rc));
+  if (!conn && host && host->conn_count >= HTTP_POOL_MAX_CONNS_PER_HOST && !req->chunked) {
+    req->host = host;
+    req->pending = true;
+    if (host->pending_tail) host->pending_tail->next_pending = req;
+    else host->pending_head = req;
+    host->pending_tail = req;
     if (out_req) *out_req = req;
     return 0;
-  }}
+  }
 
+  if (!conn) conn = ant_http_conn_new(loop, host, req->host_url);
+  if (!conn) {
+    ant_http_host_maybe_free(host);
+    ant_http_request_free(req);
+    return UV_ENOMEM;
+  }
+
+  req->host = host;
+  ant_http_start_or_fail(req, conn);
   if (out_req) *out_req = req;
   return 0;
 }

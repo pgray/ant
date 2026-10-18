@@ -295,6 +295,9 @@ static void eventsource_start_request(ant_t *js, eventsource_state_t *es) {
   options.method = "GET";
   options.url = es->url;
   options.headers = &accept;
+  
+  if (!js->http_pool) js->http_pool = ant_http_pool_create(js->loop);
+  options.pool = js->http_pool;
 
   rc = ant_http_request_start(
     js->loop, &options,

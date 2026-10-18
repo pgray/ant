@@ -115,6 +115,7 @@
 #include "modules/fs.h"
 #include "modules/child_process.h"
 #include "modules/fetch.h"
+#include "modules/http.h"
 #include "modules/net.h"
 
 #define D(x) ((double)(x))
@@ -21063,6 +21064,10 @@ void js_destroy(ant_t *js) {
   cleanup_net_module(js);
   cleanup_server_module(js);
   cleanup_fetch_module(js);
+  
+  ant_http_pool_free(js->http_pool);
+  js->http_pool = NULL;
+  
   cleanup_child_process_module(js);
   cleanup_fs_module(js);
   cleanup_readline_module(js);

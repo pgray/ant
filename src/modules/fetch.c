@@ -888,6 +888,9 @@ void fetch_start_http(fetch_request_t *req) {
   options.body_len = request->body_size;
   options.chunked_body = request->body_is_stream;
   
+  if (!req->js->http_pool) req->js->http_pool = ant_http_pool_create(req->js->loop);
+  options.pool = req->js->http_pool;
+  
   req->network_encoded_length = 0;
   req->network_request_id = ant_inspector_network_request(
     request->method, url,
