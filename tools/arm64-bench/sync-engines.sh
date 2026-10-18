@@ -166,7 +166,7 @@ if [[ ! -x "$libjs_install/js" ]]; then
       rustup_prefix=$(brew --prefix rustup)
       export PATH="$rustup_prefix/bin:$PATH"
     fi
-    python3 Meta/Utils/build_vcpkg.py
+    python3 Meta/ladybird.py vcpkg --preset Distribution
     cmake --preset Distribution -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 -DENABLE_GUI_TARGETS=OFF
     ninja -C Build/distribution js
   )
