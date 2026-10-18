@@ -37,16 +37,20 @@ static inline ant_value_t sv_op_throw_error(
   return js_mkerr_typed(js, (js_err_type_t)err_type, "%.*s", (int)a->len, a->str);
 }
 
-static inline void sv_op_try_push(sv_vm_t *vm, uint8_t *ip, sv_handler_kind_t kind) {
+static inline ant_value_t sv_op_try_push(sv_vm_t *vm, ant_t *js, uint8_t *ip, sv_handler_kind_t kind) {
+  if (__builtin_expect(vm->handler_depth >= vm->handler_cap, 0) && !sv_vm_reserve_handlers(vm, 1)) 
+    return Ant_Error_CreateStackOverflow(js);
+  
   sv_frame_t *frame = &vm->frames[vm->fp];
-  if (vm->handler_depth < SV_HANDLER_MAX) {
-    int32_t off = sv_get_i32(ip + 1);
-    sv_handler_t *h = &vm->handler_stack[vm->handler_depth++];
-    h->kind = (uint8_t)kind;
-    h->ip = ip + sv_op_size[OP_TRY_PUSH] + off;
-    h->saved_sp = vm->sp;
-    frame->handler_top = (uint16_t)vm->handler_depth;
-  }
+  int32_t off = sv_get_i32(ip + 1);
+  sv_handler_t *h = &vm->handler_stack[vm->handler_depth++];
+  
+  h->kind = (uint8_t)kind;
+  h->ip = ip + sv_op_size[OP_TRY_PUSH] + off;
+  h->saved_sp = vm->sp;
+  frame->handler_top = (uint16_t)vm->handler_depth;
+  
+  return js_mkundef();
 }
 
 static inline void sv_op_try_pop(sv_vm_t *vm) {
@@ -73,8 +77,8 @@ static inline void sv_op_catch(sv_vm_t *vm) {
 
 static inline ant_value_t sv_op_finally(sv_vm_t *vm, ant_t *js, uint8_t *ip) {
   sv_frame_t *frame = &vm->frames[vm->fp];
-  if (vm->handler_depth >= SV_HANDLER_MAX)
-    return js_mkerr(js, "handler stack overflow");
+  if (vm->handler_depth >= vm->handler_cap && !sv_vm_reserve_handlers(vm, 1))
+    return Ant_Error_CreateStackOverflow(js);
 
   int32_t off = sv_get_i32(ip + 1);
   sv_handler_t *h = &vm->handler_stack[vm->handler_depth++];

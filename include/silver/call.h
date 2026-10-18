@@ -1,11 +1,13 @@
 #ifndef SILVER_CALL_H
 #define SILVER_CALL_H
 
-#include "silver/engine.h"
+#include "realm.h"
 #include "handles.h"
 #include "interrupt.h"
-#include "silver/feedback.h"
 #include "modules/timer.h"
+
+#include "silver/engine.h"
+#include "silver/feedback.h"
 #include "../../src/silver/ops/async.h"
 
 static constexpr int SV_CALL_INLINE_ARGS_CAP = 4;
@@ -30,7 +32,7 @@ static inline ant_value_t sv_invoke_native(
   int nargs, ant_value_t new_target
 ) {
   if (__builtin_expect(sv_check_c_stack_overflow(js), 0))
-    return js_mkerr_typed(js, JS_ERR_RANGE | JS_ERR_NO_STACK, "Maximum call stack size exceeded");
+    return Ant_Error_CreateStackOverflow(js);
 
   if (__builtin_expect(Ant_Exception_Pending(js), 0))
     return Ant_Silver_InvokeNativeScoped(js, fn, args, nargs, new_target);
@@ -375,7 +377,7 @@ static inline ant_value_t sv_callback_call(
     return sv_vm_call(vm, js, cb->func, cb->this_val, args, argc, NULL, js_mkundef());
   
   if (cb->stack_overflow) 
-    return js_mkerr_typed(js, JS_ERR_RANGE | JS_ERR_NO_STACK, "Maximum call stack size exceeded");
+    return Ant_Error_CreateStackOverflow(js);
   
   if (js_interrupt_pending(js)) return js_interrupt_raise(js);
 
@@ -416,8 +418,7 @@ static inline ant_value_t sv_call_async_closure(
 ) {
   ant_value_t result = sv_start_async_closure(
     vm, js, closure, callee_func,
-    ctx->super_val, ctx->new_target,
-    ctx->this_val, ctx->args, ctx->argc
+    ctx->super_val, ctx->this_val, ctx->args, ctx->argc
   );
   sv_call_cleanup(js, ctx);
   return result;

@@ -8,6 +8,7 @@
 #include "interrupt.h"
 #include "silver/engine.h"
 #include "modules/timer.h"
+#include "modules/promise.h"
 
 typedef enum {
   SV_AWAIT_READY = 0,
@@ -61,8 +62,10 @@ static inline void sv_async_init_activation(
   ant_value_t async_func, int nargs
 ) {
   if (!coro) return;
+  struct sv_activation *act = coro->act;
   *coro = (coroutine_t){
     .js = js,
+    .act = act,
     .this_val = this_val,
     .super_val = super_val,
     .new_target = new_target,
@@ -161,117 +164,36 @@ static inline ant_value_t sv_start_tla(
 }
 
 static inline ant_value_t sv_start_async_closure(
-  sv_vm_t *caller_vm, ant_t *js,
-  sv_closure_t *closure, ant_value_t callee_func, ant_value_t super_val, ant_value_t new_target,
+  sv_vm_t *caller_vm, ant_t *js, sv_closure_t *closure, 
+  ant_value_t callee_func, ant_value_t super_val,
   ant_value_t this_val, ant_value_t *args, int argc
 ) {
-  if (caller_vm && closure && closure->func && !closure->func->has_await) {
-    GC_ROOT_SAVE(root_mark, js);
-    GC_ROOT_PIN(js, callee_func);
-    GC_ROOT_PIN(js, super_val);
-    GC_ROOT_PIN(js, this_val);
-    
-    if (args) {
-      for (int i = 0; i < argc; i++) GC_ROOT_PIN(js, args[i]);
-    }
-    
-    ant_value_t promise = js_mkpromise(js);
-    GC_ROOT_PIN(js, promise);
-    
-    ant_value_t result = sv_execute_closure_entry(
-      caller_vm, closure, callee_func, super_val, new_target, this_val, args, argc, NULL
-    );
-    
-    if (js_terminating_error(js, result)) {
-      GC_ROOT_RESTORE(js, root_mark);
-      return result;
-    }
-    
-    if (is_err(result)) {
-      ant_value_t reject_value = js_take_thrown(js, result);
-      js_reject_promise(js, promise, reject_value);
-    } else js_resolve_promise(js, promise, result);
-    
-    GC_ROOT_RESTORE(js, root_mark);
-    return promise;
-  }
-
-  if (caller_vm && closure && closure->func) {
-    GC_ROOT_SAVE(root_mark, js);
-    GC_ROOT_PIN(js, callee_func);
-    GC_ROOT_PIN(js, super_val);
-    GC_ROOT_PIN(js, this_val);
-    
-    if (args)
-      for (int i = 0; i < argc; i++) GC_ROOT_PIN(js, args[i]);
-    
-    ant_value_t promise = js_mkpromise(js);
-    GC_ROOT_PIN(js, promise);
-    
-    coroutine_t *coro = (coroutine_t *)calloc(1, sizeof(coroutine_t));
-    if (!coro) {
-      GC_ROOT_RESTORE(js, root_mark);
-      return js_mkerr(js, "out of memory for async coroutine");
-    }
-
-    sv_async_init_activation(
-      coro, js, promise, this_val,
-      super_val, new_target, callee_func, argc
-    );
-    
-    sv_async_link_activation(js, coro);
-    ant_value_t result = sv_execute_closure_entry(
-      caller_vm, closure, callee_func, 
-      super_val, new_target, this_val, args, argc, NULL
-    );
-    sv_async_unlink_activation(js, coro);
-  
-    if (coro->act && coro->act->frame_count > 0) {
-      coroutine_release(coro);
-      GC_ROOT_RESTORE(js, root_mark);
-      return promise;
-    }
-  
-    if (js_terminating_error(js, result)) {
-      coroutine_release(coro);
-      GC_ROOT_RESTORE(js, root_mark);
-      return result;
-    }
-  
-    if (is_err(result)) {
-      ant_value_t reject_value = js_take_thrown(js, result);
-      js_reject_promise(js, promise, reject_value);
-    } else js_resolve_promise(js, promise, result);
-
-    coroutine_release(coro);
-    GC_ROOT_RESTORE(js, root_mark);
-  
-    return promise;
-  }
-
+  if (caller_vm && closure && closure->func) return sv_async_call_lazy(
+    caller_vm, closure, callee_func, 
+    super_val, this_val, args, argc, 0
+  );
   return js_mkerr(js, "async function cannot start (unsupported form)");
 }
 
-static inline sv_await_result_t sv_await_value(sv_vm_t *vm, ant_t *js, ant_value_t value) {
+static inline sv_await_result_t sv_await_register(
+  ant_t *js, ant_value_t value, coroutine_t **coro_out, bool deferred
+) {
   sv_await_result_t out = {
     .state = SV_AWAIT_READY,
     .value = js_mkundef(),
   };
 
-  coroutine_t *coro = NULL;
+  coroutine_t *coro = sv_async_active_coro(js);
   ant_value_type_t value_type = vtype(value);
-  if (
-    value_type != kTypePromise &&
-    sv_await_type_is_primitive(value_type)
-  ) {
-    coro = sv_async_active_coro(js);
+  
+  if (value_type != kTypePromise && sv_await_type_is_primitive(value_type)) {
     if (!coro) {
       out.state = SV_AWAIT_ERROR;
       out.value = js_mkerr(js, "await can only be used inside async functions");
       return out;
     }
 
-    if (!queue_await_resume_job(coro, value)) {
+    if (!(deferred ? queue_await_defer_job(coro, value) : queue_await_resume_job(coro, value))) {
       out.state = SV_AWAIT_ERROR;
       out.value = js_mkerr(js, "out of memory queuing await resume");
       return out;
@@ -279,34 +201,51 @@ static inline sv_await_result_t sv_await_value(sv_vm_t *vm, ant_t *js, ant_value
 
     coro->awaited_promise = js_mkundef();
     coro->await_registered = true;
-  } else {
-    value = js_promise_assimilate_awaitable(js, value);
-    if (is_err(value)) {
-      out.state = SV_AWAIT_ERROR;
-      out.value = value;
-      return out;
-    }
-    if (vtype(value) != kTypePromise) {
-      out.value = value;
-      return out;
-    }
-
-    coro = sv_async_active_coro(js);
-    if (!coro) {
-      out.state = SV_AWAIT_ERROR;
-      out.value = js_mkerr(js, "await can only be used inside async functions");
-      return out;
-    }
-
-    js_await_result_t await_result = js_promise_await_coroutine(js, value, coro);
-    if (await_result.state == JS_AWAIT_ERROR) {
-      out.state = SV_AWAIT_ERROR;
-      out.value = js_throw(js, await_result.value);
-      return out;
-    }
+    
+    out.state = SV_AWAIT_SUSPENDED;
+    *coro_out = coro;
+    
+    return out;
   }
 
-  int entry_fp = vm->suspended_entry_fp;
+  value = js_promise_assimilate_awaitable(js, value);
+  if (is_err(value)) {
+    out.state = SV_AWAIT_ERROR;
+    out.value = value;
+    return out;
+  }
+  
+  if (vtype(value) != kTypePromise) {
+    out.value = value;
+    return out;
+  }
+
+  if (!coro) {
+    out.state = SV_AWAIT_ERROR;
+    out.value = js_mkerr(js, "await can only be used inside async functions");
+    return out;
+  }
+
+  js_await_result_t await_result = js_promise_await_coroutine(js, value, coro, deferred);
+  if (await_result.state == JS_AWAIT_ERROR) {
+    out.state = SV_AWAIT_ERROR;
+    out.value = js_throw(js, await_result.value);
+    return out;
+  }
+
+  out.state = SV_AWAIT_SUSPENDED;
+  *coro_out = coro;
+  
+  return out;
+}
+
+static inline sv_await_result_t sv_await_value(sv_vm_t *vm, ant_t *js, ant_value_t value, bool deferred) {
+  coroutine_t *coro = NULL;
+  sv_await_result_t out = sv_await_register(js, value, &coro, deferred);
+  
+  if (out.state != SV_AWAIT_SUSPENDED) return out;
+  int entry_fp = vm->suspend.entry_fp;
+  
   if (entry_fp < 0 || entry_fp > vm->fp) {
     coroutine_clear_await_registration(coro);
     out.state = SV_AWAIT_ERROR;
@@ -327,7 +266,17 @@ static inline sv_await_result_t sv_await_value(sv_vm_t *vm, ant_t *js, ant_value
   // minor collections reach a suspended coroutine only through this set; the
   // promise it waits on may be old, and old handlers are not rescanned
   gc_remember_coroutine(js, coro);
-  out.state = SV_AWAIT_SUSPENDED;
+  return out;
+}
+
+static inline sv_await_result_t sv_await_tail(ant_t *js, ant_value_t value) {
+  coroutine_t *coro = NULL;
+  
+  sv_await_result_t out = sv_await_register(js, value, &coro, false);
+  if (out.state != SV_AWAIT_SUSPENDED) return out;
+
+  coro->tail_await = true;
+  gc_remember_coroutine(js, coro);
   
   return out;
 }

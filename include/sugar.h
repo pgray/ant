@@ -15,7 +15,7 @@ typedef enum {
   CORO_HOLD_AWAIT     = 1u << 3,
 } coroutine_hold_t;
 
-struct coroutine {
+typedef struct coroutine {
   ant_t *js;
 
   ant_value_t this_val;
@@ -39,13 +39,14 @@ struct coroutine {
   bool is_generator: 1;
   bool await_registered: 1;
   bool yield_tick: 1;
+  bool tail_await: 1;
 
   uint64_t gc_epoch;
   uint32_t refcount;
   uint32_t remember_index;
 
   microtask_entry_t *await_resume_job;
-};
+} coroutine_t;
 
 typedef enum {
   JS_AWAIT_PENDING = 0,
@@ -57,8 +58,12 @@ typedef struct {
   ant_value_t value;
 } js_await_result_t;
 
-bool coroutine_cancel(coroutine_t *coro);
+coroutine_t *coroutine_alloc(ant_t *js);
 
+bool coroutine_cancel(coroutine_t *coro);
+bool coroutine_pending(const coroutine_t *coro);
+
+void coroutine_pool_destroy(ant_t *js);
 void coroutine_retain(coroutine_t *coro);
 void coroutine_release(coroutine_t *coro);
 void coroutine_clear_await_registration(coroutine_t *coro);
@@ -71,11 +76,8 @@ ant_value_t start_async_in_coroutine(
   ant_value_t closure_scope, ant_value_t *args, int nargs
 );
 
-// TODO: move to promise.c
-js_await_result_t js_promise_await_coroutine(ant_t *js, ant_value_t promise, coroutine_t *coro);
-
-void Ant_Promise_ClearAwaitCoroutine(ant_t *js, ant_value_t promise, coroutine_t *coro);
-void Ant_Coroutine_ResumeAwaitJob(ant_t *js, coroutine_t *coro, ant_value_t value);
+void Ant_Coroutine_ResumeAwaitJob(ant_t *js, coroutine_t *coro, ant_value_t value, bool is_error);
+void Ant_Coroutine_DeferResume(ant_t *js, coroutine_t *coro, ant_value_t value, bool is_error);
 void Ant_Coroutine_SettleAndResume(ant_t *js, coroutine_t *coro, ant_value_t value, bool is_error);
 
 #endif
