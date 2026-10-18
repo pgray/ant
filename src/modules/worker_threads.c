@@ -954,7 +954,7 @@ static void worker_setup_child_state(ant_t *js, ant_value_t lib) {
 
 ant_value_t worker_threads_library(ant_t *js) {
   ant_value_t lib = Ant_Object_CreateBare(js);
-  bool is_worker = js->worker != NULL
+  bool is_worker = js->worker != NULL;
   if (!js->builtins.worker_share_env) js->builtins.worker_share_env = js_mksym(js, "nodejs.worker_threads.SHARE_ENV");
 
   if (!is_object_type(js->builtins.worker_proto)) {
