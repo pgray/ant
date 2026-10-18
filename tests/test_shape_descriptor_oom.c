@@ -29,7 +29,7 @@ int main(void) {
   char keys[24][16];
   ant_shape_t *root = ant_shape_new(js);
   ant_shape_release(root);
-  size_t empty_bytes = ant_shape_total_bytes();
+  size_t empty_bytes = ant_shape_total_bytes(js);
   for (unsigned failure = 1; failure <= 24; failure++) {
     ant_shape_t *prefix = ant_shape_new(js);
     for (unsigned i = 0; i < 24; i++) {
@@ -62,7 +62,7 @@ int main(void) {
     ant_shape_release(prefix);
     ant_gc_shapes_begin(js);
     ant_gc_shapes_sweep(js);
-    assert(ant_shape_total_bytes() == empty_bytes);
+    assert(ant_shape_total_bytes(js) == empty_bytes);
   }
   unsigned failed_deletes = 0;
   // A live descendant and a collected tail both require prefix copy-on-write.
@@ -99,7 +99,7 @@ int main(void) {
       ant_shape_release(prefix);
       ant_gc_shapes_begin(js);
       ant_gc_shapes_sweep(js);
-      assert(ant_shape_total_bytes() == empty_bytes);
+      assert(ant_shape_total_bytes(js) == empty_bytes);
     }
   }
   assert(failed_deletes > 0);

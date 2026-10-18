@@ -108,6 +108,7 @@
 #include "modules/navigator.h"
 #include "modules/worker_threads.h"
 #include "modules/message_port.h"
+#include "modules/performance.h"
 #include "modules/napi.h"
 #include "modules/readline.h"
 #include "modules/server.h"
@@ -21040,7 +21041,6 @@ ant_t *ant_create(const ant_isolate_options_t *options) {
 }
 
 void ant_thread_cleanup(void) {
-  ant_shapes_thread_cleanup();
   ant_output_thread_cleanup();
   utf8_thread_cleanup();
   ts_strip_thread_cleanup();
@@ -21068,8 +21068,9 @@ void js_destroy(ant_t *js) {
   cleanup_readline_module(js);
   cleanup_napi_module(js);
   cleanup_message_port_module(js);
+  cleanup_performance_module(js);
   cleanup_process_module(js);
-  
+
   Ant_Loop_Drain(js);
   cleanup_timer_module(js);
   gc_weak_cleanup(js);

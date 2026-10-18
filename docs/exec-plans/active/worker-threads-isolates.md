@@ -17,10 +17,14 @@ gone.
   through isolate-owned visitors; registered-library namespaces are cached per
   isolate (`js->libraries`), and the library registry itself is shared and locked.
 - Shapes: root shapes and the GC shape epoch are per isolate (`js->shapes`), so one
-  isolate's sweep never prunes another's tree. The transition-entry pool and shape
-  byte counter are thread-local because `ant_shape_release` has no isolate.
-- The string intern table stays process-wide (interned pointers are compared
-  across isolates and live forever). Lookups are lock-free over an open-addressed
+  isolate's sweep never prunes another's tree. The shape byte counter and the
+  transition-entry pool live in a per-isolate `ant_shape_heap_t`; every shape
+  points at its isolate's heap, so release and clone need no isolate argument and
+  no thread-local access (thread-local storage cost 0.5–1.2% instructions on
+  shape churn on macOS).
+- The string intern table stays process-wide, carried over from master; nothing
+  requires interned pointers to match across isolates, so a per-isolate table is
+  a possible follow-up. Lookups are lock-free over an open-addressed
   table; inserts take a mutex and growth publishes a new table, so readers on an
   old table see valid entries and fall back to the locked path on a miss.
 - Module state that held per-isolate resources moved onto `ant_t` or behind a

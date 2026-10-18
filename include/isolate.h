@@ -11,6 +11,7 @@
 #include "runtime.h"
 #include "primordials.h"
 #include "descriptors.h"
+#include "shapes.h"
 
 #include "esm/loader.h"
 #include "modules/json.h"
@@ -152,6 +153,7 @@ struct ant_isolate_t {
   ant_napi_env_t *napi_env;
   ant_port_binding_t *port_bindings;
   broadcast_member_t *broadcast_members;
+  perf_eld_monitor_t *eld_monitors;
   navigator_locks_t *navigator_locks;
   wasm_import_func_env_t *wasm_import_envs;
   ant_ptr_pair_map_t wasm_instance_owners;
@@ -209,6 +211,7 @@ struct ant_isolate_t {
 
   struct {
     ant_shape_t *roots[ANT_INOBJ_MAX_SLOTS + 1];
+    ant_shape_heap_t heap;
     uint16_t gc_epoch;
   } shapes;
 

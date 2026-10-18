@@ -92,7 +92,7 @@ size_t gc_pool_major_threshold(ant_t *js) {
 }
 
 static size_t gc_offheap_live(ant_t *js) {
-  return js->gc.overflow_live + ant_shape_total_bytes() + js->buffers.bytes;
+  return js->gc.overflow_live + ant_shape_total_bytes(js) + js->buffers.bytes;
 }
 
 static size_t gc_offheap_major_threshold(ant_t *js) {

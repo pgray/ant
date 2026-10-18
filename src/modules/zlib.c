@@ -247,14 +247,13 @@ static void zlib_stream_release(zlib_stream_t *st) {
   }
 }
 
-static void zlib_stream_finalizer(ant_t *js, ant_object_t *obj) {
-  ant_value_t value = js_obj_from_ptr(obj);
-  zlib_stream_t *st = zlib_stream_ptr(value);
+static void zlib_stream_finalizer(ant_t *js, ant_value_t value, void *state) {
+  zlib_stream_t *st = state;
   if (!st) return;
-  
+
   js_clear_native(value, ZLIB_STREAM_TAG);
   zlib_stream_release(st);
-  
+
   free(st);
 }
 
@@ -434,84 +433,57 @@ static ant_value_t js_zlib_process_chunk(ant_params_t) {
   return zlib_process_chunk_sync(js, st, input, input_len, flush_flag);
 }
 
-static ant_value_t js_zlib_write(ant_params_t) {
-  zlib_stream_t *st = zlib_stream_ptr(js_getthis(js));
-  if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid zlib stream");
-  if (st->destroyed) return js_false;
-  if (st->ended) return js_false;
+static ant_value_t zlib_finish_callback(ant_t *js, ant_value_t cb, ant_value_t result) {
+  if (is_err(result)) {
+    GC_ROOT_SAVE(root_mark, js);
+    ant_value_t error = js_take_thrown(js, result);
 
-  if (nargs < 1 || vtype(args[0]) == kTypeUndefined || vtype(args[0]) == kTypeNull)
-    return js_true;
+    GC_ROOT_PIN(js, error);
+    ant_value_t r = is_callable(cb) ? sv_vm_call(js->vm, js, cb, js_mkundef(), &error, 1, NULL, js_mkundef()) : js_mkundef();
+
+    GC_ROOT_RESTORE(js, root_mark);
+    return is_err(r) ? r : js_mkundef();
+  }
+
+  if (Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
+  if (!is_callable(cb)) return js_mkundef();
+
+  ant_value_t r = sv_vm_call(js->vm, js, cb, js_mkundef(), NULL, 0, NULL, js_mkundef());
+  return is_err(r) ? r : js_mkundef();
+}
+
+static ant_value_t js_zlib__transform(ant_params_t) {
+  zlib_stream_t *st = zlib_stream_ptr(js_getthis(js));
+  ant_value_t cb = nargs > 2 ? args[2] : js_mkundef();
+  if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid zlib stream");
 
   const uint8_t *bytes = NULL;
   size_t len = 0;
-
-  if (is_object_type(args[0])) {
-    buffer_source_get_bytes(js, args[0], &bytes, &len);
-  }
-
-  if (!bytes) {
+  
+  if (nargs > 0 && is_object_type(args[0])) buffer_source_get_bytes(js, args[0], &bytes, &len);
+  if (!bytes && nargs > 0 && vtype(args[0]) == kTypeString) {
     size_t slen = 0;
     char *s = js_getstr(js, args[0], &slen);
     if (s) { bytes = (const uint8_t *)s; len = slen; }
   }
 
-  if (!bytes) return js_true;
-  st->bytes_written += (uint32_t)len;
-
-  ant_value_t r = zlib_do_process(js, st, bytes, len, Z_NO_FLUSH);
-  if (is_err(r)) {
-    r = js_take_thrown(js, r);
-    eventemitter_emit_args(js, st->obj, "error", &r, 1);
-    if (Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
-    return js_false;
+  ant_value_t r = js_mkundef();
+  if (bytes) {
+    st->bytes_written += (uint32_t)len;
+    r = zlib_do_process(js, st, bytes, len, Z_NO_FLUSH);
   }
-
-  if (Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
-
-  ant_value_t cb = pick_callback(args, nargs);
-  if (is_callable(cb)) {
-    ant_value_t null_val = js_mknull();
-    sv_vm_call(js->vm, js, cb, js_mkundef(), &null_val, 1, NULL, js_mkundef());
-  }
-
-  return js_true;
+  return zlib_finish_callback(js, cb, r);
 }
 
-static ant_value_t js_zlib_end(ant_params_t) {
+static ant_value_t js_zlib__flush(ant_params_t) {
   zlib_stream_t *st = zlib_stream_ptr(js_getthis(js));
-  ant_value_t self = js_getthis(js);
-
+  ant_value_t cb = nargs > 0 ? args[0] : js_mkundef();
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid zlib stream");
-  if (st->destroyed || st->ended) return self;
-
-  if (nargs > 0 && vtype(args[0]) != kTypeUndefined && vtype(args[0]) != kTypeNull) {
-    ant_value_t write_args[1] = { args[0] };
-    ant_value_t written = js_zlib_write(js, write_args, 1, js_mkundef());
-    if (is_err(written) || Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
-  }
 
   ant_value_t r = zlib_do_process(js, st, NULL, 0, Z_FINISH);
-
-  if (is_err(r)) {
-    r = js_take_thrown(js, r);
-    eventemitter_emit_args(js, st->obj, "error", &r, 1);
-    if (Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
-    return self;
-  }
-
-  if (Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
-
   st->ended = true;
-  js_set(js, st->obj, "writable", js_false);
-  stream_readable_push(js, st->obj, js_mknull(), js_mkundef());
-  eventemitter_emit_args(js, st->obj, "finish", NULL, 0);
-
-  ant_value_t cb = pick_callback(args, nargs);
-  if (is_callable(cb))
-    sv_vm_call(js->vm, js, cb, js_mkundef(), NULL, 0, NULL, js_mkundef());
-
-  return self;
+  
+  return zlib_finish_callback(js, cb, r);
 }
 
 static ant_value_t js_zlib_flush(ant_params_t) {
@@ -610,7 +582,6 @@ static ant_value_t js_zlib__destroy(ant_params_t) {
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid zlib stream");
 
   st->destroyed = true;
-  js_set(js, st->obj, "writable", js_false);
   zlib_stream_release(st);
   
   if (nargs > 1 && is_callable(args[1]))
@@ -681,15 +652,21 @@ static ant_value_t zlib_create_stream(ant_t *js, zlib_kind_t kind, ant_value_t o
     }
   }
 
-  ant_value_t obj = Ant_Object_CreateBare(js);
-  if (kind >= 0 && kind < ZLIB_KIND_COUNT && is_object_type(js->builtins.zlib_protos[kind]))
-    js_set_proto_init(obj, js->builtins.zlib_protos[kind]);
-  else if (is_object_type(js->builtins.zlib_transform_proto)) js_set_proto_init(obj, js->builtins.zlib_transform_proto);
+  ant_value_t proto = 
+    kind >= 0 && kind < ZLIB_KIND_COUNT && 
+    is_object_type(js->builtins.zlib_protos[kind])
+      ? js->builtins.zlib_protos[kind]
+      : js->builtins.zlib_transform_proto;
+  
+  ant_value_t obj = stream_construct_duplex(js, proto, opts_val, js_mkundef());
+  if (is_err(obj)) {
+    zlib_stream_release(st);
+    free(st);
+    return obj;
+  }
 
   js_set_native(obj, st, ZLIB_STREAM_TAG);
-
-  stream_init_readable_object(js, obj, opts_val);
-  js_set(js, obj, "writable", js_true);
+  stream_set_attached_state(obj, st, zlib_stream_finalizer);
   js_set(js, obj, "_processChunk", Ant_Function_Create(js_zlib_process_chunk));
 
   ant_value_t handle_obj = Ant_Object_CreateBare(js);
@@ -697,8 +674,6 @@ static ant_value_t zlib_create_stream(ant_t *js, zlib_kind_t kind, ant_value_t o
   js_set(js, obj, "_handle", handle_obj);
 
   st->obj = obj;
-  js_set_finalizer(obj, zlib_stream_finalizer);
-  
   return obj;
 }
 
@@ -1156,15 +1131,15 @@ static void zlib_init_proto(ant_t *js) {
   if (js->builtins.zlib_transform_proto) return;
 
   js->builtins.zlib_transform_proto = Ant_Object_CreateBare(js);
-  js_set_proto_init(js->builtins.zlib_transform_proto, stream_readable_prototype(js));
+  js_set_proto_init(js->builtins.zlib_transform_proto, stream_transform_prototype(js));
 
-  js_set(js, js->builtins.zlib_transform_proto, "write",    Ant_Function_Create(js_zlib_write));
-  js_set(js, js->builtins.zlib_transform_proto, "end",      Ant_Function_Create(js_zlib_end));
+  js_set(js, js->builtins.zlib_transform_proto, "_transform", Ant_Function_CreateWithArity(js_zlib__transform, 3));
+  js_set(js, js->builtins.zlib_transform_proto, "_flush", Ant_Function_CreateWithArity(js_zlib__flush, 1));
   js_set(js, js->builtins.zlib_transform_proto, "_destroy", Ant_Function_Create(js_zlib__destroy));
-  js_set(js, js->builtins.zlib_transform_proto, "close",    Ant_Function_Create(js_zlib_close));
-  js_set(js, js->builtins.zlib_transform_proto, "flush",    Ant_Function_Create(js_zlib_flush));
-  js_set(js, js->builtins.zlib_transform_proto, "params",   Ant_Function_Create(js_zlib_params));
-  js_set(js, js->builtins.zlib_transform_proto, "reset",    Ant_Function_Create(js_zlib_reset));
+  js_set(js, js->builtins.zlib_transform_proto, "close", Ant_Function_Create(js_zlib_close));
+  js_set(js, js->builtins.zlib_transform_proto, "flush", Ant_Function_Create(js_zlib_flush));
+  js_set(js, js->builtins.zlib_transform_proto, "params", Ant_Function_Create(js_zlib_params));
+  js_set(js, js->builtins.zlib_transform_proto, "reset", Ant_Function_Create(js_zlib_reset));
 
   js_set_getter_desc(js, js->builtins.zlib_transform_proto, "bytesWritten", 12,
   Ant_Function_Create(js_zlib_get_bytes_written), JS_DESC_C);

@@ -249,7 +249,7 @@ static ant_value_t js_stats_fn(ant_params_t) {
   js_set(js, alloc, "exotic", js_mknum((double)exotic_bytes));
   js_set(js, alloc, "arrays", js_mknum((double)js->alloc_bytes.arrays));
   
-  size_t shape_bytes = ant_shape_total_bytes();
+  size_t shape_bytes = ant_shape_total_bytes(js);
   js_set(js, alloc, "shapes", js_mknum((double)shape_bytes));
   js_set(js, alloc, "closures", js_mknum((double)js->alloc_bytes.closures));
   js_set(js, alloc, "upvalues", js_mknum((double)js->alloc_bytes.upvalues));

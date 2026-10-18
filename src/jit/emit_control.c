@@ -72,7 +72,9 @@ void jit_emit_await_exit(jit_compile_t *c, int n_pop, int n_push) {
   vstack_flush_to_boxed(&c->vs, c->ctx, c->jit_func, c->r_d_slot);
   if (c->op == OP_AWAIT_RETURN && c->r_async_direct && c->vs.sp > 0) {
     MIR_label_t framed = MIR_new_label(c->ctx);
-    MIR_reg_t r_res = MIR_new_func_reg(c->ctx, c->jit_func->u.func, MIR_JSVAL, "await_return_res");
+    char name[32];
+    snprintf(name, sizeof(name), "await_return_res_%d", mir_next_reg_site(&c->reg_site_n));
+    MIR_reg_t r_res = MIR_new_func_reg(c->ctx, c->jit_func->u.func, MIR_JSVAL, name);
     MIR_append_insn(c->ctx, c->jit_func, MIR_new_insn(c->ctx, MIR_BEQ,
       MIR_new_label_op(c->ctx, framed), MIR_new_reg_op(c->ctx, c->r_async_direct), MIR_new_int_op(c->ctx, 0)));
     MIR_append_insn(c->ctx, c->jit_func, MIR_new_call_insn(c->ctx, 7,

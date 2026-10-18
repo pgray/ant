@@ -262,6 +262,7 @@ export function targets() {
     'test_object_site_lookup.cjs',
     'test_object_spread_sources.cjs',
     'test_object_values_entries_semantics.cjs',
+    'test_perf_hooks_eld.mjs',
     'test_plain_object_index_access.cjs',
     'test_poly_field_ic.cjs',
     'test_poly_field_store.cjs',
@@ -301,6 +302,7 @@ export function targets() {
     'test_spawn_sync_stdin_pump.cjs',
     'test_spread_memory_pressure.cjs',
     'test_startup_time.cjs',
+    'test_stream_async_iterator.mjs',
     'test_stream_handled_errors.cjs',
     'test_stream_readable_to_web.cjs',
     'test_string_index_keys_utf16.cjs',
@@ -345,6 +347,7 @@ export function targets() {
     'test_with_scopes.cjs',
     'test_worker_threads.mjs',
     'test_zlib_callback_throws.cjs',
+    'test_zlib_stream_instanceof.mjs',
   ];
   for (const f of REGRESSION_TESTS) list.push({ group: 'tests', type: 'test', name: `tests/${f}`, entry: `tests/${f}` });
 

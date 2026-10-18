@@ -71,6 +71,7 @@ typedef struct ant_port_binding ant_port_binding_t;
 typedef struct broadcast_member broadcast_member_t;
 typedef struct ant_worker       ant_worker_t;
 typedef struct navigator_locks  navigator_locks_t;
+typedef struct perf_eld_monitor perf_eld_monitor_t;
 
 typedef uint64_t ant_offset_t;
 typedef uint64_t ant_value_t;

@@ -4,7 +4,14 @@
 #include "types.h"
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
+
+typedef struct ant_shape_heap {
+  size_t bytes;
+  size_t pool_len;
+  void *pool;
+} ant_shape_heap_t;
 
 #ifndef ANT_INOBJ_MAX_SLOTS
 #define ANT_INOBJ_MAX_SLOTS 4u
@@ -105,11 +112,9 @@ bool ant_shape_clear_accessor_slot(ant_t *js, ant_shape_t *shape, uint32_t slot)
 void ant_gc_shapes_begin(ant_t *js);
 void ant_gc_shapes_mark(ant_t *js, ant_shape_t *shape);
 bool ant_gc_shapes_sweep(ant_t *js);
-
 void ant_shapes_destroy(ant_t *js);
-void ant_shapes_thread_cleanup(void);
 
-size_t ant_shape_total_bytes(void);
+size_t ant_shape_total_bytes(ant_t *js);
 size_t ant_shape_storage_bytes(const ant_shape_t *shape);
 
 #endif
