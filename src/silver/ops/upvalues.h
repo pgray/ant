@@ -12,7 +12,7 @@ static inline ant_value_t sv_mkprop_interned_exact_key(
   const char *interned_key, const char *fallback_key,
   size_t fallback_len, ant_value_t val, uint8_t attrs
 ) {
-  if (!interned_key) interned_key = intern_string(fallback_key, fallback_len);
+  if (!interned_key) interned_key = intern_string(js, fallback_key, fallback_len);
   if (!interned_key) return js_mkerr(js, "oom");
   return mkprop_interned_exact(js, obj, interned_key, val, attrs);
 }

@@ -30,7 +30,7 @@ static int run_bundle_entry(ant_t *js, const ant_bundle_module_t *entry) {
   } else js_set_global_builtin(js, "__dirname", js_mkundef());
   js_set_global_builtin(js, "__filename", js_mkstr(js, key, strlen(key)));
 
-  const char *stable_key = intern_string(key, strlen(key));
+  const char *stable_key = intern_string(js, key, strlen(key));
   if (!stable_key) stable_key = key;
 
   js_set_filename(js, stable_key);

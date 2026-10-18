@@ -35,7 +35,7 @@ bool sv_global_lexical_lookup(
   ant_t *js, const char *name, size_t len, ant_value_t *out
 ) {
   if (!js || !name || !js->global_lexical_count) return false;
-  const char *interned = intern_find(name, len);
+  const char *interned = intern_find(js, name, len);
   
   if (!interned) return false;
   const ant_global_lexical_t *lex = sv_global_lexical(js, interned);
@@ -47,7 +47,7 @@ bool sv_global_lexical_lookup(
 }
 
 bool sv_eval_env_shadows_global(ant_t *js, ant_value_t env, const char *name, uint32_t len) {
-  const char *interned = intern_string(name, len);
+  const char *interned = intern_string(js, name, len);
   
   for (ant_value_t cur = env; is_object_type(cur) && cur != js->global; cur = js_get_proto(js, cur)) {
     if (sv_eval_env_find_binding(sv_eval_env_state(cur), name, len)) return true;

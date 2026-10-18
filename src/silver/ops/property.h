@@ -643,7 +643,7 @@ static inline bool sv_try_get_data_prop_no_effect(
   ant_value_t *out
 ) {
   if (!str || !out) return false;
-  const char *interned = intern_find(str, len);
+  const char *interned = intern_find(js, str, len);
   if (!interned) return false;
   return sv_try_get_data_prop_no_effect_interned(js, obj, interned, len, out);
 }
@@ -1143,7 +1143,7 @@ static inline bool sv_try_symbol_description_ic(
     return true;
   }
 
-  const char *interned = a->str ? a->str : intern_string("description", 11);
+  const char *interned = a->str ? a->str : intern_string(js, "description", 11);
   if (!interned) return false;
   
   if (receiver && ant_shape_lookup_interned(receiver->shape, interned) >= 0) return false;

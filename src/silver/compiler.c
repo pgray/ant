@@ -532,8 +532,9 @@ static bool atom_index_reserve(sv_compiler_t *c) {
 }
 
 static int add_atom(sv_compiler_t *c, const char *str, uint32_t len) {
-  const char *interned = intern_string(str, (size_t)len);
+  const char *interned = intern_string(c->js, str, (size_t)len);
   const char *stored = interned;
+  
   if (!stored) {
     char *copy = code_arena_bump(c->js, len);
     memcpy(copy, str, len);
@@ -1322,11 +1323,13 @@ static bool eval_scope_builder_add_binding(
   uint32_t binding_index = scope->count++;
   if (meta->import_kind == SV_IMPORT_BIND_DEFAULT) kind |= SV_EVAL_BIND_IMPORT_DEFAULT;
   if (meta->import_kind == SV_IMPORT_BIND_NAMED) kind |= SV_EVAL_BIND_IMPORT_NAMED;
+  
   scope->bindings[binding_index] = (sv_runtime_binding_t){
     name, len, index, kind, is_const,
-    meta->import_name ? intern_string(meta->import_name, meta->import_name_len) : NULL,
+    meta->import_name ? intern_string(c->js, meta->import_name, meta->import_name_len) : NULL,
     meta->import_name_len
   };
+  
   *lookup_slot = binding_index;
   return true;
 }

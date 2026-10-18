@@ -270,11 +270,13 @@ static ant_value_t worker_run_entry(ant_t *js, ant_worker_t *w) {
       js_set_global_builtin(js, "__dirname", js_mkstr(js, dir, strlen(dir)));
       free(copy);
     }
-    const char *interned = intern_string(w->entry, strlen(w->entry));
+    
+    const char *interned = intern_string(js, w->entry, strlen(w->entry));
     js_set_filename(js, interned ? interned : w->entry);
     js_setup_import_meta(js, interned ? interned : w->entry);
     specifier = js_esm_make_file_url(js, w->entry);
   }
+  
   js_set_global_builtin(js, "__filename", js_mkstr(js, w->entry, strlen(w->entry)));
   return js_esm_import_sync(js, specifier);
 }

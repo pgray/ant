@@ -696,7 +696,7 @@ static ant_value_t vm_script_init(ant_t *js, ant_value_t script, ant_value_t cod
     if (vtype(filename) == kTypeString) {
       size_t len = 0;
       const char *text = js_getstr(js, filename, &len);
-      st->filename = intern_string(text, len);
+      st->filename = intern_string(js, text, len);
       if (!st->filename) return js_mkerr(js, "out of memory");
     } else if (vtype(filename) != kTypeUndefined) return Ant_Error_CreateInvalidArgType(js, "options.filename", "of type string", filename);
 
@@ -934,7 +934,7 @@ static ant_value_t vm_compile_function(ant_params_t) {
     if (vtype(name) == kTypeString) {
       size_t len = 0;
       const char *text = js_getstr(js, name, &len);
-      filename = intern_string(text, len);
+      filename = intern_string(js, text, len);
       if (!filename) return js_mkerr(js, "out of memory");
     } else if (vtype(name) != kTypeUndefined) return Ant_Error_CreateInvalidArgType(js, "options.filename", "of type string", name);
   }

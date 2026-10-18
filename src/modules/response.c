@@ -738,8 +738,9 @@ static bool response_init_later_fields_absent(
       vtype(object_proto->proto) != kTypeNull)
     return false;
 
-  const char *status = intern_find("status", 6);
-  const char *status_text = intern_find("statusText", 10);
+  const char *status = intern_find(js, "status", 6);
+  const char *status_text = intern_find(js, "statusText", 10);
+  
   return (!status || ant_shape_lookup_interned(object_proto->shape, status) < 0) &&
     (!status_text || ant_shape_lookup_interned(object_proto->shape, status_text) < 0);
 }

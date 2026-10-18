@@ -376,7 +376,7 @@ static int execute_module(ant_t *js, const char *filename, const char *cron_peri
     specifier = js_esm_make_file_url(js, use_path);
   }
 
-  const char *interned = intern_string(use_path, strlen(use_path));
+  const char *interned = intern_string(js, use_path, strlen(use_path));
   if (interned) stable_use_path = interned;
   else stable_use_path = use_path;
   

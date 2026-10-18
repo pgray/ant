@@ -130,11 +130,11 @@ static bool regexp_result_shape_init(
   if (cache->shape) return true;
   if (!array || !array->shape) return false;
 
-  const char *index_key = intern_string("index", 5);
-  const char *input_key = intern_string("input", 5);
-  const char *groups_key = intern_string("groups", 6);
+  const char *index_key = intern_string(js, "index", 5);
+  const char *input_key = intern_string(js, "input", 5);
+  const char *groups_key = intern_string(js, "groups", 6);
   const char *indices_key = with_indices
-    ? intern_string("indices", 7)
+    ? intern_string(js, "indices", 7)
     : NULL;
   if (!index_key || !input_key || !groups_key || (with_indices && !indices_key))
     return false;
@@ -961,7 +961,7 @@ static bool regexp_init_last_index(ant_t *js, ant_value_t value) {
   if (!cache->shape) {
     if (ant_shape_count(obj->shape) != 0) return false;
     ant_shape_t *shape = ant_shape_clone(obj->shape);
-    const char *key = intern_string("lastIndex", 9);
+    const char *key = intern_string(js, "lastIndex", 9);
     uint32_t slot;
     
     if (!shape) return false;
@@ -1938,12 +1938,13 @@ static __attribute__((always_inline)) inline int compiled_regex_run(
 }
 
 static const ant_shape_prop_t *regexp_lastindex_lookup_own_property(
+  ant_t *js,
   ant_object_t *obj,
   uint32_t *out_slot
 ) {
   if (!obj || !obj->shape) return NULL;
 
-  const char *key = intern_string("lastIndex", 9);
+  const char *key = intern_string(js, "lastIndex", 9);
   if (!key) return NULL;
   int32_t found = ant_shape_lookup_interned(obj->shape, key);
   if (found < 0 || (uint32_t)found >= obj->prop_count) return NULL;
@@ -1953,11 +1954,11 @@ static const ant_shape_prop_t *regexp_lastindex_lookup_own_property(
   return ant_shape_prop_at(obj->shape, slot);
 }
 
-static bool regexp_lastindex_is_writable(ant_value_t value) {
+static bool regexp_lastindex_is_writable(ant_t *js, ant_value_t value) {
   ant_object_t *obj = js_obj_ptr(value);
   if (!obj) return false;
 
-  const ant_shape_prop_t *prop = regexp_lastindex_lookup_own_property(obj, NULL);
+  const ant_shape_prop_t *prop = regexp_lastindex_lookup_own_property(js, obj, NULL);
   if (!prop) return true;
 
   if (prop->has_getter || prop->has_setter) return false;
@@ -1989,6 +1990,7 @@ static bool regexp_lastindex_fast_location(
 }
 
 static void regexp_lastindex_cache_location(
+  ant_t *js,
   compiled_regex_cache_entry_t *compiled,
   ant_value_t regexp
 ) {
@@ -2002,7 +2004,7 @@ static void regexp_lastindex_cache_location(
 
   uint32_t slot;
   const ant_shape_prop_t *prop = regexp_lastindex_lookup_own_property(
-    obj, &slot
+    js, obj, &slot
   );
   if (
     !prop || prop->has_getter || prop->has_setter ||
@@ -2036,7 +2038,7 @@ static ant_value_t regexp_set_lastindex(
   ant_object_t *receiver = js_obj_ptr(regexp);
   if (!is_proxy(regexp)) {
     const ant_shape_prop_t *prop = regexp_lastindex_lookup_own_property(
-      receiver, NULL
+      js, receiver, NULL
     );
     if (
       prop && !prop->has_getter && !prop->has_setter &&
@@ -2182,7 +2184,7 @@ ant_value_t regexp_exec_internal(ant_t *js, ant_value_t regexp, ant_value_t str_
   compiled_regex_cache_entry_t *compiled =
     regex_get_or_compile(js, regexp, flags_mask, compiled_hint);
   if (!compiled) return js_mknull();
-  regexp_lastindex_cache_location(compiled, regexp);
+  regexp_lastindex_cache_location(js, compiled, regexp);
 
   regex_match_scope_t match_scope;
   PCRE2_SIZE *ovector;
@@ -2560,7 +2562,7 @@ static const regexp_flag_info_t regexp_flag_info[REGEXP_FLAG_COUNT] = {
 };
 
 static bool regexp_flag_getter_is_builtin(ant_t *js, const ant_shape_t *own_shape, const regexp_flag_info_t *flag) {
-  const char *key = intern_string(flag->name, flag->len);
+  const char *key = intern_string(js, flag->name, flag->len);
   if (!key || (own_shape && ant_shape_lookup_interned(own_shape, key) >= 0)) return false;
   
   ant_object_t *proto = js_obj_ptr(js->builtins.regexp_proto);
@@ -2685,7 +2687,7 @@ static bool regexp_prepare_builtin_exec(
     goto reject;
   }
 
-  regexp_lastindex_cache_location(compiled, rx);
+  regexp_lastindex_cache_location(js, compiled, rx);
   ant_object_t *lastindex_obj;
   uint32_t lastindex_slot;
   if (!regexp_lastindex_fast_location(
@@ -3065,7 +3067,7 @@ static ant_value_t regexp_replace_plain_literal_fast(
   
   if (
     !regexp_plain_literal_pattern(js, rx, flags_mask, compiled, &needle, &needle_len) ||
-    !regexp_lastindex_is_writable(rx) ||
+    !regexp_lastindex_is_writable(js, rx) ||
     !regexp_has_builtin_exec(js, rx)
   ) return js_mkundef();
 
@@ -3294,7 +3296,7 @@ static ant_value_t regexp_search_plain_literal_fast(
   
   if (
     !regexp_plain_literal_pattern(js, rx, flags_mask, compiled, &needle, &needle_len) ||
-    !regexp_lastindex_is_writable(rx) ||
+    !regexp_lastindex_is_writable(js, rx) ||
     !regexp_has_builtin_exec(js, rx)
   ) return js_mkundef();
 

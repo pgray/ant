@@ -310,8 +310,8 @@ static inline size_t utf8_export_length(const char *str, size_t str_len) {
   return utf8_export_length_slow(str, str_len);
 }
 
-const char *intern_string(const char *str, size_t len);
-const char *intern_find(const char *str, size_t len);
+const char *intern_string(ant_t *js, const char *str, size_t len);
+const char *intern_find(ant_t *js, const char *str, size_t len);
 size_t intern_length(const char *interned);
 
 js_cstr_t js_to_cstr(ant_t *js, ant_value_t value, char *stack_buf, size_t stack_size);
@@ -335,7 +335,7 @@ size_t utf8_export_into(
 );
 
 uint64_t gc_strings_sweep_epoch(void);
-js_intern_stats_t js_intern_stats(void);
+js_intern_stats_t js_intern_stats(ant_t *js);
 
 void gc_strings_begin(ant_t *js);
 void gc_strings_sweep(ant_t *js);

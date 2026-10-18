@@ -549,8 +549,9 @@ static ant_value_t crypto_get_hmac_digest(
   if (!is_object_type(algorithm))
     return js_mkerr_typed(js, JS_ERR_TYPE, "HMAC algorithm must be an object");
 
-  ant_value_t hash = crypto_algorithm_member(js, algorithm, intern_string("hash", 4));
+  ant_value_t hash = crypto_algorithm_member(js, algorithm, intern_string(js, "hash", 4));
   if (is_err(hash)) return hash;
+  
   if (vtype(hash) == kTypeUndefined)
     return js_mkerr_typed(js, JS_ERR_TYPE, "HMAC algorithm.hash is required");
 

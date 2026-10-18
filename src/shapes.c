@@ -725,7 +725,7 @@ ant_shape_t *ant_shape_index_layout(ant_t *js, ant_shape_t **cache, const ant_sh
     char key[16];
     int len = snprintf(key, sizeof(key), "%u", i);
     
-    const char *interned = intern_string(key, (size_t)len);
+    const char *interned = intern_string(js, key, (size_t)len);
     uint32_t slot = 0;
     
     if (!interned || !ant_shape_add_interned(js, shape, interned, ANT_PROP_ATTR_DEFAULT, &slot) || slot != i) {

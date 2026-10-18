@@ -273,7 +273,7 @@ static ant_value_t js_stats_fn(ant_params_t) {
   js_set(js, ext, "total", js_mknum((double)external_total));
   js_set(js, result, "external", ext);
   
-  js_intern_stats_t intern_stats = js_intern_stats();
+  js_intern_stats_t intern_stats = js_intern_stats(js);
   ant_value_t intern = Ant_Object_Create(js);
   
   js_set(js, intern, "count", js_mknum((double)intern_stats.count));

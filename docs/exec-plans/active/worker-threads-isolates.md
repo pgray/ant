@@ -22,11 +22,14 @@ gone.
   points at its isolate's heap, so release and clone need no isolate argument and
   no thread-local access (thread-local storage cost 0.5–1.2% instructions on
   shape churn on macOS).
-- The string intern table stays process-wide, carried over from master; nothing
-  requires interned pointers to match across isolates, so a per-isolate table is
-  a possible follow-up. Lookups are lock-free over an open-addressed
-  table; inserts take a mutex and growth publishes a new table, so readers on an
-  old table see valid entries and fall back to the locked path on a miss.
+- The string intern table is per isolate (`js->intern_table`): an open-addressed
+  table with no atomics or locks, whose entries come from a bump arena of 64 KiB
+  chunks and are freed with the isolate in `js_destroy`. Nothing compares interned
+  pointers across isolates (values cross only through the wire serializer, which
+  copies bytes), and a worker's keys no longer stay in a process-wide table after
+  it exits. The cfunc registry keys derived records by name pointer, but only
+  compares those pointers after the owning realm is released. On master the table
+  was process-wide and its entries were never freed.
 - Module state that held per-isolate resources moved onto `ant_t` or behind a
   mutex: rpc servers/clients, sandboxes, lmdb handles and prototypes, N-API env
   (externals, wraps, adjust-external-memory), navigator locks, stream/net

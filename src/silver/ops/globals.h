@@ -118,7 +118,7 @@ static inline ant_value_t sv_env_get(
 ) {
   if (!str) return js_mkundef();
 
-  const char *interned = intern_string(str, len);
+  const char *interned = intern_string(js, str, len);
   if (!interned) return js_mkundef();
 
   ant_value_t val = js_mkundef();

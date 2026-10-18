@@ -137,11 +137,20 @@ typedef struct interned_string {
   size_t len;
 } interned_string_t;
 
-typedef struct intern_table {
+typedef struct intern_chunk {
+  struct intern_chunk *next;
+  size_t used;
+  size_t cap;
+  alignas(max_align_t) unsigned char data[];
+} intern_chunk_t;
+
+struct ant_intern_table {
   size_t mask;
-  struct intern_table *retired;
-  _Atomic(interned_string_t *) slots[];
-} intern_table_t;
+  size_t count;
+  size_t bytes;
+  intern_chunk_t *chunks;
+  interned_string_t *slots[];
+};
 
 typedef struct {
   uint64_t gc_epoch;
@@ -151,50 +160,72 @@ typedef struct {
   char desc[];
 } ant_symbol_heap_t;
 
-static _Atomic size_t intern_count = 0;
-static _Atomic size_t intern_bytes = 0;
+static constexpr size_t INTERN_TABLE_MIN = 2048;
+static constexpr size_t INTERN_CHUNK_SIZE = 64 * 1024;
 
-static _Atomic(intern_table_t *) intern_table = NULL;
-static ant_mutex_t intern_lock = ANT_MUTEX_INIT;
-
-#define INTERN_TABLE_MIN 2048u
-
-static intern_table_t *intern_table_alloc(size_t cap) {
-  intern_table_t *t = calloc(1, sizeof(*t) + cap * sizeof(t->slots[0]));
+static ant_intern_table_t *intern_table_alloc(size_t cap) {
+  ant_intern_table_t *t = calloc(1, sizeof(*t) + cap * sizeof(t->slots[0]));
   if (t) t->mask = cap - 1;
   return t;
 }
 
-static void intern_table_place(intern_table_t *t, interned_string_t *entry) {
+static void intern_table_place(ant_intern_table_t *t, interned_string_t *entry) {
   size_t i = (size_t)entry->hash & t->mask;
-  while (atomic_load_explicit(&t->slots[i], memory_order_relaxed)) i = (i + 1) & t->mask;
-  atomic_store_explicit(&t->slots[i], entry, memory_order_release);
+  while (t->slots[i]) i = (i + 1) & t->mask;
+  t->slots[i] = entry;
 }
 
-static interned_string_t *intern_table_probe(intern_table_t *t, uint64_t h, const char *str, size_t len) {
+static interned_string_t *intern_table_probe(const ant_intern_table_t *t, uint64_t h, const char *str, size_t len) {
   for (size_t i = (size_t)h & t->mask;; i = (i + 1) & t->mask) {
-    interned_string_t *e = atomic_load_explicit(&t->slots[i], memory_order_acquire);
+    interned_string_t *e = t->slots[i];
     if (!e) return NULL;
     if (e->hash == h && e->len == len && memcmp(e->str, str, len) == 0) return e;
   }
 }
 
-static intern_table_t *intern_table_reserve(intern_table_t *t, size_t count) {
-  if (t && (count + 1) * 2 < t->mask + 1) return t;
+static ant_intern_table_t *intern_table_reserve(ant_t *js) {
+  ant_intern_table_t *t = js->intern.table;
+  if (t && (t->count + 1) * 2 < t->mask + 1) return t;
 
-  size_t cap = t ? (t->mask + 1) * 2 : INTERN_TABLE_MIN;
-  intern_table_t *next = intern_table_alloc(cap);
-  if (!next) return (t && count < t->mask) ? t : NULL;
+  ant_intern_table_t *next = intern_table_alloc(t ? (t->mask + 1) * 2 : INTERN_TABLE_MIN);
+  if (!next) return t && t->count < t->mask ? t : NULL;
 
-  if (t) for (size_t i = 0; i <= t->mask; i++) {
-    interned_string_t *e = atomic_load_explicit(&t->slots[i], memory_order_relaxed);
-    if (e) intern_table_place(next, e);
+  if (t) {
+    for (size_t i = 0; i <= t->mask; i++) if (t->slots[i]) intern_table_place(next, t->slots[i]);
+    next->count = t->count;
+    next->bytes = t->bytes;
+    next->chunks = t->chunks;
+    free(t);
   }
-
-  next->retired = t;
-  atomic_store_explicit(&intern_table, next, memory_order_release);
-  
+  js->intern.table = next;
   return next;
+}
+
+static interned_string_t *intern_entry_alloc(ant_intern_table_t *t, size_t size) {
+  size = (size + alignof(interned_string_t) - 1) & ~(alignof(interned_string_t) - 1);
+  intern_chunk_t *chunk = t->chunks;
+  if (!chunk || chunk->cap - chunk->used < size) {
+    size_t cap = size > INTERN_CHUNK_SIZE ? size : INTERN_CHUNK_SIZE;
+    if (!(chunk = malloc(sizeof(*chunk) + cap))) return NULL;
+    chunk->next = t->chunks;
+    chunk->used = 0;
+    chunk->cap = cap;
+    t->chunks = chunk;
+  }
+  interned_string_t *entry = (interned_string_t *)(chunk->data + chunk->used);
+  chunk->used += size;
+  return entry;
+}
+
+static void intern_table_free(ant_t *js) {
+  ant_intern_table_t *t = js->intern.table;
+  if (!t) return;
+  for (intern_chunk_t *chunk = t->chunks, *next; chunk; chunk = next) {
+    next = chunk->next;
+    free(chunk);
+  }
+  free(t);
+  js->intern.table = NULL;
 }
 
 ant_object_t *js_obj_ptr(ant_value_t v) {
@@ -1906,50 +1937,42 @@ size_t strstring(ant_t *js, ant_value_t value, char *buf, size_t len) {
   return n;
 }
 
-const char *intern_find(const char *str, size_t len) {
-  intern_table_t *t = atomic_load_explicit(&intern_table, memory_order_acquire);
+const char *intern_find(ant_t *js, const char *str, size_t len) {
+  ant_intern_table_t *t = js->intern.table;
   if (!t) return NULL;
   interned_string_t *e = intern_table_probe(t, hash_key(str, len), str, len);
   return e ? e->str : NULL;
 }
 
-const char *intern_string(const char *str, size_t len) {
+const char *intern_string(ant_t *js, const char *str, size_t len) {
   uint64_t h = hash_key(str, len);
-  intern_table_t *t = atomic_load_explicit(&intern_table, memory_order_acquire);
+  ant_intern_table_t *t = js->intern.table;
   interned_string_t *e = t ? intern_table_probe(t, h, str, len) : NULL;
+  
   if (e) return e->str;
-
-  ant_mutex_lock(&intern_lock);
-  t = atomic_load_explicit(&intern_table, memory_order_relaxed);
-  e = t ? intern_table_probe(t, h, str, len) : NULL;
-  if (e) goto done;
-
-  size_t count = atomic_load_explicit(&intern_count, memory_order_relaxed);
-  if (!(t = intern_table_reserve(t, count))) goto done;
+  if (!(t = intern_table_reserve(js))) return NULL;
 
   size_t alloc_size = sizeof(interned_string_t) + len + 1;
-  if (!(e = calloc(1, alloc_size))) goto done;
-  
+  if (!(e = intern_entry_alloc(t, alloc_size))) return NULL;
+
   e->str = (char *)(e + 1);
   memcpy(e->str, str, len);
   e->str[len] = '\0';
   e->len = len;
   e->hash = h;
   intern_table_place(t, e);
-  
-  atomic_store_explicit(&intern_count, count + 1, memory_order_relaxed);
-  atomic_fetch_add_explicit(&intern_bytes, alloc_size, memory_order_relaxed);
 
-done:
-  ant_mutex_unlock(&intern_lock);
-  return e ? e->str : NULL;
+  t->count++;
+  t->bytes += alloc_size;
+  
+  return e->str;
 }
 
 const char *intern_find_flat(ant_t *js, const char *bytes, size_t len) {
   ant_intern_memo_entry_t *entry = &js->intern_memo[((uintptr_t)bytes >> 4) & (INTERN_MEMO_SIZE - 1)];
   if (entry->bytes == bytes) return entry->interned;
-  
-  const char *interned = intern_find(bytes, len);
+
+  const char *interned = intern_find(js, bytes, len);
   if (interned) *entry = (ant_intern_memo_entry_t){ bytes, interned };
   
   return interned;
@@ -1959,11 +1982,9 @@ size_t intern_length(const char *interned) {
   return ((const interned_string_t *)(const void *)interned)[-1].len;
 }
 
-js_intern_stats_t js_intern_stats(void) {
-  return (js_intern_stats_t){ 
-    .count = atomic_load_explicit(&intern_count, memory_order_relaxed), 
-    .bytes = atomic_load_explicit(&intern_bytes, memory_order_relaxed) 
-  };
+js_intern_stats_t js_intern_stats(ant_t *js) {
+  const ant_intern_table_t *t = js->intern.table;
+  return (js_intern_stats_t){ .count = t ? t->count : 0, .bytes = t ? t->bytes : 0 };
 }
 
 struct func_format {
@@ -2972,7 +2993,7 @@ static ant_value_t arguments_template(ant_t *js, bool is_strict, bool has_iterat
   
   ANT_ASSERT(
     ant_shape_lookup_interned(ptr->shape, js->intern.length) == ANT_ARGUMENTS_SLOT_LENGTH &&
-    ant_shape_lookup_interned(ptr->shape, intern_string("callee", 6)) == ANT_ARGUMENTS_SLOT_CALLEE,
+    ant_shape_lookup_interned(ptr->shape, intern_string(js, "callee", 6)) == ANT_ARGUMENTS_SLOT_CALLEE,
     "arguments template slots out of order"
   );
   
@@ -3394,29 +3415,29 @@ static inline bool is_nonconfig_prop(ant_prop_loc_t loc) {
 }
 
 static void js_init_intern_cache(ant_t *js) {
-  js->intern.length = intern_string("length", 6);
-  js->intern.buffer = intern_string("buffer", 6);
-  js->intern.prototype = intern_string("prototype", 9);
-  js->intern.exec = intern_string("exec", 4);
-  js->intern.replace = intern_string("replace", 7);
-  js->intern.constructor = intern_string("constructor", 11);
-  js->intern.promise = intern_string("Promise", 7);
-  js->intern.resolve = intern_string("resolve", 7);
-  js->intern.then = intern_string("then", 4);
-  js->intern.name = intern_string("name", 4);
-  js->intern.message = intern_string("message", 7);
-  js->intern.done = intern_string("done", 4);
-  js->intern.value = intern_string("value", 5);
-  js->intern.get = intern_string("get", 3);
-  js->intern.set = intern_string("set", 3);
-  js->intern.enumerable = intern_string("enumerable", 10);
-  js->intern.configurable = intern_string("configurable", 12);
-  js->intern.writable = intern_string("writable", 8);
-  js->intern.arguments = intern_string("arguments", 9);
-  js->intern.callee = intern_string("callee", 6);
-  js->intern.next = intern_string("next", 4);
-  js->intern.define_property = intern_string("defineProperty", 14);
-  js->intern.get_own_property_descriptor = intern_string("getOwnPropertyDescriptor", 24);
+  js->intern.length = intern_string(js, "length", 6);
+  js->intern.buffer = intern_string(js, "buffer", 6);
+  js->intern.prototype = intern_string(js, "prototype", 9);
+  js->intern.exec = intern_string(js, "exec", 4);
+  js->intern.replace = intern_string(js, "replace", 7);
+  js->intern.constructor = intern_string(js, "constructor", 11);
+  js->intern.promise = intern_string(js, "Promise", 7);
+  js->intern.resolve = intern_string(js, "resolve", 7);
+  js->intern.then = intern_string(js, "then", 4);
+  js->intern.name = intern_string(js, "name", 4);
+  js->intern.message = intern_string(js, "message", 7);
+  js->intern.done = intern_string(js, "done", 4);
+  js->intern.value = intern_string(js, "value", 5);
+  js->intern.get = intern_string(js, "get", 3);
+  js->intern.set = intern_string(js, "set", 3);
+  js->intern.enumerable = intern_string(js, "enumerable", 10);
+  js->intern.configurable = intern_string(js, "configurable", 12);
+  js->intern.writable = intern_string(js, "writable", 8);
+  js->intern.arguments = intern_string(js, "arguments", 9);
+  js->intern.callee = intern_string(js, "callee", 6);
+  js->intern.next = intern_string(js, "next", 4);
+  js->intern.define_property = intern_string(js, "defineProperty", 14);
+  js->intern.get_own_property_descriptor = intern_string(js, "getOwnPropertyDescriptor", 24);
 }
 
 typedef enum {
@@ -3472,7 +3493,7 @@ static ant_value_t mkprop_bytes_attrs_impl(
   ant_t *js, ant_value_t obj, const char *key, size_t key_len,
   ant_value_t v, uint8_t attrs, mkprop_mode_t mode
 ) {
-  const char *interned = intern_string(key, key_len);
+  const char *interned = intern_string(js, key, key_len);
   if (!interned) return js_mkerr(js, "oom");
   return mkprop_interned_attrs_impl(js, obj, interned, key_len, v, attrs, mode);
 }
@@ -3583,13 +3604,13 @@ static ant_value_t mkprop_interned_keyed(ant_t *js, ant_value_t obj, const char 
 }
 
 ant_value_t js_mkprop_fast(ant_t *js, ant_value_t obj, const char *key, size_t len, ant_value_t v) {
-  const char *interned = intern_string(key, len);
+  const char *interned = intern_string(js, key, len);
   if (!interned) return js_mkerr(js, "oom");
   return mkprop_interned(js, obj, interned, v, 0);
 }
 
 ant_value_t mkprop_append_fast(ant_t *js, ant_value_t obj, const char *key, size_t len, ant_value_t v) {
-  const char *interned = intern_string(key, len);
+  const char *interned = intern_string(js, key, len);
   if (!interned) return js_mkerr(js, "oom");
 
   obj = js_as_obj(obj);
@@ -4171,7 +4192,7 @@ static proto_index_property_t proto_index_property(ant_t *js, ant_value_t proto,
 
   char key[24];
   size_t klen = uint_to_str(key, sizeof(key), idx);
-  const char *interned = intern_find(key, klen);
+  const char *interned = intern_find(js, key, klen);
   int32_t slot = interned && ptr->shape ? ant_shape_lookup_interned(ptr->shape, interned) : -1;
   if (slot >= 0) {
     const ant_shape_prop_t *prop = ant_shape_prop_at(ptr->shape, (uint32_t)slot);
@@ -4376,7 +4397,7 @@ bool lookup_prop_meta(
     if (key_kind == PROP_META_SYMBOL) {
       slot = ant_shape_lookup_symbol(cur_ptr->shape, sym_off);
     } else {
-      const char *interned_key = intern_find(key, klen);
+      const char *interned_key = intern_find(js, key, klen);
       if (interned_key) slot = ant_shape_lookup_interned(cur_ptr->shape, interned_key);
     }
 
@@ -4414,7 +4435,7 @@ bool js_try_get_own_data_prop(ant_t *js, ant_value_t obj, const char *key, size_
   if (ptr && ptr->flags.is_exotic && is_proxy(as_obj)) return false;
 
   if (ptr && ptr->shape && !(real_array_obj_ptr(as_obj) && is_length_key(key, key_len))) {
-    const char *interned = intern_find(key, key_len);
+    const char *interned = intern_find(js, key, key_len);
     int32_t slot = interned ? ant_shape_lookup_interned(ptr->shape, interned) : -1;
     
     if (slot >= 0) {
@@ -4699,7 +4720,7 @@ static ant_value_t setprop_impl(ant_t *js, ant_value_t obj, ant_value_t k, ant_v
   ant_prop_loc_t existing = lkp(js, obj, key, klen);
   
   {
-    const char *interned_key = intern_string(key, (size_t)klen);
+    const char *interned_key = intern_string(js, key, (size_t)klen);
     bool found_desc = false;
     bool desc_on_receiver = false;
     bool desc_has_getter = false;
@@ -4809,7 +4830,7 @@ create_new:
     if (extensibility_error == js_false) return set_declined(declined, v);
   }
 
-  const char *interned_key = intern_string(key, (size_t)klen);
+  const char *interned_key = intern_string(js, key, (size_t)klen);
   if (!interned_key) return js_mkerr(js, "oom");
   ant_value_t result = keyed
     ? mkprop_interned_keyed(js, obj, interned_key, v)
@@ -4831,14 +4852,14 @@ ant_value_t js_setprop_keyed(ant_t *js, ant_value_t obj, ant_value_t k, ant_valu
 static inline const char *index_key_find(ant_t *js, uint32_t idx, char *buf, size_t *len) {
   if (idx < INTERN_INDEX_CACHE_SIZE && js->intern.idx[idx]) return js->intern.idx[idx];
   *len = uint_to_str(buf, 16, idx);
-  const char *interned = intern_find(buf, *len);
+  const char *interned = intern_find(js, buf, *len);
   if (interned && idx < INTERN_INDEX_CACHE_SIZE) js->intern.idx[idx] = interned;
   return interned;
 }
 
 static inline const char *index_key_intern(ant_t *js, uint32_t idx, char *buf, size_t *len) {
   if (!*len) *len = uint_to_str(buf, 16, idx);
-  const char *interned = intern_string(buf, *len);
+  const char *interned = intern_string(js, buf, *len);
   if (interned && idx < INTERN_INDEX_CACHE_SIZE) js->intern.idx[idx] = interned;
   return interned;
 }
@@ -4846,7 +4867,7 @@ static inline const char *index_key_intern(ant_t *js, uint32_t idx, char *buf, s
 static inline const char *index_key_get_or_intern(ant_t *js, uint32_t idx) {
   if (idx < INTERN_INDEX_CACHE_SIZE && js->intern.idx[idx]) return js->intern.idx[idx];
   char buf[16];
-  const char *interned = intern_string(buf, uint_to_str(buf, sizeof(buf), idx));
+  const char *interned = intern_string(js, buf, uint_to_str(buf, sizeof(buf), idx));
   if (interned && idx < INTERN_INDEX_CACHE_SIZE) js->intern.idx[idx] = interned;
   return interned;
 }
@@ -5043,7 +5064,7 @@ static inline ant_value_t js_setprop_index_throw(ant_t *js, ant_value_t obj, uin
 
 ant_value_t setprop_cstr(ant_t *js, ant_value_t obj, const char *key, size_t len, ant_value_t v) {
   obj = js_as_obj(obj);
-  const char *interned = intern_string(key, len);
+  const char *interned = intern_string(js, key, len);
   if (!interned) return js_mkerr(js, "oom");
   return mkprop_interned(js, obj, interned, v, 0);
 }
@@ -5067,7 +5088,7 @@ ant_value_t js_define_own_prop(ant_t *js, ant_value_t obj, const char *key, size
     ant_value_t desc_setter = js_mkundef();
     ant_value_t as_obj = js_as_obj(obj);
     ant_object_t *ptr = js_obj_ptr(as_obj);
-    const char *interned_key = intern_string(key, klen);
+    const char *interned_key = intern_string(js, key, klen);
 
     if (ptr && ptr->shape && interned_key) {
       int32_t slot = ant_shape_lookup_interned(ptr->shape, interned_key);
@@ -5122,7 +5143,7 @@ ant_value_t js_define_own_prop(ant_t *js, ant_value_t obj, const char *key, size
     if (extensibility_error == js_false) return v;
   }
 
-  const char *interned_key = intern_string(key, klen);
+  const char *interned_key = intern_string(js, key, klen);
   if (!interned_key) return js_mkerr(js, "oom");
   ant_value_t created = mkprop_interned_exact(js, obj, interned_key, v, 0);
   
@@ -5223,7 +5244,7 @@ ant_value_t js_symbol_description_value(ant_t *js, ant_value_t symbol) {
 }
 
 ant_value_t js_mksym_for(ant_t *js, const char *key) {
-  const char *interned = intern_string(key, strlen(key));
+  const char *interned = intern_string(js, key, strlen(key));
 
   sym_registry_entry_t *reg = js->sym.registry;
   sym_registry_entry_t *found = NULL;
@@ -5287,7 +5308,7 @@ ant_prop_loc_t lkp_interned(ant_value_t obj, const char *search_intern) {
 }
 
 inline ant_prop_loc_t lkp(ant_t *js, ant_value_t obj, const char *buf, size_t len) {
-  const char *search_intern = intern_find(buf, len);
+  const char *search_intern = intern_find(js, buf, len);
   if (!search_intern) return ANT_PROP_LOC_NONE;
   return lkp_interned(obj, search_intern);
 }
@@ -5302,7 +5323,7 @@ inline ant_value_t lkp_interned_val(ant_t *js, ant_value_t obj, const char *sear
 }
 
 static inline ant_value_t lkp_val(ant_t *js, ant_value_t obj, const char *buf, size_t len) {
-  const char *interned = intern_find(buf, len);
+  const char *interned = intern_find(js, buf, len);
   if (!interned) return js_mkundef();
   return lkp_interned_val(js, obj, interned);
 }
@@ -5359,7 +5380,7 @@ static inline ant_value_t lkp_sym_proto_val(ant_t *js, ant_value_t obj, ant_offs
 static uintptr_t lkp_with_getter(ant_t *js, ant_value_t obj, const char *buf, size_t len, ant_value_t *getter_out, bool *has_getter_out) {
   *has_getter_out = false;
   *getter_out = js_mkundef();
-  const char *search_intern = intern_find(buf, len);
+  const char *search_intern = intern_find(js, buf, len);
   
   ant_value_t current = obj;
   proto_overflow_guard_t guard;
@@ -5403,7 +5424,7 @@ static uintptr_t lkp_with_getter(ant_t *js, ant_value_t obj, const char *buf, si
 static uintptr_t lkp_with_setter(ant_t *js, ant_value_t obj, const char *buf, size_t len, ant_value_t *setter_out, bool *has_setter_out) {
   *has_setter_out = false;
   *setter_out = js_mkundef();
-  const char *search_intern = intern_find(buf, len);
+  const char *search_intern = intern_find(js, buf, len);
   
   ant_value_t current = obj;
   proto_overflow_guard_t guard;
@@ -5525,7 +5546,7 @@ ant_value_t js_primitive_prototype(ant_t *js, uint8_t type) {
 
 ant_prop_loc_t lkp_proto(ant_t *js, ant_value_t obj, const char *key, size_t len) {
   uint8_t t = vtype(obj);
-  const char *key_intern = intern_find(key, len);
+  const char *key_intern = intern_find(js, key, len);
   if (!key_intern) return ANT_PROP_LOC_NONE;
 
   ant_value_t cur = obj;
@@ -6291,7 +6312,7 @@ static inline void property_key_view_resolve(ant_t *js, property_key_view_t *key
   ant_flat_string_t *flat = ant_str_flat_ptr(key->js_key);
   key->interned = flat && flat->bytes == key->bytes
     ? intern_find_flat(js, key->bytes, key->length)
-    : intern_find(key->bytes, key->length);
+    : intern_find(js, key->bytes, key->length);
 
   key->index_like = is_length_key(key->bytes, key->length) || is_array_index(key->bytes, (ant_offset_t)key->length);
 }
@@ -6491,7 +6512,7 @@ ant_value_t js_delete_prop_ordinary(ant_t *js, ant_value_t obj, const char *key,
     }
   }
 
-  const char *interned = intern_string(key, len);
+  const char *interned = intern_string(js, key, len);
   if (!interned) return js_bool(exotic_delete_allowed(js, obj, key, len));
 
   int32_t shape_slot = ant_shape_lookup_interned(ptr->shape, interned);
@@ -9146,7 +9167,7 @@ static ant_value_t for_in_keys_add_cstr(
   GC_ROOT_PIN(js, out);
   GC_ROOT_PIN(js, seen);
 
-  const char *interned = intern_string(key, key_len);
+  const char *interned = intern_string(js, key, key_len);
   if (!interned) {
     GC_ROOT_RESTORE(js, root_mark);
     return js_mkerr(js, "oom");
@@ -10574,7 +10595,7 @@ static ant_value_t object_define_property_keyed(
       if (existing_off.obj) {
         if (!js_obj_ensure_unique_shape(existing_off.obj)) return js_mkerr(js, "oom");
         if (sym_key) ant_shape_set_attrs_symbol(js, existing_off.obj->shape, sym_off, attrs);
-        else ant_shape_set_attrs_interned(js, existing_off.obj->shape, intern_string(prop_str, prop_len), attrs);
+        else ant_shape_set_attrs_interned(js, existing_off.obj->shape, intern_string(js, prop_str, prop_len), attrs);
         ant_shape_clear_accessor_slot(js, existing_off.obj->shape, existing_off.slot);
       }
     } else {
@@ -10915,7 +10936,7 @@ static bool copy_key_of(ant_t *js, ant_value_t key, copy_key_t *out) {
   
   size_t len = 0;
   const char *str = vtype(key) == kTypeString ? js_getstr(js, key, &len) : NULL;
-  *out = (copy_key_t){ .sym = js_mkundef(), .interned = str ? intern_string(str, len) : NULL };
+  *out = (copy_key_t){ .sym = js_mkundef(), .interned = str ? intern_string(js, str, len) : NULL };
   
   return out->interned != NULL;
 }
@@ -11878,7 +11899,7 @@ static iter_action_t object_from_entries_iter_cb(ant_t *js, ant_value_t entry, v
     js, *result, key_view.js_key, val, 0, MKPROP_USE_DEFAULT_ATTRS | MKPROP_KEYED_STORE
   );
   else {
-    const char *interned = intern_string(key_view.bytes, key_view.length);
+    const char *interned = intern_string(js, key_view.bytes, key_view.length);
     added = interned
       ? mkprop_interned_keyed(js, *result, interned, val)
       : js_mkerr(js, "oom");
@@ -19390,7 +19411,7 @@ static ant_value_t proxy_set_with_receiver(ant_t *js, ant_value_t proxy, const c
         return js_false;
       }
 
-      const char *interned_key = intern_string(key, key_len);
+      const char *interned_key = intern_string(js, key, key_len);
       set_result = interned_key
         ? mkprop_interned_exact(js, receiver, interned_key, value, 0)
         : js_mkerr(js, "oom");
@@ -19837,7 +19858,7 @@ static ant_value_t set_with_receiver_fast(ant_t *js, ant_value_t target, ant_val
   const char *key_str = js_getstr(js, key, &key_len);
   if (!key_str || is_length_key(key_str, key_len) || is_array_index(key_str, (ant_offset_t)key_len)) return T_EMPTY;
   
-  const char *interned = intern_find(key_str, key_len);
+  const char *interned = intern_find(js, key_str, key_len);
   ant_object_t *holder = NULL;
   int32_t slot = -1;
   bool chain_end = false;
@@ -19884,7 +19905,7 @@ static ant_value_t set_with_receiver_fast(ant_t *js, ant_value_t target, ant_val
   }
   
   if (!own_ptr->flags.extensible) return js_false;
-  const char *added_key = interned ? interned : intern_string(key_str, key_len);
+  const char *added_key = interned ? interned : intern_string(js, key_str, key_len);
   if (!added_key) return js_mkerr(js, "oom");
   
   ant_value_t added = mkprop_interned_exact(js, own, added_key, value, 0);
@@ -21211,6 +21232,7 @@ void js_destroy(ant_t *js) {
   gc_strings_epoch_bump();
   gc_strings_destroy(js);
   gc_bigints_destroy(js);
+  intern_table_free(js);
 
   if (js->owns_mem) free(js);
 }
@@ -21271,7 +21293,7 @@ static void js_note_function_display_name(ant_t *js, ant_value_t fn, ant_value_t
   const char *name = js_getstr(js, name_val, &len);
   if (!name || len == 0) return;
   
-  const char *interned = intern_string(name, len);
+  const char *interned = intern_string(js, name, len);
   if (!func->debug->display_name) func->debug->display_name = interned;
   else if (func->debug->display_name != interned) func->debug->display_name_varies = true;
 }
@@ -21284,7 +21306,7 @@ static ant_value_t js_define_function_name_value(ant_t *js, ant_value_t fn, ant_
   if (vtype(name_val) != kTypeString) return js_mkerr(js, "function name must be a string");
   js_note_function_display_name(js, fn, name_val);
 
-  const char *name_key = js->intern.name ? js->intern.name : intern_string("name", 4);
+  const char *name_key = js->intern.name ? js->intern.name : intern_string(js, "name", 4);
   if (!name_key) return js_mkerr(js, "oom");
 
   return mkprop_interned_exact(
@@ -21474,7 +21496,7 @@ static ant_value_t cfunc_expose_named(ant_t *js, ant_value_t cfunc, const char *
     memcmp(base->name, name, name_len) == 0
   ) return cfunc;
 
-  const char *interned = intern_string(name, name_len);
+  const char *interned = intern_string(js, name, name_len);
   if (!interned) return js_mkerr(js, "oom");
 
   ant_value_t cached;
@@ -21590,7 +21612,7 @@ static ant_value_t js_heavy_function(ant_t *js, ant_value_t cfunc, ant_value_t d
 
 void js_define_methods(ant_t *js, ant_value_t obj, const ant_cfunc_meta_t *methods, size_t count, uint8_t attrs) {
   for (const ant_cfunc_meta_t *m = methods; m < methods + count; m++)
-    mkprop_interned(js, obj, intern_string(m->name, strlen(m->name)), js_mkfun_meta(m), attrs);
+    mkprop_interned(js, obj, intern_string(js, m->name, strlen(m->name)), js_mkfun_meta(m), attrs);
 }
 
 ant_value_t js_make_ctor_cfunc(ant_t *js, ant_value_t cfunc, ant_value_t proto, uint8_t proto_attrs) {
@@ -21669,7 +21691,7 @@ void js_set(ant_t *js, ant_value_t obj, const char *key, ant_value_t val) {
 
 void js_set_exact(ant_t *js, ant_value_t obj, const char *key, ant_value_t val) {
   size_t key_len = strlen(key);
-  const char *interned = intern_string(key, key_len);
+  const char *interned = intern_string(js, key, key_len);
   
   if (!interned) {
     js_mkerr(js, "oom");
@@ -22012,7 +22034,7 @@ ant_value_t js_getprop_super(ant_t *js, ant_value_t super_obj, ant_value_t recei
   size_t key_len = strlen(name);
   if (is_proxy(super_obj)) return proxy_get(js, super_obj, name, key_len);
 
-  const char *key_intern = intern_string(name, key_len);
+  const char *key_intern = intern_string(js, name, key_len);
   if (!key_intern) return js_mkundef();
 
   ant_value_t cur = super_obj;

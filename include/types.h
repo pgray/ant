@@ -12,6 +12,7 @@ typedef struct ant_realm          ant_realm_t;
 typedef struct ant_pool_block     ant_pool_block_t;
 typedef struct ant_http_request_s ant_http_request_t;
 typedef struct ant_http_pool      ant_http_pool_t;
+typedef struct ant_intern_table   ant_intern_table_t;
 typedef struct ant_process_state  ant_process_state_t;
 typedef struct ant_event_list     ant_event_list_t;
 typedef struct ant_esm_state      ant_esm_state_t;

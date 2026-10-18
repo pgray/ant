@@ -269,6 +269,7 @@ struct ant_isolate_t {
   } modules;
 
   struct {
+    ant_intern_table_t *table;
     const char *length;
     const char *buffer;
     const char *prototype;

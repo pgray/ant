@@ -4256,7 +4256,7 @@ void init_buffer_module(ant_t *js) {
   };
   
   js_define_methods(js, buffer_proto, buffer_proto_methods, countof(buffer_proto_methods), ANT_PROP_ATTR_DEFAULT);
-  mkprop_interned_exact(js, buffer_proto, intern_string("toLocaleString", 14), js_get(js, buffer_proto, "toString"), ANT_PROP_ATTR_DEFAULT);
+  mkprop_interned_exact(js, buffer_proto, intern_string(js, "toLocaleString", 14), js_get(js, buffer_proto, "toString"), ANT_PROP_ATTR_DEFAULT);
   
   for (size_t i = 0; i < sizeof(buffer_num_methods) / sizeof(buffer_num_methods[0]); i++) {
     const buffer_num_method_t *m = &buffer_num_methods[i];
