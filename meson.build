@@ -560,6 +560,15 @@ gc_two_isolates_test = executable(
 )
 test('gc-two-isolates', gc_two_isolates_test)
 
+arena_chunks_test = executable(
+  'test-arena-chunks',
+  files('tests/test_arena_chunks.c'),
+  dependencies: libant_dep,
+  c_args: ['-UNDEBUG'],
+  build_by_default: false
+)
+test('arena-chunks', arena_chunks_test)
+
 isolate_code_arenas_test = executable(
   'test-isolate-code-arenas',
   files('tests/test_isolate_code_arenas.c'),

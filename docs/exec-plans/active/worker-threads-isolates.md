@@ -53,19 +53,38 @@ gone.
   `--cage-size=<GiB>` (default 32) sets the reservation before the first isolate
   is created. The only upper bound is the 47-bit NaN-box payload (131072 GiB); if
   the OS refuses a size, the reservation halves until it fits, as it does for the
-  default. Reserving costs ~1 µs per GiB at startup.
-- Isolates size their arenas instead (`ant_create_with_options`). The main
-  isolate keeps a 4 GiB object arena (5.5 GiB of cage with the closure, upvalue
-  and promise arenas, which scale at master's 1/8 ratio). Workers default to a
-  512 MiB object arena (~3.9M live objects, ~704 MiB of cage), or
-  `resourceLimits.maxOldGenerationSizeMb` clamped to 16 MiB–4 GiB; about 38
-  default workers fit at once, 64 at 128 MiB. Only object, closure, upvalue and
-  promise headers, strings and code live in the cage; array storage, overflow
-  properties and ArrayBuffer bytes are outside it.
+  default. Reserving costs ~1 µs per GiB at startup. The cage base is aligned to
+  8 MiB so a cage offset shifted right by 23 indexes the arena chunk table.
+- Arenas are lists of 8 MiB chunks (1 MiB on WASM) taken from the cage on
+  demand (`include/arena.h`, `src/gc/arena.c`), so an isolate reserves only what
+  it uses: an idle worker holds ~32 MiB of cage (four arenas, one chunk each).
+  The per-isolate sizes (`ant_create_with_options`) are now byte limits on
+  committed memory, not reservations: the main isolate keeps 4 GiB for objects
+  with the closure, upvalue and promise arenas at master's 1/8 ratio; workers
+  default to 512 MiB or `resourceLimits.maxOldGenerationSizeMb` clamped to
+  16 MiB–4 GiB. About 970 idle workers fit in the 32 GiB cage (was 38) and 242
+  in 8 GiB (was 3). Only object, closure, upvalue and promise headers, strings
+  and code live in the cage; array storage, overflow properties and ArrayBuffer
+  bytes are outside it.
+- A process-wide table maps each 8 MiB cage slot to the owning arena's 32-bit id
+  (bit 31 marks the arena's last, partially used chunk) and the chunk ordinal.
+  Marking accepts a value with one load and compare for full chunks; pointers
+  into the last chunk must also be below the bump cursor, because the sweep
+  decommits the tail above the highest live object and stale references to dead
+  objects there must not be read. Conservative scanning checks the ordinal,
+  used extent and slot alignment. Entries are relaxed atomics: other isolates
+  publish and clear their own slots while a scan runs.
+- Arena chunks are only taken while the cage keeps 1/32 of its size free, so
+  strings, code and pool blocks always have room. A full cage therefore shows up
+  as an arena failure: a new worker emits `ERR_WORKER_INIT_FAILED`, a growing
+  heap gets a full GC and then `ERR_WORKER_OUT_OF_MEMORY`. Without the reserve,
+  pool allocations failed first and aborted the process.
 - An exhausted object or closure arena runs a full GC and retries once. A worker
   that still runs out reports `ERR_WORKER_OUT_OF_MEMORY` (built by the parent;
   the child does not serialize anything) and exits 1. If the cage has no room
   for a new isolate, the worker emits `ERR_WORKER_INIT_FAILED` and exits 1.
+- GC fixture cost of chunking: at most +0.75% instructions (survival-heavy
+  patterns), cycles within ±1%; bench-v8 fixed work +0.1% instructions.
 
 ## Teardown
 

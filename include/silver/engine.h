@@ -76,6 +76,7 @@ bool sv_op_stack_effect(
 );
 
 int *sv_func_stack_depth_map(const sv_func_t *func);
+int *sv_func_try_map(const sv_func_t *func);
 
 static const uint8_t sv_op_size[OP__COUNT] = {
 #define OP_DEF(name, size, n_pop, n_push, f) [OP_##name] = (size),
@@ -1067,6 +1068,8 @@ typedef struct {
 } sv_try_region_t;
 
 typedef struct sv_try_table {
+  int *map;
+  int *depth;
   int count;
   sv_try_region_t regions[];
 } sv_try_table_t;

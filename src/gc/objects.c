@@ -336,8 +336,14 @@ static inline void gc_release_closure_payload(sv_closure_t *c) {
 
 void gc_closures_destroy(ant_t *js) {
   ant_fixed_arena_t *ca = &js->closure_arena;
-  for (size_t off = 0; off < ca->watermark; off += ca->elem_size)
-    gc_release_closure_payload((sv_closure_t *)(ca->base + off));
+  
+  for (uint32_t chunk = 0; chunk < ca->chunk_count; chunk++) {
+    uint8_t *base = ca->chunks[chunk].base;
+    size_t used = fixed_arena_chunk_used(ca, chunk);
+    
+    for (size_t off = 0; off < used; off += ca->elem_size)
+      gc_release_closure_payload((sv_closure_t *)(base + off));
+  }
 }
 
 static void gc_sweep_young_closures(ant_t *js) {
@@ -644,9 +650,8 @@ void gc_mark_value(ant_t *js, ant_value_t v) {
   }
   
   ant_object_t *obj = (ant_object_t *)vptr(v);
-  uintptr_t offset = (uintptr_t)obj - (uintptr_t)js->obj_arena.base;
+  if (!fixed_arena_holds_offset(&js->obj_arena, vdata(v), obj)) return;
   
-  if (offset >= js->obj_arena.watermark) return;
   gc_grey_obj(js, obj);
 }
 
@@ -893,7 +898,7 @@ static void gc_scan_range(ant_t *js, uintptr_t lo, uintptr_t hi) {
 
     sv_upvalue_t *raw_uv = (sv_upvalue_t *)(uintptr_t)w;
     if (fixed_arena_contains(&js->upvalue_arena, raw_uv)) {
-      size_t uv_budget = js->upvalue_arena.watermark / js->upvalue_arena.elem_size + 1;
+      size_t uv_budget = fixed_arena_extent(&js->upvalue_arena) / js->upvalue_arena.elem_size + 1;
       do {
         if (raw_uv->gc_epoch != js->gc.epoch) {
           raw_uv->gc_epoch = js->gc.epoch;
@@ -1545,40 +1550,49 @@ static void gc_sweep_young_and_promote(ant_t *js) {
 static void gc_sweep(ant_t *js) {
   ant_fixed_arena_t *oa = &js->obj_arena;
   ant_object_t *old = NULL;
-  size_t new_wm = 0;
+  
+  bool found_live = false;
+  uint32_t live_chunk = 0;
+  size_t live_used = 0;
 
   js->objects = NULL;
   oa->free_list = NULL;
 
-  for (size_t off = oa->watermark; off >= oa->elem_size; off -= oa->elem_size) {
-    ant_object_t *obj = (ant_object_t *)(oa->base + off - oa->elem_size);
-    if (off >= 3 * oa->elem_size) __builtin_prefetch(oa->base + off - 3 * oa->elem_size);
+  for (uint32_t chunk = oa->chunk_count; chunk-- > 0;) {
+    uint8_t *base = oa->chunks[chunk].base;
+    
+    for (size_t off = fixed_arena_chunk_used(oa, chunk); off >= oa->elem_size; off -= oa->elem_size) {
+      ant_object_t *obj = (ant_object_t *)(base + off - oa->elem_size);
+      if (off >= 3 * oa->elem_size) __builtin_prefetch(base + off - 3 * oa->elem_size);
 
-    if (obj->mark_epoch == ANT_GC_DEAD) {
-      if (new_wm) { *(void **)obj = oa->free_list; oa->free_list = obj; }
-      continue;
+      if (obj->mark_epoch == ANT_GC_DEAD) {
+        if (found_live) { *(void **)obj = oa->free_list; oa->free_list = obj; }
+        continue;
+      }
+
+      if (obj->flags.gc_permanent || obj->mark_epoch == js->gc.obj_epoch) {
+        if (!found_live) {
+          found_live = true;
+          live_chunk = chunk;
+          live_used = off;
+        }
+        
+        if (obj->flags.gc_permanent) continue;
+        obj->flags.generation = 1;
+        obj->next = old;
+        old = obj;
+        
+        continue;
+      }
+
+      gc_object_free(js, obj);
+      if (!found_live) oa->free_list = *(void **)obj;
     }
-
-    if (obj->flags.gc_permanent || obj->mark_epoch == js->gc.obj_epoch) {
-      if (!new_wm) new_wm = off;
-      if (obj->flags.gc_permanent) continue;
-      obj->flags.generation = 1;
-      obj->next = old;
-      old = obj;
-      continue;
-    }
-
-    // slots above the new watermark are decommitted instead
-    gc_object_free(js, obj);
-    if (!new_wm) oa->free_list = *(void **)obj;
   }
 
   js->objects_old = old;
-  if (new_wm < oa->watermark) {
-    ant_arena_decommit(oa->base, oa->committed, new_wm);
-    oa->committed = new_wm;
-    oa->watermark = new_wm;
-  }
+  if (oa->chunk_count && (live_chunk + 1 < oa->chunk_count || live_used < fixed_arena_chunk_used(oa, live_chunk)))
+    fixed_arena_trim(oa, live_chunk, live_used);
 }
 
 void gc_pin_existing_objects(ant_t *js) {
@@ -1587,9 +1601,14 @@ void gc_pin_existing_objects(ant_t *js) {
   ant_fixed_arena_t *ua = &js->upvalue_arena;
   uint64_t stamp = js->gc.epoch ? js->gc.epoch : ~0ull;
   
-  for (size_t off = 0; off < ua->watermark; off += ua->elem_size) {
-    sv_upvalue_t *uv = (sv_upvalue_t *)(ua->base + off);
-    if (uv->gc_epoch == 0) uv->gc_epoch = stamp;
+  for (uint32_t chunk = 0; chunk < ua->chunk_count; chunk++) {
+    uint8_t *base = ua->chunks[chunk].base;
+    size_t used = fixed_arena_chunk_used(ua, chunk);
+    
+    for (size_t off = 0; off < used; off += ua->elem_size) {
+      sv_upvalue_t *uv = (sv_upvalue_t *)(base + off);
+      if (uv->gc_epoch == 0) uv->gc_epoch = stamp;
+    }
   }
 
   ant_object_t *tail = NULL;
@@ -1688,31 +1707,42 @@ uint64_t gc_objects_run(ant_t *js, gc_extra_roots_fn extra_roots) {
   ca->free_list = NULL;
   ca->live_count = 0;
   
-  for (size_t off = 0; off < ca->watermark; off += ca->elem_size) {
-    sv_closure_t *c = (sv_closure_t *)(ca->base + off);
+  for (uint32_t chunk = 0; chunk < ca->chunk_count; chunk++) {
+    uint8_t *base = ca->chunks[chunk].base;
+    size_t used = fixed_arena_chunk_used(ca, chunk);
     
-  if (c->gc_epoch == js->gc.epoch) {
-    c->generation = 1;
-    ca->live_count++;
-  } else {
-    gc_release_closure_payload(c);
-    *(void **)c = ca->free_list;
-    ca->free_list = c;
-  }}
+    for (size_t off = 0; off < used; off += ca->elem_size) {
+      sv_closure_t *c = (sv_closure_t *)(base + off);
+      
+      if (c->gc_epoch == js->gc.epoch) {
+        c->generation = 1;
+        ca->live_count++;
+      } else {
+        gc_release_closure_payload(c);
+        *(void **)c = ca->free_list;
+        ca->free_list = c;
+      }
+    }
+  }
 
   ant_fixed_arena_t *ua = &js->upvalue_arena;
   ua->free_list = NULL;
   ua->live_count = 0;
   
-  for (size_t off = 0; off < ua->watermark; off += ua->elem_size) {
-    uint8_t *slot = ua->base + off;
-    uint64_t epoch;
-    memcpy(&epoch, slot + ua->epoch_offset, sizeof(epoch));
+  for (uint32_t chunk = 0; chunk < ua->chunk_count; chunk++) {
+    uint8_t *base = ua->chunks[chunk].base;
+    size_t used = fixed_arena_chunk_used(ua, chunk);
     
-    if (epoch == js->gc.epoch) ua->live_count++;
-    else {
-      *(void **)slot = ua->free_list;
-      ua->free_list = slot;
+    for (size_t off = 0; off < used; off += ua->elem_size) {
+      uint8_t *slot = base + off;
+      uint64_t epoch;
+      memcpy(&epoch, slot + ua->epoch_offset, sizeof(epoch));
+      
+      if (epoch == js->gc.epoch) ua->live_count++;
+      else {
+        *(void **)slot = ua->free_list;
+        ua->free_list = slot;
+      }
     }
   }
 

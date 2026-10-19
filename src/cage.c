@@ -30,7 +30,8 @@ void *ant_cage_alloc(size_t size, size_t align) {
   return size ? ant_wasm_aligned_alloc(size, align) : NULL;
 }
 
-void *ant_cage_reserve(size_t size, size_t align) {
+void *ant_cage_reserve(size_t size, size_t align, size_t keep) {
+  (void)keep;
   return size ? ant_wasm_aligned_alloc(size, align) : NULL;
 }
 
@@ -58,6 +59,8 @@ typedef struct ant_cage_range {
 } ant_cage_range_t;
 
 static ant_cage_range_t *cage_free_ranges = NULL;
+
+static size_t cage_free_bytes = 0;
 static size_t cage_requested_size = ANT_CAGE_MAX_SIZE;
 
 #ifdef _WIN32
@@ -97,19 +100,27 @@ static bool size_align_up(size_t value, size_t align, size_t *out) {
 static bool cage_initialize_locked(void) {
   if (ant_cage_base_address) return true;
 
-  void *base = NULL;
+  void *raw = NULL;
   size_t reserved = cage_requested_size;
   while (reserved >= ANT_CAGE_MIN_SIZE) {
 #ifdef _WIN32
-    base = VirtualAlloc(NULL, reserved, MEM_RESERVE, PAGE_NOACCESS);
+    raw = VirtualAlloc(NULL, reserved + ANT_CAGE_ALIGNMENT, MEM_RESERVE, PAGE_NOACCESS);
 #else
-    base = mmap(NULL, reserved, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0);
-    if (base == MAP_FAILED) base = NULL;
+    raw = mmap(NULL, reserved + ANT_CAGE_ALIGNMENT, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0);
+    if (raw == MAP_FAILED) raw = NULL;
 #endif
-    if (base) break;
+    if (raw) break;
     reserved >>= 1;
   }
-  if (!base) return false;
+  if (!raw) return false;
+
+  uintptr_t aligned = ((uintptr_t)raw + ANT_CAGE_ALIGNMENT - 1) & ~(uintptr_t)(ANT_CAGE_ALIGNMENT - 1);
+  void *base = (void *)aligned;
+#ifndef _WIN32
+  size_t head = aligned - (uintptr_t)raw;
+  if (head) munmap(raw, head);
+  if (ANT_CAGE_ALIGNMENT - head) munmap((void *)(aligned + reserved), ANT_CAGE_ALIGNMENT - head);
+#endif
 
   size_t first = cage_page_size();
 #ifdef _WIN32
@@ -120,7 +131,7 @@ static bool cage_initialize_locked(void) {
   ant_cage_range_t *range = guarded ? malloc(sizeof(*range)) : NULL;
   if (!range) {
 #ifdef _WIN32
-    VirtualFree(base, 0, MEM_RELEASE);
+    VirtualFree(raw, 0, MEM_RELEASE);
 #else
     munmap(base, reserved);
 #endif
@@ -131,6 +142,7 @@ static bool cage_initialize_locked(void) {
   range->size = reserved - first;
   range->next = NULL;
   cage_free_ranges = range;
+  cage_free_bytes = range->size;
   ant_cage_base_address = (uintptr_t)base;
   ant_cage_reserved_size = reserved;
   return true;
@@ -177,6 +189,7 @@ static void *cage_take_locked(size_t size, size_t align) {
       free(range);
     }
 
+    cage_free_bytes -= size;
     return (void *)(ant_cage_base_address + start);
   }
 
@@ -184,8 +197,11 @@ static void *cage_take_locked(size_t size, size_t align) {
 }
 
 static void cage_put_locked(size_t offset, size_t size) {
+  cage_free_bytes += size;
+  
   ant_cage_range_t *prev = NULL;
   ant_cage_range_t *next = cage_free_ranges;
+  
   while (next && next->offset < offset) {
     prev = next;
     next = next->next;
@@ -208,7 +224,10 @@ static void cage_put_locked(size_t offset, size_t size) {
   }
 
   ant_cage_range_t *range = malloc(sizeof(*range));
-  if (!range) return;
+  if (!range) {
+    cage_free_bytes -= size;
+    return;
+  }
   range->offset = offset;
   range->size = size;
   range->next = next;
@@ -235,7 +254,7 @@ static bool cage_decommit(void *ptr, size_t size) {
 #endif
 }
 
-static void *cage_take(size_t size, size_t align, bool commit) {
+static void *cage_take(size_t size, size_t align, bool commit, size_t keep) {
   if (!size) return NULL;
 
   size_t page = cage_page_size();
@@ -250,7 +269,9 @@ static void *cage_take(size_t size, size_t align, bool commit) {
     return NULL;
   }
 
-  void *ptr = cage_take_locked(rounded, align);
+  void *ptr = cage_free_bytes >= keep && cage_free_bytes - keep >= rounded
+    ? cage_take_locked(rounded, align)
+    : NULL;
   if (ptr && commit && !cage_commit(ptr, rounded)) {
     cage_put_locked((uintptr_t)ptr - ant_cage_base_address, rounded);
     ptr = NULL;
@@ -260,11 +281,11 @@ static void *cage_take(size_t size, size_t align, bool commit) {
 }
 
 void *ant_cage_alloc(size_t size, size_t align) {
-  return cage_take(size, align, true);
+  return cage_take(size, align, true, 0);
 }
 
-void *ant_cage_reserve(size_t size, size_t align) {
-  return cage_take(size, align, false);
+void *ant_cage_reserve(size_t size, size_t align, size_t keep) {
+  return cage_take(size, align, false, keep);
 }
 
 void ant_cage_free(void *ptr, size_t size) {

@@ -19,7 +19,7 @@ int main(void) {
   ant_cage_free(first, block_size);
   ant_cage_free(second, block_size);
 
-  void *merged = ant_cage_reserve(block_size * 2, block_size);
+  void *merged = ant_cage_reserve(block_size * 2, block_size, 0);
   assert(merged == first);
   ant_cage_free(merged, block_size * 2);
 

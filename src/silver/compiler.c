@@ -8388,6 +8388,83 @@ int *sv_func_stack_depth_map(const sv_func_t *func) {
   return depth;
 }
 
+int *sv_func_try_map(const sv_func_t *func) {
+  int len = func->code_len;
+  const uint8_t *code = func->code;
+  
+  if (len <= 0) return NULL;
+  int *map = malloc(2 * (size_t)len * sizeof(int));
+  int *work = malloc((size_t)len * sizeof(int));
+  
+  if (!map || !work) {
+    free(map);
+    free(work);
+    return NULL;
+  }
+  
+  int *parent = map + len;
+  for (int i = 0; i < len; i++) map[i] = parent[i] = -2;
+  
+  int wn = 0;
+  bool ok = true;
+  
+  #define TRY_VISIT(off_, state_) do {      \
+    int to_ = (off_), st_ = (state_);       \
+    if (to_ < 0 || to_ >= len) ok = false;  \
+    else if (map[to_] == -2) {              \
+      map[to_] = st_;                       \
+      work[wn++] = to_;                     \
+    } else if (map[to_] != st_) ok = false; \
+  } while (0)
+  
+  TRY_VISIT(0, -1);
+  while (ok && wn > 0) {
+    int off = work[--wn];
+    int state = map[off];
+    
+    uint8_t op = code[off];
+    int sz = sv_op_size[op];
+    
+    if (sz == 0 || off + sz > len) {
+      ok = false;
+      break;
+    }
+    
+    int next = state;
+    switch (op) {
+      case OP_TRY_PUSH:
+        if (parent[off] != -2 && parent[off] != state) ok = false;
+        parent[off] = state;
+        TRY_VISIT(off + sz + sv_get_i32(code + off + 1), state);
+        next = off;
+        break;
+      case OP_TRY_POP:
+        if (state < 0) ok = false;
+        else next = parent[state];
+        break;
+      case OP_TRY_PUSH_FINALLY:
+      case OP_UNWIND_JMP:
+        ok = false;
+        break;
+      default:
+        if (sv_op_fmts[op] == SVF_label) TRY_VISIT(off + sz + sv_get_i32(code + off + 1), state);
+        else if (sv_op_fmts[op] == SVF_atom_label) TRY_VISIT(off + sz + sv_get_i32(code + off + 5), state);
+        else if (sv_op_fmts[op] == SVF_label8) TRY_VISIT(off + sz + (int8_t)sv_get_i8(code + off + 1), state);
+        break;
+    }
+    
+    if (ok && !(sv_op_flags[op] & SV_OPF_TERMINAL)) TRY_VISIT(off + sz, next);
+  }
+  
+  #undef TRY_VISIT
+  free(work);
+  
+  if (ok) return map;
+  free(map);
+  
+  return NULL;
+}
+
 void sv_disasm(ant_t *js, sv_func_t *func, const char *label) {
   const char *fname = func->debug->name ? func->debug->name : "";
 

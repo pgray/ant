@@ -189,6 +189,7 @@ export function targets() {
     'test_jit_await_live_locals.cjs',
     'test_jit_bitwise_primitives.cjs',
     'test_jit_logical_immediates.cjs',
+    'test_jit_try_regions.cjs',
     'test_jit_builtin_direct_call.cjs',
     'test_jit_call_spread.cjs',
     'test_jit_captured_local_init.cjs',

@@ -11,13 +11,14 @@ static constexpr size_t ANT_CAGE_MIN_SIZE = 1UL << 24;
 #else
 static constexpr size_t ANT_CAGE_MAX_SIZE = 1ULL << 35;
 static constexpr size_t ANT_CAGE_MIN_SIZE = 1ULL << 33;
+static constexpr size_t ANT_CAGE_ALIGNMENT = 1ULL << 23;
 #endif
 
 extern uintptr_t ant_cage_base_address;
 extern size_t ant_cage_reserved_size;
 
 void *ant_cage_alloc(size_t size, size_t align);
-void *ant_cage_reserve(size_t size, size_t align);
+void *ant_cage_reserve(size_t size, size_t align, size_t keep);
 void ant_cage_free(void *ptr, size_t size);
 bool ant_cage_set_size(size_t size);
 

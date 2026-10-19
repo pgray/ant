@@ -67,9 +67,9 @@ static ant_value_t detached_native_failure(ant_params_t) {
 
 static ant_fixed_arena_t ExhaustArena(ant_fixed_arena_t *arena) {
   ant_fixed_arena_t saved = *arena;
-  arena->committed = arena->watermark;
-  arena->reserved = arena->watermark;
+  arena->limit = arena->committed;
   arena->free_list = NULL;
+  while (fixed_arena_alloc_uninit(arena));
   return saved;
 }
 

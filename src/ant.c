@@ -2698,7 +2698,7 @@ static void js_arguments_link_cell(ant_t *js, ant_value_t obj, ant_arguments_sta
   state->cells[idx] = uv;
   uv->maps_arguments = 1;
   uv->args_index = (uint8_t)idx;
-  uv->args_owner = (uint32_t)(((uint8_t *)js_obj_ptr(obj) - js->obj_arena.base) / js->obj_arena.elem_size);
+  uv->args_owner = fixed_arena_slot_index(&js->obj_arena, js_obj_ptr(obj));
 }
 
 void js_arguments_link_upvalue(ant_t *js, sv_frame_t *frame, sv_upvalue_t *uv) {
@@ -2708,12 +2708,14 @@ void js_arguments_link_upvalue(ant_t *js, sv_frame_t *frame, sv_upvalue_t *uv) {
 }
 
 void js_arguments_upvalue_written(ant_t *js, sv_upvalue_t *uv, ant_value_t value) {
-  ant_object_t *owner = (ant_object_t *)(js->obj_arena.base + (size_t)uv->args_owner * js->obj_arena.elem_size);
-  if (!fixed_arena_contains(&js->obj_arena, owner) || owner->mark_epoch == ANT_GC_DEAD) return;
+  ant_object_t *owner = fixed_arena_slot_at(&js->obj_arena, uv->args_owner);
+  
+  if (!owner || owner->mark_epoch == ANT_GC_DEAD) return;
   if (!ant_object_is_arguments(owner)) return;
 
   ant_value_t obj = js_obj_from_ptr(owner);
   ant_arguments_state_t *state = js_arguments_state(obj);
+  
   uint32_t idx = uv->args_index;
   if (!state || idx >= state->mapped_count || state->cells[idx] != uv || state->deleted[idx]) return;
 
@@ -2722,6 +2724,7 @@ void js_arguments_upvalue_written(ant_t *js, sv_upvalue_t *uv, ant_value_t value
     gc_write_barrier(js, owner, value);
     return;
   }
+  
   state->in_setter = 1;
   arr_set(js, obj, (ant_offset_t)idx, value);
   state->in_setter = 0;

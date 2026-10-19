@@ -23,10 +23,14 @@ Promise.all(Array.from({ length: n }, () => new Promise(resolve => {
 });
 `;
 
-const small = run('--cage-size=8', '-e', workers, '8');
+const fits = run('--cage-size=8', '-e', workers, '64');
+assert.equal(fits.status, 0, fits.stderr);
+assert.deepEqual(JSON.parse(fits.stdout.trim()), []);
+
+const small = run('--cage-size=8', '-e', workers, '400');
 assert.equal(small.status, 0, small.stderr);
 const failures = JSON.parse(small.stdout.trim());
-assert.ok(failures.length > 0);
+assert.ok(failures.length > 0 && failures.length < 400);
 assert.ok(failures.every(code => code === 'ERR_WORKER_INIT_FAILED'));
 
 const large = run('--cage-size=64', '-e', workers, '48');

@@ -84,9 +84,15 @@ void sv_gf_mega_clear(ant_t *js) {
 
 __attribute__((noinline, cold)) void sv_ic_identities_reset(ant_t *js) {
   ant_fixed_arena_t *oa = &js->obj_arena;
-  for (size_t off = oa->elem_size; off <= oa->watermark; off += oa->elem_size) {
-    ant_object_t *obj = (ant_object_t *)(oa->base + off - oa->elem_size);
-    if (obj->mark_epoch != ANT_GC_DEAD) obj->ic_identity = 0;
+  
+  for (uint32_t chunk = 0; chunk < oa->chunk_count; chunk++) {
+    uint8_t *base = oa->chunks[chunk].base;
+    size_t used = fixed_arena_chunk_used(oa, chunk);
+    
+    for (size_t off = 0; off < used; off += oa->elem_size) {
+      ant_object_t *obj = (ant_object_t *)(base + off);
+      if (obj->mark_epoch != ANT_GC_DEAD) obj->ic_identity = 0;
+    }
   }
 }
 
@@ -1446,20 +1452,53 @@ static const sv_try_table_t *sv_func_try_table(sv_func_t *func) {
   }
   
   table->count = k;
+  table->map = sv_func_try_map(func);
+  table->depth = depth;
 
   free(open);
-  free(depth);
   sidecar->try_table = table;
   
   return table;
 }
 
 void sv_try_table_free(const sv_try_table_t *table) {
-  if (table && table != &sv_no_try_regions) free((void *)table);
+  if (!table || table == &sv_no_try_regions) return;
+  free(table->map);
+  free(table->depth);
+  free((void *)table);
+}
+
+static void sv_frame_push_try_chain(sv_vm_t *vm, const sv_try_table_t *table, sv_func_t *func, int off, int base_sp) {
+  int chain[SV_TRY_MAX];
+  int count = 0;
+  
+  for (
+    int state = table->map[off]; state >= 0 && 
+    count < SV_TRY_MAX; state = table->map[func->code_len + state]
+  ) chain[count++] = state;
+
+  for (int i = count - 1; i >= 0; i--) {
+    if (!sv_vm_reserve_handlers(vm, 1)) break;
+    
+    uint8_t *push = func->code + chain[i];
+    int try_depth = table->depth ? table->depth[chain[i]] : -1;
+    
+    vm->handler_stack[vm->handler_depth++] = (sv_handler_t){
+      .kind = SV_HANDLER_TRY,
+      .ip = push + sv_op_size[OP_TRY_PUSH] + sv_get_i32(push + 1),
+      .saved_sp = try_depth >= 0 ? base_sp + try_depth : vm->sp,
+    };
+  }
 }
 
 void sv_frame_push_try_handlers(sv_vm_t *vm, sv_frame_t *frame, sv_func_t *func, int off, int base_sp) {
   const sv_try_table_t *table = sv_func_try_table(func);
+  
+  if (table->map && off >= 0 && off < func->code_len) {
+    sv_frame_push_try_chain(vm, table, func, off, base_sp);
+    frame->handler_top = (uint16_t)vm->handler_depth;
+    return;
+  }
   
   for (int i = 0; i < table->count; i++) {
     const sv_try_region_t *r = &table->regions[i];
