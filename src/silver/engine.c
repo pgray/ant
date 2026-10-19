@@ -2082,12 +2082,7 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
   L_PUT_FIELD:     { VM_CHECK(sv_op_put_field(vm, js, func, ip));  NEXT(OP_PUT_FIELD); }
   
   L_GET_ELEM: {
-    uint8_t old;
-    uint8_t *site = sv_tfb_specialization_site(func, ip, &old);
-    if (site)sv_tfb_record_specialization_at(
-      func, site, old,
-      sv_tfb_dense_numeric_get(vm->stack[vm->sp - 2], vm->stack[vm->sp - 1])
-    );
+    sv_tfb_record_dense_numeric_get(func, ip, vm->stack[vm->sp - 2], vm->stack[vm->sp - 1]);
     VM_CHECK(sv_op_get_elem(vm, js, func, ip));
     NEXT(OP_GET_ELEM);
   }

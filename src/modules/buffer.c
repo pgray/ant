@@ -1098,6 +1098,90 @@ static const ant_exotic_ops_t typedarray_exotic_ops = {
   .keys = ANT_EXOTIC_KEYS_NUMERIC,
 };
 
+const void *buffer_typedarray_exotic_ops(void) {
+  return &typedarray_exotic_ops;
+}
+
+static inline TypedArrayData *typedarray_fast_data(ant_value_t obj) {
+  ant_object_t *ptr = vtype(obj) == kTypeObject ? js_obj_ptr(obj) : NULL;
+  if (!ptr || ptr->exotic_ops != &typedarray_exotic_ops || ptr->native_tag != BUFFER_TYPEDARRAY_NATIVE_TAG) return NULL;
+  return ptr->native_ptr;
+}
+
+__attribute__((noinline)) bool buffer_typedarray_get_index(ant_t *js, ant_value_t obj, uint32_t index, ant_value_t *out) {
+  TypedArrayData *ta_data = typedarray_fast_data(obj);
+  if (!ta_data) return false;
+  
+  if (!Ant_Buffer_ViewIsLive(ta_data) || index >= ta_data->length) {
+    *out = js_mkundef();
+    return true;
+  }
+  
+  if (!buffer_typedarray_data_read_index(js, ta_data, index, out) && !is_err(*out)) *out = js_mkundef();
+  
+  return true;
+}
+
+static buffer_ta_access_t typedarray_inline_access(
+  ant_value_t obj, ant_value_t key, TypedArrayData **out, TypedArrayType *type
+) {
+  TypedArrayData *ta_data = typedarray_fast_data(obj);
+  if (!ta_data) return BUFFER_TA_ACCESS_NONE;
+  
+  *type = ta_data->type;
+  if (!Ant_Buffer_ViewIsLive(ta_data) || vtype(key) != kTypeNumber) return BUFFER_TA_ACCESS_SLOW;
+  
+  double index = tod(key);
+  if (!(index >= 0 && index < (double)UINT32_MAX) || trunc(index) != index || (size_t)index >= ta_data->length)
+    return BUFFER_TA_ACCESS_SLOW;
+  
+  *out = ta_data;
+  switch (ta_data->type) {
+    case TYPED_ARRAY_FLOAT16: case TYPED_ARRAY_BIGINT64: case TYPED_ARRAY_BIGUINT64: return BUFFER_TA_ACCESS_SLOW;
+    default: return BUFFER_TA_ACCESS_INLINE;
+  }
+}
+
+__attribute__((noinline)) buffer_ta_access_t buffer_typedarray_inline_get(
+  ant_value_t obj, ant_value_t key, TypedArrayType *type
+) {
+  TypedArrayData *ta_data;
+  return typedarray_inline_access(obj, key, &ta_data, type);
+}
+
+__attribute__((noinline)) buffer_ta_access_t buffer_typedarray_inline_put(
+  ant_value_t obj, ant_value_t key, ant_value_t number, TypedArrayType *type
+) {
+  TypedArrayData *ta_data;
+  buffer_ta_access_t access = typedarray_inline_access(obj, key, &ta_data, type);
+  
+  if (access != BUFFER_TA_ACCESS_INLINE) return access;
+  if (vtype(number) != kTypeNumber) return BUFFER_TA_ACCESS_SLOW;
+  if (ta_data->type == TYPED_ARRAY_FLOAT32 || ta_data->type == TYPED_ARRAY_FLOAT64) return BUFFER_TA_ACCESS_INLINE;
+  
+  double value = tod(number);
+  if (!(fabs(value) < 0x1p63) || trunc(value) != value) return BUFFER_TA_ACCESS_SLOW;
+  
+  return ta_data->type != TYPED_ARRAY_UINT8_CLAMPED || (value >= 0 && value <= UINT8_MAX)
+    ? BUFFER_TA_ACCESS_INLINE : BUFFER_TA_ACCESS_SLOW;
+}
+
+__attribute__((noinline)) bool buffer_typedarray_set_index(ant_t *js, ant_value_t obj, uint32_t index, ant_value_t value, ant_value_t *result) {
+  TypedArrayData *ta_data = typedarray_fast_data(obj);
+  if (!ta_data) return false;
+  
+  ant_value_t coerced = typedarray_coerce_value(js, ta_data, value);
+  if (is_err(coerced)) {
+    *result = coerced;
+    return true;
+  }
+  
+  (void)typedarray_write_value(js, ta_data, index, coerced);
+  *result = value;
+  
+  return true;
+}
+
 ant_value_t create_typed_array_with_buffer(
   ant_t *js, TypedArrayType type, ArrayBufferData *buffer,
   size_t byte_offset, size_t length, ant_value_t proto, ant_value_t arraybuffer_obj

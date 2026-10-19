@@ -546,6 +546,7 @@ struct ant_isolate_t {
   ant_timer_state_t timers;
   bool microtasks_draining;
   bool destroying;
+  bool process_exiting;
   
   struct coroutine *active_async_coro;
   struct gc_temp_root_scope *temp_roots;

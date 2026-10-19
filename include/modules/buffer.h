@@ -62,6 +62,12 @@ typedef struct {
   size_t byte_length;
 } DataViewData;
 
+typedef enum {
+  BUFFER_TA_ACCESS_NONE,
+  BUFFER_TA_ACCESS_SLOW,
+  BUFFER_TA_ACCESS_INLINE,
+} buffer_ta_access_t;
+
 static constexpr size_t BUFFER_INSPECT_MAX_BYTES = 50;
 
 static constexpr uint32_t BUFFER_ARRAYBUFFER_NATIVE_TAG = Ant_NativeTag("ABUF");
@@ -70,6 +76,9 @@ static constexpr uint32_t BUFFER_DATAVIEW_NATIVE_TAG    = Ant_NativeTag("DVIW");
 
 ant_value_t buffer_library(ant_t *js);
 size_t buffer_get_external_memory(ant_t *js);
+
+buffer_ta_access_t buffer_typedarray_inline_get(ant_value_t obj, ant_value_t key, TypedArrayType *type);
+buffer_ta_access_t buffer_typedarray_inline_put(ant_value_t obj, ant_value_t key, ant_value_t value, TypedArrayType *type);
 
 void init_buffer_module(ant_t *js);
 void cleanup_buffer_module(ant_t *js);
@@ -80,6 +89,8 @@ void buffer_detach(ant_t *js, ArrayBufferData *data);
 ant_value_t create_arraybuffer_obj(ant_t *js, ArrayBufferData *buffer);
 ant_value_t create_arraybuffer_copy(ant_t *js, const void *bytes, size_t length);
 ant_value_t create_shared_arraybuffer_obj(ant_t *js, ArrayBufferData *buffer);
+
+const void *buffer_typedarray_exotic_ops(void);
 const char *buffer_typedarray_type_name(TypedArrayType type);
 
 ArrayBufferData *create_array_buffer_data(ant_t *js, size_t length);
@@ -95,6 +106,8 @@ bool buffer_can_transfer(const ArrayBufferData *data);
 bool buffer_source_get_bytes(ant_t *js, ant_value_t value, const uint8_t **out, size_t *len);
 bool buffer_typedarray_data_read_index(ant_t *js, const TypedArrayData *ta_data, size_t index, ant_value_t *out);
 bool buffer_typedarray_read_index(ant_t *js, ant_value_t value, size_t index, ant_value_t *out);
+bool buffer_typedarray_get_index(ant_t *js, ant_value_t obj, uint32_t index, ant_value_t *out);
+bool buffer_typedarray_set_index(ant_t *js, ant_value_t obj, uint32_t index, ant_value_t value, ant_value_t *result);
 
 bool buffer_bytes_to_string(
   ant_t *js, const uint8_t *data, size_t len,

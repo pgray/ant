@@ -1745,6 +1745,7 @@ void jit_emit_inline_body(
                                ? sv_func_type_feedback(callee)[inl_bc_off]
                                : 0;
         bool specialize = sv_tfb_specialization_ready(feedback);
+        bool typed_seen = sv_tfb_elem_saw_typed_array(feedback);
         bool key_is_num = inl_num[isp - 1] != 0;
         MIR_reg_t key_double = inl_d[isp - 1];
 
@@ -1758,10 +1759,21 @@ void jit_emit_inline_body(
           MIR_reg_t index = mir_emit_array_index_guard(
               ctx, jit_func, ge_key, key_double, key_is_num,
               *p_d_slot, slow, index_site);
+          MIR_label_t ge_typed = typed_seen ? MIR_new_label(ctx) : slow;
+          MIR_label_t ge_loaded = MIR_new_label(ctx);
           (void)mir_emit_dense_element_guard(
-              ctx, jit_func, ge_obj, index, r_bool, JIT_ELEMENT_NUMERIC_READ, slow, element_site, NULL);
+              ctx, jit_func, ge_obj, index, r_bool, JIT_ELEMENT_NUMERIC_READ, ge_typed, element_site, NULL);
           mir_i64_to_d(
               ctx, jit_func, inl_d[isp - 1], r_bool, *p_d_slot);
+          MIR_append_insn(ctx, jit_func,
+                          MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, ge_loaded)));
+          if (typed_seen) {
+            MIR_append_insn(ctx, jit_func, ge_typed);
+            mir_emit_typed_array_read(
+                ctx, jit_func, ge_obj, index, inl_d[isp - 1], slow, ge_loaded, element_site,
+                sv_tfb_elem_type(callee, inl_bc_off));
+          }
+          MIR_append_insn(ctx, jit_func, ge_loaded);
           inl_num[isp - 1] = 1;
           inl_num[isp] = 0;
           break;
@@ -1775,17 +1787,33 @@ void jit_emit_inline_body(
         MIR_label_t ge_ok = MIR_new_label(ctx);
         MIR_label_t ge_slow = MIR_new_label(ctx);
         INL_ENSURE_D_SLOT();
+        MIR_label_t ge_typed = typed_seen ? MIR_new_label(ctx) : ge_slow;
         MIR_reg_t ge_index = mir_emit_array_index_guard(
             ctx, jit_func, ge_key, key_double, key_is_num, *p_d_slot, ge_slow,
             mir_next_reg_site(p_reg_site));
+        int ge_site = mir_next_reg_site(p_reg_site);
         (void)mir_emit_dense_element_guard(
             ctx, jit_func, ge_obj, ge_index, r_bool, JIT_ELEMENT_READ,
-            ge_slow, mir_next_reg_site(p_reg_site), NULL);
+            ge_typed, ge_site, NULL);
         MIR_append_insn(ctx, jit_func,
                         MIR_new_insn(ctx, MIR_MOV,
                                      MIR_new_reg_op(ctx, ge_dst), MIR_new_reg_op(ctx, r_bool)));
         MIR_append_insn(ctx, jit_func,
                         MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, ge_ok)));
+        if (typed_seen) {
+          MIR_label_t ge_typed_loaded = MIR_new_label(ctx);
+          char ge_name[48];
+          snprintf(ge_name, sizeof(ge_name), "inl_ta_number_%d", ge_site);
+          MIR_reg_t ge_number = MIR_new_func_reg(ctx, jit_func->u.func, MIR_T_D, ge_name);
+          MIR_append_insn(ctx, jit_func, ge_typed);
+          mir_emit_typed_array_read(
+              ctx, jit_func, ge_obj, ge_index, ge_number, ge_slow, ge_typed_loaded, ge_site,
+              sv_tfb_elem_type(callee, inl_bc_off));
+          MIR_append_insn(ctx, jit_func, ge_typed_loaded);
+          mir_d_to_i64(ctx, jit_func, ge_dst, ge_number, *p_d_slot);
+          MIR_append_insn(ctx, jit_func,
+                          MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, ge_ok)));
+        }
         MIR_append_insn(ctx, jit_func, ge_slow);
         MIR_append_insn(ctx, jit_func,
                         MIR_new_call_insn(ctx, 6,

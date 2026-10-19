@@ -1703,6 +1703,13 @@ static inline ant_value_t sv_op_put_elem(sv_vm_t *vm, ant_t *js) {
   ant_value_t key = vm->stack[vm->sp - 2];
   ant_value_t obj = vm->stack[vm->sp - 3];
   
+  uint32_t idx;
+  if (sv_number_key_index(key, &idx)) {
+    ant_value_t res = js_setprop_index(js, obj, idx, val);
+    vm->sp -= 3;
+    return res;
+  }
+  
   ant_value_t prop_key = sv_key_to_property_key(js, key);
   if (is_err(prop_key)) { 
     vm->sp -= 3;

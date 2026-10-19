@@ -4883,7 +4883,10 @@ static inline bool index_keys_absent_from_protos(const ant_object_t *ptr) {
 
 bool js_get_plain_index(ant_t *js, ant_value_t obj, uint32_t idx, ant_value_t *out) {
   ant_object_t *ptr = vtype(obj) == kTypeObject ? js_obj_ptr(obj) : NULL;
-  if (!ptr || ptr->flags.is_exotic || !ptr->shape) return false;
+  if (!ptr) return false;
+  
+  if (ptr->flags.is_exotic) return buffer_typedarray_get_index(js, obj, idx, out);
+  if (!ptr->shape) return false;
   
   ant_value_t str = ptr->extra_slots 
     ? js_string_wrapper_value(obj) 
@@ -5006,7 +5009,11 @@ keyed:;
   size_t key_len = 0;
   
   ant_object_t *plain = vtype(obj) == kTypeObject ? js_obj_ptr(obj) : NULL;
-  if (plain && !plain->flags.is_exotic && plain->shape) {
+  ant_value_t stored;
+  
+  if (plain && plain->flags.is_exotic) {
+    if (buffer_typedarray_set_index(js, obj, idx, value, &stored)) return stored;
+  } else if (plain && plain->shape) {
     const char *interned = index_key_find(js, idx, key, &key_len);
     int32_t slot = interned ? ant_shape_lookup_interned(plain->shape, interned) : -1;
     
@@ -21165,7 +21172,7 @@ void js_destroy(ant_t *js) {
   ant_library_cache_free(js);
 
   ant_realm_destroy_all(js);
-  ant_shapes_destroy(js);
+  if (!js->process_exiting) ant_shapes_destroy(js);
   free(js->global_lexicals);
   
   js->global_lexicals = NULL;
@@ -22549,6 +22556,7 @@ void js_check_unhandled_rejections(ant_t *js) {
       js_throw(js, pd->value);
       print_uncaught_throw(js);
       int status = process_run_exit_handlers(js, EXIT_FAILURE);
+      js->process_exiting = true;
       js_destroy(js); exit(status);
     }
 

@@ -22,7 +22,12 @@ gone.
   points at its isolate's heap, so release and clone need no isolate argument and
   no thread-local access (thread-local storage cost 0.5–1.2% instructions on
   shape churn on macOS).
-- The string intern table is per isolate (`js->intern_table`): an open-addressed
+- `js_destroy` frees the shape tree only when the process keeps running (workers,
+  embedders, native tests). The main entrypoints set `js->process_exiting` first,
+  which skips it as master did: freeing every live shape at exit cost about 900
+  instructions per shape (+18% on 200k uniquely-keyed live objects, +6% on the
+  intern new-keys bench). `leaks --atExit` reports that tree on the main isolate.
+- The string intern table is per isolate (`js->intern.table`): an open-addressed
   table with no atomics or locks, whose entries come from a bump arena of 64 KiB
   chunks and are freed with the isolate in `js_destroy`. Nothing compares interned
   pointers across isolates (values cross only through the wire serializer, which

@@ -509,6 +509,14 @@ MIR_reg_t mir_emit_dense_element_guard(
     MIR_reg_t object, MIR_reg_t index, MIR_reg_t value,
     jit_element_access_t access, MIR_label_t slow, int site,
     jit_dense_element_t *element);
+void mir_emit_typed_array_read(
+    MIR_context_t ctx, MIR_item_t fn,
+    MIR_reg_t object, MIR_reg_t index, MIR_reg_t number,
+    MIR_label_t slow, MIR_label_t done, int site, int first_type);
+void mir_emit_typed_array_write(
+    MIR_context_t ctx, MIR_item_t fn,
+    MIR_reg_t object, MIR_reg_t index, MIR_reg_t value, MIR_reg_t d_slot,
+    MIR_label_t slow, MIR_label_t done, int site, int first_type);
 void mir_emit_word32_binary(
     MIR_context_t ctx, MIR_item_t fn, sv_op_t op,
     MIR_reg_t left, MIR_reg_t right, MIR_reg_t result,

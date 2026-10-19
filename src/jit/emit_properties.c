@@ -953,6 +953,7 @@ void jit_emit_properties(jit_compile_t *c) {
                              ? sv_func_type_feedback(c->func)[c->bc_off]
                              : 0;
       bool specialize = sv_tfb_specialization_ready(feedback);
+      bool typed_seen = sv_tfb_elem_saw_typed_array(feedback);
       MIR_reg_t integer_index = 0;
       if (c->vs.slot_type[c->vs.sp - 1] == SLOT_I32) {
         char name[48];
@@ -978,13 +979,20 @@ void jit_emit_properties(jit_compile_t *c) {
             c, key, integer_index, c->vs.d_regs[c->vs.sp], key_is_num,
             bail_direct, index_site);
         MIR_reg_t loaded = c->r_err_tmp;
+        MIR_label_t typed = typed_seen ? MIR_new_label(c->ctx) : bail_direct;
         (void)mir_emit_dense_element_guard(
-            c->ctx, c->jit_func, obj, index, loaded, JIT_ELEMENT_NUMERIC_READ, bail_direct, element_site, NULL);
+            c->ctx, c->jit_func, obj, index, loaded, JIT_ELEMENT_NUMERIC_READ, typed, element_site, NULL);
         mir_i64_to_d(
             c->ctx, c->jit_func, c->vs.d_regs[c->vs.sp - 1], loaded, c->r_d_slot);
         c->vs.slot_type[c->vs.sp - 1] = SLOT_NUM;
         MIR_append_insn(c->ctx, c->jit_func,
                         MIR_new_insn(c->ctx, MIR_JMP, MIR_new_label_op(c->ctx, done)));
+        if (typed_seen) {
+          MIR_append_insn(c->ctx, c->jit_func, typed);
+          mir_emit_typed_array_read(
+              c->ctx, c->jit_func, obj, index, c->vs.d_regs[c->vs.sp - 1], bail_direct, done, element_site,
+              sv_tfb_elem_type(c->func, c->bc_off));
+        }
         MIR_append_insn(c->ctx, c->jit_func, bail_direct);
         mir_emit_bailout_jump_typed(
             c->ctx, c->jit_func, c->bc_off, c->vs.sp + 1, &c->bailout_ctx,
@@ -1031,12 +1039,14 @@ void jit_emit_properties(jit_compile_t *c) {
           MIR_append_insn(c->ctx, c->jit_func, MIR_new_insn(c->ctx, MIR_JMP, MIR_new_label_op(c->ctx, loaded)));
           MIR_append_insn(c->ctx, c->jit_func, miss);
         }
+        MIR_label_t typed = typed_seen ? MIR_new_label(c->ctx) : slow;
         MIR_reg_t index = mir_emit_known_array_index_guard(
             c->ctx, c->jit_func, key, integer_index, slow, c->r_d_slot,
             mir_next_reg_site(&c->reg_site_n), c->cached_index_key, c->cached_index_value);
+        int element_site = mir_next_reg_site(&c->reg_site_n);
         (void)mir_emit_dense_element_guard(
-            c->ctx, c->jit_func, obj, index, c->r_err_tmp, JIT_ELEMENT_READ, slow,
-            mir_next_reg_site(&c->reg_site_n), NULL);
+            c->ctx, c->jit_func, obj, index, c->r_err_tmp, JIT_ELEMENT_READ, typed,
+            element_site, NULL);
         MIR_append_insn(c->ctx, c->jit_func, MIR_new_insn(c->ctx, MIR_MOV, MIR_new_reg_op(c->ctx, c->cached_element_object), MIR_new_reg_op(c->ctx, obj)));
         MIR_append_insn(c->ctx, c->jit_func, MIR_new_insn(c->ctx, MIR_MOV, MIR_new_reg_op(c->ctx, c->cached_element_key), MIR_new_reg_op(c->ctx, key)));
         MIR_append_insn(c->ctx, c->jit_func, MIR_new_insn(c->ctx, MIR_MOV, MIR_new_reg_op(c->ctx, c->cached_element_value), MIR_new_reg_op(c->ctx, c->r_err_tmp)));
@@ -1047,6 +1057,20 @@ void jit_emit_properties(jit_compile_t *c) {
                                      MIR_new_reg_op(c->ctx, dst), MIR_new_reg_op(c->ctx, c->r_err_tmp)));
         MIR_append_insn(c->ctx, c->jit_func,
                         MIR_new_insn(c->ctx, MIR_JMP, MIR_new_label_op(c->ctx, element_done)));
+        if (typed_seen) {
+          MIR_label_t typed_loaded = MIR_new_label(c->ctx);
+          char name[48];
+          snprintf(name, sizeof(name), "ta_number_%d", element_site);
+          MIR_reg_t number = MIR_new_func_reg(c->ctx, c->jit_func->u.func, MIR_T_D, name);
+          MIR_append_insn(c->ctx, c->jit_func, typed);
+          mir_emit_typed_array_read(
+              c->ctx, c->jit_func, obj, index, number, slow, typed_loaded, element_site,
+              sv_tfb_elem_type(c->func, c->bc_off));
+          MIR_append_insn(c->ctx, c->jit_func, typed_loaded);
+          mir_d_to_i64(c->ctx, c->jit_func, dst, number, c->r_d_slot);
+          MIR_append_insn(c->ctx, c->jit_func,
+                          MIR_new_insn(c->ctx, MIR_JMP, MIR_new_label_op(c->ctx, element_done)));
+        }
         MIR_append_insn(c->ctx, c->jit_func, slow);
         mir_load_imm(c->ctx, c->jit_func, c->cached_element_valid, 0);
         jit_emit_index_read_fast(c, obj, key, dst, element_done);
@@ -1149,6 +1173,7 @@ void jit_emit_properties(jit_compile_t *c) {
                              ? sv_func_type_feedback(c->func)[c->bc_off]
                              : 0;
       bool specialize = sv_tfb_specialization_ready(feedback);
+      bool typed_seen = sv_tfb_elem_saw_typed_array(feedback);
       MIR_reg_t integer_index = 0;
       if (c->vs.slot_type[c->vs.sp - 2] == SLOT_I32) {
         char name[48];
@@ -1187,9 +1212,10 @@ void jit_emit_properties(jit_compile_t *c) {
           mir_emit_is_num_guard(c->ctx, c->jit_func, c->r_bool, val, bail_direct);
 
         MIR_reg_t old_value = c->r_err_tmp;
+        MIR_label_t typed = typed_seen ? MIR_new_label(c->ctx) : bail_direct;
         MIR_reg_t data = mir_emit_dense_element_guard(
             c->ctx, c->jit_func, obj, index, old_value,
-            JIT_ELEMENT_WRITE, bail_direct, element_site, NULL);
+            JIT_ELEMENT_WRITE, typed, element_site, NULL);
         MIR_label_t tagged_old_value = NULL;
         MIR_label_t store = NULL;
         if (tagged_old_possible) {
@@ -1222,6 +1248,12 @@ void jit_emit_properties(jit_compile_t *c) {
           MIR_append_insn(c->ctx, c->jit_func,
                           MIR_new_insn(c->ctx, MIR_JMP, MIR_new_label_op(c->ctx, store)));
         }
+        if (typed_seen) {
+          MIR_append_insn(c->ctx, c->jit_func, typed);
+          mir_emit_typed_array_write(
+              c->ctx, c->jit_func, obj, index, val, c->r_d_slot, bail_direct, done, element_site,
+              sv_tfb_elem_type(c->func, c->bc_off));
+        }
         MIR_append_insn(c->ctx, c->jit_func, bail_direct);
         mir_emit_bailout_jump_typed(
             c->ctx, c->jit_func, c->bc_off, c->vs.sp + 3, &c->bailout_ctx,
@@ -1247,8 +1279,9 @@ void jit_emit_properties(jit_compile_t *c) {
         int site = mir_next_reg_site(&c->reg_site_n);
         MIR_label_t add = MIR_new_label(c->ctx);
         jit_dense_element_t element = {.past_end = MIR_new_label(c->ctx)};
+        MIR_label_t typed = typed_seen ? MIR_new_label(c->ctx) : slow;
         MIR_reg_t data = mir_emit_dense_element_guard(
-            c->ctx, c->jit_func, obj, index, c->r_err_tmp, JIT_ELEMENT_WRITE, slow,
+            c->ctx, c->jit_func, obj, index, c->r_err_tmp, JIT_ELEMENT_WRITE, typed,
             site, &element);
         MIR_reg_t flags = element.flags;
         MIR_append_insn(c->ctx, c->jit_func,
@@ -1282,6 +1315,12 @@ void jit_emit_properties(jit_compile_t *c) {
         jit_emit_element_barrier_filter(c, val, flags, element_done);
         MIR_append_insn(c->ctx, c->jit_func,
                         MIR_new_insn(c->ctx, MIR_JMP, MIR_new_label_op(c->ctx, barrier)));
+        if (typed_seen) {
+          MIR_append_insn(c->ctx, c->jit_func, typed);
+          mir_emit_typed_array_write(
+              c->ctx, c->jit_func, obj, index, val, c->r_d_slot, slow, element_done, site,
+              sv_tfb_elem_type(c->func, c->bc_off));
+        }
         MIR_append_insn(c->ctx, c->jit_func, slow);
       }
       MIR_append_insn(c->ctx, c->jit_func,

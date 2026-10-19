@@ -978,6 +978,7 @@ int main(int argc, char *argv[]) {
     js_result = process_run_exit_handlers(js, js_result);
     
   cleanup: {
+    js->process_exiting = true;
     js_destroy(js);
     CLEANUP_ARGS_AND_ARGV();
   }

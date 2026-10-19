@@ -178,7 +178,9 @@ int main(int argc, char *argv[]) {
     js_result = process_run_exit_handlers(js, js_result);
   }
 
+  js->process_exiting = true;
   js_destroy(js);
+  
   ant_bundle_close(&bundle);
   free(proc_argv);
 
