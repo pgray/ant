@@ -32,7 +32,6 @@
 #include "gc.h"
 #include "gc/objects.h"
 #include "gc/roots.h"
-#include "sync.h"
 #include "realm.h"
 #include "bootstrap.h"
 #include "gc/weak.h"
@@ -106,6 +105,7 @@
 #include "modules/globals.h"
 #include "modules/rpc.h"
 #include "modules/navigator.h"
+#include "modules/isolate.h"
 #include "modules/worker_threads.h"
 #include "modules/message_port.h"
 #include "modules/performance.h"
@@ -416,9 +416,11 @@ static ant_exotic_ops_t *obj_ensure_exotic_ops(ant_object_t *obj) {
 
 static ant_object_t *obj_alloc(ant_t *js, uint8_t type_tag, uint8_t inobj_limit) {
   gc_alloc_check(js);
-
   ant_object_t *obj = (ant_object_t *)fixed_arena_alloc_uninit(&js->obj_arena);
-  if (!obj && gc_reclaim_arena(js)) obj = (ant_object_t *)fixed_arena_alloc_uninit(&js->obj_arena);
+  
+  if (!obj && gc_reclaim_arena(js, &js->obj_arena)) 
+    obj = (ant_object_t *)fixed_arena_alloc_uninit(&js->obj_arena);
+  
   if (!obj) return NULL;
 
   obj->ic_identity = 0;
@@ -21023,9 +21025,7 @@ void init_intrinsic_symbols(ant_t *js) {
   js->array_iteration_protector_invalid = false;
 }
 
-bool js_realm_init_intrinsics(ant_t *js) {
-  realm_init_core(js);
-  ant_bootstrap_realm_intrinsics(js);
+bool js_realm_finish_intrinsics(ant_t *js) {
   js_set_global_builtin(js, "globalThis", js->global);
   
   static const char *const not_ecmascript[] = { "Buffer", "atob", "btoa", "AsyncIterator", "InternalError", "import" };
@@ -21034,6 +21034,12 @@ bool js_realm_init_intrinsics(ant_t *js) {
     
   ant_realm_install_console(js);
   return !Ant_Exception_Pending(js);
+}
+
+bool js_realm_init_intrinsics(ant_t *js) {
+  realm_init_core(js);
+  ant_bootstrap_realm_intrinsics(js);
+  return js_realm_finish_intrinsics(js);
 }
 
 ant_t *ant_create(const ant_isolate_options_t *options) {
@@ -21082,11 +21088,14 @@ void js_destroy(ant_t *js) {
   if (js == NULL) return;
   js->destroying = true;
   
+  cleanup_isolate_module(js);
   cleanup_worker_threads_module(js);
   cleanup_timer_module(js);
   json_layout_cache_clear(js);
+  
   if (js->index_layout_shape) ant_shape_release(js->index_layout_shape);
   js->index_layout_shape = NULL;
+  
   cleanup_cron_module(js);
   cleanup_abort_module(js);
   cleanup_eventsource_module(js);

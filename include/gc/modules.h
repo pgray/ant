@@ -30,6 +30,7 @@ void gc_mark_iterator_registry(ant_t *js, const struct ant_iterator_registry *re
 void gc_mark_symbols(ant_t *js, gc_mark_fn mark);
 void gc_mark_esm(ant_t *js, gc_mark_fn mark);
 void gc_mark_worker_threads(ant_t *js, gc_mark_fn mark);
+void gc_mark_isolates(ant_t *js, gc_mark_fn mark);
 void gc_mark_abort(ant_t *js, gc_mark_fn mark);
 void gc_mark_wasm(ant_t *js, gc_mark_fn mark);
 void gc_mark_napi(ant_t *js, gc_mark_fn mark);

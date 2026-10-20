@@ -2281,6 +2281,44 @@ void Ant_EventTarget_SetHandler(ant_t *js, ant_value_t target, const char *type,
   eventtarget_add_entry(js, evt, trampoline, false, false, js_mkundef());
 }
 
+ant_value_t Ant_GlobalEvents_GetHandler(ant_t *js, const char *type, size_t len) {
+  ant_event_list_t *list = js->global_events;
+  EventType *evt = list ? evt_list_find_cstr(list, type, len) : NULL;
+  return evt ? evt->handler : js_mknull();
+}
+
+void Ant_GlobalEvents_SetHandler(ant_t *js, const char *type, size_t len, ant_value_t handler) {
+  ant_event_list_t *list = global_events_list(js);
+  if (!list) return;
+  EventType *evt = evt_list_find_cstr(list, type, len);
+  ant_value_t trampoline = eventtarget_handler_trampoline();
+
+  if (!is_object_type(handler)) {
+    if (!evt) return;
+    evt->handler = js_mknull();
+    eventtarget_remove_entry(js, evt, trampoline, false);
+    return;
+  }
+
+  if (!evt) evt = evt_list_find_or_create(js, list, js_mkstr(js, type, len));
+  if (!evt) return;
+  evt->handler = handler;
+  eventtarget_add_entry(js, evt, trampoline, false, false, js_mkundef());
+}
+
+void Ant_GlobalEvents_SetListenerChangeHook(ant_t *js, eventemitter_listener_change_fn hook, void *context) {
+  ant_event_list_t *list = global_events_list(js);
+  if (!list) return;
+  list->target = js_glob(js);
+  list->listener_change_hook = hook;
+  list->listener_change_context = context;
+}
+
+bool Ant_Event_Canceled(ant_value_t event) {
+  event_data_t *data = get_event_data(event);
+  return data && data->canceled;
+}
+
 void Ant_EventTarget_Dispatch(ant_t *js, ant_value_t target, ant_value_t event) {
   event_data_t *data = get_event_data(event);
   ant_value_t type = data ? data->type : js_get(js, event, "type");

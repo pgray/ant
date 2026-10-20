@@ -118,8 +118,10 @@ static inline void sv_obj_site_apply(
   }
 }
 
-static inline void sv_op_object(sv_vm_t *vm, ant_t *js, sv_func_t *func, uint8_t *ip) {
+static inline ant_value_t sv_op_object(sv_vm_t *vm, ant_t *js, sv_func_t *func, uint8_t *ip) {
   ant_value_t obj = mkobj(js, 0);
+  if (__builtin_expect(is_err(obj), 0)) return obj;
+  
   ant_object_t *ptr = js_obj_ptr(js_as_obj(obj));
   sv_obj_site_cache_t *site = sv_obj_site_for_ip(func, ip);
   sv_obj_site_apply(js, func, site, ptr);
@@ -127,20 +129,31 @@ static inline void sv_op_object(sv_vm_t *vm, ant_t *js, sv_func_t *func, uint8_t
   ant_value_t proto = js->sym.object_proto;
   if (vtype(proto) == kTypeObject) js_set_proto_init(obj, proto);
   vm->stack[vm->sp++] = obj;
+  
+  return tov(0);
 }
 
-static inline void sv_op_private_token(sv_vm_t *vm, ant_t *js, uint8_t *ip) {
+static inline ant_value_t sv_op_private_token(sv_vm_t *vm, ant_t *js, uint8_t *ip) {
   ant_value_t obj = mkobj(js, 0);
+  if (__builtin_expect(is_err(obj), 0)) return obj;
+  
   uint32_t hash = sv_get_u32(ip + 1);
   js_set_slot(obj, SLOT_DATA, js_mknum((double)hash));
   vm->stack[vm->sp++] = obj;
+  
+  return tov(0);
 }
 
-static inline void sv_op_array(sv_vm_t *vm, ant_t *js, uint8_t *ip) {
+static inline ant_value_t sv_op_array(sv_vm_t *vm, ant_t *js, uint8_t *ip) {
   uint16_t n = sv_get_u16(ip + 1);
+  
   ant_value_t arr = js_mkarr_dense_literal(js, &vm->stack[vm->sp - n], n);
+  if (__builtin_expect(is_err(arr), 0)) return arr;
+  
   vm->sp -= n;
   vm->stack[vm->sp++] = arr;
+  
+  return tov(0);
 }
 
 static inline void sv_op_set_brand(sv_vm_t *vm, uint8_t *ip) {

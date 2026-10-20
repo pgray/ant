@@ -74,6 +74,7 @@ typedef struct broadcast_member broadcast_member_t;
 typedef struct ant_worker       ant_worker_t;
 
 typedef struct ant_thread_mailbox ant_thread_mailbox_t;
+typedef struct ant_guest        ant_guest_t;
 typedef struct navigator_locks    navigator_locks_t;
 typedef struct perf_eld_monitor   perf_eld_monitor_t;
 

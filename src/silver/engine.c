@@ -1938,10 +1938,21 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
   ant_value_t  tc_this = js_mkundef();
   uint16_t tc_argc = 0;
   
+  // TODO: cleanup
+  
   #define VM_CHECK(expr) ({            \
     frame->ip = ip;                    \
     sv_err = (expr);                   \
     if (is_err(sv_err)) goto sv_throw; \
+  })
+
+  #define VM_CHECK_ALLOC(expr) ({                          \
+    ant_value_t alloc_ = (expr);                           \
+    if (__builtin_expect(is_err(alloc_), 0)) {             \
+      frame->ip = ip;                                      \
+      sv_err = alloc_;                                     \
+      goto sv_throw;                                       \
+    }                                                      \
   })
 
 #ifdef ANT_WASM_EMBED
@@ -2036,8 +2047,8 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
   L_FALSE:     { sv_op_false(vm);                 NEXT(OP_FALSE); }
   L_THIS:      { sv_op_this(vm, frame);           NEXT(OP_THIS); }
   L_GLOBAL:    { sv_op_global(vm, js);            NEXT(OP_GLOBAL); }
-  L_OBJECT:    { sv_op_object(vm, js, func, ip);  NEXT(OP_OBJECT); }
-  L_ARRAY:     { sv_op_array(vm, js, ip);         NEXT(OP_ARRAY); }
+  L_OBJECT:    { VM_CHECK_ALLOC(sv_op_object(vm, js, func, ip)); NEXT(OP_OBJECT); }
+  L_ARRAY:     { VM_CHECK_ALLOC(sv_op_array(vm, js, ip));        NEXT(OP_ARRAY); }
   L_SET_BRAND: { sv_op_set_brand(vm, ip);         NEXT(OP_SET_BRAND); }
 
   L_REGEXP:        { sv_op_regexp(vm, js);                                  NEXT(OP_REGEXP); }
@@ -2062,7 +2073,7 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
   }
   
   L_PRIVATE_TOKEN: { 
-    sv_op_private_token(vm, js, ip);
+    VM_CHECK_ALLOC(sv_op_private_token(vm, js, ip));
     NEXT(OP_PRIVATE_TOKEN);
   }
 

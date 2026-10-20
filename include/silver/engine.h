@@ -944,7 +944,10 @@ static inline sv_closure_t *js_closure_alloc_finish(ant_t *js, sv_closure_t *c) 
 static inline sv_closure_t *js_closure_alloc(ant_t *js) {
   js_closure_alloc_prepare(js);
   sv_closure_t *c = (sv_closure_t *)fixed_arena_alloc(&js->closure_arena);
-  if (!c && gc_reclaim_arena(js)) c = (sv_closure_t *)fixed_arena_alloc(&js->closure_arena);
+  
+  if (!c && gc_reclaim_arena(js, &js->closure_arena)) 
+    c = (sv_closure_t *)fixed_arena_alloc(&js->closure_arena);
+  
   if (!c) return NULL;
   return js_closure_alloc_finish(js, c);
 }
@@ -952,7 +955,9 @@ static inline sv_closure_t *js_closure_alloc(ant_t *js) {
 static inline sv_closure_t *js_closure_alloc_hot(ant_t *js) {
   js_closure_alloc_prepare(js);
   sv_closure_t *c = (sv_closure_t *)fixed_arena_alloc_uninit(&js->closure_arena);
-  if (!c && gc_reclaim_arena(js)) c = (sv_closure_t *)fixed_arena_alloc_uninit(&js->closure_arena);
+  
+  if (!c && gc_reclaim_arena(js, &js->closure_arena)) 
+    c = (sv_closure_t *)fixed_arena_alloc_uninit(&js->closure_arena);
   
   if (!c) return NULL;
   c->call_flags = 0;

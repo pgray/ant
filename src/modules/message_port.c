@@ -55,6 +55,8 @@ struct ant_port_binding {
   bool started;
   bool refed;
   bool has_listeners;
+  bool global_listeners;
+  bool mirror_global;
   bool closed;
   bool draining;
   ant_port_binding_t *next;
@@ -265,9 +267,8 @@ static void binding_destroy(ant_port_binding_t *binding) {
   } else free(binding);
 }
 
-static ant_value_t port_message_event(ant_t *js, ant_value_t target, const char *type, ant_value_t data, ant_value_t ports) {
-  ant_value_t event = Ant_EventTarget_CreateEvent(js, target, js->builtins.message_event_proto, ANT_EVENT_MESSAGE, type);
-  if (is_err(event)) return event;
+static ant_value_t message_event_fill(ant_t *js, ant_value_t event, ant_value_t data, ant_value_t ports) {
+  if (!is_object_type(event)) return event;
   ant_value_t empty = js_mkstr(js, "", 0);
   
   Ant_Event_SetField(js, event, ANT_EVENT_FIELD_MESSAGE_data, data);
@@ -279,17 +280,43 @@ static ant_value_t port_message_event(ant_t *js, ant_value_t target, const char 
   return event;
 }
 
+static ant_value_t port_message_event(ant_t *js, ant_value_t target, const char *type, ant_value_t data, ant_value_t ports) {
+  ant_value_t event = Ant_EventTarget_CreateEvent(js, target, js->builtins.message_event_proto, ANT_EVENT_MESSAGE, type);
+  return message_event_fill(js, event, data, ports);
+}
+
+ant_value_t ant_message_event_create(ant_t *js, const char *type, ant_value_t data, ant_value_t ports) {
+  ant_value_t event = Ant_Event_CreateTrusted(js, js->builtins.message_event_proto, ANT_EVENT_MESSAGE, type);
+  return message_event_fill(js, event, data, ports);
+}
+
 static void port_dispatch(ant_t *js, ant_value_t target, const char *type, ant_value_t data, ant_value_t ports) {
   GC_ROOT_SAVE(mark, js);
   GC_ROOT_PIN(js, data);
   GC_ROOT_PIN(js, ports);
   
   ant_value_t event = port_message_event(js, target, type, data, ports);
-  if (!is_err(event)) {
+  if (is_object_type(event)) {
     GC_ROOT_PIN(js, event);
     Ant_EventTarget_Dispatch(js, target, event);
   }
   
+  GC_ROOT_RESTORE(js, mark);
+}
+
+static void binding_dispatch(ant_port_binding_t *binding, const char *type, ant_value_t data, ant_value_t ports) {
+  ant_t *js = binding->js;
+  port_dispatch(js, binding->target, type, data, ports);
+  if (!binding->mirror_global || Ant_Exception_Pending(js)) return;
+
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, data);
+  GC_ROOT_PIN(js, ports);
+  ant_value_t event = ant_message_event_create(js, type, data, ports);
+  if (is_object_type(event)) {
+    GC_ROOT_PIN(js, event);
+    js_dispatch_global_event(js, event);
+  }
   GC_ROOT_RESTORE(js, mark);
 }
 
@@ -316,9 +343,9 @@ static void binding_deliver(ant_port_binding_t *binding, ant_port_message_t *msg
   if (is_err(value)) {
     ant_value_t error = js_take_thrown(js, value);
     if (binding->on_message) binding->on_message(js, target, error, js_mknull());
-    else port_dispatch(js, target, "messageerror", error, ports);
+    else binding_dispatch(binding, "messageerror", error, ports);
   } else if (binding->on_message) binding->on_message(js, target, value, ports);
-  else port_dispatch(js, target, "message", value, ports);
+  else binding_dispatch(binding, "message", value, ports);
 
   GC_ROOT_RESTORE(js, mark);
   process_microtasks(js);
@@ -409,23 +436,34 @@ static void message_port_finalize(ant_t *js, ant_object_t *obj) {
   binding_destroy(binding);
 }
 
-static void message_port_listener_change(ant_t *js, ant_value_t target, ant_value_t key, ant_offset_t count, void *context) {
-  ant_port_binding_t *binding = port_binding(target);
-  if (!binding || vtype(key) != kTypeString) return;
+static bool binding_listener_change(ant_t *js, ant_port_binding_t *binding, ant_value_t key, bool *slot, ant_offset_t count) {
+  if (!binding || vtype(key) != kTypeString) return false;
   size_t len = 0;
   const char *name = js_getstr(js, key, &len);
-  if (len != 7 || memcmp(name, "message", 7) != 0) return;
+  if (len != 7 || memcmp(name, "message", 7) != 0) return false;
 
-  bool had = binding->has_listeners;
-  binding->has_listeners = count > 0;
-  if (binding->has_listeners == had) return;
+  bool had = binding->has_listeners || binding->global_listeners;
+  *slot = count > 0;
+  bool has = binding->has_listeners || binding->global_listeners;
+  if (has == had) return true;
 
-  binding->refed = binding->has_listeners;
-  if (binding->has_listeners && !binding->started) {
+  binding->refed = has;
+  if (has && !binding->started) {
     binding->started = true;
     if (binding->async_open) uv_async_send(&binding->async);
   }
   binding_update_ref(binding);
+  return true;
+}
+
+static void message_port_listener_change(ant_t *js, ant_value_t target, ant_value_t key, ant_offset_t count, void *context) {
+  ant_port_binding_t *binding = port_binding(target);
+  if (binding) binding_listener_change(js, binding, key, &binding->has_listeners, count);
+}
+
+static void message_port_global_listener_change(ant_t *js, ant_value_t target, ant_value_t key, ant_offset_t count, void *context) {
+  ant_port_binding_t *binding = context;
+  binding_listener_change(js, binding, key, &binding->global_listeners, count);
 }
 
 static ant_value_t message_port_create(ant_t *js, ant_port_end_t *end) {
@@ -452,13 +490,23 @@ ant_value_t ant_message_port_adopt(ant_t *js, ant_port_end_t *end) {
   return port;
 }
 
+bool ant_message_port_mirror_global(ant_t *js, ant_value_t port) {
+  ant_port_binding_t *binding = port_binding(port);
+  if (!binding) return false;
+  binding->mirror_global = true;
+  Ant_GlobalEvents_SetListenerChangeHook(js, message_port_global_listener_change, binding);
+  return true;
+}
+
 ant_port_end_t *ant_message_port_take(ant_t *js, ant_value_t port) {
   ant_port_binding_t *binding = port_binding(port);
   if (!binding || !binding->end) return NULL;
   ant_port_end_t *end = binding->end;
+  
   binding_detach(binding, false);
   binding->closed = true;
   binding_update_ref(binding);
+  
   return end;
 }
 

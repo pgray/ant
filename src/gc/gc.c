@@ -517,10 +517,11 @@ bool gc_alloc_due(ant_t *js) {
   return js->obj_arena.live_count >= js->gc.alloc_limit;
 }
 
-__attribute__((noinline)) bool gc_reclaim_arena(ant_t *js) {
+__attribute__((noinline)) bool gc_reclaim_arena(ant_t *js, const ant_fixed_arena_t *arena) {
   if (__builtin_expect(gc_disabled, 0) || js->gc_running) return false;
   gc_run(js);
-  return true;
+  size_t capacity = arena->limit / arena->elem_size;
+  return arena->live_count + capacity / GC_RECLAIM_MIN_FREE_DIVISOR < capacity;
 }
 
 void gc_alloc_check(ant_t *js) {

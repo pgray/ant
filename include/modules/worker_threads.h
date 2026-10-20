@@ -6,6 +6,7 @@
 uint64_t ant_worker_thread_id(ant_t *js);
 
 ant_value_t worker_threads_library(ant_t *js);
+void init_web_worker_module(ant_t *js);
 ant_value_t ant_worker_exit(ant_t *js, int code);
 
 bool ant_worker_is_worker(ant_t *js);

@@ -125,7 +125,7 @@ state.
 
 ## Workers
 
-- `src/modules/worker_threads.c`: a refcounted `ant_worker_t` shared by the
+- `src/modules/worker/`: a refcounted `ant_worker_t` shared by the
   parent (Worker object, parent `uv_async_t` for online/error/exit) and the child
   thread (control `uv_async_t` for termination). Messages use an entangled port
   pair; the parent side is an internal binding that emits on the Worker.
@@ -180,6 +180,34 @@ state.
 - `resourceLimits` is reported like Node: the parent object echoes requested
   values with `-1` for unset ones; the worker sees effective values.
 
+## Module Layout and the Web Worker
+
+- `src/modules/worker/` splits the runtime by concern: `core.c` owns the
+  native worker (thread, isolate boot, event queue, entry resolution, options,
+  teardown), `stdio.c` the stdout/stderr/stdin channels, `messaging.c`
+  `postMessageToThread`, `node.c` the `worker_threads` front end and `web.c`
+  the global `Worker`. Front ends plug in through `worker_ops_t` (message,
+  online, error, exit, child init); `worker_internal.h` holds the shared struct.
+- The global `Worker` follows Bun: an `EventTarget` with `onmessage`,
+  `onerror`, `onmessageerror`, `open` and `close` (`CloseEvent.code` is the exit
+  code), `postMessage`, `terminate` (exit code 0), `ref`/`unref` and `threadId`.
+  Options are `name`, `workerData`, `env`, `argv`, `ref` and `resourceLimits`;
+  `type` is ignored. Relative and bare paths resolve against the working
+  directory; `file:`, `data:` and `blob:` URLs work (blob sources become
+  `data:` URLs).
+- Inside a web worker `self === globalThis`; `postMessage`, `onmessage`,
+  `onmessageerror`, `addEventListener('message')`, `close()` and `self.name`
+  are installed on the global, and `worker_threads.parentPort` still works.
+  Both views share one port: the binding mirrors deliveries to the global
+  event list and stays referenced while either side has `message` listeners,
+  so a worker without a message listener exits like in Bun.
+- An uncaught worker error dispatches a cancelable `ErrorEvent` (`message`,
+  `filename`, `error`); if no listener cancels it the error is printed as
+  `Uncaught (in worker)`. Bun prints nothing and its event is not cancelable.
+- Engine-created errors now carry `SLOT_ERROR_BRAND`, so they report
+  `[object Error]`, pass `Error.isError` and survive structured clone and
+  worker error transfer (they used to arrive as plain objects).
+
 ## Validation
 
 - Node 22 parity: the comparison scripts used during development produced
@@ -191,6 +219,8 @@ state.
   `tests/test_structured_clone_props.mjs` (all also pass on Node 22),
   `examples/spec/worker_threads.js` (updated to Node semantics; Node fails the
   old synchronous-delivery assertions).
+- Web worker: `tests/test_web_worker.mjs` (passes on Bun 1.4.3 and Ant);
+  engine error brand: `tests/test_engine_error_brand.cjs` (passes on Node 22).
 - Cross-thread services: `tests/test_worker_post_message_to_thread.cjs`,
   `tests/test_worker_stdin.cjs`, `tests/test_worker_performance.cjs` (pass on
   Node 22) and `tests/test_navigator_locks_threads.cjs` (passes on Node 26; the

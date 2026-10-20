@@ -18,6 +18,8 @@ void ant_port_end_release(ant_port_end_t *end);
 
 bool ant_message_port_is(ant_value_t value);
 bool ant_port_end_pair(ant_port_end_t **a, ant_port_end_t **b);
+bool ant_message_port_mirror_global(ant_t *js, ant_value_t port);
+ant_value_t ant_message_event_create(ant_t *js, const char *type, ant_value_t data, ant_value_t ports);
 
 void ant_port_binding_drain(ant_port_binding_t *binding);
 void ant_port_binding_close(ant_port_binding_t *binding);

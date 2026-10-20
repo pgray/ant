@@ -1269,6 +1269,7 @@ static void gc_mark_roots(ant_t *js) {
   gc_mark_iterators(js, gc_mark_value);
   gc_mark_esm(js, gc_mark_value);
   gc_mark_worker_threads(js, gc_mark_value);
+  gc_mark_isolates(js, gc_mark_value);
   gc_mark_sandbox(js, gc_mark_value);
   gc_mark_abort(js, gc_mark_value);
   gc_mark_wasm(js, gc_mark_value);

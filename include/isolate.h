@@ -126,6 +126,9 @@ struct ant_isolate_t {
   ant_worker_t *workers;
   ant_thread_mailbox_t *thread_mailbox;
   
+  ant_guest_t *guest;
+  ant_guest_t *guests;
+  
   // TODO: registry struct
   descriptor_entry_t *desc_registry;
   ant_process_state_t *process_state;
