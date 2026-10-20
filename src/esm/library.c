@@ -92,6 +92,8 @@ ant_value_t ant_library_namespace(ant_t *js, ant_library_entry_t *lib) {
   if (is_err(ns)) return ns;
   
   js_set_slot(ns, SLOT_MODULE_LOADING, js_mkundef());
+  js_set_slot_wb(js, ns, SLOT_MODULE_CTX, js_get_slot(exports, SLOT_MODULE_CTX));
+  
   cache = library_ns(js, canon);
   cache->esm_ns = ns;
   

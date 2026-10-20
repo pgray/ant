@@ -3443,6 +3443,7 @@ static void js_init_intern_cache(ant_t *js) {
   js->intern.next = intern_string(js, "next", 4);
   js->intern.define_property = intern_string(js, "defineProperty", 14);
   js->intern.get_own_property_descriptor = intern_string(js, "getOwnPropertyDescriptor", 24);
+  js->intern.module_cache = intern_string(js, "_cache", 6);
 }
 
 typedef enum {

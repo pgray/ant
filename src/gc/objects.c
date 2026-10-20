@@ -1198,6 +1198,12 @@ static void gc_mark_roots(ant_t *js) {
   gc_mark_value(js, js->modules.cjs.parent);
   gc_mark_value(js, js->modules.cjs.main);
   gc_mark_value(js, js->modules.cjs.constructor);
+  
+  for (uint32_t i = 0; i < CJS_BUILTIN_CACHE_SIZE; i++) {
+    gc_mark_value(js, js->modules.cjs.builtins[i].specifier);
+    gc_mark_value(js, js->modules.cjs.builtins[i].exports);
+  }
+  
   gc_mark_value(js, js->modules.hooks);
   gc_mark_value(js, js->modules.import_meta);
   

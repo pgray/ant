@@ -68,6 +68,7 @@ typedef struct zlib_stream_s {
   bool initialized;
   bool ended;
   bool destroyed;
+  bool closed;
 } zlib_stream_t;
 
 static bool zlib_kind_is_compress(zlib_kind_t k) {
@@ -104,6 +105,10 @@ static zlib_options_t zlib_default_options(zlib_kind_t kind) {
 
 static bool zlib_is_brotli_kind(zlib_kind_t kind) {
   return kind == ZLIB_KIND_BROTLI_COMPRESS || kind == ZLIB_KIND_BROTLI_DECOMPRESS;
+}
+
+static bool zlib_kind_presets_dictionary(zlib_kind_t kind) {
+  return kind == ZLIB_KIND_DEFLATE || kind == ZLIB_KIND_DEFLATE_RAW || kind == ZLIB_KIND_INFLATE_RAW;
 }
 
 static bool zlib_option_int(ant_t *js, ant_value_t opts, const char *key, int *out) {
@@ -243,8 +248,34 @@ static void zlib_stream_release(zlib_stream_t *st) {
   } else if (st->initialized) {
     if (zlib_kind_is_compress(st->kind)) deflateEnd(&st->strm);
     else inflateEnd(&st->strm);
-    st->initialized = false;
   }
+
+  st->initialized = false;
+  st->closed = true;
+}
+
+static ant_value_t zlib_binding_closed(ant_t *js) {
+  return js_mkerr_code(js, JS_ERR_GENERIC, "ERR_ZLIB_BINDING_CLOSED", "zlib binding closed");
+}
+
+static ant_value_t zlib_stream_ready(ant_t *js, zlib_stream_t *st) {
+  if (st->closed) return zlib_binding_closed(js);
+  if (st->initialized) return js_mkundef();
+
+  bool compress = zlib_kind_is_compress(st->kind);
+  int ret = compress
+    ? deflateInit2(&st->strm, st->opts.level, Z_DEFLATED, st->opts.window_bits, st->opts.mem_level, st->opts.strategy)
+    : inflateInit2(&st->strm, st->opts.window_bits);
+  
+  if (ret != Z_OK) return js_mkerr(js, "zlib init failed");
+  st->initialized = true;
+
+  if (!st->opts.dictionary || !zlib_kind_presets_dictionary(st->kind)) return js_mkundef();
+  ret = compress
+    ? deflateSetDictionary(&st->strm, st->opts.dictionary, (uInt)st->opts.dictionary_len)
+    : inflateSetDictionary(&st->strm, st->opts.dictionary, (uInt)st->opts.dictionary_len);
+
+  return ret == Z_OK ? js_mkundef() : js_mkerr(js, "zlib dictionary load failed");
 }
 
 static void zlib_stream_finalizer(ant_t *js, ant_value_t value, void *state) {
@@ -288,12 +319,47 @@ static int brotli_collect_cb(void *ctx, const uint8_t *chunk, size_t len) {
   return 0;
 }
 
+static const char *zlib_code_name(int code) {
+  switch (code) {
+    case Z_NEED_DICT: return "Z_NEED_DICT";
+    case Z_ERRNO: return "Z_ERRNO";
+    case Z_STREAM_ERROR: return "Z_STREAM_ERROR";
+    case Z_DATA_ERROR: return "Z_DATA_ERROR";
+    case Z_MEM_ERROR: return "Z_MEM_ERROR";
+    case Z_BUF_ERROR: return "Z_BUF_ERROR";
+    case Z_VERSION_ERROR: return "Z_VERSION_ERROR";
+    default: return "Z_UNKNOWN";
+  }
+}
+
+static ant_value_t zlib_error(ant_t *js, const char *message, const char *code, int errnum) {
+  ant_value_t props = Ant_Object_CreateBare(js);
+  js_set(js, props, "code", js_mkstr(js, code, strlen(code)));
+  js_set(js, props, "errno", js_mknum((double)errnum));
+  return js_mkerr_props(js, JS_ERR_GENERIC, props, "%s", message);
+}
+
+static ant_value_t zlib_stream_error(ant_t *js, int ret, const z_stream *strm) {
+  if (ret == Z_BUF_ERROR) return zlib_error(js, "unexpected end of file", "Z_BUF_ERROR", Z_BUF_ERROR);
+  if (ret == Z_NEED_DICT) return zlib_error(js, "Missing dictionary", "Z_NEED_DICT", Z_NEED_DICT);
+  return zlib_error(js, strm->msg ? strm->msg : "zlib error", zlib_code_name(ret), ret);
+}
+
+static int zlib_inflate_with_dictionary(zlib_stream_t *st, int flush) {
+  int ret = inflate(&st->strm, flush);
+  if (ret != Z_NEED_DICT || !st->opts.dictionary) return ret;
+  if (inflateSetDictionary(&st->strm, st->opts.dictionary, (uInt)st->opts.dictionary_len) != Z_OK) return ret;
+  return inflate(&st->strm, flush);
+}
+
 static ant_value_t zlib_do_process(
   ant_t *js, zlib_stream_t *st,
   const uint8_t *input, size_t input_len,
   int flush
 ) {
-  if (st->destroyed || st->ended) return js_mkundef();
+  if (st->ended) return js_mkundef();
+  ant_value_t ready = zlib_stream_ready(js, st);
+  if (is_err(ready)) return ready;
 
   if (st->brotli) {
     brotli_emit_ctx_t ctx = { js, st->obj, js_mkundef() };
@@ -325,19 +391,11 @@ static ant_value_t zlib_do_process(
 
     if (compress) {
       ret = deflate(&st->strm, flush);
-      if (ret == Z_STREAM_ERROR) { result = js_mkerr(js, "zlib deflate error"); break; }
+      if (ret == Z_STREAM_ERROR) { result = zlib_stream_error(js, ret, &st->strm); break; }
     } else {
-      ret = inflate(&st->strm, flush);
-      if (ret == Z_NEED_DICT && st->opts.dictionary) {
-        if (inflateSetDictionary(&st->strm, st->opts.dictionary, (uInt)st->opts.dictionary_len) == Z_OK) {
-          size_t got = chunk_size - st->strm.avail_out;
-          if (got > 0) result = zlib_emit_data(js, st->obj, out, got);
-          if (is_err(result) || Ant_Exception_Pending(js)) break;
-          continue;
-        }
-      }
+      ret = zlib_inflate_with_dictionary(st, flush);
       if (ret == Z_NEED_DICT || ret == Z_DATA_ERROR || ret == Z_MEM_ERROR) {
-        result = js_mkerr(js, "zlib inflate error");
+        result = zlib_stream_error(js, ret, &st->strm);
         break;
       }
     }
@@ -394,11 +452,11 @@ static ant_value_t zlib_process_chunk_sync(
 
     if (compress) {
       ret = deflate(&st->strm, flush_flag);
-      if (ret == Z_STREAM_ERROR) { result = js_mkerr(js, "zlib deflate error"); break; }
+      if (ret == Z_STREAM_ERROR) { result = zlib_stream_error(js, ret, &st->strm); break; }
     } else {
-      ret = inflate(&st->strm, flush_flag);
+      ret = zlib_inflate_with_dictionary(st, flush_flag);
       if (ret == Z_NEED_DICT || ret == Z_DATA_ERROR || ret == Z_MEM_ERROR) {
-        result = js_mkerr(js, "zlib inflate error");
+        result = zlib_stream_error(js, ret, &st->strm);
         break;
       }
     }
@@ -418,8 +476,12 @@ static ant_value_t zlib_process_chunk_sync(
 
 static ant_value_t js_zlib_process_chunk(ant_params_t) {
   zlib_stream_t *st = zlib_stream_ptr(js_getthis(js));
+  
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid zlib stream");
-  if (st->destroyed || st->ended) return js_mkarr(js);
+  if (st->ended) return js_mkarr(js);
+  
+  ant_value_t ready = zlib_stream_ready(js, st);
+  if (is_err(ready)) return ready;
 
   const uint8_t *input = NULL;
   size_t input_len = 0;
@@ -490,7 +552,6 @@ static ant_value_t js_zlib_flush(ant_params_t) {
   zlib_stream_t *st = zlib_stream_ptr(js_getthis(js));
   ant_value_t self = js_getthis(js);
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid zlib stream");
-  if (st->destroyed || st->ended) return self;
 
   int flush = st->brotli ? 1 : Z_FULL_FLUSH;
   ant_value_t cb = js_mkundef();
@@ -500,7 +561,12 @@ static ant_value_t js_zlib_flush(ant_params_t) {
     if (nargs > 1 && is_callable(args[1])) cb = args[1];
   }
 
-  ant_value_t r = st->brotli ? js_mkundef() : zlib_do_process(js, st, NULL, 0, flush);
+  if (st->destroyed || st->ended) {
+    if (is_callable(cb)) queue_microtask_with_args(js, cb, NULL, 0);
+    return self;
+  }
+
+  ant_value_t r = st->brotli && !st->closed ? js_mkundef() : zlib_do_process(js, st, NULL, 0, flush);
   if (is_err(r)) {
     GC_ROOT_SAVE(root_mark, js);
     r = js_take_thrown(js, r);
@@ -529,6 +595,7 @@ static ant_value_t js_zlib_reset(ant_params_t) {
   zlib_stream_t *st = zlib_stream_ptr(js_getthis(js));
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid zlib stream");
   if (st->destroyed) return js_getthis(js);
+  if (st->closed) return zlib_binding_closed(js);
 
   if (st->brotli) {
     bool decompress = st->kind == ZLIB_KIND_BROTLI_DECOMPRESS;
@@ -536,9 +603,10 @@ static ant_value_t js_zlib_reset(ant_params_t) {
     st->brotli = brotli_stream_state_new_params(decompress, &st->opts.brotli_params,
       st->opts.dictionary, st->opts.dictionary_len, NULL);
     if (!st->brotli) return js_mkerr(js, "brotli init failed");
-  } else if (zlib_kind_is_compress(st->kind)) {
-    if (deflateReset(&st->strm) != Z_OK) return js_mkerr(js, "zlib reset failed");
-  } else if (inflateReset(&st->strm) != Z_OK) return js_mkerr(js, "zlib reset failed");
+  } else if (st->initialized) {
+    int ret = zlib_kind_is_compress(st->kind) ? deflateReset(&st->strm) : inflateReset(&st->strm);
+    if (ret != Z_OK) return js_mkerr(js, "zlib reset failed");
+  }
 
   st->bytes_written = 0;
   
@@ -548,12 +616,16 @@ static ant_value_t js_zlib_reset(ant_params_t) {
 static ant_value_t js_zlib_params(ant_params_t) {
   zlib_stream_t *st = zlib_stream_ptr(js_getthis(js));
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid zlib stream");
+  
   if (!zlib_kind_is_compress(st->kind) || st->brotli)
     return js_mkerr_typed(js, JS_ERR_TYPE, "params() is only available for deflate streams");
   if (nargs < 2) return js_mkerr_typed(js, JS_ERR_TYPE, "level and strategy are required");
 
   int level = (int)js_to_number(js, args[0]);
   int strategy = (int)js_to_number(js, args[1]);
+  ant_value_t ready = zlib_stream_ready(js, st);
+  
+  if (is_err(ready)) return ready;
   if (deflateParams(&st->strm, level, strategy) != Z_OK)
     return js_mkerr(js, "zlib params failed");
 
@@ -562,6 +634,7 @@ static ant_value_t js_zlib_params(ant_params_t) {
     ant_value_t null_val = js_mknull();
     sv_vm_call(js->vm, js, cb, js_mkundef(), &null_val, 1, NULL, js_mkundef());
   }
+  
   return js_getthis(js);
 }
 
@@ -577,13 +650,24 @@ static ant_value_t js_zlib_close(ant_params_t) {
   return self;
 }
 
+static ant_value_t js_zlib_handle_close(ant_params_t) {
+  zlib_stream_t *st = zlib_stream_ptr(js_get_slot(js_getthis(js), SLOT_DATA));
+  if (st) zlib_stream_release(st);
+
+  if (nargs > 0 && is_callable(args[0]))
+    sv_vm_call(js->vm, js, args[0], js_mkundef(), NULL, 0, NULL, js_mkundef());
+
+  return js_mkundef();
+}
+
 static ant_value_t js_zlib__destroy(ant_params_t) {
   zlib_stream_t *st = zlib_stream_ptr(js_getthis(js));
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid zlib stream");
 
   st->destroyed = true;
   zlib_stream_release(st);
-  
+  js_set(js, js_getthis(js), "_handle", js_mknull());
+
   if (nargs > 1 && is_callable(args[1]))
     return sv_vm_call(js->vm, js, args[1], js_mkundef(), args, 1, NULL, js_mkundef());
   
@@ -597,7 +681,6 @@ static ant_value_t js_zlib_get_bytes_written(ant_params_t) {
 }
 
 static ant_value_t zlib_create_stream(ant_t *js, zlib_kind_t kind, ant_value_t opts_val) {
-  bool compress = zlib_kind_is_compress(kind);
   zlib_options_t opts;
   ant_value_t opt_err = zlib_read_options(js, kind, opts_val, &opts);
   if (is_err(opt_err)) return opt_err;
@@ -631,25 +714,6 @@ static ant_value_t zlib_create_stream(ant_t *js, zlib_kind_t kind, ant_value_t o
       return js_mkerr(js, "brotli init failed");
     }
     st->initialized = true;
-  } else {
-    int ret;
-    if (compress) {
-      ret = deflateInit2(&st->strm, opts.level, Z_DEFLATED, opts.window_bits, opts.mem_level, opts.strategy);
-    } else ret = inflateInit2(&st->strm, opts.window_bits);
-
-    if (ret != Z_OK) { free(st->owned_dict); free(st); return js_mkerr(js, "zlib init failed"); }
-    st->initialized = true;
-
-    if (st->opts.dictionary && (compress || st->opts.window_bits < 0)) {
-      ret = compress
-        ? deflateSetDictionary(&st->strm, st->opts.dictionary, (uInt)st->opts.dictionary_len)
-        : inflateSetDictionary(&st->strm, st->opts.dictionary, (uInt)st->opts.dictionary_len);
-      if (ret != Z_OK) {
-        zlib_stream_release(st);
-        free(st);
-        return js_mkerr(js, "zlib dictionary load failed");
-      }
-    }
   }
 
   ant_value_t proto = 
@@ -670,7 +734,9 @@ static ant_value_t zlib_create_stream(ant_t *js, zlib_kind_t kind, ant_value_t o
   js_set(js, obj, "_processChunk", Ant_Function_Create(js_zlib_process_chunk));
 
   ant_value_t handle_obj = Ant_Object_CreateBare(js);
-  js_set(js, handle_obj, "close", Ant_Function_Create(js_zlib_close));
+  js_set_slot(handle_obj, SLOT_DATA, obj);
+  
+  js_set(js, handle_obj, "close", Ant_Function_Create(js_zlib_handle_close));
   js_set(js, obj, "_handle", handle_obj);
 
   st->obj = obj;
@@ -751,32 +817,6 @@ static ant_value_t zlib_too_large(ant_t *js, size_t limit) {
     "Cannot create a Buffer larger than %zu bytes", limit);
 }
 
-static const char *zlib_code_name(int code) {
-  switch (code) {
-    case Z_NEED_DICT: return "Z_NEED_DICT";
-    case Z_ERRNO: return "Z_ERRNO";
-    case Z_STREAM_ERROR: return "Z_STREAM_ERROR";
-    case Z_DATA_ERROR: return "Z_DATA_ERROR";
-    case Z_MEM_ERROR: return "Z_MEM_ERROR";
-    case Z_BUF_ERROR: return "Z_BUF_ERROR";
-    case Z_VERSION_ERROR: return "Z_VERSION_ERROR";
-    default: return "Z_UNKNOWN";
-  }
-}
-
-static ant_value_t zlib_error(ant_t *js, const char *message, const char *code, int errnum) {
-  ant_value_t props = Ant_Object_CreateBare(js);
-  js_set(js, props, "code", js_mkstr(js, code, strlen(code)));
-  js_set(js, props, "errno", js_mknum((double)errnum));
-  return js_mkerr_props(js, JS_ERR_GENERIC, props, "%s", message);
-}
-
-static ant_value_t zlib_stream_error(ant_t *js, int ret, const z_stream *strm) {
-  if (ret == Z_BUF_ERROR) return zlib_error(js, "unexpected end of file", "Z_BUF_ERROR", Z_BUF_ERROR);
-  if (ret == Z_NEED_DICT) return zlib_error(js, "Missing dictionary", "Z_NEED_DICT", Z_NEED_DICT);
-  return zlib_error(js, strm->msg ? strm->msg : "zlib error", zlib_code_name(ret), ret);
-}
-
 static ant_value_t zlib_brotli_error(ant_t *js, int code, const char *name) {
   if (code >= 0) return zlib_error(js, "unexpected end of file", "Z_BUF_ERROR", Z_BUF_ERROR);
   char code_name[96];
@@ -840,7 +880,7 @@ static ant_value_t zlib_sync_op(
   else ret = inflateInit2(&strm, opts.window_bits);
   if (ret != Z_OK) { free(tmp); return js_mkerr(js, "zlib init failed"); }
 
-  if (opts.dictionary && (compress || opts.window_bits < 0)) {
+  if (opts.dictionary && zlib_kind_presets_dictionary(kind)) {
     ret = compress
       ? deflateSetDictionary(&strm, opts.dictionary, (uInt)opts.dictionary_len)
       : inflateSetDictionary(&strm, opts.dictionary, (uInt)opts.dictionary_len);

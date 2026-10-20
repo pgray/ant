@@ -245,7 +245,10 @@ state.
   through `process_stdin_attach_reader`, which is disabled in workers.
 - Main-thread `process.stdin` never emits `'end'` on piped input (pre-existing,
   also in the installed release).
-- zlib streams are still kept alive by a second, older reference; readline
-  interfaces are only freed at isolate teardown, not on `close()`.
+- readline interfaces are only freed at isolate teardown, not on `close()`.
+  (The zlib half of this note was fixed by the zlib-on-streams migration:
+  2026-10-20, idle, ended, closed, destroyed, errored, piped and callback-API
+  zlib streams are all collected on the main thread and in workers, and their
+  native state is freed on end/close/destroy.)
 - `error-handoffs` C test fails on an `active_async_coro` assumption from the
   lazy async-coroutine work.

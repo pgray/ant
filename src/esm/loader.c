@@ -1903,6 +1903,14 @@ static ant_value_t esm_load_builtin(ant_t *js, const char *specifier, esm_builti
   );
 }
 
+bool esm_require_builtin_cacheable(ant_t *js) {
+  return !esm_hooks_present(js) && !esm_web_compat(js);
+}
+
+ant_value_t esm_require_load_builtin(ant_t *js, const char *specifier, esm_builtin_t builtin) {
+  return esm_load_builtin(js, specifier, builtin);
+}
+
 bool js_esm_is_node_builtin(const char *specifier, size_t spec_len) {
   return esm_builtin_is_node(esm_find_builtin(specifier, spec_len));
 }
@@ -2359,16 +2367,18 @@ static char *esm_require_reload_key(ant_t *js, const char *resolved_path) {
 }
 
 ant_value_t js_esm_import_sync_cstr_from_require(
-  ant_t *js,
-  const char *specifier,
-  size_t spec_len,
-  const char *base_path
+  ant_t *js, const char *specifier, size_t spec_len, const char *base_path
 ) {
+  return esm_require_cstr(js, specifier, spec_len, base_path, false);
+}
+
+ant_value_t esm_require_cstr(ant_t *js, const char *specifier, size_t spec_len, const char *base_path, bool not_builtin) {
   if (esm_hooks_present(js)) {
     bool handled = false;
     ant_value_t ns = esm_import_via_hooks(js, specifier, spec_len, base_path, js_mkundef(), true, &handled);
     if (handled) return ns;
   }
+  
   char *spec_copy = strndup(specifier, spec_len);
   if (!spec_copy) return js_mkerr(js, "oom");
 
@@ -2378,10 +2388,14 @@ ant_value_t js_esm_import_sync_cstr_from_require(
     spec_copy = file_url_path;
     spec_len = strlen(spec_copy);
   }
+  
   spec_copy = esm_browser_remap_specifier(js, spec_copy, base_path);
   spec_len = strlen(spec_copy);
 
-  esm_builtin_t builtin = esm_find_builtin(spec_copy, spec_len);
+  esm_builtin_t builtin = not_builtin
+    ? (esm_builtin_t){ .kind = ANT_BUILTIN_NAME_NONE }
+    : esm_find_builtin(spec_copy, spec_len);
+  
   if (builtin.kind == ANT_BUILTIN_NAME_BARE) {
     ant_value_t cached = esm_require_cache_lookup(js, spec_copy);
     if (is_err(cached) || vtype(cached) != kTypeUndefined) {

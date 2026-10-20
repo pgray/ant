@@ -66,6 +66,7 @@ static constexpr uint32_t INTERN_INDEX_CACHE_SIZE = 1024;
 static constexpr uint32_t ANT_RUNTIME_WEB_COMPAT = 1u << 0;
 
 static constexpr uint32_t INTERN_MEMO_SIZE = 64;
+static constexpr uint32_t CJS_BUILTIN_CACHE_SIZE = 8;
 static_assert((INTERN_MEMO_SIZE & (INTERN_MEMO_SIZE - 1)) == 0, "the intern memo is indexed by a mask");
 
 typedef struct {
@@ -267,6 +268,11 @@ struct ant_isolate_t {
       ant_value_t main;
       ant_value_t constructor;
       uint64_t generation;
+      struct {
+        ant_value_t specifier;
+        ant_value_t exports;
+        bool bare;
+      } builtins[CJS_BUILTIN_CACHE_SIZE];
     } cjs;
     ant_esm_state_t *state;
     ant_module_t *module_stack;
@@ -297,6 +303,7 @@ struct ant_isolate_t {
     const char *next;
     const char *define_property;
     const char *get_own_property_descriptor;
+    const char *module_cache;
     const char *idx[INTERN_INDEX_CACHE_SIZE];
   } intern;
 
