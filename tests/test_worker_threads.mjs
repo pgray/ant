@@ -185,6 +185,7 @@ for (const mode of ['spin', 'idle', 'wait']) {
   assert.equal(await hogExit, 1);
 
   const probe = new Worker('const wt = require("worker_threads"); wt.parentPort.postMessage(wt.resourceLimits.maxOldGenerationSizeMb);', { eval: true, resourceLimits: { maxOldGenerationSizeMb: 64 } });
+  assert.deepEqual({ ...probe.resourceLimits }, { maxYoungGenerationSizeMb: -1, maxOldGenerationSizeMb: 64, codeRangeSizeMb: -1, stackSizeMb: 4 });
   assert.equal(await once(probe, 'message'), 64);
 }
 

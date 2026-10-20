@@ -22,6 +22,13 @@ if (process.argv.includes("--worker")) {
   const { Worker } = await import("node:worker_threads");
   const w = new Worker(new URL("./worker.ts", import.meta.url), { workerData: { n: 5 } });
   w.on("message", (m: unknown) => console.log("worker said:", m));
+  w.on("exit", (code: number) => console.log("worker exit:", code));
+}
+
+if (process.argv.includes("--worker-relative")) {
+  const { Worker } = await import("node:worker_threads");
+  const w = new Worker("./worker.ts", { workerData: { n: 7 } });
+  w.on("message", (m: unknown) => console.log("worker said:", m));
 }
 
 if (process.argv.includes("--fork")) {

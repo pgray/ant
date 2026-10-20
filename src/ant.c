@@ -21104,6 +21104,7 @@ void js_destroy(ant_t *js) {
   cleanup_readline_module(js);
   cleanup_napi_module(js);
   cleanup_message_port_module(js);
+  cleanup_navigator_module(js);
   cleanup_performance_module(js);
   cleanup_process_module(js);
 
@@ -21160,7 +21161,6 @@ void js_destroy(ant_t *js) {
   cleanup_regex_module(js);
   free_process_module(js);
   free_napi_module(js);
-  free_navigator_module(js);
   
   Ant_Loop_Destroy(js);
   gc_array_storage_cache_destroy(js);

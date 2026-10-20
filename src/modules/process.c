@@ -2077,7 +2077,7 @@ static void process_listener_change(
     if (signum > 0) {
       if (listener_count > 0) start_signal_watch(js, signum);
       else stop_signal_watch(js, signum);
-    }
+    } else if (listener_count > 0 && process_event_key_is(js, key, "workerMessage")) ant_worker_messaging_listen(js);
     return;
   }
 

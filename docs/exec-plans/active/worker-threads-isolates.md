@@ -1,7 +1,7 @@
 # Worker Threads on In-Process Isolates
 
 Status: active
-Last reviewed: 2026-10-17
+Last reviewed: 2026-10-19
 Owner: theMackabu
 
 ## Goal
@@ -151,6 +151,35 @@ state.
   parent's env snapshot; `SHARE_ENV` uses the real environment, which is now
   accessed under one mutex. Child processes spawned from a worker inherit its env.
 
+## Cross-Thread Services
+
+- `postMessageToThread`: each isolate gets a mailbox (lock, queue, unref'd
+  `uv_async_t`) in a process-wide registry keyed by thread id, created on the
+  first `process.on('workerMessage')` listener or the first send. A request
+  carries the wire value and a retained reply mailbox; the destination emits
+  `workerMessage(value, source)`, swallows listener throws, and replies
+  delivered / failed / errored. The sender keeps pending promises (GC-marked,
+  async ref'd while any are pending) with an optional timeout timer. Closing an
+  isolate answers its queued requests with `ERR_WORKER_MESSAGING_FAILED`.
+- `stdin: true`: `worker.stdin` is a Writable whose `_write`/`_final` queue bytes
+  or EOF on the worker under `w->lock` and wake `child_async`, which now drains
+  stdin unless a terminate was requested. The worker's `process.stdin` is a plain
+  Readable fed from that queue; without `stdin: true` it ends immediately. Reading
+  it refs the worker loop until EOF, like Node.
+- `navigator.locks`: one registry of resources (held list + FIFO queue) under a
+  global mutex; each isolate is a client with an inbox and an unref'd async
+  handle. Grants to the calling isolate run synchronously as before, grants to
+  another isolate wake it. Adds `steal`, `signal`, `clientId` and the spec's
+  NotSupportedError checks, and grants every compatible waiter. `query()` lists
+  only the caller's locks (Node does the same). Unlike Node 26, an isolate's
+  locks are released when it is destroyed; Node leaks them on worker exit.
+- Compiled executables: the worker isolate activates the parent's read-only
+  bundle, `worker_resolve_entry` maps absolute keys and traced relative paths to
+  bundle keys (falling back to disk), and the tracer records
+  `new Worker('./x')` edges.
+- `resourceLimits` is reported like Node: the parent object echoes requested
+  values with `-1` for unset ones; the worker sees effective values.
+
 ## Validation
 
 - Node 22 parity: the comparison scripts used during development produced
@@ -162,6 +191,11 @@ state.
   `tests/test_structured_clone_props.mjs` (all also pass on Node 22),
   `examples/spec/worker_threads.js` (updated to Node semantics; Node fails the
   old synchronous-delivery assertions).
+- Cross-thread services: `tests/test_worker_post_message_to_thread.cjs`,
+  `tests/test_worker_stdin.cjs`, `tests/test_worker_performance.cjs` (pass on
+  Node 22) and `tests/test_navigator_locks_threads.cjs` (passes on Node 26; the
+  worker-exit release case runs on Ant only); the compiled-executable worker
+  cases are in `tests/test_compile_basic.cjs`. TSan clean on all four.
 - Native: `isolate-libraries`, `isolate-threads` (4 threads × 3 isolates, JIT,
   GC, async, interning), `isolate-teardown` (15 scenarios destroyed with live
   handles).
@@ -172,14 +206,15 @@ state.
 
 ## Follow-ups
 
-- `worker.stdin` is `null`; `stdin: true` is not implemented.
-- `resourceLimits` enforces `stackSizeMb` and `maxOldGenerationSizeMb` (object
-  arena size); `maxYoungGenerationSizeMb` and `codeRangeSizeMb` are reported
-  only. Strings and code share the cage without a per-isolate cap.
-- `getHeapSnapshot()` rejects; `postMessageToThread` and `worker.performance` are
-  missing.
-- `navigator.locks` is per isolate; Node shares Web Locks across threads.
-- Workers are disabled in compiled executables (`js_esm_bundle_active`).
+- `maxYoungGenerationSizeMb` and `codeRangeSizeMb` are reported, not enforced:
+  the nursery is an adaptive object-count threshold (~2 MiB, already below V8's
+  young generation) and JIT code lives in growable per-isolate code arenas.
+  Strings and code share the cage without a per-isolate cap.
+- `getHeapSnapshot()` rejects; Ant has no heap snapshot writer.
+- `readline` on a worker's `process.stdin` does not work: readline reads fd 0
+  through `process_stdin_attach_reader`, which is disabled in workers.
+- Main-thread `process.stdin` never emits `'end'` on piped input (pre-existing,
+  also in the installed release).
 - zlib streams are still kept alive by a second, older reference; readline
   interfaces are only freed at isolate teardown, not on `close()`.
 - `error-handoffs` C test fails on an `active_async_coro` assumption from the

@@ -1,9 +1,12 @@
 #include <compat.h> // IWYU pragma: keep
 
+#include <stdatomic.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <string.h>
 #include <uthash.h>
+#include <uv.h>
 
 #ifdef __APPLE__
 #include <sys/sysctl.h>
@@ -15,8 +18,13 @@
 #include "cfunc.h"
 #include "errors.h"
 #include "internal.h"
+#include "sync.h"
 #include "silver/call.h"
+#include "modules/abort.h"
+#include "modules/domexception.h"
 #include "modules/navigator.h"
+#include "modules/timer.h"
+#include "modules/worker_threads.h"
 #include "gc/modules.h"
 
 typedef enum {
@@ -24,30 +32,614 @@ typedef enum {
   LOCK_MODE_SHARED
 } lock_mode_t;
 
-typedef struct lock_entry {
-  char *name;
-  lock_mode_t mode;
-  int shared_count;
-  UT_hash_handle hh;
-} lock_entry_t;
+typedef enum {
+  LOCK_PENDING,
+  LOCK_HELD,
+  LOCK_STOLEN,
+  LOCK_RELEASED,
+} lock_state_t;
+
+typedef enum {
+  LOCK_REGISTER_OOM,
+  LOCK_REGISTER_UNAVAILABLE,
+  LOCK_REGISTER_OK,
+} lock_register_t;
+
+typedef struct lock_resource lock_resource_t;
 
 typedef struct lock_request {
-  ant_t *js;
+  struct lock_request *link;
+  struct lock_request *notify_next;
+  struct lock_request *next;
+  struct lock_request *prev;
+
+  lock_resource_t *resource;
+  navigator_locks_t *client;
+
   char *name;
+  size_t name_len;
+  uint64_t id;
   lock_mode_t mode;
+  _Atomic lock_state_t state;
+  bool notify_queued;
+  bool dispatched;
+
   ant_value_t callback;
   ant_value_t promise;
-  struct lock_request *next;
+  ant_value_t signal;
+  ant_value_t abort_fn;
 } lock_request_t;
 
-struct navigator_locks {
-  lock_entry_t *held;
-  lock_request_t *pending;
+struct lock_resource {
+  char *name;
+  size_t name_len;
+  lock_request_t *held;
+  lock_request_t *queue;
+  UT_hash_handle hh;
 };
 
-static navigator_locks_t *nav_locks(ant_t *js) {
-  if (!js->navigator_locks) js->navigator_locks = calloc(1, sizeof(*js->navigator_locks));
-  return js->navigator_locks;
+struct navigator_locks {
+  ant_mutex_t lock;
+  ant_t *js;
+  bool closed;
+  uv_async_t async;
+  lock_request_t *notify_head;
+  lock_request_t *notify_tail;
+  lock_request_t *requests;
+  lock_request_t *requests_tail;
+  uint64_t next_id;
+  char client_id[48];
+};
+
+typedef struct {
+  lock_mode_t mode;
+  bool if_available;
+  bool steal;
+  ant_value_t signal;
+} lock_options_t;
+
+static ant_mutex_t lock_registry = ANT_MUTEX_INIT;
+static lock_resource_t *lock_resources = NULL;
+
+static void locks_drain(ant_t *js, navigator_locks_t *client);
+
+static ant_value_t lock_mode_value(ant_t *js, lock_mode_t mode) {
+  return mode == LOCK_MODE_EXCLUSIVE ? js_mkstr(js, "exclusive", 9) : js_mkstr(js, "shared", 6);
+}
+
+static lock_state_t lock_state(const lock_request_t *req) {
+  return atomic_load_explicit(&req->state, memory_order_acquire);
+}
+
+static void lock_set_state(lock_request_t *req, lock_state_t state) {
+  atomic_store_explicit(&req->state, state, memory_order_release);
+}
+
+static char *lock_copy_name(const char *name, size_t len) {
+  char *copy = malloc(len + 1);
+  if (!copy) return NULL;
+  
+  memcpy(copy, name, len);
+  copy[len] = '\0';
+  
+  return copy;
+}
+
+static void lock_list_append(navigator_locks_t *client, lock_request_t *req) {
+  req->next = NULL;
+  req->prev = client->requests_tail;
+  if (client->requests_tail) client->requests_tail->next = req;
+  else client->requests = req;
+  client->requests_tail = req;
+}
+
+static void lock_list_remove(navigator_locks_t *client, lock_request_t *req) {
+  if (req->prev) req->prev->next = req->next;
+  else client->requests = req->next;
+  if (req->next) req->next->prev = req->prev;
+  else client->requests_tail = req->prev;
+  req->next = req->prev = NULL;
+}
+
+static lock_request_t *lock_find(navigator_locks_t *client, ant_value_t id) {
+  if (!client || vtype(id) != kTypeNumber) return NULL;
+  uint64_t want = (uint64_t)js_getnum(id);
+  for (lock_request_t *req = client->requests; req; req = req->next)
+    if (req->id == want) return req;
+  return NULL;
+}
+
+static void locks_async_cb(uv_async_t *handle) {
+  navigator_locks_t *client = handle->data;
+  if (client->closed || client->js->destroying) return;
+  locks_drain(client->js, client);
+  process_microtasks(client->js);
+}
+
+static navigator_locks_t *locks_client(ant_t *js) {
+  if (js->navigator_locks) return js->navigator_locks;
+  navigator_locks_t *client = calloc(1, sizeof(*client));
+
+  if (!client) return NULL;
+  if (uv_async_init(js->loop, &client->async, locks_async_cb) != 0) {
+    free(client);
+    return NULL;
+  }
+
+  client->async.data = client;
+  uv_unref((uv_handle_t *)&client->async);
+
+  client->lock = (ant_mutex_t)ANT_MUTEX_INIT;
+  client->js = js;
+
+  snprintf(
+    client->client_id, sizeof(client->client_id),
+    "ant-%d-%llu", (int)getpid(), (unsigned long long)ant_worker_thread_id(js)
+  );
+
+  js->navigator_locks = client;
+  return client;
+}
+
+static lock_resource_t *lock_resource_get(const char *name, size_t len) {
+  lock_resource_t *r = NULL;
+  HASH_FIND(hh, lock_resources, name, len, r);
+  if (r) return r;
+
+  r = calloc(1, sizeof(*r));
+  if (!r) return NULL;
+
+  r->name = lock_copy_name(name, len);
+  if (!r->name) {
+    free(r);
+    return NULL;
+  }
+
+  r->name_len = len;
+  HASH_ADD_KEYPTR(hh, lock_resources, r->name, r->name_len, r);
+
+  return r;
+}
+
+static void lock_resource_maybe_free(lock_resource_t *r) {
+  if (r->held || r->queue) return;
+  HASH_DELETE(hh, lock_resources, r);
+  free(r->name);
+  free(r);
+}
+
+static void lock_unlink(lock_request_t **list, lock_request_t *req) {
+  for (lock_request_t **p = list; *p; p = &(*p)->link) if (*p == req) {
+    *p = req->link;
+    req->link = NULL;
+    return;
+  }
+}
+
+static bool lock_grantable(lock_resource_t *r, lock_request_t *req) {
+  if (r->queue && r->queue != req) return false;
+  for (lock_request_t *h = r->held; h; h = h->link)
+    if (req->mode == LOCK_MODE_EXCLUSIVE || h->mode == LOCK_MODE_EXCLUSIVE) return false;
+  return true;
+}
+
+static void lock_notify(lock_request_t *req) {
+  navigator_locks_t *client = req->client;
+  ant_mutex_lock(&client->lock);
+
+  if (!client->closed && !req->notify_queued) {
+    req->notify_queued = true;
+    req->notify_next = NULL;
+    if (client->notify_tail) client->notify_tail->notify_next = req;
+    else client->notify_head = req;
+    client->notify_tail = req;
+    uv_async_send(&client->async);
+  }
+
+  ant_mutex_unlock(&client->lock);
+}
+
+static void lock_grant(lock_resource_t *r, lock_request_t *req) {
+  req->link = r->held;
+  r->held = req;
+  lock_set_state(req, LOCK_HELD);
+  lock_notify(req);
+}
+
+static void lock_resource_process(lock_resource_t *r) {
+  while (r->queue && lock_grantable(r, r->queue)) {
+    lock_request_t *req = r->queue;
+    r->queue = req->link;
+    lock_grant(r, req);
+  }
+}
+
+static void lock_steal_held(lock_resource_t *r) {
+  while (r->held) {
+    lock_request_t *h = r->held;
+    r->held = h->link;
+    h->link = NULL;
+    h->resource = NULL;
+    lock_set_state(h, LOCK_STOLEN);
+    lock_notify(h);
+  }
+}
+
+static void lock_detach(lock_request_t *req, lock_state_t state) {
+  lock_resource_t *r = req->resource;
+  if (!r) return;
+
+  lock_unlink(lock_state(req) == LOCK_HELD ? &r->held : &r->queue, req);
+  req->resource = NULL;
+  lock_set_state(req, state);
+
+  lock_resource_process(r);
+  lock_resource_maybe_free(r);
+}
+
+static lock_register_t lock_register(lock_request_t *req, const lock_options_t *opts) {
+  ant_mutex_lock(&lock_registry);
+  lock_resource_t *r = lock_resource_get(req->name, req->name_len);
+  lock_register_t result = LOCK_REGISTER_OK;
+
+  if (!r) result = LOCK_REGISTER_OOM;
+  else if (opts->if_available && !lock_grantable(r, req)) {
+    result = LOCK_REGISTER_UNAVAILABLE;
+    lock_resource_maybe_free(r);
+  } else {
+    req->resource = r;
+    
+    if (opts->steal) lock_steal_held(r);
+    if (opts->steal || opts->if_available) lock_grant(r, req);
+    
+    else {
+      lock_request_t **tail = &r->queue;
+      while (*tail) tail = &(*tail)->link;
+      *tail = req;
+      lock_resource_process(r);
+    }
+  }
+
+  ant_mutex_unlock(&lock_registry);
+  return result;
+}
+
+static void lock_request_free(ant_t *js, lock_request_t *req) {
+  navigator_locks_t *client = req->client;
+  ant_mutex_lock(&client->lock);
+
+  if (req->notify_queued) {
+    lock_request_t *prev = NULL;
+    for (lock_request_t *n = client->notify_head; n; prev = n, n = n->notify_next) if (n == req) {
+      if (prev) prev->notify_next = n->notify_next;
+      else client->notify_head = n->notify_next;
+      if (client->notify_tail == n) client->notify_tail = prev;
+      break;
+    }
+  }
+
+  ant_mutex_unlock(&client->lock);
+  if (is_object_type(req->signal) && is_callable(req->abort_fn))
+    abort_signal_remove_listener(js, req->signal, req->abort_fn);
+
+  lock_list_remove(client, req);
+  free(req->name);
+  free(req);
+}
+
+static void lock_finish(ant_t *js, lock_request_t *req) {
+  ant_mutex_lock(&lock_registry);
+  lock_detach(req, LOCK_RELEASED);
+  ant_mutex_unlock(&lock_registry);
+  lock_request_free(js, req);
+}
+
+static void lock_settle_handler(ant_t *js, ant_value_t value, bool fulfilled) {
+  ant_value_t data = js_get_slot(js_getcurrentfunc(js), SLOT_DATA);
+  ant_value_t outer_promise = js_get(js, data, "outerPromise");
+  navigator_locks_t *client = js->navigator_locks;
+
+  lock_request_t *req = lock_find(client, js_get(js, data, "lockId"));
+  if (req) lock_finish(js, req);
+  if (fulfilled) js_resolve_promise(js, outer_promise, value);
+  else js_reject_promise(js, outer_promise, value);
+
+  if (client) locks_drain(js, client);
+}
+
+static ant_value_t lock_then_handler(ant_params_t) {
+  lock_settle_handler(js, nargs > 0 ? args[0] : js_mkundef(), true);
+  return js_mkundef();
+}
+
+static ant_value_t lock_catch_handler(ant_params_t) {
+  lock_settle_handler(js, nargs > 0 ? args[0] : js_mkundef(), false);
+  return js_mkundef();
+}
+
+static void lock_reject_callback(ant_t *js, lock_request_t *req, ant_value_t promise, ant_value_t result) {
+  GC_ROOT_SAVE(root_mark, js);
+  ant_value_t reason = js_take_thrown(js, result);
+
+  GC_ROOT_PIN(js, reason);
+  GC_ROOT_PIN(js, promise);
+  if (req) lock_finish(js, req);
+
+  js_reject_promise(js, promise, reason);
+  GC_ROOT_RESTORE(js, root_mark);
+}
+
+static void lock_await_callback(ant_t *js, lock_request_t *req, ant_value_t result, ant_value_t outer_promise) {
+  GC_ROOT_SAVE(root_mark, js);
+  GC_ROOT_PIN(js, result);
+  GC_ROOT_PIN(js, outer_promise);
+
+  ant_value_t data = Ant_Object_CreateBare(js);
+  GC_ROOT_PIN(js, data);
+  js_set(js, data, "lockId", req ? js_mknum((double)req->id) : js_mkundef());
+  js_set(js, data, "outerPromise", outer_promise);
+
+  ant_value_t on_resolve = js_heavy_mkfun(js, lock_then_handler, data);
+  GC_ROOT_PIN(js, on_resolve);
+  ant_value_t on_reject = js_heavy_mkfun(js, lock_catch_handler, data);
+  GC_ROOT_PIN(js, on_reject);
+
+  ant_value_t then_result = js_promise_then(js, result, on_resolve, on_reject);
+  if (is_err(then_result)) lock_reject_callback(js, req, outer_promise, then_result);
+  GC_ROOT_RESTORE(js, root_mark);
+}
+
+static void lock_run_callback(ant_t *js, lock_request_t *req, ant_value_t callback, ant_value_t arg, ant_value_t outer_promise) {
+  ant_value_t result = sv_vm_call(js->vm, js, callback, js_mkundef(), &arg, 1, NULL, js_mkundef());
+
+  if (is_err(result)) lock_reject_callback(js, req, outer_promise, result);
+  else if (vtype(result) == kTypePromise) lock_await_callback(js, req, result, outer_promise);
+  else {
+    if (req) lock_finish(js, req);
+    js_resolve_promise(js, outer_promise, result);
+  }
+}
+
+static void lock_dispatch(ant_t *js, lock_request_t *req) {
+  req->dispatched = true;
+
+  if (is_object_type(req->signal) && is_callable(req->abort_fn))
+    abort_signal_remove_listener(js, req->signal, req->abort_fn);
+
+  req->signal = js_mkundef();
+  req->abort_fn = js_mkundef();
+
+  GC_ROOT_SAVE(root_mark, js);
+  ant_value_t callback = req->callback;
+  ant_value_t promise = req->promise;
+  GC_ROOT_PIN(js, callback);
+  GC_ROOT_PIN(js, promise);
+
+  ant_value_t lock_obj = Ant_Object_CreateBare(js);
+  GC_ROOT_PIN(js, lock_obj);
+  js_set(js, lock_obj, "name", js_mkstr(js, req->name, req->name_len));
+  js_set(js, lock_obj, "mode", lock_mode_value(js, req->mode));
+  js_set_tostringtag(js, lock_obj, js_mkstr(js, "Lock", 4));
+
+  lock_run_callback(js, req, callback, lock_obj, promise);
+  GC_ROOT_RESTORE(js, root_mark);
+}
+
+static void lock_stolen(ant_t *js, lock_request_t *req) {
+  GC_ROOT_SAVE(root_mark, js);
+  ant_value_t promise = req->promise;
+  GC_ROOT_PIN(js, promise);
+
+  if (!req->dispatched) lock_request_free(js, req);
+  ant_value_t err = make_dom_exception(js, "Lock broken by another request with the 'steal' option.", "AbortError");
+
+  GC_ROOT_PIN(js, err);
+  js_reject_promise(js, promise, err);
+  GC_ROOT_RESTORE(js, root_mark);
+}
+
+static void locks_drain(ant_t *js, navigator_locks_t *client) {
+  for (;;) {
+    ant_mutex_lock(&client->lock);
+    lock_request_t *req = client->notify_head;
+
+    if (req) {
+      client->notify_head = req->notify_next;
+      if (!client->notify_head) client->notify_tail = NULL;
+      req->notify_queued = false;
+    }
+
+    ant_mutex_unlock(&client->lock);
+    if (!req) return;
+
+    lock_state_t state = lock_state(req);
+    if (state == LOCK_HELD && !req->dispatched) lock_dispatch(js, req);
+    else if (state == LOCK_STOLEN) lock_stolen(js, req);
+  }
+}
+
+static ant_value_t lock_abort_handler(ant_params_t) {
+  navigator_locks_t *client = js->navigator_locks;
+  lock_request_t *req = lock_find(client, js_get_slot(js_getcurrentfunc(js), SLOT_DATA));
+  if (!req) return js_mkundef();
+
+  ant_mutex_lock(&lock_registry);
+  bool pending = lock_state(req) == LOCK_PENDING;
+  if (pending) lock_detach(req, LOCK_RELEASED);
+  ant_mutex_unlock(&lock_registry);
+
+  if (!pending) return js_mkundef();
+  GC_ROOT_SAVE(root_mark, js);
+
+  ant_value_t promise = req->promise;
+  ant_value_t reason = abort_signal_get_reason(req->signal);
+
+  GC_ROOT_PIN(js, promise);
+  GC_ROOT_PIN(js, reason);
+
+  lock_request_free(js, req);
+  js_reject_promise(js, promise, reason);
+
+  GC_ROOT_RESTORE(js, root_mark);
+  locks_drain(js, client);
+
+  return js_mkundef();
+}
+
+static ant_value_t locks_rejected(ant_t *js, ant_value_t reason) {
+  ant_value_t promise = js_mkpromise(js);
+  js_reject_promise(js, promise, reason);
+  return promise;
+}
+
+static ant_value_t locks_not_supported(ant_t *js, const char *message) {
+  return locks_rejected(js, make_dom_exception(js, message, "NotSupportedError"));
+}
+
+static ant_value_t lock_read_options(ant_t *js, ant_value_t options, lock_options_t *out) {
+  *out = (lock_options_t){ .mode = LOCK_MODE_EXCLUSIVE, .signal = js_mkundef() };
+  if (!is_special_object(options)) return js_mkundef();
+
+  ant_value_t mode = js_get(js, options, "mode");
+  if (is_err(mode)) return mode;
+
+  if (vtype(mode) == kTypeString) {
+    size_t len;
+    const char *str = js_getstr(js, mode, &len);
+    if (str && len == 6 && memcmp(str, "shared", 6) == 0) out->mode = LOCK_MODE_SHARED;
+  }
+
+  ant_value_t if_available = js_get(js, options, "ifAvailable");
+  if (is_err(if_available)) return if_available;
+  out->if_available = if_available == js_true;
+
+  ant_value_t steal = js_get(js, options, "steal");
+  if (is_err(steal)) return steal;
+  out->steal = js_truthy(js, steal);
+
+  out->signal = js_get(js, options, "signal");
+  if (is_err(out->signal)) return out->signal;
+  if (vtype(out->signal) != kTypeUndefined && !abort_signal_is_signal(out->signal))
+    return js_mkerr_typed(js, JS_ERR_TYPE, "signal must be an AbortSignal");
+
+  return js_mkundef();
+}
+
+static ant_value_t locks_request(ant_params_t) {
+  if (nargs < 2)
+    return js_mkerr_typed(js, JS_ERR_TYPE, "locks.request requires at least 2 arguments");
+
+  size_t name_len;
+  const char *name = js_getstr(js, args[0], &name_len);
+
+  if (!name)
+    return js_mkerr_typed(js, JS_ERR_TYPE, "First argument must be a string");
+
+  lock_options_t opts;
+  ant_value_t callback = nargs == 2 ? args[1] : args[2];
+  ant_value_t parsed = lock_read_options(js, nargs == 2 ? js_mkundef() : args[1], &opts);
+
+  if (is_err(parsed)) return parsed;
+  if (vtype(callback) != kTypeFunction)
+    return js_mkerr_typed(js, JS_ERR_TYPE, "Callback must be a function");
+
+  bool has_signal = vtype(opts.signal) != kTypeUndefined;
+  if (name_len > 0 && name[0] == '-')
+    return locks_not_supported(js, "Names starting with '-' are reserved.");
+
+  if (opts.steal && opts.if_available)
+    return locks_not_supported(js, "The 'steal' and 'ifAvailable' options cannot be used together.");
+
+  if (opts.steal && opts.mode != LOCK_MODE_EXCLUSIVE)
+    return locks_not_supported(js, "The 'steal' option may only be used with 'exclusive' locks.");
+
+  if (has_signal && (opts.steal || opts.if_available))
+    return locks_not_supported(js, "The 'signal' option may not be used with 'steal' or 'ifAvailable'.");
+
+  if (has_signal && abort_signal_is_aborted(opts.signal))
+    return locks_rejected(js, abort_signal_get_reason(opts.signal));
+
+  navigator_locks_t *client = locks_client(js);
+  lock_request_t *req = client ? calloc(1, sizeof(*req)) : NULL;
+  char *name_copy = req ? lock_copy_name(name, name_len) : NULL;
+
+  if (!name_copy) {
+    free(req);
+    return js_mkerr(js, "out of memory");
+  }
+
+  ant_value_t promise = js_mkpromise(js);
+  req->client = client;
+  req->name = name_copy;
+  req->name_len = name_len;
+  req->id = ++client->next_id;
+  req->mode = opts.mode;
+  req->callback = callback;
+  req->promise = promise;
+  req->signal = js_mkundef();
+  req->abort_fn = js_mkundef();
+  atomic_init(&req->state, LOCK_PENDING);
+
+  lock_register_t registered = lock_register(req, &opts);
+  GC_ROOT_SAVE(root_mark, js);
+  GC_ROOT_PIN(js, promise);
+
+  if (registered != LOCK_REGISTER_OK) {
+    free(req->name);
+    free(req);
+    if (registered == LOCK_REGISTER_OOM) {
+      GC_ROOT_RESTORE(js, root_mark);
+      return js_mkerr(js, "out of memory");
+    }
+    lock_run_callback(js, NULL, callback, js_mknull(), promise);
+    GC_ROOT_RESTORE(js, root_mark);
+    return promise;
+  }
+
+  lock_list_append(client, req);
+  if (has_signal && lock_state(req) == LOCK_PENDING) {
+    req->signal = opts.signal;
+    req->abort_fn = js_heavy_mkfun(js, lock_abort_handler, js_mknum((double)req->id));
+    abort_signal_add_listener(js, opts.signal, req->abort_fn);
+  }
+
+  locks_drain(js, client);
+  GC_ROOT_RESTORE(js, root_mark);
+
+  return promise;
+}
+
+static ant_value_t locks_query(ant_params_t) {
+  navigator_locks_t *client = js->navigator_locks;
+  GC_ROOT_SAVE(root_mark, js);
+
+  ant_value_t held = js_mkarr(js);
+  GC_ROOT_PIN(js, held);
+
+  ant_value_t pending = js_mkarr(js);
+  GC_ROOT_PIN(js, pending);
+
+  for (lock_request_t *req = client ? client->requests : NULL; req; req = req->next) {
+    lock_state_t state = lock_state(req);
+    if (state != LOCK_HELD && state != LOCK_PENDING) continue;
+
+    ant_value_t info = Ant_Object_CreateBare(js);
+    js_set(js, info, "name", js_mkstr(js, req->name, req->name_len));
+    js_set(js, info, "mode", lock_mode_value(js, req->mode));
+    js_set(js, info, "clientId", js_mkstr(js, client->client_id, strlen(client->client_id)));
+    js_arr_push(js, state == LOCK_HELD ? held : pending, info);
+  }
+
+  ant_value_t result = Ant_Object_CreateBare(js);
+  GC_ROOT_PIN(js, result);
+  js_set(js, result, "held", held);
+  js_set(js, result, "pending", pending);
+
+  ant_value_t promise = js_mkpromise(js);
+  js_resolve_promise(js, promise, result);
+  GC_ROOT_RESTORE(js, root_mark);
+
+  return promise;
 }
 
 static int get_hardware_concurrency(void) {
@@ -84,331 +676,6 @@ static const char *get_platform_string(void) {
 #endif
 }
 
-static lock_entry_t *find_lock(ant_t *js, const char *name) {
-  lock_entry_t *entry = NULL;
-  HASH_FIND_STR(nav_locks(js)->held, name, entry);
-  return entry;
-}
-
-static lock_entry_t *create_lock(ant_t *js, const char *name, lock_mode_t mode) {
-  lock_entry_t *entry = calloc(1, sizeof(lock_entry_t));
-  if (!entry) return NULL;
-  
-  entry->name = strdup(name);
-  entry->mode = mode;
-  entry->shared_count = (mode == LOCK_MODE_SHARED) ? 1 : 0;
-  
-  HASH_ADD_STR(nav_locks(js)->held, name, entry);
-  return entry;
-}
-
-static bool can_acquire_lock(ant_t *js, const char *name, lock_mode_t mode) {
-  lock_entry_t *entry = find_lock(js, name);
-  if (!entry) return true;
-  if (mode == LOCK_MODE_SHARED && entry->mode == LOCK_MODE_SHARED) return true;
-  return false;
-}
-
-static void release_lock(ant_t *js, const char *name) {
-  lock_entry_t *entry = find_lock(js, name);
-  if (!entry) return;
-  
-  if (entry->mode == LOCK_MODE_SHARED) {
-    entry->shared_count--;
-    if (entry->shared_count > 0) return;
-  }
-  
-  HASH_DEL(nav_locks(js)->held, entry);
-  free(entry->name);
-  free(entry);
-}
-
-static void process_pending_requests(ant_t *js);
-
-static void reject_lock_callback(ant_t *js, const char *name, ant_value_t promise, ant_value_t result) {
-  GC_ROOT_SAVE(root_mark, js);
-  ant_value_t reason = js_take_thrown(js, result);
-
-  GC_ROOT_PIN(js, reason);
-  GC_ROOT_PIN(js, promise);
-  release_lock(js, name);
-
-  js_reject_promise(js, promise, reason);
-  process_pending_requests(js);
-  GC_ROOT_RESTORE(js, root_mark);
-}
-
-static ant_value_t make_lock_handler(ant_t *js, ant_value_t cfunc, ant_value_t lock_name, ant_value_t outer_promise) {
-  GC_ROOT_SAVE(root_mark, js);
-  ant_value_t fn_obj = Ant_Object_CreateBare(js);
-  GC_ROOT_PIN(js, fn_obj);
-  
-  ant_value_t data_obj = Ant_Object_CreateBare(js);
-  GC_ROOT_PIN(js, data_obj);
-
-  js_set(js, data_obj, "lockName", lock_name);
-  js_set(js, data_obj, "outerPromise", outer_promise);
-  js_set_slot(fn_obj, SLOT_DATA, data_obj);
-  js_set_slot(fn_obj, SLOT_CFUNC, cfunc);
-  
-  ant_value_t result = js_obj_to_func(js, fn_obj);
-  GC_ROOT_RESTORE(js, root_mark);
-
-  return result;
-}
-
-static ant_value_t lock_then_handler(ant_params_t) {
-  ant_value_t current_func = js_getcurrentfunc(js);
-  ant_value_t data_obj = js_get_slot(current_func, SLOT_DATA);
-  
-  ant_value_t lock_name_val = js_get(js, data_obj, "lockName");
-  ant_value_t outer_promise = js_get(js, data_obj, "outerPromise");
-  ant_value_t result_val = (nargs > 0) ? args[0] : js_mkundef();
-  
-  size_t name_len;
-  char *name = js_getstr(js, lock_name_val, &name_len);
-  
-  if (name) release_lock(js, name);
-  js_resolve_promise(js, outer_promise, result_val);
-  process_pending_requests(js);
-  
-  return js_mkundef();
-}
-
-static ant_value_t lock_catch_handler(ant_params_t) {
-  ant_value_t current_func = js_getcurrentfunc(js);
-  ant_value_t data_obj = js_get_slot(current_func, SLOT_DATA);
-  
-  ant_value_t lock_name_val = js_get(js, data_obj, "lockName");
-  ant_value_t outer_promise = js_get(js, data_obj, "outerPromise");
-  ant_value_t error_val = (nargs > 0) ? args[0] : js_mkundef();
-  
-  size_t name_len;
-  char *name = js_getstr(js, lock_name_val, &name_len);
-  
-  if (name) release_lock(js, name);
-  
-  js_reject_promise(js, outer_promise, error_val);
-  process_pending_requests(js);
-  
-  return js_mkundef();
-}
-
-static void execute_lock_callback(ant_t *js, const char *name, lock_mode_t mode, ant_value_t callback, ant_value_t outer_promise) {
-  ant_value_t lock_obj = Ant_Object_CreateBare(js);
-  js_set(js, lock_obj, "name", js_mkstr(js, name, strlen(name)));
-  js_set(js, lock_obj, "mode", js_mkstr(js, mode == LOCK_MODE_EXCLUSIVE ? "exclusive" : "shared", mode == LOCK_MODE_EXCLUSIVE ? 9 : 6));
-  js_set_tostringtag(js, lock_obj, js_mkstr(js, "Lock", 4));
-  
-  ant_value_t result = sv_vm_call(js->vm, js, callback, js_mkundef(), &lock_obj, 1, NULL, js_mkundef());
-  
-  if (vtype(result) == kTypeError) {
-    reject_lock_callback(js, name, outer_promise, result);
-    return;
-  }
-  
-  if (vtype(result) == kTypePromise) {
-    GC_ROOT_SAVE(root_mark, js);
-    GC_ROOT_PIN(js, result);
-    GC_ROOT_PIN(js, outer_promise);
-    ant_value_t name_str = js_mkstr(js, name, strlen(name));
-
-    GC_ROOT_PIN(js, name_str);
-    ant_value_t on_resolve = make_lock_handler(js, Ant_Function_Create(lock_then_handler), name_str, outer_promise);
-
-    GC_ROOT_PIN(js, on_resolve);
-    ant_value_t on_reject = make_lock_handler(js, Ant_Function_Create(lock_catch_handler), name_str, outer_promise);
-
-    GC_ROOT_PIN(js, on_reject);
-    ant_value_t then_result = js_promise_then(js, result, on_resolve, on_reject);
-
-    if (is_err(then_result)) reject_lock_callback(js, name, outer_promise, then_result);
-    GC_ROOT_RESTORE(js, root_mark);
-
-    return;
-  }
-  
-  release_lock(js, name);
-  js_resolve_promise(js, outer_promise, result);
-  process_pending_requests(js);
-}
-
-static void process_pending_requests(ant_t *js) {
-  lock_request_t *prev = NULL;
-  lock_request_t *req = nav_locks(js)->pending;
-  
-  while (req) {
-    if (can_acquire_lock(js, req->name, req->mode)) {
-      lock_entry_t *entry = find_lock(js, req->name);
-      
-      if (entry && entry->mode == LOCK_MODE_SHARED && req->mode == LOCK_MODE_SHARED) {
-        entry->shared_count++;
-      } else {
-        create_lock(js, req->name, req->mode);
-      }
-      
-      lock_request_t *to_process = req;
-      
-      if (prev) {
-        prev->next = req->next;
-      } else {
-        nav_locks(js)->pending = req->next;
-      }
-      req = req->next;
-      
-      execute_lock_callback(js, to_process->name, to_process->mode, to_process->callback, to_process->promise);
-      free(to_process->name);
-      free(to_process);
-      return;
-    } else {
-      prev = req;
-      req = req->next;
-    }
-  }
-}
-
-static ant_value_t locks_request(ant_params_t) {
-  if (nargs < 2) {
-    return js_mkerr_typed(js, JS_ERR_TYPE, "locks.request requires at least 2 arguments");
-  }
-  
-  size_t name_len;
-  char *name = js_getstr(js, args[0], &name_len);
-  if (!name) {
-    return js_mkerr_typed(js, JS_ERR_TYPE, "First argument must be a string");
-  }
-  
-  ant_value_t options = js_mkundef();
-  ant_value_t callback;
-  lock_mode_t mode = LOCK_MODE_EXCLUSIVE;
-  bool if_available = false;
-  
-  if (nargs == 2) {
-    callback = args[1];
-  } else {
-    options = args[1];
-    callback = args[2];
-    
-    if (is_special_object(options)) {
-      ant_value_t mode_val = js_get(js, options, "mode");
-      if (is_err(mode_val)) return mode_val;
-
-      if (vtype(mode_val) == kTypeString) {
-        size_t mode_len;
-        char *mode_str = js_getstr(js, mode_val, &mode_len);
-        if (mode_str && strcmp(mode_str, "shared") == 0) mode = LOCK_MODE_SHARED;
-      }
-      
-      ant_value_t available_val = js_get(js, options, "ifAvailable");
-      if (is_err(available_val)) return available_val;
-      if (available_val == js_true) if_available = true;
-    }
-  }
-  
-  if (vtype(callback) != kTypeFunction) {
-    return js_mkerr_typed(js, JS_ERR_TYPE, "Callback must be a function");
-  }
-  
-  ant_value_t promise = js_mkpromise(js);
-  
-  if (if_available && !can_acquire_lock(js, name, mode)) {
-    ant_value_t null_val = js_mknull();
-    ant_value_t result = sv_vm_call(js->vm, js, callback, js_mkundef(), &null_val, 1, NULL, js_mkundef());
-    
-    if (is_err(result)) {
-      js_reject_promise(js, promise, result);
-      return promise;
-    }
-
-    if (vtype(result) == kTypePromise) {
-      GC_ROOT_SAVE(root_mark, js);
-      GC_ROOT_PIN(js, result);
-      GC_ROOT_PIN(js, promise);
-
-      ant_value_t on_resolve = make_lock_handler(
-        js, Ant_Function_Create(lock_then_handler),
-        js_mkundef(), promise
-      );
-
-      GC_ROOT_PIN(js, on_resolve);
-      ant_value_t on_reject = make_lock_handler(
-        js, Ant_Function_Create(lock_catch_handler),
-        js_mkundef(), promise
-      );
-
-      GC_ROOT_PIN(js, on_reject);
-      ant_value_t then_result = js_promise_then(js, result, on_resolve, on_reject);
-
-      if (is_err(then_result)) js_reject_promise(js, promise, then_result);
-      GC_ROOT_RESTORE(js, root_mark);
-
-      return promise;
-    }
-
-    js_resolve_promise(js, promise, result);
-    return promise;
-  }
-  
-  if (can_acquire_lock(js, name, mode)) {
-    lock_entry_t *entry = find_lock(js, name);
-    
-    if (entry && entry->mode == LOCK_MODE_SHARED && mode == LOCK_MODE_SHARED) entry->shared_count++;
-    else create_lock(js, name, mode);
-    
-    execute_lock_callback(js, name, mode, callback, promise);
-  } else {
-    lock_request_t *req = calloc(1, sizeof(lock_request_t));
-    req->js = js;
-    req->name = strdup(name);
-    req->mode = mode;
-    req->callback = callback;
-    req->promise = promise;
-    req->next = NULL;
-    
-    lock_request_t *tail = nav_locks(js)->pending;
-    if (!tail) nav_locks(js)->pending = req;
-    else {
-      while (tail->next) tail = tail->next;
-      tail->next = req;
-    }
-  }
-  
-  return promise;
-}
-
-static ant_value_t locks_query(ant_params_t) {
-  ant_value_t result = Ant_Object_CreateBare(js);
-  ant_value_t held_arr = js_mkarr(js);
-  ant_value_t pending_arr = js_mkarr(js);
-  
-  lock_entry_t *entry, *tmp;
-  HASH_ITER(hh, nav_locks(js)->held, entry, tmp) {
-    ant_value_t lock_info = Ant_Object_CreateBare(js);
-    js_set(js, lock_info, "name", js_mkstr(js, entry->name, strlen(entry->name)));
-    js_set(js, lock_info, "mode", js_mkstr(js, entry->mode == LOCK_MODE_EXCLUSIVE
-      ? "exclusive" : "shared", entry->mode == LOCK_MODE_EXCLUSIVE ? 9 : 6));
-    js_arr_push(js, held_arr, lock_info);
-  }
-  
-  lock_request_t *req = nav_locks(js)->pending;
-  while (req) {
-    ant_value_t req_info = Ant_Object_CreateBare(js);
-    js_set(js, req_info, "name", js_mkstr(js, req->name, strlen(req->name)));
-    js_set(js, req_info, "mode", js_mkstr(js, req->mode == LOCK_MODE_EXCLUSIVE
-      ? "exclusive" : "shared", req->mode == LOCK_MODE_EXCLUSIVE ? 9 : 6));
-    js_arr_push(js, pending_arr, req_info);
-    req = req->next;
-  }
-  
-  js_set(js, result, "held", held_arr);
-  js_set(js, result, "pending", pending_arr);
-  
-  ant_value_t promise = js_mkpromise(js);
-  js_resolve_promise(js, promise, result);
-  
-  return promise;
-}
-
 void init_navigator_module(ant_t *js) {
   ant_value_t navigator_obj = Ant_Object_Create(js);
   
@@ -436,31 +703,41 @@ void init_navigator_module(ant_t *js) {
   js_set(js, js_glob(js), "navigator", navigator_obj);
 }
 
-void free_navigator_module(ant_t *js) {
-  navigator_locks_t *state = js->navigator_locks;
-  if (!state) return;
-  lock_entry_t *entry, *tmp;
+static void locks_async_closed(uv_handle_t *handle) {
+  free(handle->data);
+}
+
+void cleanup_navigator_module(ant_t *js) {
+  navigator_locks_t *client = js->navigator_locks;
+  if (!client) return;
+  js->navigator_locks = NULL;
+
+  ant_mutex_lock(&lock_registry);
+  ant_mutex_lock(&client->lock);
   
-  HASH_ITER(hh, state->held, entry, tmp) {
-    HASH_DEL(state->held, entry);
-    free(entry->name);
-    free(entry);
-  }
+  client->closed = true;
+  client->notify_head = client->notify_tail = NULL;
   
-  for (lock_request_t *req = state->pending, *next; req; req = next) {
-    next = req->next;
+  ant_mutex_unlock(&client->lock);
+  for (lock_request_t *req = client->requests; req; req = req->next) lock_detach(req, LOCK_RELEASED);
+  ant_mutex_unlock(&lock_registry);
+
+  while (client->requests) {
+    lock_request_t *req = client->requests;
+    lock_list_remove(client, req);
     free(req->name);
     free(req);
   }
   
-  free(state);
-  js->navigator_locks = NULL;
+  uv_close((uv_handle_t *)&client->async, locks_async_closed);
 }
 
 void gc_mark_navigator(ant_t *js, gc_mark_fn mark) {
   if (!js->navigator_locks) return;
-  for (lock_request_t *req = js->navigator_locks->pending; req; req = req->next) {
+  for (lock_request_t *req = js->navigator_locks->requests; req; req = req->next) {
     mark(js, req->callback);
     mark(js, req->promise);
+    if (is_object_type(req->signal)) mark(js, req->signal);
+    if (is_object_type(req->abort_fn)) mark(js, req->abort_fn);
   }
 }

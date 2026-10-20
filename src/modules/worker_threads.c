@@ -4,6 +4,7 @@
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
+#include <uthash.h>
 #include <uv.h>
 
 #include "ant.h"
@@ -17,6 +18,7 @@
 #include "ptr.h"
 #include "reactor.h"
 #include "runtime.h"
+#include "vfs_bundle.h"
 #include "sync.h"
 #include "silver/call.h"
 
@@ -26,7 +28,9 @@
 #include "gc/modules.h"
 #include "modules/events.h"
 #include "modules/atomics.h"
+#include "modules/buffer.h"
 #include "modules/message_port.h"
+#include "modules/performance.h"
 #include "modules/process.h"
 #include "modules/stream.h"
 #include "output.h"
@@ -58,8 +62,8 @@ typedef struct worker_event {
 } worker_event_t;
 
 enum {
-  WORKER_LIMIT_OLD,
   WORKER_LIMIT_YOUNG,
+  WORKER_LIMIT_OLD,
   WORKER_LIMIT_CODE,
   WORKER_LIMIT_STACK,
   WORKER_LIMIT_COUNT,
@@ -71,28 +75,44 @@ struct ant_worker {
   uint64_t thread_id;
 
   ant_t *parent;
+  const ant_bundle_t *bundle;
+  
   ant_value_t obj;
   ant_value_t exit_promise;
   uv_async_t parent_async;
+  
   bool parent_async_open;
   bool refed;
   bool exited;
   bool pipe_stdout;
   bool pipe_stderr;
+  bool stdin_enabled;
+  bool stdin_ended;
+  
   int exit_code;
+  ant_value_t stdin_obj;
   ant_value_t stdout_obj;
   ant_value_t stderr_obj;
   ant_port_binding_t *binding;
+  
   worker_event_t *events_head;
   worker_event_t *events_tail;
+  worker_event_t *stdin_head;
+  worker_event_t *stdin_tail;
   ant_worker_t *next;
   ant_worker_t **pprev;
 
   uv_thread_t thread;
   bool thread_started;
   ant_t *child;
+  _Atomic uint64_t loop_start_ns;
   uv_async_t child_async;
   bool child_async_open;
+  
+  ant_value_t child_stdin;
+  bool child_stdin_reading;
+  bool child_stdin_done;
+  
   bool terminate_requested;
   int requested_exit_code;
   ant_port_end_t *child_end;
@@ -104,9 +124,11 @@ struct ant_worker {
   char *name;
   char **env;
   bool share_env;
+  
   ant_wire_t *worker_data;
   ant_wire_t *environment_data;
   double limits[WORKER_LIMIT_COUNT];
+  double requested_limits[WORKER_LIMIT_COUNT];
 };
 
 static constexpr uint32_t WORKER_NATIVE_TAG = Ant_NativeTag("WRKR");
@@ -114,11 +136,17 @@ static _Atomic uint64_t next_thread_id = 1;
 static constexpr double WORKER_DEFAULT_STACK_MB = 4.0;
 static constexpr double WORKER_DEFAULT_OLD_MB = 512.0;
 
+static void worker_install_stdin(ant_t *js, ant_worker_t *w);
+
 static void worker_release(ant_worker_t *w) {
   if (atomic_fetch_sub_explicit(&w->refs, 1, memory_order_acq_rel) != 1) return;
   for (worker_event_t *e = w->events_head, *next; e; e = next) {
     next = e->next;
     ant_wire_release(e->wire);
+    free(e);
+  }
+  for (worker_event_t *e = w->stdin_head, *next; e; e = next) {
+    next = e->next;
     free(e);
   }
   
@@ -166,10 +194,52 @@ static bool worker_stdio_writer(FILE *stream, const void *data, size_t len, void
   return true;
 }
 
+static void worker_drain_stdin(ant_t *js, ant_worker_t *w) {
+  if (!is_object_type(w->child_stdin) || w->child_stdin_done) return;
+  ant_mutex_lock(&w->lock);
+  
+  worker_event_t *e = w->stdin_head;
+  bool ended = w->stdin_ended || !w->stdin_enabled;
+  w->stdin_head = w->stdin_tail = NULL;
+  ant_mutex_unlock(&w->lock);
+
+  GC_ROOT_SAVE(mark, js);
+  ant_value_t stream = w->child_stdin;
+  GC_ROOT_PIN(js, stream);
+  
+  for (worker_event_t *next; e; e = next) {
+    next = e->next;
+    ArrayBufferData *ab = create_array_buffer_data(js, e->len);
+    if (ab && e->len) memcpy(ab->data, e->bytes, e->len);
+    ant_value_t chunk = ab ? create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, e->len, js->builtins.buffer_proto) : js_mkundef();
+    free(e);
+    if (is_object_type(chunk)) stream_readable_push(js, stream, chunk, js_mkundef());
+  }
+  
+  if (ended) {
+    w->child_stdin_done = true;
+    if (w->child_stdin_reading) uv_unref((uv_handle_t *)&w->child_async);
+    w->child_stdin_reading = false;
+    stream_readable_push(js, stream, js_mknull(), js_mkundef());
+  }
+  
+  GC_ROOT_RESTORE(js, mark);
+  process_microtasks(js);
+}
+
 static void worker_child_wake(uv_async_t *handle) {
   ant_worker_t *w = handle->data;
   ant_t *js = w->child;
   if (!js) return;
+  
+  ant_mutex_lock(&w->lock);
+  bool stop = w->terminate_requested;
+  ant_mutex_unlock(&w->lock);
+  
+  if (!stop) {
+    worker_drain_stdin(js, w);
+    return;
+  }
   js->terminating = true;
   atomic_store_explicit(&js->interrupt_pending, 1, memory_order_relaxed);
   uv_stop(js->loop);
@@ -306,6 +376,7 @@ static void worker_thread_main(void *arg) {
 
   js->worker = w;
   js->interrupts_armed = true;
+  uv_loop_configure(js->loop, UV_METRICS_IDLE_TIME);
   js_setstackbase(js, (void *)&stack_base);
   js_setstacklimit(js, (size_t)(w->limits[WORKER_LIMIT_STACK] * 1024 * 1024) * 3 / 4);
 
@@ -324,6 +395,11 @@ static void worker_thread_main(void *arg) {
   
   if (!w->share_env) process_set_private_env(js, w->env);
   ant_bootstrap_modules(js);
+  worker_install_stdin(js, w);
+  if (w->bundle && !js_esm_bundle_activate(js, w->bundle)) {
+    worker_post(w, WORKER_EVENT_ERROR, WORKER_ERROR_INIT, NULL);
+    worker_request_stop(w, 1);
+  }
 
   int stop_code = 0;
   bool started = !worker_stop_requested(w, &stop_code);
@@ -333,6 +409,7 @@ static void worker_thread_main(void *arg) {
     if (is_err(result) && !Ant_Exception_Pending(js)) ant_worker_report_uncaught(js, result);
     worker_report_pending(js);
     if (!worker_stop_requested(w, NULL)) {
+      atomic_store_explicit(&w->loop_start_ns, uv_hrtime(), memory_order_release);
       js_run_event_loop(js);
       worker_report_pending(js);
     }
@@ -421,6 +498,82 @@ static ant_value_t worker_make_readable(ant_t *js) {
   js_set_proto_init(obj, stream_readable_prototype(js));
   stream_init_readable_object(js, obj, js_mkundef());
   js_set(js, obj, "_read", Ant_Function_Create(worker_stdio_noop));
+  return obj;
+}
+
+static ant_value_t worker_stdin_read(ant_params_t) {
+  ant_worker_t *w = js->worker;
+  if (!w || w->child_stdin_done || w->child_stdin_reading || !w->child_async_open) return js_mkundef();
+  w->child_stdin_reading = true;
+  uv_ref((uv_handle_t *)&w->child_async);
+  return js_mkundef();
+}
+
+static void worker_install_stdin(ant_t *js, ant_worker_t *w) {
+  ant_value_t stream = worker_make_readable(js);
+  if (is_err(stream)) {
+    js_take_thrown(js, stream);
+    return;
+  }
+  js_set(js, stream, "_read", Ant_Function_Create(worker_stdin_read));
+  w->child_stdin = stream;
+  js_set(js, js_get(js, js_glob(js), "process"), "stdin", stream);
+  worker_drain_stdin(js, w);
+}
+
+static void worker_stdin_call(ant_t *js, ant_value_t callback) {
+  if (!is_callable(callback)) return;
+  ant_value_t r = sv_vm_call(js->vm, js, callback, js_mkundef(), NULL, 0, NULL, js_mkundef());
+  if (is_err(r)) js_take_thrown(js, r);
+}
+
+static void worker_stdin_enqueue(ant_worker_t *w, worker_event_t *e) {
+  ant_mutex_lock(&w->lock);
+  if (e && !w->stdin_ended) {
+    if (w->stdin_tail) w->stdin_tail->next = e;
+    else w->stdin_head = e;
+    w->stdin_tail = e;
+    e = NULL;
+  } else if (!e) w->stdin_ended = true;
+  if (w->child_async_open) uv_async_send(&w->child_async);
+  ant_mutex_unlock(&w->lock);
+  free(e);
+}
+
+static ant_value_t worker_stdin_write(ant_params_t) {
+  ant_worker_t *w = worker_data(js_get_slot(js_getcurrentfunc(js), SLOT_DATA));
+  ant_value_t chunk = nargs > 0 ? args[0] : js_mkundef();
+  const uint8_t *bytes = NULL;
+  size_t len = 0;
+  if (vtype(chunk) == kTypeString) bytes = (const uint8_t *)js_getstr(js, chunk, &len);
+  else if (!buffer_source_get_bytes(js, chunk, &bytes, &len))
+    return Ant_Error_CreateInvalidArgType(js, "chunk", "of type string or an instance of Buffer or Uint8Array", chunk);
+
+  if (w && !w->exited) {
+    worker_event_t *e = malloc(sizeof(*e) + len);
+    if (!e) return js_mkerr(js, "out of memory");
+    *e = (worker_event_t){ .kind = WORKER_EVENT_STDOUT, .len = len };
+    if (len) memcpy(e->bytes, bytes, len);
+    worker_stdin_enqueue(w, e);
+  }
+  worker_stdin_call(js, nargs > 2 ? args[2] : js_mkundef());
+  return js_mkundef();
+}
+
+static ant_value_t worker_stdin_final(ant_params_t) {
+  ant_worker_t *w = worker_data(js_get_slot(js_getcurrentfunc(js), SLOT_DATA));
+  if (w) worker_stdin_enqueue(w, NULL);
+  worker_stdin_call(js, nargs > 0 ? args[0] : js_mkundef());
+  return js_mkundef();
+}
+
+static ant_value_t worker_make_stdin(ant_t *js, ant_value_t worker_obj) {
+  ant_value_t obj = Ant_Object_CreateBare(js);
+  if (is_err(obj)) return obj;
+  js_set_proto_init(obj, stream_writable_prototype(js));
+  stream_init_writable_object(js, obj, js_mkundef());
+  js_set(js, obj, "_write", js_heavy_mkfun(js, worker_stdin_write, worker_obj));
+  js_set(js, obj, "_final", js_heavy_mkfun(js, worker_stdin_final, worker_obj));
   return obj;
 }
 
@@ -601,6 +754,23 @@ static char *worker_resolve_entry(ant_t *js, ant_value_t spec, bool is_eval, ant
   }
 
   bool relative = strncmp(path, "./", 2) == 0 || strncmp(path, "../", 3) == 0;
+  const ant_bundle_t *vfs = js_esm_bundle(js);
+  if (vfs && (relative || path[0] == '/')) {
+    const char *key = NULL;
+    if (!relative) key = ant_bundle_has_key(vfs, path) ? path : NULL;
+    else {
+      const char *parent = js_module_eval_active_filename(js);
+      const ant_bundle_module_t *entry = ant_bundle_entry(vfs);
+      if (parent) key = ant_bundle_resolve(vfs, parent, path, false);
+      if (!key && entry) key = ant_bundle_resolve(vfs, entry->key, path, false);
+    }
+    if (key) {
+      char *copy = strdup(key);
+      free(path);
+      return copy;
+    }
+  }
+
   if (path[0] != '/' && !relative) {
     *error = js_mkerr_typed(
       js, JS_ERR_TYPE, 
@@ -664,21 +834,23 @@ static ant_value_t worker_environment_map(ant_t *js) {
   return js->mutable_roots.worker_environment_data;
 }
 
-static ant_value_t worker_read_limits(ant_t *js, ant_worker_t *w, ant_value_t limits) {
-  static const char *names[WORKER_LIMIT_COUNT] = {
-    "maxOldGenerationSizeMb", "maxYoungGenerationSizeMb", "codeRangeSizeMb", "stackSizeMb",
-  };
-  for (int i = 0; i < WORKER_LIMIT_COUNT; i++) w->limits[i] = -1;
-  w->limits[WORKER_LIMIT_OLD] = WORKER_DEFAULT_OLD_MB;
-  w->limits[WORKER_LIMIT_STACK] = WORKER_DEFAULT_STACK_MB;
-  if (!is_object_type(limits)) return js_mkundef();
+static const char *worker_limit_names[WORKER_LIMIT_COUNT] = {
+  "maxYoungGenerationSizeMb", "maxOldGenerationSizeMb", "codeRangeSizeMb", "stackSizeMb",
+};
 
-  for (int i = 0; i < WORKER_LIMIT_COUNT; i++) {
-    ant_value_t v = js_get(js, limits, names[i]);
+static ant_value_t worker_read_limits(ant_t *js, ant_worker_t *w, ant_value_t limits) {
+  for (int i = 0; i < WORKER_LIMIT_COUNT; i++) w->limits[i] = w->requested_limits[i] = -1;
+  w->requested_limits[WORKER_LIMIT_STACK] = WORKER_DEFAULT_STACK_MB;
+
+  for (int i = 0; i < WORKER_LIMIT_COUNT && is_object_type(limits); i++) {
+    ant_value_t v = js_get(js, limits, worker_limit_names[i]);
     if (vtype(v) == kTypeUndefined) continue;
-    if (vtype(v) != kTypeNumber) return js_mkerr_typed(js, JS_ERR_TYPE, "The \"options.resourceLimits.%s\" property must be of type number", names[i]);
-    if (js_getnum(v) > 0) w->limits[i] = js_getnum(v);
+    if (vtype(v) != kTypeNumber) return js_mkerr_typed(js, JS_ERR_TYPE, "The \"options.resourceLimits.%s\" property must be of type number", worker_limit_names[i]);
+    if (js_getnum(v) > 0) w->limits[i] = w->requested_limits[i] = js_getnum(v);
   }
+
+  if (w->limits[WORKER_LIMIT_OLD] <= 0) w->limits[WORKER_LIMIT_OLD] = WORKER_DEFAULT_OLD_MB;
+  if (w->limits[WORKER_LIMIT_STACK] <= 0) w->limits[WORKER_LIMIT_STACK] = WORKER_DEFAULT_STACK_MB;
 
   double old_min = (double)(ANT_ARENA_MIN >> 20), old_max = (double)(ANT_ARENA_MAX >> 20);
   if (w->limits[WORKER_LIMIT_OLD] < old_min) w->limits[WORKER_LIMIT_OLD] = old_min;
@@ -686,13 +858,10 @@ static ant_value_t worker_read_limits(ant_t *js, ant_worker_t *w, ant_value_t li
   return js_mkundef();
 }
 
-static ant_value_t worker_limits_object(ant_t *js, const double limits[WORKER_LIMIT_COUNT]) {
-  static const char *names[WORKER_LIMIT_COUNT] = {
-    "maxOldGenerationSizeMb", "maxYoungGenerationSizeMb", "codeRangeSizeMb", "stackSizeMb",
-  };
+static ant_value_t worker_limits_object(ant_t *js, const double limits[WORKER_LIMIT_COUNT], double unset) {
   ant_value_t obj = Ant_Object_Create(js);
   for (int i = 0; i < WORKER_LIMIT_COUNT; i++)
-    js_set(js, obj, names[i], js_mknum(limits[i] > 0 ? limits[i] : (i == WORKER_LIMIT_STACK ? WORKER_DEFAULT_STACK_MB : 0)));
+    js_set(js, obj, worker_limit_names[i], js_mknum(limits[i] > 0 ? limits[i] : unset));
   return obj;
 }
 
@@ -716,11 +885,28 @@ static ant_value_t worker_build_argv(ant_t *js, ant_worker_t *w, ant_value_t arg
   return js_mkundef();
 }
 
+static ant_value_t js_worker_elu(ant_params_t) {
+  ant_worker_t *w = worker_data(js_get_slot(js_getcurrentfunc(js), SLOT_DATA));
+  if (!w || w->exited) return ant_performance_elu_zero(js);
+
+  ant_value_t pair;
+  if (ant_performance_elu_pair(js, args, nargs, &pair)) return pair;
+
+  ant_mutex_lock(&w->lock);
+  uint64_t start = atomic_load_explicit(&w->loop_start_ns, memory_order_acquire);
+  uint64_t idle_ns = w->child && start ? uv_metrics_idle_time(w->child->loop) : 0;
+  ant_mutex_unlock(&w->lock);
+  if (!start) return ant_performance_elu_zero(js);
+
+  double idle = (double)idle_ns / 1e6;
+  double active = (double)(uv_hrtime() - start) / 1e6 - idle;
+  return ant_performance_elu_from(js, idle, active, args, nargs);
+}
+
 static ant_value_t js_worker_ctor(ant_params_t) {
   if (vtype(call_new_target) == kTypeUndefined)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Class constructor Worker cannot be invoked without 'new'");
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "The \"filename\" argument must be of type string or an instance of URL");
-  if (js_esm_bundle_active(js)) return js_mkerr(js, "Worker is not available in compiled executables");
 
   ant_value_t this_obj = js_getthis(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.worker_proto, call_new_target);
@@ -735,12 +921,16 @@ static ant_value_t js_worker_ctor(ant_params_t) {
   atomic_init(&w->refs, 1);
   w->obj = this_obj;
   w->exit_promise = js_mkundef();
+  w->stdin_obj = js_mkundef();
+  w->child_stdin = js_mkundef();
   w->stdout_obj = js_mkundef();
   w->stderr_obj = js_mkundef();
+  w->stdin_enabled = is_object_type(options) && js_truthy(js, js_get(js, options, "stdin"));
   w->pipe_stdout = !(is_object_type(options) && js_truthy(js, js_get(js, options, "stdout")));
   w->pipe_stderr = !(is_object_type(options) && js_truthy(js, js_get(js, options, "stderr")));
   w->is_eval = is_eval;
   w->parent = js;
+  w->bundle = js_esm_bundle(js);
 
   ant_value_t error = js_mkundef();
   w->entry = worker_resolve_entry(js, args[0], is_eval, &error);
@@ -805,10 +995,14 @@ static ant_value_t js_worker_ctor(ant_params_t) {
   js_set_native(this_obj, w, WORKER_NATIVE_TAG);
   js_set_finalizer(this_obj, worker_finalize);
   js_set(js, this_obj, "threadId", js_mknum((double)w->thread_id));
-  js_set(js, this_obj, "resourceLimits", worker_limits_object(js, w->limits));
+  js_set(js, this_obj, "resourceLimits", worker_limits_object(js, w->requested_limits, -1));
   w->stdout_obj = worker_make_readable(js);
   w->stderr_obj = worker_make_readable(js);
-  js_set(js, this_obj, "stdin", js_mknull());
+  if (w->stdin_enabled) w->stdin_obj = worker_make_stdin(js, this_obj);
+  js_set(js, this_obj, "stdin", w->stdin_enabled ? w->stdin_obj : js_mknull());
+  ant_value_t perf = Ant_Object_Create(js);
+  js_set(js, perf, "eventLoopUtilization", js_heavy_mkfun(js, js_worker_elu, this_obj));
+  js_set(js, this_obj, "performance", perf);
   js_set(js, this_obj, "stdout", w->stdout_obj);
   js_set(js, this_obj, "stderr", w->stderr_obj);
   Ant_List_Insert(&js->workers, w);
@@ -931,6 +1125,352 @@ static ant_value_t js_get_environment_data(ant_params_t) {
   return sv_vm_call(js->vm, js, method, map, args, 1, NULL, js_mkundef());
 }
 
+typedef enum {
+  THREAD_MSG_REQUEST,
+  THREAD_MSG_REPLY,
+} thread_msg_kind_t;
+
+typedef enum {
+  THREAD_MSG_DELIVERED,
+  THREAD_MSG_FAILED,
+  THREAD_MSG_ERRORED,
+} thread_msg_status_t;
+
+typedef struct thread_msg {
+  struct thread_msg *next;
+  thread_msg_kind_t kind;
+  thread_msg_status_t status;
+  uint32_t request_id;
+  uint64_t source;
+  ant_thread_mailbox_t *reply_to;
+  ant_wire_t *wire;
+} thread_msg_t;
+
+typedef struct thread_request {
+  struct thread_request *next;
+  struct thread_request **pprev;
+  ant_thread_mailbox_t *mailbox;
+  uint32_t id;
+  ant_value_t promise;
+  uv_timer_t timer;
+  bool has_timer;
+} thread_request_t;
+
+struct ant_thread_mailbox {
+  _Atomic int refs;
+  ant_mutex_t lock;
+  uint64_t thread_id;
+  ant_t *js;
+  bool closed;
+  thread_msg_t *head;
+  thread_msg_t *tail;
+  uv_async_t async;
+  thread_request_t *requests;
+  uint32_t next_request_id;
+  uint32_t request_count;
+  UT_hash_handle hh;
+};
+
+static ant_mutex_t mailbox_registry_lock = ANT_MUTEX_INIT;
+static ant_thread_mailbox_t *mailbox_registry = NULL;
+
+uint64_t ant_worker_thread_id(ant_t *js) {
+  return js->worker ? js->worker->thread_id : 0;
+}
+
+static ant_thread_mailbox_t *mailbox_retain(ant_thread_mailbox_t *mb) {
+  atomic_fetch_add_explicit(&mb->refs, 1, memory_order_relaxed);
+  return mb;
+}
+
+static void thread_msg_free(thread_msg_t *msg);
+
+static void mailbox_release(ant_thread_mailbox_t *mb) {
+  if (atomic_fetch_sub_explicit(&mb->refs, 1, memory_order_acq_rel) != 1) return;
+  while (mb->head) {
+    thread_msg_t *msg = mb->head;
+    mb->head = msg->next;
+    thread_msg_free(msg);
+  }
+  free(mb);
+}
+
+static void thread_msg_free(thread_msg_t *msg) {
+  if (msg->reply_to) mailbox_release(msg->reply_to);
+  ant_wire_release(msg->wire);
+  free(msg);
+}
+
+static bool mailbox_push(ant_thread_mailbox_t *mb, thread_msg_t *msg) {
+  ant_mutex_lock(&mb->lock);
+  bool open = !mb->closed;
+  if (open) {
+    msg->next = NULL;
+    if (mb->tail) mb->tail->next = msg;
+    else mb->head = msg;
+    mb->tail = msg;
+    uv_async_send(&mb->async);
+  }
+  ant_mutex_unlock(&mb->lock);
+  return open;
+}
+
+static void mailbox_reply(ant_thread_mailbox_t *to, uint32_t id, thread_msg_status_t status) {
+  thread_msg_t *msg = calloc(1, sizeof(*msg));
+  if (!msg) return;
+  msg->kind = THREAD_MSG_REPLY;
+  msg->request_id = id;
+  msg->status = status;
+  if (!mailbox_push(to, msg)) free(msg);
+}
+
+static ant_value_t mailbox_error(ant_t *js, thread_msg_status_t status) {
+  ant_value_t err = status == THREAD_MSG_ERRORED
+    ? js_mkerr_code(js, JS_ERR_GENERIC, "ERR_WORKER_MESSAGING_ERRORED", "The destination thread threw an error while processing the message")
+    : js_mkerr_code(js, JS_ERR_GENERIC, "ERR_WORKER_MESSAGING_FAILED", "Cannot find the destination thread or listener");
+  return js_take_thrown(js, err);
+}
+
+static ant_value_t mailbox_rejected(ant_t *js, ant_value_t err) {
+  ant_value_t promise = js_mkpromise(js);
+  if (is_err(err)) err = js_take_thrown(js, err);
+  js_reject_promise(js, promise, err);
+  return promise;
+}
+
+static void thread_request_timer_closed(uv_handle_t *handle) {
+  free(handle->data);
+}
+
+static void thread_request_free(thread_request_t *req) {
+  ant_thread_mailbox_t *mb = req->mailbox;
+  Ant_List_Remove(req);
+  req->promise = js_mkundef();
+  if (--mb->request_count == 0) uv_unref((uv_handle_t *)&mb->async);
+  if (!req->has_timer) {
+    free(req);
+    return;
+  }
+  uv_timer_stop(&req->timer);
+  uv_close((uv_handle_t *)&req->timer, thread_request_timer_closed);
+}
+
+static void thread_request_settle(ant_t *js, thread_request_t *req, ant_value_t err) {
+  GC_ROOT_SAVE(mark, js);
+  ant_value_t promise = req->promise;
+  GC_ROOT_PIN(js, promise);
+  thread_request_free(req);
+  if (vtype(err) == kTypeUndefined) js_resolve_promise(js, promise, err);
+  else {
+    GC_ROOT_PIN(js, err);
+    js_reject_promise(js, promise, err);
+  }
+  GC_ROOT_RESTORE(js, mark);
+}
+
+static void thread_request_timeout(uv_timer_t *timer) {
+  thread_request_t *req = timer->data;
+  ant_t *js = req->mailbox->js;
+  thread_request_settle(js, req, js_take_thrown(js, js_mkerr_code(
+    js, JS_ERR_GENERIC, "ERR_WORKER_MESSAGING_TIMEOUT", "Sending a message to another thread timed out"
+  )));
+  process_microtasks(js);
+}
+
+static thread_msg_status_t mailbox_deliver(ant_t *js, thread_msg_t *msg) {
+  if (!process_has_event_listeners(js, "workerMessage")) return THREAD_MSG_FAILED;
+  ant_value_t value = ant_wire_deserialize(js, msg->wire, NULL);
+  if (is_err(value)) {
+    js_take_thrown(js, value);
+    return THREAD_MSG_ERRORED;
+  }
+
+  GC_ROOT_SAVE(mark, js);
+  ant_value_t argv[2] = { value, js_mknum((double)msg->source) };
+  GC_ROOT_PIN(js, argv[0]);
+  emit_process_event(js, "workerMessage", argv, 2);
+  GC_ROOT_RESTORE(js, mark);
+  if (!Ant_Exception_Pending(js)) return THREAD_MSG_DELIVERED;
+  if (js_is_termination(Ant_Exception_Peek(js))) return THREAD_MSG_FAILED;
+  js_take_thrown(js, js_mkundef());
+  return THREAD_MSG_ERRORED;
+}
+
+static void mailbox_wake(uv_async_t *handle) {
+  ant_thread_mailbox_t *mb = handle->data;
+  ant_t *js = mb->js;
+
+  while (!js->destroying && !Ant_Exception_Pending(js)) {
+    ant_mutex_lock(&mb->lock);
+    thread_msg_t *msg = mb->head;
+    if (msg) {
+      mb->head = msg->next;
+      if (!mb->head) mb->tail = NULL;
+    }
+    ant_mutex_unlock(&mb->lock);
+    if (!msg) break;
+
+    if (msg->kind == THREAD_MSG_REQUEST)
+      mailbox_reply(msg->reply_to, msg->request_id, mailbox_deliver(js, msg));
+    else {
+      thread_request_t *req = mb->requests;
+      while (req && req->id != msg->request_id) req = req->next;
+      if (req) thread_request_settle(js, req, msg->status == THREAD_MSG_DELIVERED
+        ? js_mkundef() : mailbox_error(js, msg->status));
+    }
+    thread_msg_free(msg);
+    process_microtasks(js);
+  }
+}
+
+static ant_thread_mailbox_t *worker_mailbox(ant_t *js) {
+  if (js->thread_mailbox) return js->thread_mailbox;
+  ant_thread_mailbox_t *mb = calloc(1, sizeof(*mb));
+  if (!mb) return NULL;
+  if (uv_async_init(js->loop, &mb->async, mailbox_wake) != 0) {
+    free(mb);
+    return NULL;
+  }
+  mb->async.data = mb;
+  uv_unref((uv_handle_t *)&mb->async);
+  atomic_init(&mb->refs, 1);
+  mb->lock = (ant_mutex_t)ANT_MUTEX_INIT;
+  mb->thread_id = ant_worker_thread_id(js);
+  mb->js = js;
+  js->thread_mailbox = mb;
+
+  ant_mutex_lock(&mailbox_registry_lock);
+  HASH_ADD(hh, mailbox_registry, thread_id, sizeof(mb->thread_id), mb);
+  ant_mutex_unlock(&mailbox_registry_lock);
+  return mb;
+}
+
+void ant_worker_messaging_listen(ant_t *js) {
+  if (!js->destroying) worker_mailbox(js);
+}
+
+static void mailbox_async_closed(uv_handle_t *handle) {
+  mailbox_release(handle->data);
+}
+
+static void worker_mailbox_close(ant_t *js) {
+  ant_thread_mailbox_t *mb = js->thread_mailbox;
+  if (!mb) return;
+  js->thread_mailbox = NULL;
+
+  ant_mutex_lock(&mailbox_registry_lock);
+  HASH_DELETE(hh, mailbox_registry, mb);
+  ant_mutex_unlock(&mailbox_registry_lock);
+
+  ant_mutex_lock(&mb->lock);
+  mb->closed = true;
+  thread_msg_t *msg = mb->head;
+  mb->head = mb->tail = NULL;
+  ant_mutex_unlock(&mb->lock);
+
+  while (msg) {
+    thread_msg_t *next = msg->next;
+    if (msg->kind == THREAD_MSG_REQUEST) mailbox_reply(msg->reply_to, msg->request_id, THREAD_MSG_FAILED);
+    thread_msg_free(msg);
+    msg = next;
+  }
+
+  while (mb->requests) thread_request_free(mb->requests);
+  uv_close((uv_handle_t *)&mb->async, mailbox_async_closed);
+}
+
+static ant_thread_mailbox_t *mailbox_find(uint64_t thread_id) {
+  ant_thread_mailbox_t *mb = NULL;
+  ant_mutex_lock(&mailbox_registry_lock);
+  HASH_FIND(hh, mailbox_registry, &thread_id, sizeof(thread_id), mb);
+  if (mb) mailbox_retain(mb);
+  ant_mutex_unlock(&mailbox_registry_lock);
+  return mb;
+}
+
+static ant_value_t js_post_message_to_thread(ant_params_t) {
+  ant_value_t id = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t value = nargs > 1 ? args[1] : js_mkundef();
+  ant_value_t transfer = nargs > 2 ? args[2] : js_mkundef();
+  ant_value_t timeout = nargs > 3 ? args[3] : js_mkundef();
+
+  if (vtype(transfer) == kTypeNumber && vtype(timeout) == kTypeUndefined) {
+    timeout = transfer;
+    transfer = js_mkundef();
+  }
+  
+  if (vtype(timeout) != kTypeUndefined) {
+    if (vtype(timeout) != kTypeNumber)
+      return mailbox_rejected(js, Ant_Error_CreateInvalidArgType(js, "timeout", "of type number", timeout));
+    if (!(js_getnum(timeout) >= 0))
+      return mailbox_rejected(js, Ant_Error_CreateOutOfRange(js, "timeout", ">= 0", timeout));
+  }
+
+  uint64_t self = ant_worker_thread_id(js);
+  double num = vtype(id) == kTypeNumber ? js_getnum(id) : -1;
+  
+  if (num == (double)self) return mailbox_rejected(js, js_mkerr_code(
+    js, JS_ERR_GENERIC, 
+    "ERR_WORKER_MESSAGING_SAME_THREAD", 
+    "Cannot sent a message to the same thread"
+  ));
+
+  ant_thread_mailbox_t *own = worker_mailbox(js);
+  if (!own) return mailbox_rejected(js, js_mkerr(js, "out of memory"));
+
+  ant_wire_t *wire = NULL;
+  ant_value_t ser = ant_wire_serialize(js, value, transfer, js_mkundef(), &wire);
+  if (is_err(ser)) return mailbox_rejected(js, ser);
+
+  bool valid = num >= 0 && num <= 9007199254740991.0 && num == (double)(uint64_t)num;
+  ant_thread_mailbox_t *dest = valid ? mailbox_find((uint64_t)num) : NULL;
+  
+  if (!dest) {
+    ant_wire_release(wire);
+    return mailbox_rejected(js, mailbox_error(js, THREAD_MSG_FAILED));
+  }
+
+  thread_request_t *req = calloc(1, sizeof(*req));
+  thread_msg_t *msg = calloc(1, sizeof(*msg));
+  
+  if (!req || !msg) {
+    free(req);
+    free(msg);
+    ant_wire_release(wire);
+    mailbox_release(dest);
+    return mailbox_rejected(js, js_mkerr(js, "out of memory"));
+  }
+
+  ant_value_t promise = js_mkpromise(js);
+  req->mailbox = own;
+  req->id = ++own->next_request_id;
+  req->promise = promise;
+  
+  Ant_List_Insert(&own->requests, req);
+  if (own->request_count++ == 0) uv_ref((uv_handle_t *)&own->async);
+
+  if (vtype(timeout) == kTypeNumber && uv_timer_init(js->loop, &req->timer) == 0) {
+    req->has_timer = true;
+    req->timer.data = req;
+    uv_timer_start(&req->timer, thread_request_timeout, (uint64_t)js_getnum(timeout), 0);
+  }
+
+  msg->kind = THREAD_MSG_REQUEST;
+  msg->request_id = req->id;
+  msg->source = self;
+  msg->reply_to = mailbox_retain(own);
+  msg->wire = wire;
+  bool sent = mailbox_push(dest, msg);
+  
+  mailbox_release(dest);
+  if (!sent) {
+    thread_msg_free(msg);
+    thread_request_settle(js, req, mailbox_error(js, THREAD_MSG_FAILED));
+  }
+  
+  return promise;
+}
+
 static void worker_setup_child_state(ant_t *js, ant_value_t lib) {
   ant_worker_t *w = js->worker;
 
@@ -948,9 +1488,10 @@ static void worker_setup_child_state(ant_t *js, ant_value_t lib) {
   w->child_end = NULL;
   ant_value_t port = end ? ant_message_port_adopt(js, end) : js_mknull();
   if (is_err(port)) port = js_take_thrown(js, port);
+  
   js_set(js, lib, "parentPort", port);
   js_set(js, lib, "threadId", js_mknum((double)w->thread_id));
-  js_set(js, lib, "resourceLimits", worker_limits_object(js, w->limits));
+  js_set(js, lib, "resourceLimits", worker_limits_object(js, w->limits, 0));
   js_set(js, lib, "threadName", w->name ? js_mkstr(js, w->name, strlen(w->name)) : js_mkstr(js, "", 0));
 }
 
@@ -987,6 +1528,7 @@ ant_value_t worker_threads_library(ant_t *js) {
   js_set(js, lib, "moveMessagePortToContext", Ant_Function_CreateWithArity(js_move_message_port_to_context, 2));
   js_set(js, lib, "setEnvironmentData", Ant_Function_CreateWithArity(js_set_environment_data, 2));
   js_set(js, lib, "getEnvironmentData", Ant_Function_CreateWithArity(js_get_environment_data, 1));
+  js_set(js, lib, "postMessageToThread", Ant_Function_CreateWithArity(js_post_message_to_thread, 4));
 
   if (is_worker) worker_setup_child_state(js, lib);
   else {
@@ -1027,6 +1569,7 @@ void cleanup_worker_threads_module(ant_t *js) {
     }
     if (close_async) uv_close((uv_handle_t *)&w->parent_async, worker_parent_async_closed);
   }
+  worker_mailbox_close(js);
 }
 
 void gc_mark_worker_threads(ant_t *js, gc_mark_fn mark) {
@@ -1035,5 +1578,10 @@ void gc_mark_worker_threads(ant_t *js, gc_mark_fn mark) {
     if (vtype(w->exit_promise) == kTypePromise) mark(js, w->exit_promise);
     if (is_object_type(w->stdout_obj)) mark(js, w->stdout_obj);
     if (is_object_type(w->stderr_obj)) mark(js, w->stderr_obj);
+    if (is_object_type(w->stdin_obj)) mark(js, w->stdin_obj);
   }
+  
+  if (js->worker && is_object_type(js->worker->child_stdin)) mark(js, js->worker->child_stdin);
+  if (js->thread_mailbox) for (thread_request_t *req = js->thread_mailbox->requests; req; req = req->next)
+    if (vtype(req->promise) == kTypePromise) mark(js, req->promise);
 }

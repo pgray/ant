@@ -75,13 +75,29 @@ static ant_value_t perf_elu_delta(ant_t *js, perf_elu_t now, perf_elu_t prev) {
   return perf_elu_result(js, idle, active, active / (idle + active));
 }
 
+ant_value_t ant_performance_elu_zero(ant_t *js) {
+  return perf_elu_result(js, 0, 0, 0);
+}
+
+bool ant_performance_elu_pair(ant_t *js, ant_value_t *args, int nargs, ant_value_t *out) {
+  perf_elu_t first, second;
+  if (nargs < 2 || !perf_elu_read(js, args[0], &first) || !perf_elu_read(js, args[1], &second)) return false;
+  *out = perf_elu_delta(js, first, second);
+  return true;
+}
+
+ant_value_t ant_performance_elu_from(ant_t *js, double idle, double active, ant_value_t *args, int nargs) {
+  perf_elu_t first, current = { idle, active };
+  if (nargs > 0 && perf_elu_read(js, args[0], &first)) return perf_elu_delta(js, current, first);
+  return perf_elu_result(js, idle, active, active / (idle + active));
+}
+
 // performance.eventLoopUtilization([utilization1[, utilization2]])
 static ant_value_t js_performance_elu(ant_params_t) {
-  if (js->perf_loop_start_ms < 0) return perf_elu_result(js, 0, 0, 0);
+  if (js->perf_loop_start_ms < 0) return ant_performance_elu_zero(js);
 
-  perf_elu_t first, second;
-  bool has_first = nargs > 0 && perf_elu_read(js, args[0], &first);
-  if (has_first && nargs > 1 && perf_elu_read(js, args[1], &second)) return perf_elu_delta(js, first, second);
+  ant_value_t pair;
+  if (ant_performance_elu_pair(js, args, nargs, &pair)) return pair;
 
   if (js->perf_elu_start_ms < 0) {
     uv_loop_configure(js->loop, UV_METRICS_IDLE_TIME);
@@ -90,10 +106,8 @@ static ant_value_t js_performance_elu(ant_params_t) {
 
   double since = js->perf_elu_start_ms > js->perf_loop_start_ms ? js->perf_elu_start_ms : js->perf_loop_start_ms;
   double idle = (double)uv_metrics_idle_time(js->loop) / 1e6;
-  perf_elu_t current = { idle, perf_now(js) - since - idle };
   
-  if (has_first) return perf_elu_delta(js, current, first);
-  return perf_elu_result(js, current.idle, current.active, current.active / (current.idle + current.active));
+  return ant_performance_elu_from(js, idle, perf_now(js) - since - idle, args, nargs);
 }
 
 // performance.toJSON()

@@ -51,6 +51,7 @@ struct ant_bundle;
 #define ANT_INTERNAL_RUN_ENV "ANT_INTERNAL_RUN"
 
 bool js_esm_bundle_active(ant_t *js);
+const struct ant_bundle *js_esm_bundle(ant_t *js);
 bool js_esm_bundle_activate(ant_t *js, const struct ant_bundle *bundle);
 
 #endif

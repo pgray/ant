@@ -2214,6 +2214,10 @@ bool js_esm_bundle_active(ant_t *js) {
   return js && js->modules.state && js->modules.state->bundle;
 }
 
+const struct ant_bundle *js_esm_bundle(ant_t *js) {
+  return js && js->modules.state ? js->modules.state->bundle : NULL;
+}
+
 bool js_esm_bundle_activate(ant_t *js, const struct ant_bundle *bundle) {
   ant_esm_state_t *st = esm_state(js);
   if (!st) return false;
