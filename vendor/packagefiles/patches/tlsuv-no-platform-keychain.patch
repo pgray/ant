@@ -1,0 +1,31 @@
+diff --git a/src/keychain.c b/src/keychain.c
+index ede2613..e7ec1ca 100644
+--- a/src/keychain.c
++++ b/src/keychain.c
+@@ -17,7 +17,7 @@
+ #include <uv.h>
+ #include "keychain.h"
+ 
+-#if defined(__APPLE__) || _WIN32
++#if (defined(__APPLE__) || _WIN32) && !defined(TLSUV_NO_PLATFORM_KEYCHAIN)
+ extern keychain_t* platform_keychain();
+ #endif
+ 
+@@ -25,7 +25,7 @@ static keychain_t *KEYCHAIN;
+ static uv_once_t init_guard;
+ 
+ static void init(void) {
+-#if defined(__APPLE__) || _WIN32
++#if (defined(__APPLE__) || _WIN32) && !defined(TLSUV_NO_PLATFORM_KEYCHAIN)
+     // do not override a keychain the application registered before first use
+     if (KEYCHAIN == NULL) {
+         tlsuv_set_keychain(platform_keychain());
+@@ -38,7 +38,7 @@ const keychain_t* tlsuv_keychain() {
+     return KEYCHAIN;
+ }
+ void tlsuv_set_keychain(keychain_t *kc) {
+-#if defined(__APPLE__) || _WIN32
++#if (defined(__APPLE__) || _WIN32) && !defined(TLSUV_NO_PLATFORM_KEYCHAIN)
+     // NULL resets to the platform keychain
+     if (kc == NULL) {
+         kc = platform_keychain();

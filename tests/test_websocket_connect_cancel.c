@@ -47,8 +47,10 @@ static void fake_complete_cb(uv_timer_t *timer) {
 
 static tlsuv_connector_req fake_connect(uv_loop_t *loop, const tlsuv_connector_t *self,
                                         const char *host, const char *port,
+                                        const struct sockaddr *source_addr,
                                         tlsuv_connect_cb cb, void *ctx) {
   (void)loop;
+  (void)source_addr;
   (void)self;
   (void)host;
   (void)port;

@@ -310,8 +310,11 @@ static ant_http_conn_t *ant_http_conn_new(uv_loop_t *loop, ant_http_host_t *host
 
   conn->client.data = conn;
   tlsuv_http_header(&conn->client, "Accept-Encoding", NULL);
+  tlsuv_http_header(&conn->client, "User-Agent", NULL);
+  
   uv_timer_init(loop, &conn->idle_timer);
   uv_unref((uv_handle_t *)&conn->idle_timer);
+  
   conn->idle_timer.data = conn;
   conn->open_handles = 2;
 

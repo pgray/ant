@@ -1,5 +1,5 @@
 diff --git a/src/websocket.c b/src/websocket.c
-index 6e6b4d26..7cadf180 100644
+index cb8d493..c2d1f87 100644
 --- a/src/websocket.c
 +++ b/src/websocket.c
 @@ -27,6 +27,10 @@
@@ -13,7 +13,7 @@ index 6e6b4d26..7cadf180 100644
  #include "util.h"
  #include "tlsuv/tlsuv.h"
  static const char *DEFAULT_PATH = "/";
-@@ -163,12 +167,34 @@ static int tls_write_shim(uv_write_t *r, tlsuv_stream_t *s, uv_buf_t *b, int c,
+@@ -161,12 +165,34 @@ static int tls_write_shim(uv_write_t *r, tlsuv_stream_t *s, uv_buf_t *b, int c,
      return tlsuv_stream_write(r, s, b, cb);
  }
  
@@ -48,7 +48,7 @@ index 6e6b4d26..7cadf180 100644
      if (status < 0) {
          UM_LOG(ERR, "connection failed: %s", uv_strerror(status));
          ws->conn_req = NULL;
-@@ -804,7 +830,11 @@ static void on_ws_close(tlsuv_websocket_t *ws) {
+@@ -808,7 +834,11 @@ static void on_ws_close(tlsuv_websocket_t *ws) {
          ws_read_buffer_clear(ws);
      }
      if (ws->close_cb) {
@@ -61,7 +61,7 @@ index 6e6b4d26..7cadf180 100644
      }
  }
  
-@@ -829,10 +859,11 @@ int tlsuv_websocket_close(tlsuv_websocket_t *ws, uv_close_cb cb) {
+@@ -833,10 +863,11 @@ int tlsuv_websocket_close(tlsuv_websocket_t *ws, uv_close_cb cb) {
      if (ws->connect_req) {
          UM_LOG(TRACE, "closing ws connect req");
          const tlsuv_connector_t *c = ws->connector ? ws->connector : tlsuv_global_connector();

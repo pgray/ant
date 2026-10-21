@@ -1,4 +1,4 @@
-project('tlsuv', 'c', version: '0.40.13', default_options: ['c_std=c11', 'warning_level=0'])
+project('tlsuv', 'c', version: '0.46.0', default_options: ['c_std=c11', 'warning_level=0'])
 
 cc = meson.get_compiler('c')
 tls_backend = get_option('tls_backend')
@@ -30,6 +30,7 @@ tlsuv_sources = files(
   'src/tls_engine.c',
   'src/p11.c',
   'src/socket.c',
+  'src/listener.c',
   'src/connector.c',
   'src/url.c',
   'src/alloc.c',
@@ -41,14 +42,8 @@ tlsuv_sources = files(
   'src/compression.c',
 )
 
-if host_machine.system() == 'darwin'
-  tlsuv_sources += files('src/apple/keychain.c')
-elif host_machine.system() == 'windows'
-  tlsuv_sources += files('src/win32/win32_keychain.c')
-endif
-
 if tls_backend == 'boringssl'
-  tlsuv_sources += files('src/boringssl/engine.c', 'src/boringssl/keys.c')
+  tlsuv_sources += files('src/boringssl/engine.c', 'src/boringssl/keychain.c', 'src/boringssl/keys.c')
 else
   tlsuv_sources += files('src/openssl/engine.c', 'src/openssl/keys.c')
 endif
@@ -57,7 +52,8 @@ tlsuv_c_args = [
   '-DTLSUV_VERSION=v' + meson.project_version(),
   '-DTLSUV_HTTP',
   '-DTLS_IMPL=' + tls_backend,
-  '-DUSE_OPENSSL',
+  '-DUSE_' + tls_backend.to_upper(),
+  '-DTLSUV_NO_PLATFORM_KEYCHAIN',
   '-w',
 ]
 
@@ -78,7 +74,7 @@ tls_crypto_dep = dependency('crypto', required: true)
 
 win_deps = []
 if host_machine.system() == 'windows'
-  win_deps = [cc.find_library('crypt32'), cc.find_library('ncrypt')]
+  win_deps = [cc.find_library('crypt32')]
 endif
 
 config_data = configuration_data()

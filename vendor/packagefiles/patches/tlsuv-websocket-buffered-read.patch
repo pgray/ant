@@ -16,7 +16,7 @@ index f89bc02..70957c3 100644
  
  /**
 diff --git a/src/websocket.c b/src/websocket.c
-index b7334da..8c6d6e6 100644
+index 8ad8481..a5369dc 100644
 --- a/src/websocket.c
 +++ b/src/websocket.c
 @@ -15,6 +15,8 @@
@@ -28,7 +28,7 @@ index b7334da..8c6d6e6 100644
  
  #include "alloc.h"
  #include "http_req.h"
-@@ -57,6 +59,8 @@ static void send_pong(tlsuv_websocket_t *ws, const char* ping_data, int len);
+@@ -57,6 +59,8 @@ static void send_pong(tlsuv_websocket_t* ws, const char* ping_data, size_t len);
  static void tls_hs_cb(tls_link_t *tls, int status);
  
  static int ws_read_start(uv_link_t *l);
@@ -37,18 +37,7 @@ index b7334da..8c6d6e6 100644
  static void ws_tr_write_cb(uv_write_t *req, int status);
  void ws_process_read(tlsuv_websocket_t *ws, ssize_t nread, const uv_buf_t *buf);
  
-@@ -74,6 +78,10 @@ int tlsuv_websocket_init_with_src(uv_loop_t *loop, tlsuv_websocket_t *ws, tlsuv_
-     ws->type = UV_IDLE;
-     ws->src = src;
-     ws->req = tlsuv__calloc(1, sizeof(tlsuv_http_req_t));
-+    ws->read_buf = NULL;
-+    ws->read_len = 0;
-+    ws->read_cap = 0;
-+    ws->processing_read = false;
- 
-     char randbuf[24];
-     uv_random(NULL, NULL, randbuf, sizeof(randbuf), 0, NULL);
-@@ -420,6 +428,207 @@ void ws_read_cb(uv_link_t *l, ssize_t nread, const uv_buf_t *buf) {
+@@ -422,6 +426,207 @@ void ws_read_cb(uv_link_t *l, ssize_t nread, const uv_buf_t *buf) {
      ws_process_read(ws, nread, buf);
  }
  
@@ -189,7 +178,7 @@ index b7334da..8c6d6e6 100644
 +            break;
 +        case OpCode_Ping:
 +            UM_LOG(TRACE, "got ping masked=%d len=%zd", masked, payload_len);
-+            send_pong(ws, payload, (int)payload_len);
++            send_pong(ws, payload, payload_len);
 +            break;
 +        case OpCode_Pong:
 +            UM_LOG(TRACE, "got pong");
@@ -256,7 +245,7 @@ index b7334da..8c6d6e6 100644
  void ws_process_read(tlsuv_websocket_t *ws, ssize_t nread, const uv_buf_t *buf) {
      UM_LOG(VERB, "ws_read_cb nread = %zd", nread);
      if (nread < 0) {
-@@ -469,53 +678,30 @@ void ws_process_read(tlsuv_websocket_t *ws, ssize_t nread, const uv_buf_t *buf)
+@@ -471,57 +676,30 @@ void ws_process_read(tlsuv_websocket_t *ws, ssize_t nread, const uv_buf_t *buf)
          return;
      }
  
@@ -266,10 +255,14 @@ index b7334da..8c6d6e6 100644
 -    size_t len = frame[1] & (~WS_MASK);
 -    char *dp = frame + 2;
 -    if (len == 126) {
--        len = be16toh(*(uint16_t *)(&frame[2]));
+-        uint16_t v;
+-        memcpy(&v, &frame[2], sizeof(v));
+-        len = be16toh(v);
 -        dp += 2;
 -    } else if (len == 127) {
--        len = be64toh(*(uint64_t*)&frame[2]);
+-        uint64_t v;
+-        memcpy(&v, &frame[2], sizeof(v));
+-        len = be64toh(v);
 -        dp += 8;
 -    }
 +    char *data = buf->base + processed;
@@ -311,7 +304,7 @@ index b7334da..8c6d6e6 100644
 -            break;
 -        case OpCode_Ping:
 -            UM_LOG(TRACE, "got ping masked=%d len=%zd", masked, len);
--            send_pong(ws, dp, (int)len);
+-            send_pong(ws, dp, len);
 -            break;
 -        case OpCode_Pong:
 -            UM_LOG(TRACE, "got pong");
@@ -328,8 +321,8 @@ index b7334da..8c6d6e6 100644
 +    }
  }
  
- static void send_pong(tlsuv_websocket_t *ws, const char* ping_data, int len) {
-@@ -614,6 +800,9 @@ static void on_ws_close(tlsuv_websocket_t *ws) {
+ static void send_pong(tlsuv_websocket_t* ws, const char* ping_data, size_t len) {
+@@ -626,6 +804,9 @@ static void on_ws_close(tlsuv_websocket_t *ws) {
          ws->src = NULL;
      }
  
@@ -339,7 +332,7 @@ index b7334da..8c6d6e6 100644
      if (ws->close_cb) {
          ws->close_cb((uv_handle_t *) ws);
      }
-@@ -628,6 +817,7 @@ static void ws_close_cb(uv_link_t *l) {
+@@ -640,6 +821,7 @@ static void ws_close_cb(uv_link_t *l) {
  
  int tlsuv_websocket_close(tlsuv_websocket_t *ws, uv_close_cb cb) {
      ws->close_cb = cb;

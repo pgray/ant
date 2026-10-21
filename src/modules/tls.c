@@ -232,15 +232,6 @@ static void tls_socket_free_read_queue(ant_tls_socket_t *socket) {
   }
 }
 
-static ant_value_t tls_make_error(ant_t *js, tls_context *ctx, long code, const char *fallback) {
-  const char *message = fallback;
-  if (ctx && ctx->strerror) {
-    const char *detail = ctx->strerror(code);
-    if (detail && *detail) message = detail;
-  }
-  return js_mkerr_typed(js, JS_ERR_TYPE, "%s", message ? message : "TLS error");
-}
-
 static void tls_socket_free_alpn(ant_tls_socket_t *socket) {
   if (!socket || !socket->alpn_protocols) return;
   for (int i = 0; i < socket->alpn_count; i++) free(socket->alpn_protocols[i]);
@@ -921,7 +912,6 @@ static ant_value_t js_tls_create_context(ant_params_t) {
   size_t ca_len = 0;
   size_t key_len = 0;
   size_t cert_len = 0;
-  int rc = 0;
 
   if (vtype(options) != kTypeUndefined && vtype(options) != kTypeNull && vtype(options) != kTypeObject)
     return js_mkerr_typed(js, JS_ERR_TYPE, "TLS context options must be an object");
@@ -939,80 +929,75 @@ static ant_value_t js_tls_create_context(ant_params_t) {
   if (!tls_value_bytes(js, key_v, &key_data, &key_len, &error)) return error;
   if (!tls_value_bytes(js, cert_v, &cert_data, &cert_len, &error)) return error;
 
+  if (cert_data && !key_data)
+    return js_mkerr_typed(js, JS_ERR_TYPE, "TLS certificate requires a private key");
+  if (key_data && !cert_data)
+    return js_mkerr_typed(js, JS_ERR_TYPE, "TLS private key requires a certificate");
+
   wrap = calloc(1, sizeof(*wrap));
   if (!wrap) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
 
-  wrap->ctx = default_tls_context(ca, ca_len);
+  wrap->ctx = default_tls_context();
   if (!wrap->ctx) {
     free(wrap);
     return js_mkerr_typed(js, JS_ERR_TYPE, "Failed to create TLS context");
   }
 
-  if (wrap->ctx->allow_partial_chain && js_truthy(js, partial_v)) {
-  rc = wrap->ctx->allow_partial_chain(wrap->ctx, 1);
-  if (rc != 0) {
-    ant_value_t err = tls_make_error(js, wrap->ctx, rc, "Failed to enable partial chain verification");
-    tls_context_free(wrap);
-    free(wrap);
-    return err;
-  }}
-
-  if (key_data) {
-    if (!wrap->ctx->load_key) {
-      tls_context_free(wrap);
-      free(wrap);
-      return js_mkerr_typed(js, JS_ERR_TYPE, "TLS engine does not support loading private keys");
-    }
-    
-    rc = wrap->ctx->load_key(&wrap->key, key_data, key_len);
-    if (rc != 0) {
-      ant_value_t err = tls_make_error(js, wrap->ctx, rc, "Failed to load TLS private key");
-      tls_context_free(wrap);
-      free(wrap);
-      return err;
-    }
-    
-    if (cert_data) {
-    if (!wrap->ctx->load_cert) {
-      tls_context_free(wrap);
-      free(wrap);
-      return js_mkerr_typed(js, JS_ERR_TYPE, "TLS engine does not support loading certificates");
-    }
-    
-    rc = wrap->ctx->load_cert(&wrap->cert, cert_data, cert_len);
-    if (rc != 0) {
-      ant_value_t err = tls_make_error(js, wrap->ctx, rc, "Failed to load TLS certificate");
-      tls_context_free(wrap);
-      free(wrap);
-      return err;
-    }}
-
-    if (!wrap->ctx->set_own_cert) {
-      tls_context_free(wrap);
-      free(wrap);
-      return js_mkerr_typed(js, JS_ERR_TYPE, "TLS engine does not support own certificate configuration");
-    }
-
-    rc = wrap->ctx->set_own_cert(wrap->ctx, wrap->key, wrap->cert);
-    if (rc != 0) {
-      ant_value_t err = tls_make_error(js, wrap->ctx, rc, "Failed to configure TLS certificate");
-      tls_context_free(wrap);
-      free(wrap);
-      return err;
-    }
-  } else if (cert_data) {
-    tls_context_free(wrap);
-    free(wrap);
-    return js_mkerr_typed(js, JS_ERR_TYPE, "TLS certificate requires a private key");
+  if (ca && wrap->ctx->set_ca_bundle(wrap->ctx, ca, ca_len) != 0) {
+    error = js_mkerr_typed(js, JS_ERR_TYPE, "Failed to load TLS CA bundle");
+    goto fail;
   }
 
+  if (wrap->ctx->allow_partial_chain && js_truthy(js, partial_v) &&
+      wrap->ctx->allow_partial_chain(wrap->ctx, 1) != 0) {
+    error = js_mkerr_typed(js, JS_ERR_TYPE, "Failed to enable partial chain verification");
+    goto fail;
+  }
+
+  if (!key_data) goto done;
+
+  if (!wrap->ctx->load_key) {
+    error = js_mkerr_typed(js, JS_ERR_TYPE, "TLS engine does not support loading private keys");
+    goto fail;
+  }
+
+  if (wrap->ctx->load_key(&wrap->key, key_data, key_len) != 0) {
+    error = js_mkerr_typed(js, JS_ERR_TYPE, "Failed to load TLS private key: expected a PEM-encoded key");
+    goto fail;
+  }
+
+  if (!wrap->ctx->load_cert) {
+    error = js_mkerr_typed(js, JS_ERR_TYPE, "TLS engine does not support loading certificates");
+    goto fail;
+  }
+
+  if (wrap->ctx->load_cert(&wrap->cert, cert_data, cert_len) != 0) {
+    error = js_mkerr_typed(js, JS_ERR_TYPE, "Failed to load TLS certificate: expected a PEM-encoded certificate");
+    goto fail;
+  }
+
+  if (!wrap->ctx->set_own_cert) {
+    error = js_mkerr_typed(js, JS_ERR_TYPE, "TLS engine does not support own certificate configuration");
+    goto fail;
+  }
+
+  if (wrap->ctx->set_own_cert(wrap->ctx, wrap->key, wrap->cert) != 0) {
+    error = js_mkerr_typed(js, JS_ERR_TYPE, "TLS certificate does not match the private key");
+    goto fail;
+  }
+
+done:
   obj = Ant_Object_CreateBare(js);
   js_set_proto_init(obj, js->builtins.tls_context_proto);
   wrap->obj = obj;
-  
   js_set_native(obj, wrap, TLS_CONTEXT_NATIVE_TAG);
-  
+
   return obj;
+
+fail:
+  tls_context_free(wrap);
+  free(wrap);
+  return error;
 }
 
 static ant_value_t js_tls_is_context(ant_params_t) {
@@ -1157,7 +1142,7 @@ static ant_value_t js_tls_connect_options(ant_t *js, ant_value_t options, ant_va
     socket->owns_ctx = false;
     tls_context_retain(ctx_wrap);
   } else {
-    socket->ctx = default_tls_context(NULL, 0);
+    socket->ctx = default_tls_context();
     socket->owns_ctx = true;
     if (!socket->ctx) {
       tls_socket_free(socket);
@@ -1229,7 +1214,7 @@ static ant_value_t tls_build_library(ant_t *js) {
   ant_value_t create_secure_context = Ant_Function_Create(js_tls_create_context);
   ant_value_t root_certificates = js_mkarr(js);
   
-  tls_context *ctx = default_tls_context(NULL, 0);
+  tls_context *ctx = default_tls_context();
   const char *version_str = NULL;
 
   if (ctx && ctx->version) {
