@@ -1,5 +1,5 @@
 project('libuv', 'c',
-  version: '1.52.1',
+  version: '1.53.0',
   default_options: [
     'warning_level=0', 'werror=false',
     meson.version().version_compare('>=1.3.0') ? 'c_std=gnu11,c11' : 'c_std=gnu11',
@@ -138,6 +138,7 @@ if win32
     'ole32',
     'uuid',
     'shell32',
+    'synchronization',
   ]
   libuv_src += files(
     'src/win/async.c',
@@ -307,13 +308,17 @@ endif
 if sunos
   libuv_cargs += ['-D__EXTENSIONS__', '-D_XOPEN_SOURCE=500']
   libuv_libs += ['kstat', 'nsl', 'sendfile', 'socket']
-  libuv_src += files('src/unix/no-proctitle.c', 'src/unix/sunos.c')
+  libuv_src += files(
+    'src/unix/no-proctitle.c',
+    'src/unix/random-getrandom.c',
+    'src/unix/sunos.c',
+  )
   libuv_headers += files('include/uv/sunos.h')
 endif
 
 if haiku
   libuv_cargs += '-D_BSD_SOURCE'
-  libuv_libs += ['bsd', 'network']
+  libuv_libs += ['network']
   libuv_src += files(
     'src/unix/bsd-ifaddrs.c',
     'src/unix/haiku.c',

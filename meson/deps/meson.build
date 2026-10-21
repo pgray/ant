@@ -76,7 +76,7 @@ deps_info = {
     'inc': 'src',
   },
   'libuv': {
-    'dir': 'libuv-v1.52.1',
+    'dir': 'libuv-v1.53.0',
     'inc': 'include',
   },
   'llhttp': {
@@ -221,7 +221,7 @@ deps_info = {
     'inc': 'src',
   },
   'libuv': {
-    'dir': 'libuv-v1.52.1',
+    'dir': 'libuv-v1.53.0',
     'inc': 'include',
   },
   'llhttp': {

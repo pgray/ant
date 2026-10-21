@@ -1,10 +1,10 @@
 [wrap-file]
-directory = libuv-v1.52.1
-source_url = https://dist.libuv.org/dist/v1.52.1/libuv-v1.52.1.tar.gz
-source_filename = libuv-v1.52.1.tar.gz
-source_hash = 66d511b9e6e334c0e62279eb234fbfb2b3110b1479c09b95b44c7afca8cff9e7
+directory = libuv-v1.53.0
+source_url = https://dist.libuv.org/dist/v1.53.0/libuv-v1.53.0.tar.gz
+source_filename = libuv-v1.53.0.tar.gz
+source_hash = cb0d6dd2128d5a95bd242c6cc982a24fe608fa93da57b6b4ec763b0018c53e64
 patch_directory = libuv
-diff_files = patches/libuv-drain-accept.patch, patches/libuv-poll-buffers.patch, patches/libuv-const-cpu-model.patch
+diff_files = patches/libuv-drain-accept.patch, patches/libuv-poll-buffers.patch
 
 [provide]
 libuv = libuv_dep
