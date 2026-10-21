@@ -24,6 +24,8 @@ typedef struct ArrayBufferData {
   uint8_t is_detached;
   uint8_t storage;
   uint8_t untransferable;
+  uint8_t resizable;
+  uint8_t views_slow;
 } ArrayBufferData;
 
 #if UINTPTR_MAX == UINT64_MAX
@@ -51,15 +53,21 @@ typedef enum {
 typedef struct {
   ArrayBufferData *buffer;
   TypedArrayType type;
+  bool length_tracking;
   size_t byte_offset;
   size_t byte_length;
   size_t length;
+  ArrayBufferData *backing;
+  size_t base_length;
 } TypedArrayData;
 
 typedef struct {
   ArrayBufferData *buffer;
   size_t byte_offset;
   size_t byte_length;
+  ArrayBufferData *backing;
+  size_t base_length;
+  bool length_tracking;
 } DataViewData;
 
 typedef enum {
@@ -89,6 +97,8 @@ void buffer_detach(ant_t *js, ArrayBufferData *data);
 
 ant_value_t create_arraybuffer_obj(ant_t *js, ArrayBufferData *buffer);
 ant_value_t create_arraybuffer_copy(ant_t *js, const void *bytes, size_t length);
+ant_value_t create_resizable_arraybuffer_copy(ant_t *js, const void *bytes, size_t length, size_t max_length);
+ant_value_t buffer_clone_arraybuffer(ant_t *js, const ArrayBufferData *data);
 ant_value_t create_shared_arraybuffer_obj(ant_t *js, ArrayBufferData *buffer);
 
 const void *buffer_typedarray_exotic_ops(void);

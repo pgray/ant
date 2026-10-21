@@ -118,7 +118,7 @@ static ant_value_t sc_clone_arraybuffer(
 
   if (transferred) clone = sc_transfer_target(js, transferred);
   else if (abd->is_shared) clone = create_shared_arraybuffer_obj(js, abd);
-  else clone = create_arraybuffer_copy(js, abd->data, abd->length);
+  else clone = buffer_clone_arraybuffer(js, abd);
 
   if (!is_err(clone)) sc_add(seen, key, clone);
   return clone;

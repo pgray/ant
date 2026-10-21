@@ -5,6 +5,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
+#include <uthash.h>
 
 #include "ant.h"
 #include "cfunc.h"
@@ -52,9 +53,107 @@ TypedArrayData *buffer_get_typedarray_data(ant_value_t value) {
   return (TypedArrayData *)js_get_native(value, BUFFER_TYPEDARRAY_NATIVE_TAG);
 }
 
-static inline TypedArrayData *typedarray_live(ant_value_t value) {
-  TypedArrayData *ta = buffer_get_typedarray_data(value);
+static ArrayBufferData buffer_out_of_bounds = { 
+  .is_detached = 1, 
+  .views_slow = 1
+};
+
+typedef struct {
+  void *view;
+  bool dataview;
+} buffer_view_ref_t;
+
+typedef struct buffer_view_set {
+  ArrayBufferData *buffer;
+  buffer_view_ref_t *items;
+  uint32_t count;
+  uint32_t cap;
+  UT_hash_handle hh;
+} buffer_view_set_t;
+
+static void typedarray_view_refresh(TypedArrayData *ta);
+static void dataview_view_refresh(DataViewData *dv);
+
+static inline bool buffer_is_growable_shared(const ArrayBufferData *data) {
+  return data && data->is_shared && data->resizable;
+}
+
+static __attribute__((noinline, cold)) TypedArrayData *typedarray_live_slow(TypedArrayData *ta) {
+  if (buffer_is_growable_shared(ta->backing)) typedarray_view_refresh(ta);
   return Ant_Buffer_ViewIsLive(ta) ? ta : NULL;
+}
+
+static inline TypedArrayData *typedarray_view_live(TypedArrayData *ta) {
+  if (!ta || !ta->buffer) return NULL;
+  return __builtin_expect(ta->buffer->views_slow, 0) ? typedarray_live_slow(ta) : ta;
+}
+
+static inline TypedArrayData *typedarray_live(ant_value_t value) {
+  return typedarray_view_live(buffer_get_typedarray_data(value));
+}
+
+static void buffer_views_add(ant_t *js, ArrayBufferData *buffer, void *view, bool dataview) {
+  buffer_view_set_t *set = NULL;
+  HASH_FIND_PTR(js->buffers.views, &buffer, set);
+  
+  if (!set) {
+    set = calloc(1, sizeof(*set));
+    if (!set) return;
+    set->buffer = buffer;
+    HASH_ADD_PTR(js->buffers.views, buffer, set);
+  }
+
+  if (set->count == set->cap) {
+    uint32_t cap = set->cap ? set->cap * 2 : 4;
+    buffer_view_ref_t *items = realloc(set->items, cap * sizeof(*items));
+    if (!items) return;
+    set->items = items;
+    set->cap = cap;
+  }
+
+  set->items[set->count++] = (buffer_view_ref_t){ view, dataview };
+}
+
+static void buffer_views_remove(ant_t *js, ArrayBufferData *buffer, void *view) {
+  buffer_view_set_t *set = NULL;
+  HASH_FIND_PTR(js->buffers.views, &buffer, set);
+  if (!set) return;
+
+  for (uint32_t i = 0; i < set->count; i++) if (set->items[i].view == view) {
+    set->items[i] = set->items[--set->count];
+    break;
+  }
+
+  if (set->count) return;
+  HASH_DEL(js->buffers.views, set);
+  free(set->items);
+  free(set);
+}
+
+static void buffer_views_refresh(ant_t *js, ArrayBufferData *buffer) {
+  buffer_view_set_t *set = NULL;
+  HASH_FIND_PTR(js->buffers.views, &buffer, set);
+  if (!set) return;
+
+  for (uint32_t i = 0; i < set->count; i++) {
+    if (set->items[i].dataview) dataview_view_refresh(set->items[i].view);
+    else typedarray_view_refresh(set->items[i].view);
+  }
+}
+
+static void buffer_views_free(ant_t *js) {
+  buffer_view_set_t *set, *tmp;
+  HASH_ITER(hh, js->buffers.views, set, tmp) {
+    HASH_DEL(js->buffers.views, set);
+    free(set->items);
+    free(set);
+  }
+}
+
+static inline void buffer_view_release(ant_t *js, ArrayBufferData *backing, void *view) {
+  if (!backing) return;
+  if (__builtin_expect(backing->resizable, 0)) buffer_views_remove(js, backing, view);
+  free_array_buffer_data(js, backing);
 }
 
 static __attribute__((noinline, cold)) ant_value_t typedarray_this_error(ant_t *js, ant_value_t value) {
@@ -82,7 +181,7 @@ static void typedarray_finalize(ant_t *js, ant_object_t *obj) {
   if (!ta_data) return;
   js_clear_native(value, BUFFER_TYPEDARRAY_NATIVE_TAG);
 
-  if (ta_data->buffer) free_array_buffer_data(js, ta_data->buffer);
+  buffer_view_release(js, ta_data->backing, ta_data);
   ta_meta_free(js, ta_data, sizeof(*ta_data));
 }
 
@@ -92,7 +191,7 @@ static void dataview_finalize(ant_t *js, ant_object_t *obj) {
   if (!dv_data) return;
   js_clear_native(value, BUFFER_DATAVIEW_NATIVE_TAG);
 
-  if (dv_data->buffer) free_array_buffer_data(js, dv_data->buffer);
+  buffer_view_release(js, dv_data->backing, dv_data);
   ta_meta_free(js, dv_data, sizeof(*dv_data));
 }
 
@@ -327,6 +426,19 @@ static ArrayBufferData *create_shared_array_buffer_data(size_t length) {
   return data;
 }
 
+static ArrayBufferData *create_resizable_array_buffer_data(ant_t *js, size_t length, size_t max_length, bool shared) {
+  ArrayBufferData *data = alloc_array_buffer_data(max_length);
+  if (!data) return NULL;
+
+  data->length = length;
+  data->resizable = 1;
+  data->is_shared = shared;
+  data->views_slow = shared;
+  if (!shared) register_buffer(js, data);
+
+  return data;
+}
+
 void free_array_buffer_data(ant_t *js, ArrayBufferData *data) {
   if (!data || --data->ref_count > 0) return;
   ArrayBufferData *owner = data->owner;
@@ -344,6 +456,7 @@ void buffer_detach(ant_t *js, ArrayBufferData *data) {
   data->data = NULL;
   data->length = 0;
   data->is_detached = 1;
+  data->views_slow = 1;
   free_array_buffer_data(js, owner);
 }
 
@@ -359,6 +472,7 @@ void buffer_transfer_storage(ant_t *js, ArrayBufferData *from, ArrayBufferData *
   to->data = from->data;
   to->length = from->length;
   to->capacity = from->capacity;
+  to->resizable = from->resizable;
   to->storage = ARRAY_BUFFER_STORAGE_BORROWED;
   
   buffer_detach(js, from);
@@ -388,6 +502,74 @@ static size_t get_element_size(TypedArrayType type) {
   L_2: return 2;
   L_4: return 4;
   L_8: return 8;
+}
+
+static size_t buffer_byte_length(const ArrayBufferData *data) {
+  return data->is_shared ? __atomic_load_n(&data->length, __ATOMIC_SEQ_CST) : data->length;
+}
+
+static void typedarray_view_refresh(TypedArrayData *ta) {
+  ArrayBufferData *backing = ta->backing;
+  size_t size = get_element_size(ta->type);
+  size_t total = buffer_byte_length(backing);
+  size_t room = ta->byte_offset <= total ? (total - ta->byte_offset) / size : 0;
+  bool fits = ta->byte_offset <= total && (ta->length_tracking || ta->base_length <= room);
+  size_t length = ta->length_tracking ? room : ta->base_length;
+
+  ta->buffer = fits ? backing : &buffer_out_of_bounds;
+  ta->length = fits ? length : 0;
+  ta->byte_length = fits ? length * size : 0;
+}
+
+static void dataview_view_refresh(DataViewData *dv) {
+  ArrayBufferData *backing = dv->backing;
+  size_t total = buffer_byte_length(backing);
+  size_t room = dv->byte_offset <= total ? total - dv->byte_offset : 0;
+  bool fits = dv->byte_offset <= total && (dv->length_tracking || dv->base_length <= room);
+
+  dv->buffer = fits ? backing : &buffer_out_of_bounds;
+  dv->byte_length = fits ? (dv->length_tracking ? room : dv->base_length) : 0;
+}
+
+static __attribute__((noinline, cold)) void typedarray_view_register(ant_t *js, TypedArrayData *ta) {
+  buffer_views_add(js, ta->backing, ta, false);
+  typedarray_view_refresh(ta);
+}
+
+static __attribute__((noinline, cold)) void dataview_view_register(ant_t *js, DataViewData *dv) {
+  buffer_views_add(js, dv->backing, dv, true);
+  dataview_view_refresh(dv);
+}
+
+static inline __attribute__((always_inline)) void typedarray_view_attach(
+  ant_t *js, TypedArrayData *ta, ArrayBufferData *buffer,
+  size_t byte_offset, size_t length, bool tracking
+) {
+  ta->backing = buffer;
+  ta->buffer = buffer;
+  ta->byte_offset = byte_offset;
+  ta->base_length = length;
+  ta->length_tracking = tracking && buffer->resizable;
+  ta->length = length;
+  ta->byte_length = length * get_element_size(ta->type);
+  buffer->ref_count++;
+
+  if (__builtin_expect(buffer->resizable, 0)) typedarray_view_register(js, ta);
+}
+
+static inline __attribute__((always_inline)) void dataview_view_attach(
+  ant_t *js, DataViewData *dv, ArrayBufferData *buffer,
+  size_t byte_offset, size_t byte_length, bool tracking
+) {
+  dv->backing = buffer;
+  dv->buffer = buffer;
+  dv->byte_offset = byte_offset;
+  dv->base_length = byte_length;
+  dv->length_tracking = tracking && buffer->resizable;
+  dv->byte_length = byte_length;
+  buffer->ref_count++;
+
+  if (__builtin_expect(buffer->resizable, 0)) dataview_view_register(js, dv);
 }
 
 const char *buffer_typedarray_type_name(TypedArrayType type) {
@@ -460,6 +642,21 @@ static ant_value_t create_typed_array_like(
   return out;
 }
 
+static ant_value_t buffer_read_max_length(ant_t *js, ant_value_t options, size_t length, size_t *max_length, bool *resizable) {
+  *resizable = false;
+  if (!is_object_type(options)) return js_mkundef();
+
+  ant_value_t max = js_get(js, options, "maxByteLength");
+  if (is_err(max) || vtype(max) == kTypeUndefined) return max;
+
+  ant_value_t result = js_to_index_fast(js, max, max_length);
+  if (is_err(result)) return result;
+  if (length > *max_length) return js_mkerr_typed(js, JS_ERR_RANGE, "Invalid array buffer max length");
+
+  *resizable = true;
+  return js_mkundef();
+}
+
 static ant_value_t js_arraybuffer_constructor(ant_params_t) {
   if (vtype(call_new_target) == kTypeUndefined)
     return js_mkerr_typed(js, JS_ERR_TYPE, "ArrayBuffer constructor requires 'new'");
@@ -469,9 +666,18 @@ static ant_value_t js_arraybuffer_constructor(ant_params_t) {
     ant_value_t result = js_to_index_fast(js, args[0], &length);
     if (is_err(result)) return result;
   }
-  
-  ArrayBufferData *data = create_array_buffer_data(js, length);
-  if (!data) return js_mkerr(js, "Failed to allocate ArrayBuffer");
+
+  size_t max_length = 0;
+  bool resizable = false;
+  ant_value_t options = buffer_read_max_length(js, nargs > 1 ? args[1] : js_mkundef(), length, &max_length, &resizable);
+  if (is_err(options)) return options;
+
+  ArrayBufferData *data = resizable
+    ? create_resizable_array_buffer_data(js, length, max_length, false)
+    : create_array_buffer_data(js, length);
+  if (!data) return resizable
+    ? js_mkerr_typed(js, JS_ERR_RANGE, "Array buffer allocation failed")
+    : js_mkerr(js, "Failed to allocate ArrayBuffer");
   
   ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.arraybuffer_proto, call_new_target);
@@ -517,8 +723,7 @@ static ant_value_t js_arraybuffer_slice(ant_params_t) {
   return new_obj;
 }
 
-// ArrayBuffer.prototype.transfer(newLength)
-static ant_value_t js_arraybuffer_transfer(ant_params_t) {
+static ant_value_t arraybuffer_transfer(ant_t *js, ant_value_t *args, int nargs, bool preserve) {
   ant_value_t this_val = js_getthis(js);
   ArrayBufferData *data = buffer_get_arraybuffer_data(this_val);
   if (!data) return js_mkerr(js, "Invalid ArrayBuffer");
@@ -542,7 +747,24 @@ static ant_value_t js_arraybuffer_transfer(ant_params_t) {
   if (!buffer_can_transfer(data))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot transfer this ArrayBuffer");
 
-  bool same_length = new_length == data->length;
+  if (preserve && data->resizable) {
+    if (new_length > data->capacity)
+      return js_mkerr_typed(js, JS_ERR_RANGE, "ArrayBuffer.prototype.transfer: Invalid length parameter");
+
+    ArrayBufferData *moved = create_array_buffer_data(js, 0);
+    if (!moved) return js_mkerr(js, "Failed to allocate new ArrayBuffer");
+
+    size_t old_length = data->length;
+    buffer_transfer_storage(js, data, moved);
+    if (new_length > old_length) memset(moved->data + old_length, 0, new_length - old_length);
+    moved->length = new_length;
+
+    ant_value_t moved_obj = create_arraybuffer_obj(js, moved);
+    free_array_buffer_data(js, moved);
+    return moved_obj;
+  }
+
+  bool same_length = new_length == data->length && !data->resizable;
   ArrayBufferData *new_data = create_array_buffer_data(js, same_length ? 0 : new_length);
   if (!new_data) return js_mkerr(js, "Failed to allocate new ArrayBuffer");
   
@@ -557,9 +779,84 @@ static ant_value_t js_arraybuffer_transfer(ant_params_t) {
   return new_obj;
 }
 
-// ArrayBuffer.prototype.transferToFixedLength(newLength)
+static ant_value_t js_arraybuffer_transfer(ant_params_t) {
+  return arraybuffer_transfer(js, args, nargs, true);
+}
+
 static ant_value_t js_arraybuffer_transferToFixedLength(ant_params_t) {
-  return js_arraybuffer_transfer(js, args, nargs, js_mkundef());
+  return arraybuffer_transfer(js, args, nargs, false);
+}
+
+static ant_value_t js_arraybuffer_resize(ant_params_t) {
+  ArrayBufferData *data = buffer_get_arraybuffer_data(js_getthis(js));
+  if (!data || data->is_shared || !data->resizable)
+    return js_mkerr_typed(js, JS_ERR_TYPE, "Method ArrayBuffer.prototype.resize called on incompatible receiver");
+
+  size_t new_length = 0;
+  ant_value_t result = js_to_index_fast(js, nargs > 0 ? args[0] : js_mkundef(), &new_length);
+  if (is_err(result)) return result;
+
+  if (data->is_detached) return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot resize a detached ArrayBuffer");
+  if (new_length > data->capacity)
+    return js_mkerr_typed(js, JS_ERR_RANGE, "ArrayBuffer.prototype.resize: Invalid length parameter");
+
+  if (new_length > data->length) memset(data->data + data->length, 0, new_length - data->length);
+  data->length = new_length;
+  buffer_views_refresh(js, data);
+
+  return js_mkundef();
+}
+
+static ant_value_t js_arraybuffer_resizable_getter(ant_params_t) {
+  ArrayBufferData *data = buffer_get_arraybuffer_data(js_getthis(js));
+  if (!data || data->is_shared)
+    return js_mkerr_typed(js, JS_ERR_TYPE, "Method get ArrayBuffer.prototype.resizable called on incompatible receiver");
+  return js_bool(data->resizable);
+}
+
+static ant_value_t buffer_max_length(ant_t *js, bool shared, const char *name) {
+  ArrayBufferData *data = buffer_get_arraybuffer_data(js_getthis(js));
+  if (!data || (bool)data->is_shared != shared)
+    return js_mkerr_typed(js, JS_ERR_TYPE, "Method get %s.prototype.maxByteLength called on incompatible receiver", name);
+  if (data->is_detached) return js_mknum(0);
+  return js_mknum((double)(data->resizable ? data->capacity : buffer_byte_length(data)));
+}
+
+static ant_value_t js_arraybuffer_maxByteLength_getter(ant_params_t) {
+  return buffer_max_length(js, false, "ArrayBuffer");
+}
+
+static ant_value_t js_sharedarraybuffer_maxByteLength_getter(ant_params_t) {
+  return buffer_max_length(js, true, "SharedArrayBuffer");
+}
+
+static ant_value_t js_sharedarraybuffer_growable_getter(ant_params_t) {
+  ArrayBufferData *data = buffer_get_arraybuffer_data(js_getthis(js));
+  if (!data || !data->is_shared)
+    return js_mkerr_typed(js, JS_ERR_TYPE, "Method get SharedArrayBuffer.prototype.growable called on incompatible receiver");
+  return js_bool(data->resizable);
+}
+
+static ant_value_t js_sharedarraybuffer_grow(ant_params_t) {
+  ArrayBufferData *data = buffer_get_arraybuffer_data(js_getthis(js));
+  if (!buffer_is_growable_shared(data))
+    return js_mkerr_typed(js, JS_ERR_TYPE, "Method SharedArrayBuffer.prototype.grow called on incompatible receiver");
+
+  size_t new_length = 0;
+  ant_value_t result = js_to_index_fast(js, nargs > 0 ? args[0] : js_mkundef(), &new_length);
+  if (is_err(result)) return result;
+  if (new_length > data->capacity)
+    return js_mkerr_typed(js, JS_ERR_RANGE, "SharedArrayBuffer.prototype.grow: Invalid length parameter");
+
+  size_t current = __atomic_load_n(&data->length, __ATOMIC_SEQ_CST);
+  do {
+    if (new_length < current)
+      return js_mkerr_typed(js, JS_ERR_RANGE, "SharedArrayBuffer.prototype.grow: Invalid length parameter");
+    if (new_length == current) break;
+  } while (!__atomic_compare_exchange_n(&data->length, &current, new_length, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST));
+
+  buffer_views_refresh(js, data);
+  return js_mkundef();
 }
 
 // ArrayBuffer.prototype.detached getter
@@ -585,22 +882,19 @@ static __attribute__((noinline, cold)) ant_value_t typedarray_receiver_error(ant
 static ant_value_t js_typedarray_length_getter(ant_params_t) {
   TypedArrayData *data = buffer_get_typedarray_data(js_getthis(js));
   if (!data) return typedarray_receiver_error(js, "length");
-  if (!Ant_Buffer_ViewIsLive(data)) return js_mknum(0);
-  return js_mknum((double)data->length);
+  return js_mknum(typedarray_view_live(data) ? (double)data->length : 0);
 }
 
 static ant_value_t js_typedarray_byteLength_getter(ant_params_t) {
   TypedArrayData *data = buffer_get_typedarray_data(js_getthis(js));
   if (!data) return typedarray_receiver_error(js, "byteLength");
-  if (!Ant_Buffer_ViewIsLive(data)) return js_mknum(0);
-  return js_mknum((double)data->byte_length);
+  return js_mknum(typedarray_view_live(data) ? (double)data->byte_length : 0);
 }
 
 static ant_value_t js_typedarray_byteOffset_getter(ant_params_t) {
   TypedArrayData *data = buffer_get_typedarray_data(js_getthis(js));
   if (!data) return typedarray_receiver_error(js, "byteOffset");
-  if (!Ant_Buffer_ViewIsLive(data)) return js_mknum(0);
-  return js_mknum((double)data->byte_offset);
+  return js_mknum(typedarray_view_live(data) ? (double)data->byte_offset : 0);
 }
 
 static ant_value_t js_dataview_buffer_getter(ant_params_t) {
@@ -645,11 +939,11 @@ static ant_value_t js_dataview_byteOffset_getter(ant_params_t) {
     .meta = { fn, NULL, 0, CFUNC_NATIVE_GETTER }, .native_tag = tag, .kind = ANT_NATIVE_GETTER_SLOT_DATA }
 
 BUFFER_SIZE_GETTER(typedarray_length_getter, js_typedarray_length_getter, BUFFER_TYPEDARRAY_NATIVE_TAG,
-  ANT_NATIVE_DETACH_REF, offsetof(TypedArrayData, buffer), offsetof(ArrayBufferData, is_detached), offsetof(TypedArrayData, length));
+  ANT_NATIVE_DETACH_REF_SLOW, offsetof(TypedArrayData, buffer), offsetof(ArrayBufferData, views_slow), offsetof(TypedArrayData, length));
 BUFFER_SIZE_GETTER(typedarray_byte_length_getter, js_typedarray_byteLength_getter, BUFFER_TYPEDARRAY_NATIVE_TAG,
-  ANT_NATIVE_DETACH_REF, offsetof(TypedArrayData, buffer), offsetof(ArrayBufferData, is_detached), offsetof(TypedArrayData, byte_length));
+  ANT_NATIVE_DETACH_REF_SLOW, offsetof(TypedArrayData, buffer), offsetof(ArrayBufferData, views_slow), offsetof(TypedArrayData, byte_length));
 BUFFER_SIZE_GETTER(typedarray_byte_offset_getter, js_typedarray_byteOffset_getter, BUFFER_TYPEDARRAY_NATIVE_TAG,
-  ANT_NATIVE_DETACH_REF, offsetof(TypedArrayData, buffer), offsetof(ArrayBufferData, is_detached), offsetof(TypedArrayData, byte_offset));
+  ANT_NATIVE_DETACH_REF_SLOW, offsetof(TypedArrayData, buffer), offsetof(ArrayBufferData, views_slow), offsetof(TypedArrayData, byte_offset));
 BUFFER_SIZE_GETTER(dataview_byte_length_getter, js_dataview_byteLength_getter, BUFFER_DATAVIEW_NATIVE_TAG,
   ANT_NATIVE_DETACH_REF_SLOW, offsetof(DataViewData, buffer), offsetof(ArrayBufferData, is_detached), offsetof(DataViewData, byte_length));
 BUFFER_SIZE_GETTER(dataview_byte_offset_getter, js_dataview_byteOffset_getter, BUFFER_DATAVIEW_NATIVE_TAG,
@@ -1094,11 +1388,29 @@ ant_value_t create_arraybuffer_copy(ant_t *js, const void *bytes, size_t length)
   ArrayBufferData *buffer = create_array_buffer_data(js, length);
   if (!buffer) return js_mkerr(js, "out of memory");
   if (bytes && length) memcpy(buffer->data, bytes, length);
-  
+
   ant_value_t ab_obj = create_arraybuffer_obj(js, buffer);
   free_array_buffer_data(js, buffer);
-  
+
   return ab_obj;
+}
+
+ant_value_t create_resizable_arraybuffer_copy(ant_t *js, const void *bytes, size_t length, size_t max_length) {
+  if (length > max_length) return js_mkerr_typed(js, JS_ERR_RANGE, "Invalid array buffer max length");
+  ArrayBufferData *buffer = create_resizable_array_buffer_data(js, length, max_length, false);
+  if (!buffer) return js_mkerr_typed(js, JS_ERR_RANGE, "Array buffer allocation failed");
+  if (bytes && length) memcpy(buffer->data, bytes, length);
+
+  ant_value_t ab_obj = create_arraybuffer_obj(js, buffer);
+  free_array_buffer_data(js, buffer);
+
+  return ab_obj;
+}
+
+ant_value_t buffer_clone_arraybuffer(ant_t *js, const ArrayBufferData *data) {
+  return data->resizable
+    ? create_resizable_arraybuffer_copy(js, data->data, data->length, data->capacity)
+    : create_arraybuffer_copy(js, data->data, data->length);
 }
 
 static const ant_exotic_ops_t typedarray_exotic_ops = {
@@ -1122,6 +1434,7 @@ static inline TypedArrayData *typedarray_fast_data(ant_value_t obj) {
 __attribute__((noinline)) bool buffer_typedarray_get_index(ant_t *js, ant_value_t obj, uint32_t index, ant_value_t *out) {
   TypedArrayData *ta_data = typedarray_fast_data(obj);
   if (!ta_data) return false;
+  if (ta_data->buffer && __builtin_expect(ta_data->buffer->views_slow, 0)) typedarray_live_slow(ta_data);
   
   if (!Ant_Buffer_ViewIsLive(ta_data) || index >= ta_data->length) {
     *out = js_mkundef();
@@ -1193,20 +1506,15 @@ __attribute__((noinline)) bool buffer_typedarray_set_index(ant_t *js, ant_value_
   return true;
 }
 
-ant_value_t create_typed_array_with_buffer(
+static inline __attribute__((always_inline)) ant_value_t create_typed_array_view(
   ant_t *js, TypedArrayType type, ArrayBufferData *buffer,
-  size_t byte_offset, size_t length, ant_value_t proto, ant_value_t arraybuffer_obj
+  size_t byte_offset, size_t length, ant_value_t proto, ant_value_t arraybuffer_obj, bool tracking
 ) {
   TypedArrayData *ta_data = ta_meta_alloc(js, sizeof(TypedArrayData));
   if (!ta_data) return js_mkerr(js, "Failed to allocate TypedArray");
-  
-  size_t element_size = get_element_size(type);
-  ta_data->buffer = buffer;
+
   ta_data->type = type;
-  ta_data->byte_offset = byte_offset;
-  ta_data->byte_length = length * element_size;
-  ta_data->length = length;
-  buffer->ref_count++;
+  typedarray_view_attach(js, ta_data, buffer, byte_offset, length, tracking);
   
   ant_value_t obj = Ant_Object_CreateBare(js);
   if (is_special_object(proto)) js_set_proto_init(obj, proto);
@@ -1216,8 +1524,15 @@ ant_value_t create_typed_array_with_buffer(
   
   js_set_exotic_ops(obj, &typedarray_exotic_ops);
   js_set_finalizer(obj, typedarray_finalize);
-  
+
   return obj;
+}
+
+ant_value_t create_typed_array_with_buffer(
+  ant_t *js, TypedArrayType type, ArrayBufferData *buffer,
+  size_t byte_offset, size_t length, ant_value_t proto, ant_value_t arraybuffer_obj
+) {
+  return create_typed_array_view(js, type, buffer, byte_offset, length, proto, arraybuffer_obj, false);
 }
 
 ant_value_t create_typed_array(
@@ -1237,10 +1552,7 @@ ant_value_t create_dataview_with_buffer(
   DataViewData *dv_data = ta_meta_alloc(js, sizeof(DataViewData));
   if (!dv_data) return js_mkerr(js, "Failed to allocate DataView");
 
-  dv_data->buffer = buffer;
-  dv_data->byte_offset = byte_offset;
-  dv_data->byte_length = byte_length;
-  buffer->ref_count++;
+  dataview_view_attach(js, dv_data, buffer, byte_offset, byte_length, false);
 
   ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js->builtins.dataview_proto;
@@ -1393,16 +1705,17 @@ static ant_value_t js_typedarray_constructor(ant_native_params_t, TypedArrayType
       return js_mkerr_typed(js, JS_ERR_RANGE, "Start offset is outside the bounds of the buffer");
 
     size_t available = buffer->length - byte_offset;
+    bool tracking = !has_length && buffer->resizable;
     if (has_length) {
-      if (length > available / element_size) 
+      if (length > available / element_size)
         return js_mkerr_typed(js, JS_ERR_RANGE, "Invalid TypedArray length");
     } else {
-      if (available % element_size != 0) 
+      if (!tracking && available % element_size != 0)
         return js_mkerr_typed(js, JS_ERR_RANGE, "Invalid TypedArray length");
       length = available / element_size;
     }
 
-    return create_typed_array_with_buffer(js, type, buffer, byte_offset, length, proto, args[0]);
+    return create_typed_array_view(js, type, buffer, byte_offset, length, proto, args[0], tracking);
   }
 
   uint8_t arg_type = vtype(args[0]);
@@ -1540,10 +1853,10 @@ static ant_value_t js_typedarray_slice(ant_params_t) {
 // TypedArray.prototype.subarray(begin, end)
 static ant_value_t js_typedarray_subarray(ant_params_t) {
   ant_value_t this_val = js_getthis(js);
-  TypedArrayData *ta_data = typedarray_live(this_val);
-  if (!ta_data) return typedarray_this_error(js, this_val);
+  TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
+  if (!ta_data || !Ant_Buffer_IsLive(ta_data->backing)) return typedarray_this_error(js, this_val);
   
-  ssize_t len = (ssize_t)ta_data->length;
+  ssize_t len = typedarray_view_live(ta_data) ? (ssize_t)ta_data->length : 0;
   ssize_t begin = 0, end = len;
   
   if (nargs > 0 && vtype(args[0]) == kTypeNumber) begin = (ssize_t)js_getnum(args[0]);
@@ -1556,11 +1869,19 @@ static ant_value_t js_typedarray_subarray(ant_params_t) {
   size_t new_length = (size_t)(end - begin);
   size_t element_size = get_element_size(ta_data->type);
   size_t new_offset = ta_data->byte_offset + (size_t)begin * element_size;
-  
-  return create_typed_array_like(
-    js, this_val, ta_data->type, 
-    ta_data->buffer, new_offset, new_length
+
+  ant_value_t out = create_typed_array_like(
+    js, this_val, ta_data->type,
+    ta_data->backing, new_offset, new_length
   );
+
+  if (__builtin_expect(ta_data->length_tracking, 0) && (nargs < 2 || vtype(args[1]) == kTypeUndefined) && !is_err(out)) {
+    TypedArrayData *out_data = buffer_get_typedarray_data(out);
+    out_data->length_tracking = true;
+    typedarray_view_refresh(out_data);
+  }
+
+  return out;
 }
 
 // TypedArray.prototype.fill(value, start, end)
@@ -1654,7 +1975,7 @@ static ant_value_t js_typedarray_set(ant_params_t) {
 
   if (src_ta) {
     size_t src_len = src_ta->length;
-    if (offset + src_len > dst->length) return js_mkerr(js, "Source is too large");
+    if (offset + src_len > dst->length) return js_mkerr_typed(js, JS_ERR_RANGE, "offset is out of bounds");
 
     if (src_ta->type == dst->type) {
       size_t el = get_element_size(dst->type);
@@ -1686,7 +2007,7 @@ static ant_value_t js_typedarray_set(ant_params_t) {
     src_len = vtype(len_val) == kTypeNumber ? (size_t)js_getnum(len_val) : 0;
   }
 
-  if (offset + src_len > dst->length) return js_mkerr(js, "Source is too large");
+  if (offset + src_len > dst->length) return js_mkerr_typed(js, JS_ERR_RANGE, "offset is out of bounds");
 
   for (size_t i = 0; i < src_len; i++) {
     if (vtype(src_val) == kTypeString) {
@@ -2124,23 +2445,22 @@ static ant_value_t js_dataview_constructor(ant_params_t) {
   if (byte_offset > buffer_length)
     return js_mkerr_typed(js, JS_ERR_RANGE, "Start offset is outside the bounds of the buffer");
   
+  bool tracking = buffer->resizable;
   if (nargs > 2 && vtype(args[2]) != kTypeUndefined) {
     ant_value_t result = js_to_index_fast(js, args[2], &byte_length);
     if (is_err(result)) return result;
     if (byte_length > buffer_length - byte_offset)
       return js_mkerr_typed(js, JS_ERR_RANGE, "Invalid DataView length");
+    tracking = false;
   } else byte_length = buffer_length - byte_offset;
-  
+
   if (buffer->is_detached)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot create a view of a detached ArrayBuffer");
 
   DataViewData *dv_data = ta_meta_alloc(js, sizeof(DataViewData));
   if (!dv_data) return js_mkerr(js, "Failed to allocate DataView");
-  
-  dv_data->buffer = buffer;
-  dv_data->byte_offset = byte_offset;
-  dv_data->byte_length = byte_length;
-  buffer->ref_count++;
+
+  dataview_view_attach(js, dv_data, buffer, byte_offset, byte_length, tracking);
   
   ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.dataview_proto, call_new_target);
@@ -2651,14 +2971,16 @@ static ant_value_t js_buffer_from(ant_params_t) {
     if (byte_offset > arraybuffer->length)
       return js_mkerr(js, "Start offset is outside the bounds of the buffer");
 
+    bool tracking = arraybuffer->resizable;
     if (nargs > 2 && vtype(args[2]) == kTypeNumber) {
       byte_length = (size_t)js_getnum(args[2]);
       if (byte_length > arraybuffer->length - byte_offset)
         return js_mkerr(js, "Invalid Buffer length");
+      tracking = false;
     } else byte_length = arraybuffer->length - byte_offset;
 
-    return create_typed_array_with_buffer(
-      js, TYPED_ARRAY_UINT8, arraybuffer, byte_offset, byte_length, js->builtins.buffer_proto, args[0]
+    return create_typed_array_view(
+      js, TYPED_ARRAY_UINT8, arraybuffer, byte_offset, byte_length, js->builtins.buffer_proto, args[0], tracking
     );
   }
   
@@ -4142,15 +4464,26 @@ static ant_value_t js_buffer_compare(ant_params_t) {
 static ant_value_t js_sharedarraybuffer_constructor(ant_params_t) {
   if (vtype(call_new_target) == kTypeUndefined)
     return js_mkerr_typed(js, JS_ERR_TYPE, "SharedArrayBuffer constructor requires 'new'");
-    
+
   size_t length = 0;
   if (nargs > 0) {
     ant_value_t result = js_to_index_fast(js, args[0], &length);
     if (is_err(result)) return result;
   }
+
+  size_t max_length = 0;
+  bool growable = false;
   
-  ArrayBufferData *data = create_shared_array_buffer_data(length);
-  if (!data) return js_mkerr(js, "Failed to allocate SharedArrayBuffer");
+  ant_value_t options = buffer_read_max_length(js, nargs > 1 ? args[1] : js_mkundef(), length, &max_length, &growable);
+  if (is_err(options)) return options;
+
+  ArrayBufferData *data = growable
+    ? create_resizable_array_buffer_data(js, length, max_length, true)
+    : create_shared_array_buffer_data(length);
+  
+  if (!data) return growable
+    ? js_mkerr_typed(js, JS_ERR_RANGE, "Array buffer allocation failed")
+    : js_mkerr(js, "Failed to allocate SharedArrayBuffer");
   
   ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js->builtins.sharedarraybuffer_proto;
@@ -4199,6 +4532,9 @@ void init_buffer_module(ant_t *js) {
   defmethod(js, arraybuffer_proto, "slice", 5, Ant_Function_CreateWithArity(js_arraybuffer_slice, 2));
   defmethod(js, arraybuffer_proto, "transfer", 8, Ant_Function_Create(js_arraybuffer_transfer));
   defmethod(js, arraybuffer_proto, "transferToFixedLength", 21, Ant_Function_Create(js_arraybuffer_transferToFixedLength));
+  defmethod(js, arraybuffer_proto, "resize", 6, Ant_Function_CreateWithArity(js_arraybuffer_resize, 1));
+  js_set_getter_desc(js, arraybuffer_proto, "resizable", 9, Ant_Function_Create(js_arraybuffer_resizable_getter), JS_DESC_C);
+  js_set_getter_desc(js, arraybuffer_proto, "maxByteLength", 13, Ant_Function_Create(js_arraybuffer_maxByteLength_getter), JS_DESC_C);
   
   js_set_getter_desc(js, arraybuffer_proto, "detached", 8, Ant_Function_Create(js_arraybuffer_detached_getter), JS_DESC_C);
   js_set_getter_desc(js, arraybuffer_proto, "byteLength", 10, js_mkfun_meta(&arraybuffer_byte_length_getter.meta), JS_DESC_C);
@@ -4312,6 +4648,9 @@ void init_buffer_module(ant_t *js) {
   js->builtins.sharedarraybuffer_proto = sharedarraybuffer_proto;
   
   defmethod(js, sharedarraybuffer_proto, "slice", 5, Ant_Function_CreateWithArity(js_arraybuffer_slice, 2));
+  defmethod(js, sharedarraybuffer_proto, "grow", 4, Ant_Function_CreateWithArity(js_sharedarraybuffer_grow, 1));
+  js_set_getter_desc(js, sharedarraybuffer_proto, "growable", 8, Ant_Function_Create(js_sharedarraybuffer_growable_getter), JS_DESC_C);
+  js_set_getter_desc(js, sharedarraybuffer_proto, "maxByteLength", 13, Ant_Function_Create(js_sharedarraybuffer_maxByteLength_getter), JS_DESC_C);
   js_set_getter_desc(js, sharedarraybuffer_proto, "byteLength", 10, js_mkfun_meta(&sharedarraybuffer_byte_length_getter.meta), JS_DESC_C);
   js_set_tostringtag(js, sharedarraybuffer_proto, js_mkstr(js, "SharedArrayBuffer", 17));
   
@@ -4389,6 +4728,7 @@ void init_buffer_module(ant_t *js) {
 }
 
 void cleanup_buffer_module(ant_t *js) {
+  buffer_views_free(js);
   for (size_t i = 0; i < js->buffers.count; i++) free(js->buffers.entries[i]);
   free(js->buffers.entries);
   js->buffers.entries = NULL;

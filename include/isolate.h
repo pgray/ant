@@ -375,6 +375,7 @@ struct ant_isolate_t {
     uint32_t cap;
     size_t bytes;
     size_t meta_bytes;
+    struct buffer_view_set *views;
   } buffers;
 
   ant_offset_t max_size;

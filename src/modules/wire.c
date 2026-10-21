@@ -39,6 +39,7 @@ enum {
   WIRE_ARRAY_BUFFER = 'Y',
   WIRE_SHARED_BUFFER = 'Q',
   WIRE_MOVED_BUFFER = 'W',
+  WIRE_RESIZABLE_BUFFER = 'J',
   WIRE_VIEW = 'V',
   WIRE_BLOB = 'L',
   WIRE_PORT = 'P',
@@ -328,8 +329,15 @@ static ant_value_t wire_write_buffer(wire_writer_t *w, ant_value_t value, ArrayB
     return wire_remember(w, value) ? js_mkundef() : wire_oom(js);
   }
 
-  if (!put_u8(w, WIRE_ARRAY_BUFFER) || !put_varint(w, data->length) || !put_bytes(w, data->data, data->length))
-    return wire_oom(js);
+  bool ok = data->resizable
+    ? put_u8(w, WIRE_RESIZABLE_BUFFER) && put_varint(w, data->capacity)
+    : put_u8(w, WIRE_ARRAY_BUFFER);
+  
+  if (
+    !ok || !put_varint(w, data->length) || 
+    !put_bytes(w, data->data, data->length)
+  ) return wire_oom(js);
+  
   return wire_remember(w, value) ? js_mkundef() : wire_oom(js);
 }
 
@@ -960,6 +968,13 @@ static ant_value_t wire_read_object(wire_reader_t *r, uint8_t tag) {
       return wire_track(r, create_arraybuffer_copy(js, bytes, (size_t)len));
     }
 
+    case WIRE_RESIZABLE_BUFFER: {
+      uint64_t max, len;
+      const uint8_t *bytes;
+      if (!get_varint(r, &max) || !get_varint(r, &len) || !get_bytes(r, &bytes, (size_t)len)) return wire_corrupt(js);
+      return wire_track(r, create_resizable_arraybuffer_copy(js, bytes, (size_t)len, (size_t)max));
+    }
+
     case WIRE_SHARED_BUFFER: {
       uint64_t index;
       if (!get_varint(r, &index) || index >= r->wire->shared_count) return wire_corrupt(js);
@@ -1069,37 +1084,47 @@ static ant_value_t wire_weakset_add(ant_t *js, ant_value_t *root, ant_value_t va
     if (is_err(set)) return set;
     *root = set;
   }
+  
   ant_value_t add = js_get(js, *root, "add");
   ant_value_t r = sv_vm_call(js->vm, js, add, *root, &value, 1, NULL, js_mkundef());
+  
   return is_err(r) ? r : js_mkundef();
 }
 
 static bool wire_weakset_has(ant_t *js, ant_value_t root, ant_value_t value) {
   if (!is_object_type(root) || !is_object_type(value)) return false;
+  
   ant_value_t has = js_get(js, root, "has");
   ant_value_t r = sv_vm_call(js->vm, js, has, root, &value, 1, NULL, js_mkundef());
+  
   if (is_err(r)) {
     js_take_thrown(js, r);
     return false;
   }
+  
   return js_truthy(js, r);
 }
 
 ant_value_t ant_wire_mark_untransferable(ant_t *js, ant_value_t value) {
   ArrayBufferData *data = is_object_type(value) ? buffer_get_arraybuffer_data(value) : NULL;
   TypedArrayData *ta = !data && is_object_type(value) ? buffer_get_typedarray_data(value) : NULL;
-  if (ta) data = ta->buffer;
+  
+  if (ta) data = ta->backing;
   if (data) data->untransferable = 1;
   if (!is_object_type(value)) return js_mkundef();
+  
   return wire_weakset_add(js, &js->mutable_roots.untransferable, value);
 }
 
 bool ant_wire_is_untransferable(ant_t *js, ant_value_t value) {
   if (!is_object_type(value)) return false;
+  
   ArrayBufferData *data = buffer_get_arraybuffer_data(value);
   TypedArrayData *ta = !data ? buffer_get_typedarray_data(value) : NULL;
-  if (ta) data = ta->buffer;
+  
+  if (ta) data = ta->backing;
   if (data && data->untransferable) return true;
+  
   return wire_weakset_has(js, js->mutable_roots.untransferable, value);
 }
 
