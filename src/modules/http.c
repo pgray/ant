@@ -309,6 +309,7 @@ static ant_http_conn_t *ant_http_conn_new(uv_loop_t *loop, ant_http_host_t *host
   }
 
   conn->client.data = conn;
+  tlsuv_http_connect_timeout(&conn->client, ANT_HTTP_CONNECT_TIMEOUT_MS);
   tlsuv_http_header(&conn->client, "Accept-Encoding", NULL);
   tlsuv_http_header(&conn->client, "User-Agent", NULL);
   
@@ -439,10 +440,11 @@ static void ant_http_finish(ant_http_request_t *req, int error_code, const char 
 }
 
 static bool ant_http_should_retry(const ant_http_request_t *req, int code) {
-  if (!req->reused || req->retried || req->chunked || req->got_response || req->canceled) return false;
+  if (req->retried || req->chunked || req->got_response || req->canceled) return false;
   if (!req->conn || !req->conn->host || req->conn->host->pool->closing) return false;
   if (!ant_http_method_idempotent(req->method)) return false;
-  return code == UV_EOF || code == UV_ECONNRESET || code == UV_EPIPE || code == UV_ECONNABORTED;
+  if (code == UV_ETIMEDOUT) return true;
+  return req->reused && (code == UV_EOF || code == UV_ECONNRESET || code == UV_EPIPE || code == UV_ECONNABORTED);
 }
 
 static void ant_http_retry(ant_http_request_t *req) {

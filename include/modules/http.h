@@ -7,6 +7,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define ANT_HTTP_CONNECT_TIMEOUT_MS 10000
+
 typedef struct ant_http_header_s {
   char *name;
   char *value;

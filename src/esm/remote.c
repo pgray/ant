@@ -3,6 +3,7 @@
 #include "escape.h"
 #include "ascii.h"
 #include "esm/remote.h"
+#include "modules/http.h"
 #include "reactor.h"
 #include "isolate.h"
 
@@ -281,8 +282,11 @@ char *esm_fetch_url(ant_t *js, const char *url, size_t *out_len, char **out_erro
 
   char *host_url = calloc(1, scheme_len + 3 + host_len + 1);
   snprintf(host_url, scheme_len + 3 + host_len + 1, "%.*s://%.*s", (int)scheme_len, url, (int)host_len, host_start);
+  
   int rc = tlsuv_http_init(loop, &ctx.http_client, host_url);
   free(host_url);
+  
+  if (rc == 0) tlsuv_http_connect_timeout(&ctx.http_client, ANT_HTTP_CONNECT_TIMEOUT_MS);
 
   if (rc != 0) {
     free(ctx.data);
