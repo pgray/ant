@@ -115,9 +115,13 @@ void js_define_species_getter(ant_t *js, ant_value_t ctor) {
   js_set_sym_getter_desc(js, ctor, js->sym.species_sym, Ant_Function_Create(sym_this_cb), JS_DESC_C);
 }
 
-void init_symbol_module(ant_t *js) {
+void init_well_known_symbols(ant_t *js) {
   #define ANT_SYMBOL(name, desc) js->sym.name##_sym = js_mksym_well_known(js, desc);
   #include "symbol_list.h"
+}
+
+void init_symbol_module(ant_t *js) {
+  init_well_known_symbols(js);
   init_symbol_ctor(js);
 }
 

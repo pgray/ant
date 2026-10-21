@@ -174,6 +174,7 @@ static void print_commands(void **argtable) {
   print_flags_help(stdout, argtable);
   print_flag(stdout, (flag_help_t){ .s = "V", .l = "verbose",  .g = "enable verbose output" });
   print_flag(stdout, (flag_help_t){ .l = "no-color", .g = "disable colored output" });
+  print_flag(stdout, (flag_help_t){ .l = "cage-size", .d = "<GiB>", .g = "pointer cage reservation shared by all isolates (default 32)" });
 }
 
 typedef struct { 
@@ -375,7 +376,7 @@ static int execute_module(ant_t *js, const char *filename, const char *cron_peri
     specifier = js_esm_make_file_url(js, use_path);
   }
 
-  const char *interned = intern_string(use_path, strlen(use_path));
+  const char *interned = intern_string(js, use_path, strlen(use_path));
   if (interned) stable_use_path = interned;
   else stable_use_path = use_path;
   
@@ -606,6 +607,19 @@ int main(int argc, char *argv[]) {
       inspector.enabled = true;
       inspector.wait_for_session = true;
       parse_inspector_spec(arg + 15, inspector.host, sizeof(inspector.host), &inspector.port);
+    }
+    
+    else if (strncmp(arg, "--cage-size=", 12) == 0) {
+      char *end = NULL;
+      unsigned long long gib = strtoull(arg + 12, &end, 10);
+      if (!end || *end || end == arg + 12 || gib > ((NANBOX_DATA_MASK + 1) >> 30) || !ant_cage_set_size((size_t)gib << 30)) {
+        fprintf(
+          stderr, "ant: --cage-size must be a whole number of GiB between %zu and %llu\n", 
+          ANT_CAGE_MIN_SIZE >> 30, (unsigned long long)((NANBOX_DATA_MASK + 1) >> 30)
+        );
+        free(filtered_argv);
+        return EXIT_FAILURE;
+      }
     }
     
     else filtered_argv[filtered_argc++] = argv[i];
@@ -869,7 +883,7 @@ int main(int argc, char *argv[]) {
   ant_t *js;
   volatile char stack_base;
   
-  if (!(js = ant_create())) {
+  if (!(js = ant_create(nullptr))) {
     crfprintf(stderr, msg.ant_allocation_fatal);
     CLEANUP_ARGS_AND_ARGV();
     return EXIT_FAILURE;
@@ -964,6 +978,7 @@ int main(int argc, char *argv[]) {
     js_result = process_run_exit_handlers(js, js_result);
     
   cleanup: {
+    js->process_exiting = true;
     js_destroy(js);
     CLEANUP_ARGS_AND_ARGV();
   }

@@ -6,6 +6,7 @@
 
 #include "ant.h"
 #include "cfunc.h"
+#include "sync.h"
 #include "errors.h"
 #include "internal.h"
 #include "descriptors.h"
@@ -19,6 +20,7 @@ typedef struct storage_entry {
 
 static storage_entry_t *local_storage = NULL;
 static char *storage_file_path = NULL;
+static ant_mutex_t local_storage_lock = ANT_MUTEX_INIT;
 
 static void storage_save(void) {
   if (!storage_file_path) return;
@@ -149,14 +151,20 @@ static char *storage_key(size_t index) {
   return NULL;
 }
 
-#define CHECK_FILE_SET(js) \
-  if (!storage_file_path) { \
-    return js_mkerr(js, "Warning: `--localstorage-file` or `localStorage.setFile` were not provided with valid paths."); \
-  }
+static bool storage_file_set(void) {
+  ant_mutex_lock(&local_storage_lock);
+  bool set = storage_file_path != NULL;
+  ant_mutex_unlock(&local_storage_lock);
+  return set;
+}
+
+static ant_value_t storage_file_unset_error(ant_t *js) {
+  return js_mkerr(js, "localStorage requires a file path: pass --localstorage-file or call localStorage.setFile(path)");
+}
 
 // localStorage.setItem(key, value)
 static ant_value_t js_localstorage_setItem(ant_params_t) {
-  CHECK_FILE_SET(js);
+  if (!storage_file_set()) return storage_file_unset_error(js);
   
   if (nargs < 2) {
     return js_mkerr(js, "Failed to execute 'setItem' on 'Storage': 2 arguments required");
@@ -166,14 +174,16 @@ static ant_value_t js_localstorage_setItem(ant_params_t) {
   char *key = js_getstr(js, args[0], &key_len);
   char *value = js_getstr(js, js_tostring_val(js, args[1]), &value_len);
   
+  ant_mutex_lock(&local_storage_lock);
   storage_set_item(key, key_len, value, value_len);
+  ant_mutex_unlock(&local_storage_lock);
   
   return js_mkundef();
 }
 
 // localStorage.getItem(key)
 static ant_value_t js_localstorage_getItem(ant_params_t) {
-  CHECK_FILE_SET(js);
+  if (!storage_file_set()) return storage_file_unset_error(js);
   
   if (nargs < 1) {
     return js_mkerr(js, "Failed to execute 'getItem' on 'Storage': 1 argument required");
@@ -181,16 +191,17 @@ static ant_value_t js_localstorage_getItem(ant_params_t) {
   
   size_t key_len;
   char *key = js_getstr(js, args[0], &key_len);
+  ant_mutex_lock(&local_storage_lock);
   char *value = storage_get_item(key, key_len);
+  ant_value_t result = value ? js_mkstr(js, value, strlen(value)) : js_mknull();
+  ant_mutex_unlock(&local_storage_lock);
   
-  if (!value) return js_mknull();
-  
-  return js_mkstr(js, value, strlen(value));
+  return result;
 }
 
 // localStorage.removeItem(key)
 static ant_value_t js_localstorage_removeItem(ant_params_t) {
-  CHECK_FILE_SET(js);
+  if (!storage_file_set()) return storage_file_unset_error(js);
   
   if (nargs < 1) {
     return js_mkerr(js, "Failed to execute 'removeItem' on 'Storage': 1 argument required");
@@ -198,23 +209,27 @@ static ant_value_t js_localstorage_removeItem(ant_params_t) {
   
   size_t key_len;
   char *key = js_getstr(js, args[0], &key_len);
+  ant_mutex_lock(&local_storage_lock);
   storage_remove_item(key, key_len);
+  ant_mutex_unlock(&local_storage_lock);
   
   return js_mkundef();
 }
 
 // localStorage.clear()
 static ant_value_t js_localstorage_clear(ant_params_t) {
-  CHECK_FILE_SET(js);
+  if (!storage_file_set()) return storage_file_unset_error(js);
   (void)args; (void)nargs;
+  ant_mutex_lock(&local_storage_lock);
   storage_clear();
   storage_save();
+  ant_mutex_unlock(&local_storage_lock);
   return js_mkundef();
 }
 
 // localStorage.key(index)
 static ant_value_t js_localstorage_key(ant_params_t) {
-  CHECK_FILE_SET(js);
+  if (!storage_file_set()) return storage_file_unset_error(js);
   
   if (nargs < 1) {
     return js_mkerr(js, "Failed to execute 'key' on 'Storage': 1 argument required");
@@ -228,18 +243,23 @@ static ant_value_t js_localstorage_key(ant_params_t) {
   if (idx < 0) return js_mknull();
   
   size_t index = (size_t)idx;
+  ant_mutex_lock(&local_storage_lock);
   char *key = storage_key(index);
+  ant_value_t result = key ? js_mkstr(js, key, strlen(key)) : js_mknull();
+  ant_mutex_unlock(&local_storage_lock);
   
-  if (!key) return js_mknull();
-  
-  return js_mkstr(js, key, strlen(key));
+  return result;
 }
 
 // localStorage.length
 static ant_value_t js_localstorage_length(ant_params_t) {
-  (void)args; (void)nargs;
-  CHECK_FILE_SET(js)
-  return js_mknum((double)storage_length());
+  if (!storage_file_set()) return storage_file_unset_error(js);
+  ant_mutex_lock(&local_storage_lock);
+  
+  size_t length = storage_length();
+  ant_mutex_unlock(&local_storage_lock);
+  
+  return js_mknum((double)length);
 }
 
 // localStorage.setFile(path)
@@ -251,20 +271,18 @@ static ant_value_t js_localstorage_setFile(ant_params_t) {
   size_t path_len;
   char *path = js_getstr(js, args[0], &path_len);
   
-  if (storage_file_path) {
-    free(storage_file_path);
-  }
+  char *next = malloc(path_len + 1);
+  if (!next) return js_mkerr(js, "Failed to allocate memory for file path");
   
-  storage_file_path = malloc(path_len + 1);
-  if (!storage_file_path) {
-    return js_mkerr(js, "Failed to allocate memory for file path");
-  }
+  memcpy(next, path, path_len);
+  next[path_len] = '\0';
   
-  memcpy(storage_file_path, path, path_len);
-  storage_file_path[path_len] = '\0';
+  ant_mutex_lock(&local_storage_lock);
+  free(storage_file_path);
   
-  // Load existing data from the new file
+  storage_file_path = next;
   storage_load();
+  ant_mutex_unlock(&local_storage_lock);
   
   return js_mkundef();
 }
@@ -273,11 +291,13 @@ void init_localstorage_module(ant_t *js) {
   ant_value_t glob = js_glob(js);
   const char *file_path = js->runtime.ls_fp;
   
-  if (file_path) {
+  ant_mutex_lock(&local_storage_lock);
+  if (file_path && !storage_file_path) {
     storage_file_path = strdup(file_path);
     storage_load();
   }
   
+  ant_mutex_unlock(&local_storage_lock);
   ant_value_t storage_obj = Ant_Object_Create(js);
   
   js_set(js, storage_obj, "setItem", Ant_Function_Create(js_localstorage_setItem));

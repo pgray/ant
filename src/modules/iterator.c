@@ -282,7 +282,7 @@ void cleanup_iterator_module(ant_t *js) {
 static inline ant_value_t iterator_get_method(
   ant_t *js, ant_value_t iterator, const char *name, size_t len
 ) {
-  const char *key = intern_find(name, len);
+  const char *key = intern_find(js, name, len);
   ant_value_t current = iterator;
 
   for (int depth = 0; depth < MAX_PROTO_CHAIN_DEPTH; depth++) {

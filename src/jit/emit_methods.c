@@ -8,10 +8,16 @@ static void jit_emit_forward_arguments_call(jit_compile_t *c, bool is_tail) {
   MIR_reg_t target = vstack_pop(&c->vs);
   MIR_reg_t result = vstack_push(&c->vs);
   MIR_label_t slow = MIR_new_label(c->ctx), done = MIR_new_label(c->ctx);
-  MIR_reg_t meta = MIR_new_func_reg(c->ctx, c->jit_func->u.func, MIR_T_I64, "forward_meta");
-  MIR_reg_t closure = MIR_new_func_reg(c->ctx, c->jit_func->u.func, MIR_T_I64, "forward_closure");
-  MIR_reg_t function = MIR_new_func_reg(c->ctx, c->jit_func->u.func, MIR_T_I64, "forward_function");
-  MIR_reg_t code = MIR_new_func_reg(c->ctx, c->jit_func->u.func, MIR_T_I64, "forward_code");
+  int site = mir_next_reg_site(&c->reg_site_n);
+  char name[40];
+  snprintf(name, sizeof(name), "forward_meta_%d", site);
+  MIR_reg_t meta = MIR_new_func_reg(c->ctx, c->jit_func->u.func, MIR_T_I64, name);
+  snprintf(name, sizeof(name), "forward_closure_%d", site);
+  MIR_reg_t closure = MIR_new_func_reg(c->ctx, c->jit_func->u.func, MIR_T_I64, name);
+  snprintf(name, sizeof(name), "forward_function_%d", site);
+  MIR_reg_t function = MIR_new_func_reg(c->ctx, c->jit_func->u.func, MIR_T_I64, name);
+  snprintf(name, sizeof(name), "forward_code_%d", site);
+  MIR_reg_t code = MIR_new_func_reg(c->ctx, c->jit_func->u.func, MIR_T_I64, name);
   MIR_append_insn(c->ctx, c->jit_func, MIR_new_insn(c->ctx, MIR_URSH,
     MIR_new_reg_op(c->ctx, c->r_bool), MIR_new_reg_op(c->ctx, apply),
     MIR_new_uint_op(c->ctx, NANBOX_TYPE_SHIFT)));

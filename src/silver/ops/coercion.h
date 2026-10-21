@@ -127,9 +127,14 @@ static inline ant_value_t sv_op_import(sv_vm_t *vm, ant_t *js, sv_func_t *func) 
   }
 
   vm->sp -= 2;
-  vm->stack[vm->sp++] = mkval(kTypeUndefined, 0);
   
-  return tov(0);
+  ant_value_t promise = js_mkpromise(js);
+  ant_value_t error = js_mkerr_code(js, JS_ERR_TYPE, "ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING", "A dynamic import callback was not specified.");
+  
+  js_reject_promise(js, promise, js_take_thrown(js, error));
+  vm->stack[vm->sp++] = promise;
+  
+  return promise;
 }
 
 static inline ant_value_t sv_op_import_sync(sv_vm_t *vm, ant_t *js) {

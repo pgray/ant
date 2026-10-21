@@ -14,10 +14,14 @@
 
 #define ANT_OUTPUT_INITIAL_CAP 65536
 
-static ant_output_stream_t g_stdout_writer = { .stream = NULL };
-static ant_output_stream_t g_stderr_writer = { .stream = NULL };
+static _Thread_local ant_output_stream_t g_stdout_writer = { .stream = NULL };
+static _Thread_local ant_output_stream_t g_stderr_writer = { .stream = NULL };
+
 static ant_output_writer_t g_writer = NULL;
 static void *g_writer_user = NULL;
+
+static _Thread_local ant_output_writer_t t_writer = NULL;
+static _Thread_local void *t_writer_user = NULL;
 
 #ifdef _WIN32
 void ant_output_init_console(void) {
@@ -36,8 +40,20 @@ void ant_output_set_writer(ant_output_writer_t writer, void *user) {
   g_writer_user = user;
 }
 
+void ant_output_set_thread_writer(ant_output_writer_t writer, void *user) {
+  t_writer = writer;
+  t_writer_user = user;
+}
+
 bool ant_output_has_writer(void) {
-  return g_writer != NULL;
+  return t_writer != NULL || g_writer != NULL;
+}
+
+void ant_output_thread_cleanup(void) {
+  free(g_stdout_writer.buffer.data);
+  free(g_stderr_writer.buffer.data);
+  g_stdout_writer = (ant_output_stream_t){ .stream = NULL };
+  g_stderr_writer = (ant_output_stream_t){ .stream = NULL };
 }
 
 ant_output_stream_t *ant_output_stream(FILE *stream) {
@@ -142,11 +158,15 @@ bool ant_output_stream_flush(ant_output_stream_t *out) {
     out->buffer.failed = false;
     return false;
   }
+  
   if (out->buffer.len == 0) return fflush(out->stream) == 0;
-
   len = out->buffer.len;
-  if (g_writer) {
-    bool ok = g_writer(out->stream, out->buffer.data, len, g_writer_user);
+  
+  if (t_writer || g_writer) {
+    bool ok = t_writer
+      ? t_writer(out->stream, out->buffer.data, len, t_writer_user)
+      : g_writer(out->stream, out->buffer.data, len, g_writer_user);
+    
     out->buffer.len = 0;
     return ok;
   }

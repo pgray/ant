@@ -86,6 +86,7 @@ ant_value_t Ant_Event_Create(
   ant_value_t type, unsigned int flags
 );
 
+ant_value_t Ant_GlobalEvents_GetHandler(ant_t *js, const char *type, size_t len);
 ant_value_t Ant_Event_CreateTrusted(ant_t *js, ant_value_t proto, ant_event_kind_t kind, const char *type);
 ant_value_t Ant_EventTarget_CreateEvent(ant_t *js, ant_value_t target, ant_value_t proto, ant_event_kind_t kind, const char *type);
 ant_value_t Ant_EventTarget_GetHandler(ant_t *js, ant_value_t target, const char *type, size_t len);
@@ -96,9 +97,13 @@ void Ant_Event_SetField(ant_t *js, ant_value_t event, unsigned int index, ant_va
 void Ant_Event_DefineFields(ant_t *js, ant_value_t proto, ant_event_kind_t kind);
 void Ant_EventTarget_Dispatch(ant_t *js, ant_value_t target, ant_value_t event);
 void Ant_EventTarget_SetHandler(ant_t *js, ant_value_t target, const char *type, size_t len, ant_value_t handler);
+void Ant_GlobalEvents_SetHandler(ant_t *js, const char *type, size_t len, ant_value_t handler);
+void Ant_GlobalEvents_SetListenerChangeHook(ant_t *js, eventemitter_listener_change_fn hook, void *context);
 
+bool Ant_Event_Canceled(ant_value_t event);
 bool Ant_EventTarget_AddListener(ant_t *js, ant_value_t target, ant_value_t type, ant_value_t listener);
 bool Ant_EventTarget_RemoveListener(ant_t *js, ant_value_t target, ant_value_t type, ant_value_t listener);
+bool Ant_EventTarget_AddDataListener(ant_t *js, ant_value_t target, ant_value_t type, ant_value_t listener, bool once, bool prepend);
 
 #define ANT_EVENT_HANDLER_ACCESSORS(prefix, type, invalid_this)              \
   static ant_value_t prefix##_get_on##type(ant_params_t) {                   \

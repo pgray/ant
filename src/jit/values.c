@@ -1,6 +1,7 @@
 #include "jit_internal.h"
 #include "../silver/ops/literals.h"
 #include "silver/feedback.h"
+#include "modules/buffer.h"
 
 static_assert(
   kTypeObject == 0 &&
@@ -1369,6 +1370,182 @@ MIR_reg_t mir_emit_dense_element_guard(
   }
   return data;
 }
+
+static const struct { TypedArrayType type; MIR_type_t mem; MIR_scale_t scale; } typed_array_kinds[] = {
+  { TYPED_ARRAY_UINT8, MIR_T_U8, 1 }, { TYPED_ARRAY_FLOAT64, MIR_T_D, 8 },
+  { TYPED_ARRAY_INT32, MIR_T_I32, 4 }, { TYPED_ARRAY_FLOAT32, MIR_T_F, 4 },
+  { TYPED_ARRAY_UINT8_CLAMPED, MIR_T_U8, 1 }, { TYPED_ARRAY_INT8, MIR_T_I8, 1 },
+  { TYPED_ARRAY_UINT16, MIR_T_U16, 2 }, { TYPED_ARRAY_INT16, MIR_T_I16, 2 },
+  { TYPED_ARRAY_UINT32, MIR_T_U32, 4 },
+};
+
+#define TA_INSN(...) MIR_append_insn(ctx, fn, MIR_new_insn(ctx, __VA_ARGS__))
+#define TA_REG(r) MIR_new_reg_op(ctx, r)
+#define TA_LBL(l) MIR_new_label_op(ctx, l)
+#define TA_MEM(type, off, base) MIR_new_mem_op(ctx, type, (MIR_disp_t)(off), base, 0, 1)
+
+typedef struct { MIR_reg_t type, t, data; } jit_typed_array_t;
+
+static jit_typed_array_t mir_emit_typed_array_guard(
+    MIR_context_t ctx, MIR_item_t fn,
+    MIR_reg_t object, MIR_reg_t index, MIR_label_t slow, int site) {
+  char name[48];
+  jit_typed_array_t ta;
+  snprintf(name, sizeof(name), "ta_type_%d", site);
+  ta.type = MIR_new_func_reg(ctx, fn->u.func, MIR_T_I64, name);
+  snprintf(name, sizeof(name), "ta_t_%d", site);
+  ta.t = MIR_new_func_reg(ctx, fn->u.func, MIR_T_I64, name);
+  snprintf(name, sizeof(name), "ta_data_%d", site);
+  ta.data = MIR_new_func_reg(ctx, fn->u.func, MIR_T_I64, name);
+  MIR_reg_t ptr = ta.type, t = ta.t, data = ta.data;
+
+  TA_INSN(MIR_URSH, TA_REG(t), TA_REG(object), MIR_new_uint_op(ctx, NANBOX_TYPE_SHIFT));
+  TA_INSN(MIR_BNE, TA_LBL(slow), TA_REG(t), MIR_new_uint_op(ctx, NANBOX_TOBJ_TAG));
+  mir_emit_decode_ref(ctx, fn, ptr, object);
+  TA_INSN(MIR_MOV, TA_REG(t), TA_MEM(MIR_T_U32, offsetof(ant_object_t, native_tag), ptr));
+  TA_INSN(MIR_BNE, TA_LBL(slow), TA_REG(t), MIR_new_uint_op(ctx, BUFFER_TYPEDARRAY_NATIVE_TAG));
+  TA_INSN(MIR_MOV, TA_REG(t), TA_MEM(MIR_T_P, offsetof(ant_object_t, exotic_ops), ptr));
+  TA_INSN(MIR_BNE, TA_LBL(slow), TA_REG(t), MIR_new_uint_op(ctx, (uint64_t)(uintptr_t)buffer_typedarray_exotic_ops()));
+  TA_INSN(MIR_MOV, TA_REG(ptr), TA_MEM(MIR_T_P, offsetof(ant_object_t, native_ptr), ptr));
+  TA_INSN(MIR_MOV, TA_REG(t), TA_MEM(MIR_T_U64, offsetof(TypedArrayData, length), ptr));
+  TA_INSN(MIR_UBGE, TA_LBL(slow), TA_REG(index), TA_REG(t));
+  TA_INSN(MIR_MOV, TA_REG(data), TA_MEM(MIR_T_P, offsetof(TypedArrayData, buffer), ptr));
+  TA_INSN(MIR_BEQ, TA_LBL(slow), TA_REG(data), MIR_new_int_op(ctx, 0));
+  TA_INSN(MIR_MOV, TA_REG(t), TA_MEM(MIR_T_U8, offsetof(ArrayBufferData, is_detached), data));
+  TA_INSN(MIR_BNE, TA_LBL(slow), TA_REG(t), MIR_new_int_op(ctx, 0));
+  TA_INSN(MIR_MOV, TA_REG(data), TA_MEM(MIR_T_P, offsetof(ArrayBufferData, data), data));
+  TA_INSN(MIR_MOV, TA_REG(t), TA_MEM(MIR_T_U64, offsetof(TypedArrayData, byte_offset), ptr));
+  TA_INSN(MIR_ADD, TA_REG(data), TA_REG(data), TA_REG(t));
+  TA_INSN(MIR_MOV, TA_REG(ptr), TA_MEM(MIR_T_U32, offsetof(TypedArrayData, type), ptr));
+  return ta;
+}
+
+static int typed_array_kind_index(int type) {
+  for (size_t i = 0; i < sizeof(typed_array_kinds) / sizeof(typed_array_kinds[0]); i++)
+    if ((int)typed_array_kinds[i].type == type) return (int)i;
+  return -1;
+}
+
+static void typed_array_emit_load(
+    MIR_context_t ctx, MIR_item_t fn, jit_typed_array_t ta, MIR_reg_t index,
+    MIR_reg_t number, MIR_reg_t single, size_t kind, MIR_label_t done) {
+  MIR_type_t mem = typed_array_kinds[kind].mem;
+  MIR_op_t element = MIR_new_mem_op(ctx, mem, 0, ta.data, index, typed_array_kinds[kind].scale);
+  if (mem == MIR_T_D) {
+    TA_INSN(MIR_DMOV, TA_REG(number), element);
+  } else if (mem == MIR_T_F) {
+    TA_INSN(MIR_FMOV, TA_REG(single), element);
+    TA_INSN(MIR_F2D, TA_REG(number), TA_REG(single));
+  } else {
+    TA_INSN(MIR_MOV, TA_REG(ta.t), element);
+    TA_INSN(MIR_I2D, TA_REG(number), TA_REG(ta.t));
+  }
+  TA_INSN(MIR_JMP, TA_LBL(done));
+}
+
+void mir_emit_typed_array_read(
+    MIR_context_t ctx, MIR_item_t fn,
+    MIR_reg_t object, MIR_reg_t index, MIR_reg_t number,
+    MIR_label_t slow, MIR_label_t done, int site, int first_type) {
+  jit_typed_array_t ta = mir_emit_typed_array_guard(ctx, fn, object, index, slow, site);
+  char name[48];
+  snprintf(name, sizeof(name), "ta_f_%d", site);
+  MIR_reg_t single = MIR_new_func_reg(ctx, fn->u.func, MIR_T_F, name);
+  int first = typed_array_kind_index(first_type);
+
+  for (int pass = first >= 0 ? 0 : 1; pass < 2; pass++)
+  for (size_t i = 0; i < sizeof(typed_array_kinds) / sizeof(typed_array_kinds[0]); i++) {
+    if (pass == 0 ? (int)i != first : (int)i == first) continue;
+    MIR_label_t next = MIR_new_label(ctx);
+    TA_INSN(MIR_BNE, TA_LBL(next), TA_REG(ta.type), MIR_new_uint_op(ctx, typed_array_kinds[i].type));
+    typed_array_emit_load(ctx, fn, ta, index, number, single, i, done);
+    MIR_append_insn(ctx, fn, next);
+  }
+  TA_INSN(MIR_JMP, TA_LBL(slow));
+}
+
+static void typed_array_emit_store(
+    MIR_context_t ctx, MIR_item_t fn, jit_typed_array_t ta, MIR_reg_t index,
+    MIR_reg_t number, MIR_reg_t single, size_t kind, MIR_label_t done) {
+  MIR_type_t mem = typed_array_kinds[kind].mem;
+  MIR_op_t element = MIR_new_mem_op(ctx, mem, 0, ta.data, index, typed_array_kinds[kind].scale);
+  if (mem == MIR_T_D) {
+    TA_INSN(MIR_DMOV, element, TA_REG(number));
+  } else if (mem == MIR_T_F) {
+    TA_INSN(MIR_D2F, TA_REG(single), TA_REG(number));
+    TA_INSN(MIR_FMOV, element, TA_REG(single));
+  } else {
+    TA_INSN(MIR_MOV, element, TA_REG(ta.t));
+  }
+  TA_INSN(MIR_JMP, TA_LBL(done));
+}
+
+static void typed_array_emit_integer(
+    MIR_context_t ctx, MIR_item_t fn, jit_typed_array_t ta, MIR_reg_t number,
+    MIR_reg_t round, bool clamped, MIR_label_t slow) {
+  TA_INSN(MIR_D2I, TA_REG(ta.t), TA_REG(number));
+  TA_INSN(MIR_I2D, TA_REG(round), TA_REG(ta.t));
+  TA_INSN(MIR_DBNE, TA_LBL(slow), TA_REG(number), TA_REG(round));
+  if (clamped) TA_INSN(MIR_UBGT, TA_LBL(slow), TA_REG(ta.t), MIR_new_uint_op(ctx, UINT8_MAX));
+}
+
+void mir_emit_typed_array_write(
+    MIR_context_t ctx, MIR_item_t fn,
+    MIR_reg_t object, MIR_reg_t index, MIR_reg_t value, MIR_reg_t d_slot,
+    MIR_label_t slow, MIR_label_t done, int site, int first_type) {
+  TA_INSN(MIR_UBGT, TA_LBL(slow), TA_REG(value), MIR_new_uint_op(ctx, NANBOX_PREFIX));
+  jit_typed_array_t ta = mir_emit_typed_array_guard(ctx, fn, object, index, slow, site);
+  char name[48];
+  snprintf(name, sizeof(name), "ta_num_%d", site);
+  MIR_reg_t number = MIR_new_func_reg(ctx, fn->u.func, MIR_T_D, name);
+  snprintf(name, sizeof(name), "ta_round_%d", site);
+  MIR_reg_t round = MIR_new_func_reg(ctx, fn->u.func, MIR_T_D, name);
+  snprintf(name, sizeof(name), "ta_f_%d", site);
+  MIR_reg_t single = MIR_new_func_reg(ctx, fn->u.func, MIR_T_F, name);
+  MIR_label_t integer = MIR_new_label(ctx);
+  mir_i64_to_d(ctx, fn, number, value, d_slot);
+
+  int first = typed_array_kind_index(first_type);
+  if (first >= 0) {
+    MIR_type_t mem = typed_array_kinds[first].mem;
+    MIR_label_t next = MIR_new_label(ctx);
+    TA_INSN(MIR_BNE, TA_LBL(next), TA_REG(ta.type), MIR_new_uint_op(ctx, typed_array_kinds[first].type));
+    if (mem != MIR_T_D && mem != MIR_T_F)
+      typed_array_emit_integer(ctx, fn, ta, number, round, typed_array_kinds[first].type == TYPED_ARRAY_UINT8_CLAMPED, slow);
+    typed_array_emit_store(ctx, fn, ta, index, number, single, (size_t)first, done);
+    MIR_append_insn(ctx, fn, next);
+  }
+
+  for (size_t i = 0; i < sizeof(typed_array_kinds) / sizeof(typed_array_kinds[0]); i++) {
+    MIR_type_t mem = typed_array_kinds[i].mem;
+    if ((mem != MIR_T_D && mem != MIR_T_F) || (int)i == first) continue;
+    MIR_label_t next = MIR_new_label(ctx);
+    TA_INSN(MIR_BNE, TA_LBL(next), TA_REG(ta.type), MIR_new_uint_op(ctx, typed_array_kinds[i].type));
+    typed_array_emit_store(ctx, fn, ta, index, number, single, i, done);
+    MIR_append_insn(ctx, fn, next);
+  }
+
+  TA_INSN(MIR_D2I, TA_REG(ta.t), TA_REG(number));
+  TA_INSN(MIR_I2D, TA_REG(round), TA_REG(ta.t));
+  TA_INSN(MIR_DBNE, TA_LBL(slow), TA_REG(number), TA_REG(round));
+  TA_INSN(MIR_BNE, TA_LBL(integer), TA_REG(ta.type), MIR_new_uint_op(ctx, TYPED_ARRAY_UINT8_CLAMPED));
+  TA_INSN(MIR_UBGT, TA_LBL(slow), TA_REG(ta.t), MIR_new_uint_op(ctx, UINT8_MAX));
+  MIR_append_insn(ctx, fn, integer);
+  for (size_t i = 0; i < sizeof(typed_array_kinds) / sizeof(typed_array_kinds[0]); i++) {
+    MIR_type_t mem = typed_array_kinds[i].mem;
+    if (mem == MIR_T_D || mem == MIR_T_F || (int)i == first) continue;
+    MIR_label_t next = MIR_new_label(ctx);
+    TA_INSN(MIR_BNE, TA_LBL(next), TA_REG(ta.type), MIR_new_uint_op(ctx, typed_array_kinds[i].type));
+    typed_array_emit_store(ctx, fn, ta, index, number, single, i, done);
+    MIR_append_insn(ctx, fn, next);
+  }
+  TA_INSN(MIR_JMP, TA_LBL(slow));
+}
+
+#undef TA_INSN
+#undef TA_REG
+#undef TA_LBL
+#undef TA_MEM
 
 uint8_t jit_math_field_builtin(uint8_t receiver, const char *name, uint32_t len) {
   if (receiver != JIT_BUILTIN_MATH) return JIT_BUILTIN_UNKNOWN;

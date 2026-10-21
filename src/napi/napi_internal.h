@@ -20,7 +20,7 @@ typedef struct napi_cleanup_hook_entry {
   struct napi_cleanup_hook_entry *next;
 } napi_cleanup_hook_entry_t;
 
-typedef struct ant_napi_env__ {
+struct ant_napi_env__ {
   ant_t *js;
   napi_extended_error_info last_error;
   char last_error_msg[256];
@@ -37,7 +37,12 @@ typedef struct ant_napi_env__ {
   ant_value_t *handle_slots;
   size_t handle_slots_len;
   size_t handle_slots_cap;
-} ant_napi_env_t;
+  struct napi_external_entry *externals;
+  struct napi_wrap_entry *wraps;
+  uint64_t external_next_id;
+  uint64_t wrap_next_id;
+  int64_t external_memory;
+};
 
 typedef struct napi_callback_binding {
   ant_napi_env_t *env;
@@ -155,6 +160,7 @@ typedef napi_value(NAPI_CDECL* napi_register_module_v1_fn)(
 
 typedef struct napi_native_lib {
   void *handle;
+  napi_module *module;
   struct napi_native_lib *next;
 } napi_native_lib_t;
 
@@ -198,6 +204,7 @@ bool ant_napi_is_external(ant_t *js, napi_value value);
 #define NAPI_RETURN(nenv, val) ant_napi_scope_pin((nenv), (napi_value)(val))
 
 void ant_napi_link_async(void);
+void ant_napi_tsfns_close(ant_napi_env_t *nenv);
 void ant_napi_link_objects(void);
 void ant_napi_link_references(void);
 void ant_napi_link_values(void);

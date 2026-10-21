@@ -1,15 +1,20 @@
 #if !defined(_WIN32)
 
+#include <stdatomic.h>
 #include <sys/mman.h>
 #include <unistd.h>
 #include "heap.h"
 
 size_t jit_heap_page_round(size_t size) {
-  static size_t page = 0;
+  static _Atomic size_t cached = 0;
+  size_t page = atomic_load_explicit(&cached, memory_order_relaxed);
+  
   if (!page) {
     long v = sysconf(_SC_PAGESIZE);
     page = v > 0 ? (size_t)v : 4096u;
+    atomic_store_explicit(&cached, page, memory_order_relaxed);
   }
+  
   return (size + page - 1) / page * page;
 }
 

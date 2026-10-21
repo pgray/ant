@@ -119,6 +119,7 @@ size_t gc_array_storage_cached_bytes(ant_t *js);
 
 void gc_array_storage_trim(ant_t *js);
 void gc_array_storage_cache_destroy(ant_t *js);
+void gc_closures_destroy(ant_t *js);
 
 struct ant_promise_state *gc_promise_state_alloc(ant_t *js);
 

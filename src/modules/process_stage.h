@@ -45,6 +45,7 @@ void ant_process_stage_init(
 
 int ant_process_stage_spawn(ant_process_stage_t *stage, const ant_process_spawn_spec_t *spec);
 int ant_process_stage_kill(ant_process_stage_t *stage, int signal);
+void ant_process_stage_close(ant_process_stage_t *stage);
 
 void ant_process_stage_ref(ant_process_stage_t *stage);
 void ant_process_stage_unref(ant_process_stage_t *stage);

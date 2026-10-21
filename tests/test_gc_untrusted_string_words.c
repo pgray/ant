@@ -54,7 +54,7 @@ int main(void) {
   static_assert(STR_HEAP_TAG_UNUSED != STR_HEAP_TAG_ROPE);
   static_assert(STR_HEAP_TAG_UNUSED != STR_HEAP_TAG_BUILDER);
 
-  ant_t *js = ant_create();
+  ant_t *js = ant_create(nullptr);
   assert(js);
 
   fill_words(words);

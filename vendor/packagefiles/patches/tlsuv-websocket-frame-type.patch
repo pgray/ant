@@ -1,4 +1,5 @@
 diff --git a/include/tlsuv/websocket.h b/include/tlsuv/websocket.h
+index 70957c3..7e5ce0d 100644
 --- a/include/tlsuv/websocket.h
 +++ b/include/tlsuv/websocket.h
 @@ -53,6 +53,7 @@ struct tlsuv_websocket_s {
@@ -10,9 +11,10 @@ diff --git a/include/tlsuv/websocket.h b/include/tlsuv/websocket.h
  };
  
 diff --git a/src/websocket.c b/src/websocket.c
+index c2d1f87..2ad51dd 100644
 --- a/src/websocket.c
 +++ b/src/websocket.c
-@@ -581,6 +581,7 @@ static void websocket_process_frames(tlsuv_websocket_t *ws) {
+@@ -579,6 +579,7 @@ static void ws_dispatch_frame(tlsuv_websocket_t *ws, char op, char *payload, siz
          case OpCode_BIN: {
              UM_LOG(TRACE, "got data %zd masked=%d", payload_len, masked);
              uv_buf_t data = uv_buf_init(payload, (unsigned int)payload_len);

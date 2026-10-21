@@ -164,10 +164,7 @@ static _Thread_local struct {
   utf16_index_entry_t entries[UTF16_INDEX_WAYS];
 } utf16_index_cache;
 
-static void utf16_index_sync_epoch(void) {
-  uint64_t epoch = gc_strings_sweep_epoch();
-  if (utf16_index_cache.epoch == epoch) return;
-
+static void utf16_index_reset(uint64_t epoch) {
   for (size_t i = 0; i < UTF16_INDEX_WAYS; i++) {
     free(utf16_index_cache.entries[i].points);
     utf16_index_cache.entries[i] = (utf16_index_entry_t){0};
@@ -176,6 +173,15 @@ static void utf16_index_sync_epoch(void) {
   utf16_index_cache.victim = 0;
   utf16_index_cache.mru = 0;
   utf16_index_cache.epoch = epoch;
+}
+
+static void utf16_index_sync_epoch(void) {
+  uint64_t epoch = gc_strings_sweep_epoch();
+  if (utf16_index_cache.epoch != epoch) utf16_index_reset(epoch);
+}
+
+void utf8_thread_cleanup(void) {
+  utf16_index_reset(0);
 }
 
 static __attribute__((noinline, cold)) 

@@ -1,0 +1,176 @@
+diff --git a/mir-gen-aarch64.c b/mir-gen-aarch64.c
+--- a/mir-gen-aarch64.c
++++ b/mir-gen-aarch64.c
+@@ -1252,6 +1252,9 @@
+      T -- pc-relative address [5..23]
+      i<one or two hex digits> -- shift value in [10..15]
+      I<one or two hex digits> -- shift value in [16..21]
++     G, g -- 64-bit or 32-bit logical op bitmask immediate: N[22], immr[16..21], imms[10..15]
++     K -- equality compare constant whose bits above 12 are a 64-bit bitmask immediate (eor)
++     k -- the low 12 bits of a K constant as an arithmetic immediate [10..21] (cmp)
+   */
+   const char *replacement;
+ };
+@@ -1385,6 +1388,8 @@
+ #define CMPI "f100001f:ff00001f rn1 I"
+ #define SCMPR "6b00001f:ff20001f rn1 rm2"
+ #define SCMPI "7100001f:ff00001f rn1 I"
++#define EORK "d2000000:ff800000 hda rn1 K"
++#define CMPK "f100001f:ff00001f hna k"
+ #define FCMP "1e202010:ffe0fc1f vn1 vm2"
+ #define DCMP "1e602010:ffe0fc1f vn1 vm2"
+ 
+@@ -1573,6 +1578,8 @@
+   {MIR_BEQS, "l r r", SCMPR "; " BEQ},
+   /* cmp Wn,I,shift; beq l */
+   {MIR_BEQS, "l r I", SCMPI "; " BEQ},
++  /* eor R10,Rn,K; cmp R10,k; beq l */
++  {MIR_BEQ, "l r K", EORK "; " CMPK "; " BEQ},
+   /* fcmpe Sn,Sm; beq l */
+   {MIR_FBEQ, "l r r", FCMP "; " BEQ},
+   /* fcmpe Dn,Dm; beq l */
+@@ -1591,6 +1598,8 @@
+   {MIR_BNES, "l r r", SCMPR "; " BNE},
+   /* cmp Wn,I,shift; bne l */
+   {MIR_BNES, "l r I", SCMPI "; " BNE},
++  /* eor R10,Rn,K; cmp R10,k; bne l */
++  {MIR_BNE, "l r K", EORK "; " CMPK "; " BNE},
+   /* fcmpe Sn,Sm; bne l */
+   {MIR_FBNE, "l r r", FCMP "; " BNE},
+   /* fcmpe Dn,Dm; bne l */
+@@ -1717,12 +1726,18 @@
+   // ??? adding shift, negate, immediate
+   {MIR_AND, "r r r", "8a000000:ffe0fc00 rd0 rn1 rm2"},  /* and Rd,Rn,Rm */
+   {MIR_ANDS, "r r r", "0a000000:ffe0fc00 rd0 rn1 rm2"}, /* and Wd,Wn,Wm */
++  {MIR_AND, "r r G", "92000000:ff800000 rd0 rn1 G"},    /* and Rd,Rn,#bimm */
++  {MIR_ANDS, "r r g", "12000000:ff800000 rd0 rn1 g"},   /* and Wd,Wn,#bimm */
+ 
+   {MIR_OR, "r r r", "aa000000:ffe0fc00 rd0 rn1 rm2"},  /* orr Rd,Rn,Rm */
+   {MIR_ORS, "r r r", "2a000000:ffe0fc00 rd0 rn1 rm2"}, /* orr Wd,Wn,Wm */
++  {MIR_OR, "r r G", "b2000000:ff800000 rd0 rn1 G"},    /* orr Rd,Rn,#bimm */
++  {MIR_ORS, "r r g", "32000000:ff800000 rd0 rn1 g"},   /* orr Wd,Wn,#bimm */
+ 
+   {MIR_XOR, "r r r", "ca000000:ffe0fc00 rd0 rn1 rm2"},  /* eor Rd,Rn,Rm */
+   {MIR_XORS, "r r r", "4a000000:ffe0fc00 rd0 rn1 rm2"}, /* eor Wd,Wn,Wm */
++  {MIR_XOR, "r r G", "d2000000:ff800000 rd0 rn1 G"},    /* eor Rd,Rn,#bimm */
++  {MIR_XORS, "r r g", "52000000:ff800000 rd0 rn1 g"},   /* eor Wd,Wn,#bimm */
+ 
+   // ??? can we add scale
+   {MIR_I2F, "r r", "9e220000:ffff0000 vd0 rn1"},  /* scvtf Sd,Rn */
+@@ -1894,6 +1909,42 @@
+   return TRUE;
+ }
+ 
++/* Return TRUE if V is a 64-bit or 32-bit (if SHORT_P) logical op bitmask immediate and set its
++   N, immr, and imms fields. */
++static int logical_const_p (uint64_t v, int short_p, int *n, int *immr, int *imms) {
++  unsigned reg_size = short_p ? 32 : 64, size = reg_size, i, cto, clo;
++  uint64_t mask, inv, nimms;
++
++  if (short_p) v &= 0xffffffff;
++  if (v == 0 || v == (~(uint64_t) 0 >> (64 - reg_size))) return FALSE;
++  do {
++    size /= 2;
++    mask = ((uint64_t) 1 << size) - 1;
++    if ((v & mask) != ((v >> size) & mask)) {
++      size *= 2;
++      break;
++    }
++  } while (size > 2);
++  mask = ~(uint64_t) 0 >> (64 - size);
++  v &= mask;
++  if (((v + (v & -v)) & v) == 0) {
++    i = __builtin_ctzll (v);
++    cto = __builtin_ctzll (~(v >> i));
++  } else {
++    v |= ~mask;
++    inv = ~v;
++    if (((inv + (inv & -inv)) & inv) != 0) return FALSE;
++    clo = __builtin_clzll (inv);
++    i = 64 - clo;
++    cto = clo + __builtin_ctzll (inv) - (64 - size);
++  }
++  *immr = (size - i) & (size - 1);
++  nimms = (~(uint64_t) (size - 1) << 1) | (cto - 1);
++  *n = ((nimms >> 6) & 1) ^ 1;
++  *imms = nimms & 0x3f;
++  return TRUE;
++}
++
+ static int pattern_match_p (gen_ctx_t gen_ctx, const struct pattern *pat, MIR_insn_t insn) {
+   MIR_context_t ctx = gen_ctx->ctx;
+   size_t nop, nops = MIR_insn_nops (ctx, insn);
+@@ -2052,6 +2103,21 @@
+       }
+       break;
+     }
++    case 'G':
++    case 'g': {
++      int n, immr, imms;
++
++      if (op.mode != MIR_OP_INT && op.mode != MIR_OP_UINT) return FALSE;
++      if (!logical_const_p (op.u.u, start_ch == 'g', &n, &immr, &imms)) return FALSE;
++      break;
++    }
++    case 'K': {
++      int n, immr, imms;
++
++      if (op.mode != MIR_OP_INT && op.mode != MIR_OP_UINT) return FALSE;
++      if (!logical_const_p (op.u.u & ~(uint64_t) 0xfff, FALSE, &n, &immr, &imms)) return FALSE;
++      break;
++    }
+     case 'l':
+       if (op.mode != MIR_OP_LABEL) return FALSE;
+       break;
+@@ -2170,6 +2236,7 @@
+     uint32_t opcode = 0, opcode_mask = 0xffffffff;
+     int rd = -1, rn = -1, rm = -1, ra = -1, disp = -1, scale = -1;
+     int immr = -1, imms = -1, imm16 = -1, imm16_shift = -1, imm12 = -1, imm12_shift = -1;
++    int logical_n = -1;
+     MIR_op_t op;
+     int label_ref_num = -1, switch_table_addr_p = FALSE;
+ 
+@@ -2266,6 +2333,31 @@
+         gen_assert (disp < (1 << 12));
+         break;
+       }
++      case 'G':
++      case 'g': {
++        int flag;
++
++        op = insn->ops[2];
++        gen_assert (op.mode == MIR_OP_INT || op.mode == MIR_OP_UINT);
++        flag = logical_const_p (op.u.u, start_ch == 'g', &logical_n, &immr, &imms);
++        gen_assert (flag);
++        break;
++      }
++      case 'K': {
++        int flag;
++
++        op = insn->ops[2];
++        gen_assert (op.mode == MIR_OP_INT || op.mode == MIR_OP_UINT);
++        flag = logical_const_p (op.u.u & ~(uint64_t) 0xfff, FALSE, &logical_n, &immr, &imms);
++        gen_assert (flag);
++        break;
++      }
++      case 'k':
++        op = insn->ops[2];
++        gen_assert (op.mode == MIR_OP_INT || op.mode == MIR_OP_UINT);
++        imm12 = op.u.u & 0xfff;
++        imm12_shift = 0;
++        break;
+       case 'S': { /* S, SL, Sl */
+         int flag;
+ 
+@@ -2393,6 +2485,11 @@
+       opcode |= imms << 10;
+       opcode_mask = check_and_set_mask (opcode_mask, 0x3f << 10);
+     }
++    if (logical_n >= 0) {
++      gen_assert (logical_n < 2);
++      opcode |= (uint32_t) logical_n << 22;
++      opcode_mask = check_and_set_mask (opcode_mask, 1 << 22);
++    }
+     if (imm16 >= 0) {
+       gen_assert (imm16 < (1 << 16));
+       opcode |= imm16 << 5;

@@ -10,8 +10,8 @@ static ant_t *const js = &test_isolate;
 
 int main(void) {
   char keys[256][16];
-  ant_shape_t *first = ant_shape_new();
-  ant_shape_t *second = ant_shape_new();
+  ant_shape_t *first = ant_shape_new(js);
+  ant_shape_t *second = ant_shape_new(js);
   ant_shape_t *prefix = NULL;
   for (unsigned i = 0; i < 256; i++) {
     snprintf(keys[i], sizeof(keys[i]), "property%u", i);
@@ -60,16 +60,16 @@ int main(void) {
   ant_shape_release(first);
 
   // GC can prune a descendant while a prefix still owns the shared backing.
-  ant_gc_shapes_begin();
-  ant_gc_shapes_mark(prefix);
-  ant_gc_shapes_sweep();
+  ant_gc_shapes_begin(js);
+  ant_gc_shapes_mark(js, prefix);
+  ant_gc_shapes_sweep(js);
   assert(ant_shape_lookup_interned(prefix, keys[7]) == 7);
   assert(ant_shape_add_interned_tr(js, &prefix, "after_gc", ANT_PROP_ATTR_DEFAULT, NULL));
   assert(ant_shape_lookup_interned(prefix, keys[8]) == -1);
   ant_shape_release(prefix);
 
-  first = ant_shape_new();
-  second = ant_shape_new();
+  first = ant_shape_new(js);
+  second = ant_shape_new(js);
   for (unsigned i = 1; i <= 128; i++) {
     assert(ant_shape_add_symbol_tr(js, &first, i, ANT_PROP_ATTR_DEFAULT, NULL));
     assert(ant_shape_add_symbol_tr(js, &second, i, ANT_PROP_ATTR_DEFAULT, NULL));
@@ -77,14 +77,14 @@ int main(void) {
   }
   ant_shape_release(first);
   ant_shape_release(second);
-  ant_gc_shapes_begin();
-  ant_gc_shapes_sweep();
+  ant_gc_shapes_begin(js);
+  ant_gc_shapes_sweep(js);
 
   // The bounded transition chain still falls back to independently mutable
   // shapes for very wide objects, without losing any descriptors.
   char wide_keys[1100][16];
-  first = ant_shape_new();
-  second = ant_shape_new();
+  first = ant_shape_new(js);
+  second = ant_shape_new(js);
   for (unsigned i = 0; i < 1100; i++) {
     snprintf(wide_keys[i], sizeof(wide_keys[i]), "wide%u", i);
     assert(ant_shape_add_interned_tr(js, &first, wide_keys[i], ANT_PROP_ATTR_DEFAULT, NULL));
@@ -96,13 +96,13 @@ int main(void) {
   assert(ant_shape_lookup_interned(second, "only_first") == -1);
   ant_shape_release(first);
   ant_shape_release(second);
-  ant_gc_shapes_begin();
-  ant_gc_shapes_sweep();
+  ant_gc_shapes_begin(js);
+  ant_gc_shapes_sweep(js);
   // Computed-key stores share only a short prefix, then go private so
   // dictionaries do not pin long chains. Named stores keep sharing.
   char keyed_keys[48][16];
-  first = ant_shape_new();
-  second = ant_shape_new();
+  first = ant_shape_new(js);
+  second = ant_shape_new(js);
   for (unsigned i = 0; i < 48; i++) {
     snprintf(keyed_keys[i], sizeof(keyed_keys[i]), "keyed%u", i);
     assert(ant_shape_add_interned_keyed_tr(js, &first, keyed_keys[i], ANT_PROP_ATTR_DEFAULT, NULL));
@@ -117,14 +117,14 @@ int main(void) {
   assert(ant_shape_lookup_interned(second, "named_after_keyed") == -1);
   ant_shape_release(first);
   ant_shape_release(second);
-  ant_gc_shapes_begin();
-  ant_gc_shapes_sweep();
+  ant_gc_shapes_begin(js);
+  ant_gc_shapes_sweep(js);
 
   // Keyed stores reuse a named layout beyond their new-transition limit.
   // Exercise both key kinds, then fork on a key with no existing transition.
   for (unsigned symbols = 0; symbols < 2; symbols++) {
-    first = ant_shape_new();
-    second = ant_shape_new();
+    first = ant_shape_new(js);
+    second = ant_shape_new(js);
     for (unsigned i = 0; i < 64; i++) {
       assert(symbols
         ? ant_shape_add_symbol_tr(js, &first, i + 1, ANT_PROP_ATTR_DEFAULT, NULL)
@@ -145,13 +145,13 @@ int main(void) {
     assert(ant_shape_count(second) == 65);
     ant_shape_release(first);
     ant_shape_release(second);
-    ant_gc_shapes_begin();
-    ant_gc_shapes_sweep();
+    ant_gc_shapes_begin(js);
+    ant_gc_shapes_sweep(js);
   }
 
   // Fan-out: the first child is stored inline, later ones in the table.
   // Every child must be found, and pruning any subset must leave the rest.
-  ant_shape_t *root = ant_shape_new();
+  ant_shape_t *root = ant_shape_new(js);
   ant_shape_t *children[5];
   const char *fan_keys[5] = { "fan0", "fan1", "fan2", "fan3", "fan4" };
   for (unsigned i = 0; i < 5; i++) {
@@ -171,12 +171,12 @@ int main(void) {
   assert(ant_shape_add_interned_tr(js, &grandchild, "deep", ANT_PROP_ATTR_DEFAULT, NULL));
   ant_shape_release(children[0]);
   ant_shape_release(children[2]);
-  ant_gc_shapes_begin();
-  ant_gc_shapes_mark(grandchild);
-  ant_gc_shapes_mark(children[1]);
-  ant_gc_shapes_mark(children[3]);
-  ant_gc_shapes_mark(children[4]);
-  ant_gc_shapes_sweep();
+  ant_gc_shapes_begin(js);
+  ant_gc_shapes_mark(js, grandchild);
+  ant_gc_shapes_mark(js, children[1]);
+  ant_gc_shapes_mark(js, children[3]);
+  ant_gc_shapes_mark(js, children[4]);
+  ant_gc_shapes_sweep(js);
   for (unsigned i = 0; i < 5; i++) {
     if (i == 2) continue;
     ant_shape_t *again = root;
@@ -189,10 +189,10 @@ int main(void) {
   ant_shape_release(grandchild);
   for (unsigned i = 1; i < 5; i++) if (i != 2) ant_shape_release(children[i]);
   ant_shape_release(root);
-  ant_gc_shapes_begin();
-  ant_gc_shapes_sweep();
+  ant_gc_shapes_begin(js);
+  ant_gc_shapes_sweep(js);
   // A collected tail no longer forces surviving prefixes to copy their table.
-  prefix = ant_shape_new();
+  prefix = ant_shape_new(js);
   for (unsigned i = 0; i < 8; i++)
     assert(ant_shape_add_interned_tr(js, &prefix, keys[i], ANT_PROP_ATTR_DEFAULT, NULL));
   first = prefix;
@@ -200,9 +200,9 @@ int main(void) {
   for (unsigned i = 8; i < 12; i++)
     assert(ant_shape_add_interned_tr(js, &first, keys[i], ANT_PROP_ATTR_DEFAULT, NULL));
   ant_shape_release(first);
-  ant_gc_shapes_begin();
-  ant_gc_shapes_mark(prefix);
-  ant_gc_shapes_sweep();
+  ant_gc_shapes_begin(js);
+  ant_gc_shapes_mark(js, prefix);
+  ant_gc_shapes_sweep(js);
   const ant_shape_prop_t *backing = ant_shape_prop_at(prefix, 0);
   first = prefix;
   ant_shape_retain(first);
@@ -215,11 +215,11 @@ int main(void) {
   assert(ant_shape_lookup_interned(first, keys[8]) == -1);
   ant_shape_release(first);
   ant_shape_release(prefix);
-  ant_gc_shapes_begin();
-  ant_gc_shapes_sweep();
+  ant_gc_shapes_begin(js);
+  ant_gc_shapes_sweep(js);
 
   // Branch reservation includes the index capacity needed by the next append.
-  first = ant_shape_new();
+  first = ant_shape_new(js);
   for (unsigned i = 0; i < 32; i++) {
     ant_shape_t *copy = shape_clone_reserve(first, 1);
     assert(copy);
@@ -230,7 +230,7 @@ int main(void) {
     assert(ant_shape_add_interned_tr(js, &first, keys[i], ANT_PROP_ATTR_DEFAULT, NULL));
   }
   ant_shape_release(first);
-  ant_gc_shapes_begin();
-  ant_gc_shapes_sweep();
+  ant_gc_shapes_begin(js);
+  ant_gc_shapes_sweep(js);
   puts("PASS shared descriptors, tail reclamation, index reservation, mutation and GC");
 }

@@ -22,7 +22,7 @@ static void run(ant_t *js, const char *source) {
 
 int main(void) {
   char stack_base;
-  ant_t *js = ant_create();
+  ant_t *js = ant_create(nullptr);
   assert(js);
   js_setstackbase(js, &stack_base);
   init_symbol_module(js);
@@ -42,20 +42,20 @@ int main(void) {
     "  return out;"
     "};");
   gc_run(js);
-  size_t before = ant_shape_total_bytes();
+  size_t before = ant_shape_total_bytes(js);
 
   run(js,
     "for (let r = 0; r < 200; r++) {"
     "  const objs = makeAll(0);"
     "  for (const o of objs) { readV(o); writeV(o, r); }"
     "}");
-  size_t during = ant_shape_total_bytes();
+  size_t during = ant_shape_total_bytes(js);
   assert(during > before);
 
   // the objects are garbage now; only the sites' stale cases reference them
   gc_run(js);
   gc_run(js);
-  size_t after = ant_shape_total_bytes();
+  size_t after = ant_shape_total_bytes(js);
 
   printf("shape bytes: before %zu, during %zu, after %zu\n", before, during, after);
   // most of what the scenario added is gone again

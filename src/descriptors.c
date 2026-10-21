@@ -180,7 +180,7 @@ static bool ensure_string_shape_slot(ant_t *js, ant_value_t obj, const char *key
   ant_object_t *ptr = js_obj_ptr(obj);
   if (!ptr || !ptr->shape) return false;
 
-  const char *interned = intern_string(key, klen);
+  const char *interned = intern_string(js, key, klen);
   if (!interned) return false;
 
   int32_t slot = ant_shape_lookup_interned(ptr->shape, interned);
@@ -439,8 +439,9 @@ void js_set_setter_desc(ant_t *js, ant_value_t obj, const char *key, size_t klen
 void js_define_accessor_desc(ant_t *js, ant_value_t obj, const char *key, size_t klen, ant_value_t getter, ant_value_t setter, int flags) {
   getter = js_cfunc_expose_property(js, getter, JS_CFUNC_GETTER, key, klen, false);
   setter = js_cfunc_expose_property(js, setter, JS_CFUNC_SETTER, key, klen, false);
+  
   ant_object_t *ptr = js_obj_ptr(obj);
-  const char *interned = ptr && ptr->shape && !ptr->flags.is_exotic ? intern_string(key, klen) : NULL;
+  const char *interned = ptr && ptr->shape && !ptr->flags.is_exotic ? intern_string(js, key, klen) : NULL;
   
   uint32_t slot = 0;
   if (

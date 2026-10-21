@@ -13,7 +13,7 @@ static void mark_conservative_words(ant_t *js) {
 }
 
 int main(void) {
-  ant_t *js = ant_create();
+  ant_t *js = ant_create(nullptr);
   assert(js);
   // Exact heap edges must retain children without help from C-stack copies.
   js_setstackbase(js, NULL);

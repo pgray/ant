@@ -1638,7 +1638,7 @@ ant_value_t jit_helper_get_elem(
       if (ic->get_kind == SV_GF_IC_MISSING && vtype(obj) == kTypeObject &&
         sv_ic_try_get_hit(js, ic, obj, js_obj_ptr(obj), &atom, &result, NULL)) return result;
       if (sv_try_symbol_description_ic(js, obj, &atom, ic, &result)) return result;
-      atom.str = intern_string("description", 11);
+      atom.str = intern_string(js, "description", 11);
       if (atom.str && sv_try_prop_get_ic_no_effect(js, obj, &atom, ic, &result)) return result;
     }
   }

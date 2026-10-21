@@ -30,7 +30,7 @@ static int run_bundle_entry(ant_t *js, const ant_bundle_module_t *entry) {
   } else js_set_global_builtin(js, "__dirname", js_mkundef());
   js_set_global_builtin(js, "__filename", js_mkstr(js, key, strlen(key)));
 
-  const char *stable_key = intern_string(key, strlen(key));
+  const char *stable_key = intern_string(js, key, strlen(key));
   if (!stable_key) stable_key = key;
 
   js_set_filename(js, stable_key);
@@ -148,7 +148,7 @@ int main(int argc, char *argv[]) {
   ant_t *js;
   volatile char stack_base;
 
-  if (!(js = ant_create())) {
+  if (!(js = ant_create(nullptr))) {
     fprintf(stderr, "ant-runtime: failed to allocate runtime\n");
     free(proc_argv);
     ant_bundle_close(&bundle);
@@ -178,7 +178,9 @@ int main(int argc, char *argv[]) {
     js_result = process_run_exit_handlers(js, js_result);
   }
 
+  js->process_exiting = true;
   js_destroy(js);
+  
   ant_bundle_close(&bundle);
   free(proc_argv);
 

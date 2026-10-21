@@ -76,7 +76,7 @@ static bool run(ant_t *js, void (*callback)(void)) {
 }
 
 int main(void) {
-  ant_t *js = ant_create();
+  ant_t *js = ant_create(nullptr);
   assert(js);
   js_setstackbase(js, __builtin_frame_address(0));
   g_js = js;

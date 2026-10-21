@@ -304,11 +304,11 @@ static ant_value_t v8_get_heap_statistics(ant_params_t) {
   uv_resident_set_memory(&rss);
 
   size_t arena_committed  = js->obj_arena.committed;
-  size_t arena_reserved   = js->obj_arena.reserved;
+  size_t arena_reserved   = js->obj_arena.limit;
   size_t arena_live_bytes = js->obj_arena.live_count * js->obj_arena.elem_size;
 
   size_t closure_committed = js->closure_arena.committed;
-  size_t closure_reserved  = js->closure_arena.reserved;
+  size_t closure_reserved  = js->closure_arena.limit;
   size_t closure_live      = js->closure_arena.live_count * js->closure_arena.elem_size;
 
   size_t pool_live  = js->gc.pool_last_live;

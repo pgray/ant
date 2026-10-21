@@ -7,7 +7,6 @@
 #include "internal.h"
 #include "modules/lmdb.h"
 #include "modules/buffer.h"
-#include "gc/modules.h"
 
 #include <lmdb.h>
 #include <stdbool.h>
@@ -61,13 +60,14 @@ struct lmdb_txn_ref {
   lmdb_txn_ref_t *next;
 };
 
-static lmdb_js_types_t lmdb_types = {0};
-static lmdb_env_handle_t *env_handles = NULL;
-static lmdb_db_handle_t *db_handles = NULL;
-static lmdb_txn_handle_t *txn_handles = NULL;
-static lmdb_env_ref_t *env_refs = NULL;
-static lmdb_db_ref_t *db_refs = NULL;
-static lmdb_txn_ref_t *txn_refs = NULL;
+struct lmdb_state {
+  lmdb_env_handle_t *env_handles;
+  lmdb_db_handle_t *db_handles;
+  lmdb_txn_handle_t *txn_handles;
+  lmdb_env_ref_t *env_refs;
+  lmdb_db_ref_t *db_refs;
+  lmdb_txn_ref_t *txn_refs;
+};
 
 static constexpr uint32_t LMDB_ENV_NATIVE_TAG = Ant_NativeTag("LENV");
 static constexpr uint32_t LMDB_DB_NATIVE_TAG = Ant_NativeTag("LDBB");
@@ -103,35 +103,35 @@ static void list_remove_txn(lmdb_env_handle_t *env, lmdb_txn_handle_t *target) {
   }
 }
 
-static void register_env_ref(ant_value_t obj, lmdb_env_handle_t *env) {
+static void register_env_ref(ant_t *js, ant_value_t obj, lmdb_env_handle_t *env) {
   lmdb_env_ref_t *ref = calloc(1, sizeof(lmdb_env_ref_t));
   if (!ref) return;
   ref->obj = obj;
   ref->env = env;
-  ref->next = env_refs;
-  env_refs = ref;
+  ref->next = js->lmdb->env_refs;
+  js->lmdb->env_refs = ref;
 }
 
-static void register_db_ref(ant_value_t obj, lmdb_db_handle_t *db) {
+static void register_db_ref(ant_t *js, ant_value_t obj, lmdb_db_handle_t *db) {
   lmdb_db_ref_t *ref = calloc(1, sizeof(lmdb_db_ref_t));
   if (!ref) return;
   ref->obj = obj;
   ref->db = db;
-  ref->next = db_refs;
-  db_refs = ref;
+  ref->next = js->lmdb->db_refs;
+  js->lmdb->db_refs = ref;
 }
 
-static void register_txn_ref(ant_value_t obj, lmdb_txn_handle_t *txn) {
+static void register_txn_ref(ant_t *js, ant_value_t obj, lmdb_txn_handle_t *txn) {
   lmdb_txn_ref_t *ref = calloc(1, sizeof(lmdb_txn_ref_t));
   if (!ref) return;
   ref->obj = obj;
   ref->txn = txn;
-  ref->next = txn_refs;
-  txn_refs = ref;
+  ref->next = js->lmdb->txn_refs;
+  js->lmdb->txn_refs = ref;
 }
 
-static void unregister_env_ref_by_obj(ant_value_t obj) {
-  lmdb_env_ref_t **cur = &env_refs;
+static void unregister_env_ref_by_obj(ant_t *js, ant_value_t obj) {
+  lmdb_env_ref_t **cur = &js->lmdb->env_refs;
   while (*cur) {
     if ((*cur)->obj == obj) {
       lmdb_env_ref_t *next = (*cur)->next;
@@ -144,8 +144,8 @@ static void unregister_env_ref_by_obj(ant_value_t obj) {
   }
 }
 
-static void unregister_db_ref_by_obj(ant_value_t obj) {
-  lmdb_db_ref_t **cur = &db_refs;
+static void unregister_db_ref_by_obj(ant_t *js, ant_value_t obj) {
+  lmdb_db_ref_t **cur = &js->lmdb->db_refs;
   while (*cur) {
     if ((*cur)->obj == obj) {
       lmdb_db_ref_t *next = (*cur)->next;
@@ -158,8 +158,8 @@ static void unregister_db_ref_by_obj(ant_value_t obj) {
   }
 }
 
-static void unregister_txn_ref_by_obj(ant_value_t obj) {
-  lmdb_txn_ref_t **cur = &txn_refs;
+static void unregister_txn_ref_by_obj(ant_t *js, ant_value_t obj) {
+  lmdb_txn_ref_t **cur = &js->lmdb->txn_refs;
   while (*cur) {
     if ((*cur)->obj == obj) {
       lmdb_txn_ref_t *next = (*cur)->next;
@@ -172,8 +172,8 @@ static void unregister_txn_ref_by_obj(ant_value_t obj) {
   }
 }
 
-static void unregister_db_refs_by_env(lmdb_env_handle_t *env) {
-  lmdb_db_ref_t **cur = &db_refs;
+static void unregister_db_refs_by_env(ant_t *js, lmdb_env_handle_t *env) {
+  lmdb_db_ref_t **cur = &js->lmdb->db_refs;
   while (*cur) {
     if ((*cur)->db && (*cur)->db->env == env) {
       lmdb_db_ref_t *next = (*cur)->next;
@@ -186,8 +186,8 @@ static void unregister_db_refs_by_env(lmdb_env_handle_t *env) {
   }
 }
 
-static void unregister_txn_refs_by_env(lmdb_env_handle_t *env) {
-  lmdb_txn_ref_t **cur = &txn_refs;
+static void unregister_txn_refs_by_env(ant_t *js, lmdb_env_handle_t *env) {
+  lmdb_txn_ref_t **cur = &js->lmdb->txn_refs;
   while (*cur) {
     if ((*cur)->txn && (*cur)->txn->env == env) {
       lmdb_txn_ref_t *next = (*cur)->next;
@@ -200,7 +200,7 @@ static void unregister_txn_refs_by_env(lmdb_env_handle_t *env) {
   }
 }
 
-static void env_handle_close(lmdb_env_handle_t *env) {
+static void env_handle_close(ant_t *js, lmdb_env_handle_t *env) {
   if (!env || env->closed) return;
 
   lmdb_txn_handle_t *txn = env->txn_head;
@@ -228,8 +228,8 @@ static void env_handle_close(lmdb_env_handle_t *env) {
   env->db_head = NULL;
   env->txn_head = NULL;
 
-  unregister_db_refs_by_env(env);
-  unregister_txn_refs_by_env(env);
+  unregister_db_refs_by_env(js, env);
+  unregister_txn_refs_by_env(js, env);
 }
 
 static lmdb_env_handle_t *get_env_handle(ant_t *js, ant_value_t obj, bool open_required) {
@@ -258,8 +258,8 @@ static void lmdb_env_finalize(ant_t *js, ant_object_t *obj) {
   lmdb_env_handle_t *env = 
     (lmdb_env_handle_t *)js_get_native(value, LMDB_ENV_NATIVE_TAG);
   if (!env) return;
-  env_handle_close(env);
-  unregister_env_ref_by_obj(value);
+  env_handle_close(js, env);
+  unregister_env_ref_by_obj(js, value);
   js_clear_native(value, LMDB_ENV_NATIVE_TAG);
 }
 
@@ -274,7 +274,7 @@ static void lmdb_db_finalize(ant_t *js, ant_object_t *obj) {
   }
   
   db->closed = true;
-  unregister_db_ref_by_obj(value);
+  unregister_db_ref_by_obj(js, value);
   js_clear_native(value, LMDB_DB_NATIVE_TAG);
 }
 
@@ -290,7 +290,7 @@ static void lmdb_txn_finalize(ant_t *js, ant_object_t *obj) {
   }
   txn->closed = true;
   if (txn->env) list_remove_txn(txn->env, txn);
-  unregister_txn_ref_by_obj(value);
+  unregister_txn_ref_by_obj(js, value);
   js_clear_native(value, LMDB_TXN_NATIVE_TAG);
 }
 
@@ -467,8 +467,8 @@ static ant_value_t lmdb_open(ant_params_t) {
   handle->closed = false;
   handle->read_only = read_only;
   handle->path = strndup(path, path_len);
-  handle->next_global = env_handles;
-  env_handles = handle;
+  handle->next_global = js->lmdb->env_handles;
+  js->lmdb->env_handles = handle;
 
   return make_env_obj(js, handle);
 }
@@ -537,8 +537,8 @@ static ant_value_t lmdb_env_open_db(ant_params_t) {
 
   db->next_in_env = env->db_head;
   env->db_head = db;
-  db->next_global = db_handles;
-  db_handles = db;
+  db->next_global = js->lmdb->db_handles;
+  js->lmdb->db_handles = db;
 
   return make_db_obj(js, db, js_getthis(js));
 }
@@ -571,8 +571,8 @@ static ant_value_t lmdb_env_begin_txn(ant_params_t) {
 
   handle->next_in_env = env->txn_head;
   env->txn_head = handle;
-  handle->next_global = txn_handles;
-  txn_handles = handle;
+  handle->next_global = js->lmdb->txn_handles;
+  js->lmdb->txn_handles = handle;
 
   return make_txn_obj(js, handle, js_getthis(js));
 }
@@ -584,8 +584,8 @@ static ant_value_t lmdb_env_close_method(ant_params_t) {
   lmdb_env_handle_t *env = get_env_handle(js, self, false);
   if (!env) return js_mkerr(js, "Invalid LMDB env");
 
-  env_handle_close(env);
-  unregister_env_ref_by_obj(self);
+  env_handle_close(js, env);
+  unregister_env_ref_by_obj(js, self);
   return js_mkundef();
 }
 
@@ -750,7 +750,7 @@ static ant_value_t lmdb_txn_commit(ant_params_t) {
   txn->txn = NULL;
   txn->closed = true;
   if (txn->env) list_remove_txn(txn->env, txn);
-  unregister_txn_ref_by_obj(self);
+  unregister_txn_ref_by_obj(js, self);
 
   if (rc != 0) return js_mkerr(js, "lmdb_txn_commit failed: %s", mdb_strerror(rc));
   return js_mkundef();
@@ -761,7 +761,7 @@ static ant_value_t lmdb_txn_abort(ant_params_t) {
   lmdb_txn_handle_t *txn = get_txn_handle(js, self, false);
   if (!txn) return js_mkerr(js, "Invalid LMDB transaction");
   if (txn->closed || !txn->txn) {
-    unregister_txn_ref_by_obj(self);
+    unregister_txn_ref_by_obj(js, self);
     return js_mkundef();
   }
 
@@ -769,7 +769,7 @@ static ant_value_t lmdb_txn_abort(ant_params_t) {
   txn->txn = NULL;
   txn->closed = true;
   if (txn->env) list_remove_txn(txn->env, txn);
-  unregister_txn_ref_by_obj(self);
+  unregister_txn_ref_by_obj(js, self);
   return js_mkundef();
 }
 
@@ -950,7 +950,7 @@ static ant_value_t lmdb_db_drop(ant_params_t) {
   if (del_db) {
     db->closed = true;
     if (db->env) list_remove_db(db->env, db);
-    unregister_db_ref_by_obj(self);
+    unregister_db_ref_by_obj(js, self);
   }
   return js_mkundef();
 }
@@ -962,7 +962,7 @@ static ant_value_t lmdb_db_close(ant_params_t) {
   lmdb_db_handle_t *db = get_db_handle(js, self, false);
   if (!db) return js_mkerr(js, "Invalid LMDB database handle");
   if (db->closed) {
-    unregister_db_ref_by_obj(self);
+    unregister_db_ref_by_obj(js, self);
     return js_mkundef();
   }
 
@@ -972,7 +972,7 @@ static ant_value_t lmdb_db_close(ant_params_t) {
   }
 
   db->closed = true;
-  unregister_db_ref_by_obj(self);
+  unregister_db_ref_by_obj(js, self);
   return js_mkundef();
 }
 
@@ -998,7 +998,7 @@ static ant_value_t lmdb_txn_constructor(ant_params_t) {
 }
 
 static void ensure_lmdb_prototypes(ant_t *js) {
-  if (lmdb_types.ready) return;
+  if (is_object_type(js->builtins.lmdb_env_proto)) return;
   ant_value_t object_proto = js->sym.object_proto;
 
   ant_value_t env_ctor_obj = Ant_Object_CreateBare(js);
@@ -1049,13 +1049,12 @@ static void ensure_lmdb_prototypes(ant_t *js) {
   js_mkprop_fast(js, txn_ctor_obj, "prototype", 9, txn_proto);
   js_set_function_name(js, txn_ctor_obj, "LMDBTxn", sizeof("LMDBTxn") - 1);
 
-  lmdb_types.env_ctor = js_obj_to_func(js, env_ctor_obj);
-  lmdb_types.db_ctor = js_obj_to_func(js, db_ctor_obj);
-  lmdb_types.txn_ctor = js_obj_to_func(js, txn_ctor_obj);
-  lmdb_types.env_proto = env_proto;
-  lmdb_types.db_proto = db_proto;
-  lmdb_types.txn_proto = txn_proto;
-  lmdb_types.ready = true;
+  js->builtins.lmdb_env_ctor = js_obj_to_func(js, env_ctor_obj);
+  js->builtins.lmdb_db_ctor = js_obj_to_func(js, db_ctor_obj);
+  js->builtins.lmdb_txn_ctor = js_obj_to_func(js, txn_ctor_obj);
+  js->builtins.lmdb_env_proto = env_proto;
+  js->builtins.lmdb_db_proto = db_proto;
+  js->builtins.lmdb_txn_proto = txn_proto;
 }
 
 static ant_value_t make_env_obj(ant_t *js, lmdb_env_handle_t *env) {
@@ -1063,8 +1062,8 @@ static ant_value_t make_env_obj(ant_t *js, lmdb_env_handle_t *env) {
   ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_native(obj, env, LMDB_ENV_NATIVE_TAG);
   js_set_finalizer(obj, lmdb_env_finalize);
-  register_env_ref(obj, env);
-  if (is_special_object(lmdb_types.env_proto)) js_set_proto_init(obj, lmdb_types.env_proto);
+  register_env_ref(js, obj, env);
+  if (is_special_object(js->builtins.lmdb_env_proto)) js_set_proto_init(obj, js->builtins.lmdb_env_proto);
   return obj;
 }
 
@@ -1074,8 +1073,8 @@ static ant_value_t make_db_obj(ant_t *js, lmdb_db_handle_t *db, ant_value_t env_
   js_set_native(obj, db, LMDB_DB_NATIVE_TAG);
   js_set_finalizer(obj, lmdb_db_finalize);
   js_set_slot_wb(js, obj, SLOT_DATA, env_obj);
-  register_db_ref(obj, db);
-  if (is_special_object(lmdb_types.db_proto)) js_set_proto_init(obj, lmdb_types.db_proto);
+  register_db_ref(js, obj, db);
+  if (is_special_object(js->builtins.lmdb_db_proto)) js_set_proto_init(obj, js->builtins.lmdb_db_proto);
   return obj;
 }
 
@@ -1085,19 +1084,20 @@ static ant_value_t make_txn_obj(ant_t *js, lmdb_txn_handle_t *txn, ant_value_t e
   js_set_native(obj, txn, LMDB_TXN_NATIVE_TAG);
   js_set_finalizer(obj, lmdb_txn_finalize);
   js_set_slot_wb(js, obj, SLOT_DATA, env_obj);
-  register_txn_ref(obj, txn);
-  if (is_special_object(lmdb_types.txn_proto)) js_set_proto_init(obj, lmdb_types.txn_proto);
+  register_txn_ref(js, obj, txn);
+  if (is_special_object(js->builtins.lmdb_txn_proto)) js_set_proto_init(obj, js->builtins.lmdb_txn_proto);
   return obj;
 }
 
 ant_value_t lmdb_library(ant_t *js) {
+  if (!js->lmdb && !(js->lmdb = calloc(1, sizeof(*js->lmdb)))) return js_mkerr(js, "out of memory");
   ensure_lmdb_prototypes(js);
   ant_value_t lib = Ant_Object_CreateBare(js);
   js_set(js, lib, "open", Ant_Function_Create(lmdb_open));
   js_set(js, lib, "strerror", Ant_Function_Create(lmdb_strerror_fn));
-  js_set(js, lib, "Env", lmdb_types.env_ctor);
-  js_set(js, lib, "Database", lmdb_types.db_ctor);
-  js_set(js, lib, "Txn", lmdb_types.txn_ctor);
+  js_set(js, lib, "Env", js->builtins.lmdb_env_ctor);
+  js_set(js, lib, "Database", js->builtins.lmdb_db_ctor);
+  js_set(js, lib, "Txn", js->builtins.lmdb_txn_ctor);
 
   int major = 0; int minor = 0; int patch = 0;
   const char *version = mdb_version(&major, &minor, &patch);
@@ -1127,19 +1127,9 @@ ant_value_t lmdb_library(ant_t *js) {
   return lib;
 }
 
-void gc_mark_lmdb(ant_t *js, gc_mark_fn mark) {
-  if (lmdb_types.ready) {
-    mark(js, lmdb_types.env_ctor);
-    mark(js, lmdb_types.db_ctor);
-    mark(js, lmdb_types.txn_ctor);
-    mark(js, lmdb_types.env_proto);
-    mark(js, lmdb_types.db_proto);
-    mark(js, lmdb_types.txn_proto);
-  }
-}
-
-void cleanup_lmdb_module(void) {
-  lmdb_txn_handle_t *txn = txn_handles;
+void cleanup_lmdb_module(ant_t *js) {
+  if (!js->lmdb) return;
+  lmdb_txn_handle_t *txn = js->lmdb->txn_handles;
   while (txn) {
     if (!txn->closed && txn->txn) {
       mdb_txn_abort(txn->txn);
@@ -1149,7 +1139,7 @@ void cleanup_lmdb_module(void) {
     txn = txn->next_global;
   }
 
-  lmdb_db_handle_t *db = db_handles;
+  lmdb_db_handle_t *db = js->lmdb->db_handles;
   while (db) {
     if (!db->closed && db->env && !db->env->closed) {
       mdb_dbi_close(db->env->env, db->dbi);
@@ -1158,58 +1148,59 @@ void cleanup_lmdb_module(void) {
     db = db->next_global;
   }
 
-  lmdb_env_handle_t *env = env_handles;
+  lmdb_env_handle_t *env = js->lmdb->env_handles;
   while (env) {
-    if (!env->closed) env_handle_close(env);
+    if (!env->closed) env_handle_close(js, env);
     env = env->next_global;
   }
 
-  txn = txn_handles;
+  txn = js->lmdb->txn_handles;
   while (txn) {
     lmdb_txn_handle_t *next = txn->next_global;
     free(txn);
     txn = next;
   }
-  txn_handles = NULL;
+  js->lmdb->txn_handles = NULL;
 
-  db = db_handles;
+  db = js->lmdb->db_handles;
   while (db) {
     lmdb_db_handle_t *next = db->next_global;
     free(db->name);
     free(db);
     db = next;
   }
-  db_handles = NULL;
+  js->lmdb->db_handles = NULL;
 
-  env = env_handles;
+  env = js->lmdb->env_handles;
   while (env) {
     lmdb_env_handle_t *next = env->next_global;
     free(env->path);
     free(env);
     env = next;
   }
-  env_handles = NULL;
+  js->lmdb->env_handles = NULL;
 
-  while (env_refs) {
-    lmdb_env_ref_t *next = env_refs->next;
-    js_clear_native(env_refs->obj, LMDB_ENV_NATIVE_TAG);
-    free(env_refs);
-    env_refs = next;
+  while (js->lmdb->env_refs) {
+    lmdb_env_ref_t *next = js->lmdb->env_refs->next;
+    js_clear_native(js->lmdb->env_refs->obj, LMDB_ENV_NATIVE_TAG);
+    free(js->lmdb->env_refs);
+    js->lmdb->env_refs = next;
   }
 
-  while (db_refs) {
-    lmdb_db_ref_t *next = db_refs->next;
-    js_clear_native(db_refs->obj, LMDB_DB_NATIVE_TAG);
-    free(db_refs);
-    db_refs = next;
+  while (js->lmdb->db_refs) {
+    lmdb_db_ref_t *next = js->lmdb->db_refs->next;
+    js_clear_native(js->lmdb->db_refs->obj, LMDB_DB_NATIVE_TAG);
+    free(js->lmdb->db_refs);
+    js->lmdb->db_refs = next;
   }
 
-  while (txn_refs) {
-    lmdb_txn_ref_t *next = txn_refs->next;
-    js_clear_native(txn_refs->obj, LMDB_TXN_NATIVE_TAG);
-    free(txn_refs);
-    txn_refs = next;
+  while (js->lmdb->txn_refs) {
+    lmdb_txn_ref_t *next = js->lmdb->txn_refs->next;
+    js_clear_native(js->lmdb->txn_refs->obj, LMDB_TXN_NATIVE_TAG);
+    free(js->lmdb->txn_refs);
+    js->lmdb->txn_refs = next;
   }
 
-  lmdb_types = (lmdb_js_types_t){0};
+  free(js->lmdb);
+  js->lmdb = NULL;
 }

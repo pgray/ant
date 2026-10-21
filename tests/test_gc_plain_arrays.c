@@ -13,7 +13,7 @@ static void test_finalizer(ant_t *js, ant_object_t *obj) {
 
 int main(void) {
   char stack_base;
-  ant_t *js = ant_create();
+  ant_t *js = ant_create(nullptr);
   assert(js);
   js_setstackbase(js, &stack_base);
 

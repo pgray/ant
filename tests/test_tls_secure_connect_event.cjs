@@ -16,6 +16,18 @@ const detachedSocket = new tls.TLSSocket();
 assert.strictEqual(tls.default, tls);
 assert.strictEqual(tls.isSecureContext(context), true);
 assert.strictEqual(tls.isSecureContext(constructedContext), true);
+const contextError = (options) => {
+  try {
+    tls.createSecureContext(options);
+  } catch (err) {
+    return err.message;
+  }
+  return 'no error';
+};
+assert.strictEqual(contextError({ key: 'k' }), 'TLS private key requires a certificate');
+assert.strictEqual(contextError({ cert: 'c' }), 'TLS certificate requires a private key');
+assert.strictEqual(contextError({ key: 'k', cert: 'c' }), 'Failed to load TLS private key: expected a PEM-encoded key');
+assert.strictEqual(contextError({ ca: 'not a pem' }), 'Failed to load TLS CA bundle');
 assert.strictEqual(tls.createContext, undefined);
 assert.strictEqual(tls.isContext, undefined);
 assert.throws(

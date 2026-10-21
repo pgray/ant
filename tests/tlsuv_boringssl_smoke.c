@@ -110,7 +110,7 @@ int main(int argc, char **argv) {
     }
   }
 
-  tls_context *base = default_tls_context(NULL, 0);
+  tls_context *base = default_tls_context();
   smoke_check(base != NULL, "created default TLS context");
 
   const char *version = base->version ? base->version() : NULL;
@@ -161,8 +161,9 @@ int main(int argc, char **argv) {
     uv_loop_t *loop = uv_loop_new();
     smoke_check(loop != NULL, "created libuv loop");
 
-    tls_context *http_tls = default_tls_context(ca_path, strlen(ca_path));
-    smoke_check(http_tls != NULL, "created CA-backed TLS context");
+    tls_context *http_tls = default_tls_context();
+    smoke_check(http_tls != NULL, "created TLS context");
+    smoke_check(http_tls->set_ca_bundle(http_tls, ca_path, strlen(ca_path)) == 0, "loaded CA bundle");
 
     tlsuv_http_t client;
     memset(&client, 0, sizeof(client));

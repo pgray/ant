@@ -1393,6 +1393,38 @@ ant_value_t readline_promises_library(ant_t *js) {
   return lib;
 }
 
+static void rl_interface_free(rl_interface_t *iface) {
+  for (int i = 0; i < iface->history.count; i++) free(iface->history.lines[i]);
+  free(iface->history.lines);
+  free(iface->prompt);
+  free(iface->active_prompt);
+  free(iface->line_buffer);
+  free(iface);
+}
+
+#ifndef _WIN32
+static void rl_interface_sigint_closed(uv_handle_t *handle) {
+  rl_interface_free((rl_interface_t *)handle->data);
+}
+#endif
+
+void cleanup_readline_module(ant_t *js) {
+  rl_interface_t *iface, *tmp;
+  HASH_ITER(hh, js->rl_interfaces, iface, tmp) {
+    HASH_DEL(js->rl_interfaces, iface);
+    rl_close_interface(js, iface);
+#ifndef _WIN32
+    uv_handle_t *sigint = (uv_handle_t *)&iface->sigint_watcher;
+    if (iface->sigint_watcher_initialized && !uv_is_closing(sigint)) {
+      sigint->data = iface;
+      uv_close(sigint, rl_interface_sigint_closed);
+      continue;
+    }
+#endif
+    rl_interface_free(iface);
+  }
+}
+
 void gc_mark_readline(ant_t *js, gc_mark_fn mark) {
   rl_interface_t *iface, *tmp;
   HASH_ITER(hh, js->rl_interfaces, iface, tmp) {

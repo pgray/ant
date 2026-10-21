@@ -11,6 +11,7 @@
 #include "runtime.h"
 #include "primordials.h"
 #include "descriptors.h"
+#include "shapes.h"
 
 #include "esm/loader.h"
 #include "modules/json.h"
@@ -65,6 +66,7 @@ static constexpr uint32_t INTERN_INDEX_CACHE_SIZE = 1024;
 static constexpr uint32_t ANT_RUNTIME_WEB_COMPAT = 1u << 0;
 
 static constexpr uint32_t INTERN_MEMO_SIZE = 64;
+static constexpr uint32_t CJS_BUILTIN_CACHE_SIZE = 8;
 static_assert((INTERN_MEMO_SIZE & (INTERN_MEMO_SIZE - 1)) == 0, "the intern memo is indexed by a mask");
 
 typedef struct {
@@ -121,6 +123,13 @@ struct ant_isolate_t {
   ant_object_t *objects;
   ant_object_t *permanent_objects;
   
+  ant_worker_t *worker;
+  ant_worker_t *workers;
+  ant_thread_mailbox_t *thread_mailbox;
+  
+  ant_guest_t *guest;
+  ant_guest_t *guests;
+  
   // TODO: registry struct
   descriptor_entry_t *desc_registry;
   ant_process_state_t *process_state;
@@ -142,6 +151,16 @@ struct ant_isolate_t {
   net_server_t *net_servers;
   net_socket_t *net_sockets;
   ant_tls_socket_t *tls_sockets;
+  rpc_server_t *rpc_servers;
+  rpc_client_t *rpc_clients;
+  sandbox_state_t *sandboxes;
+  lmdb_state_t *lmdb;
+  ant_napi_env_t *napi_env;
+  ant_port_binding_t *port_bindings;
+  broadcast_member_t *broadcast_members;
+  perf_eld_monitor_t *eld_monitors;
+  ant_http_pool_t *http_pool;
+  navigator_locks_t *navigator_locks;
   wasm_import_func_env_t *wasm_import_envs;
   ant_ptr_pair_map_t wasm_instance_owners;
   bool wasm_pending_import_throw;
@@ -151,6 +170,13 @@ struct ant_isolate_t {
   rl_interface_t *rl_interfaces;
   uint64_t rl_next_interface_id;
   // END TODO
+  
+  struct {
+    double stream_high_water_mark;
+    double stream_object_high_water_mark;
+    double net_auto_select_family_timeout;
+    bool net_auto_select_family;
+  } defaults;
 
   ant_fixed_arena_t obj_arena;
   ant_fixed_arena_t closure_arena;
@@ -184,6 +210,17 @@ struct ant_isolate_t {
   size_t c_root_count;
   size_t c_root_cap;
 
+  struct {
+    struct ant_library_ns *entries;
+    uint32_t cap;
+  } libraries;
+
+  struct {
+    ant_shape_t *roots[ANT_INOBJ_MAX_SLOTS + 1];
+    ant_shape_heap_t heap;
+    uint16_t gc_epoch;
+  } shapes;
+
   const char *code;
   const char *filename;
 
@@ -206,6 +243,7 @@ struct ant_isolate_t {
   _Atomic uint8_t interrupt_pending;
   
   bool interrupts_armed;
+  bool uncloneable_marked;
   bool terminating;
   vm_interrupt_t *interrupt_run;
   
@@ -231,12 +269,18 @@ struct ant_isolate_t {
       ant_value_t main;
       ant_value_t constructor;
       uint64_t generation;
+      struct {
+        ant_value_t specifier;
+        ant_value_t exports;
+        bool bare;
+      } builtins[CJS_BUILTIN_CACHE_SIZE];
     } cjs;
     ant_esm_state_t *state;
     ant_module_t *module_stack;
   } modules;
 
   struct {
+    ant_intern_table_t *table;
     const char *length;
     const char *buffer;
     const char *prototype;
@@ -260,6 +304,7 @@ struct ant_isolate_t {
     const char *next;
     const char *define_property;
     const char *get_own_property_descriptor;
+    const char *module_cache;
     const char *idx[INTERN_INDEX_CACHE_SIZE];
   } intern;
 
@@ -330,6 +375,7 @@ struct ant_isolate_t {
     uint32_t cap;
     size_t bytes;
     size_t meta_bytes;
+    struct buffer_view_set *views;
   } buffers;
 
   ant_offset_t max_size;
@@ -513,6 +559,7 @@ struct ant_isolate_t {
   ant_timer_state_t timers;
   bool microtasks_draining;
   bool destroying;
+  bool process_exiting;
   
   struct coroutine *active_async_coro;
   struct gc_temp_root_scope *temp_roots;

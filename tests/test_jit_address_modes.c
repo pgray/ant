@@ -91,7 +91,7 @@ static void check_index_guard(void) {
 
 // Exercise the emitted dense-read guards independently of feedback/warmup.
 static void check_dense_read_guard(void) {
-  ant_t *js = ant_create();
+  ant_t *js = ant_create(nullptr);
   assert(js);
   MIR_context_t ctx = MIR_init();
   MIR_gen_init(ctx);

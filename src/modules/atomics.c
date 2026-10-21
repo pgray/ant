@@ -12,6 +12,7 @@
 #include "cfunc.h"
 #include "errors.h"
 #include "internal.h"
+#include "interrupt.h"
 
 #include "gc/modules.h"
 #include "modules/buffer.h"
@@ -218,6 +219,20 @@ int wait_queue_notify(WaitQueue *queue, int32_t *address, int count) {
     notified += async_waiter_notify(address, count == -1 ? -1 : count - notified);
     
   return notified;
+}
+
+void atomics_wake_isolate(ant_t *js) {
+  pthread_once(&wait_queue_init_once, init_wait_queue);
+  pthread_mutex_lock(&global_wait_queue.lock);
+  
+  for (WaitQueueEntry *entry = global_wait_queue.head; entry; entry = entry->next) {
+    if (entry->js != js) continue;
+    pthread_mutex_lock(&entry->mutex);
+    pthread_cond_signal(&entry->cond);
+    pthread_mutex_unlock(&entry->mutex);
+  }
+  
+  pthread_mutex_unlock(&global_wait_queue.lock);
 }
 
 void cleanup_atomics_module(ant_t *js) {
@@ -848,25 +863,32 @@ static ant_value_t js_atomics_wait(ant_params_t) {
   }
   
   _Atomic int32_t *atomic_ptr = (_Atomic int32_t *)(ptr + index * 4);
-  int32_t current_value = atomic_load(atomic_ptr);
-  
-  if (current_value != expected_value) {
-    return js_mkstr(js, "not-equal", 9);
-  }
   
   WaitQueueEntry entry;
   pthread_cond_init(&entry.cond, NULL);
   pthread_mutex_init(&entry.mutex, NULL);
+  
+  entry.js = js;
   entry.address = (int32_t *)atomic_ptr;
   entry.notified = 0;
-  entry.next = NULL;
   
-  wait_queue_add(&global_wait_queue, &entry);
+  pthread_mutex_lock(&global_wait_queue.lock);
+  if (atomic_load(atomic_ptr) != expected_value) {
+    pthread_mutex_unlock(&global_wait_queue.lock);
+    pthread_cond_destroy(&entry.cond);
+    pthread_mutex_destroy(&entry.mutex);
+    return js_mkstr(js, "not-equal", 9);
+  }
+  
+  entry.next = global_wait_queue.head;
+  global_wait_queue.head = &entry;
+  
   pthread_mutex_lock(&entry.mutex);
+  pthread_mutex_unlock(&global_wait_queue.lock);
   
   const char *result = "ok";
   if (timeout_ms < 0) {
-    while (!entry.notified) pthread_cond_wait(&entry.cond, &entry.mutex);
+    while (!entry.notified && !js_interrupt_pending(js)) pthread_cond_wait(&entry.cond, &entry.mutex);
   } else {
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
@@ -877,16 +899,19 @@ static ant_value_t js_atomics_wait(ant_params_t) {
       ts.tv_nsec -= 1000000000;
     }
     
-    int wait_result = pthread_cond_timedwait(&entry.cond, &entry.mutex, &ts);
-    if (wait_result == ETIMEDOUT && !entry.notified) result = "timed-out";
+    while (!entry.notified && !js_interrupt_pending(js))
+      if (pthread_cond_timedwait(&entry.cond, &entry.mutex, &ts) == ETIMEDOUT) break;
+    if (!entry.notified) result = "timed-out";
   }
   
+  bool interrupted = !entry.notified && js_interrupt_pending(js);
   pthread_mutex_unlock(&entry.mutex);
   wait_queue_remove(&global_wait_queue, &entry);
   
   pthread_cond_destroy(&entry.cond);
   pthread_mutex_destroy(&entry.mutex);
   
+  if (interrupted) return js_interrupt_raise(js);
   return js_mkstr(js, result, strlen(result));
 }
 
@@ -1006,8 +1031,11 @@ static ant_value_t js_atomics_waitAsync(ant_params_t) {
   }
 
   pthread_mutex_lock(&async_waiters_lock);
-  async_waiter_add_locked(entry);
+  bool changed = atomic_load(atomic_ptr) != expected_value;
+  if (!changed) async_waiter_add_locked(entry);
+  
   pthread_mutex_unlock(&async_waiters_lock);
+  if (changed) async_waiter_queue_settle(entry, ASYNC_WAIT_SETTLE_OK, false);
 
   js_set(js, result_obj, "async", js_true);
   js_set(js, result_obj, "value", promise);

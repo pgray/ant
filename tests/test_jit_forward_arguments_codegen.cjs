@@ -22,7 +22,7 @@ for (const name of ['forward', 'Construct']) {
   // Imports exist in every module: require an emitted call, not just the symbol.
   assert.match(mir, /\bcall\s+forward_arguments_proto,\s*jit_helper_forward_arguments,/,
     `${name}: missing guarded argument forwarding`);
-  assert.match(mir, /\bcall\s+jit_proto,\s*forward_code,[^\n]*, args, argc, forward_closure/,
+  assert.match(mir, /\bcall\s+jit_proto,\s*forward_code_\d+,[^\n]*, args, argc, forward_closure_\d+/,
     `${name}: missing direct call with the incoming arguments`);
   assert.doesNotMatch(mir, /\bcall\s+(?:soj_proto|strict_arguments_proto),\s*jit_helper_(?:special_obj|strict_arguments),/,
     `${name}: eagerly materialized arguments`);

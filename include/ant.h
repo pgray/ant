@@ -19,10 +19,10 @@ static constexpr uint8_t CFUNC_IS_CONSTRUCTOR = 0x02u;
 static constexpr uint8_t CFUNC_NATIVE_GETTER  = 0x04u;
 static constexpr uint8_t CFUNC_REALM_FREE     = 0x08u;
 
-#define ANT_ASSERT(cond, msg) ({                                            \
-if (!(cond)) {                                                              \
-  fprintf(stderr, "ANT FATAL: %s\n  %s:%d\n", msg, __FILE__, __LINE__);     \
-  abort();                                                                  \
+#define ANT_ASSERT(cond, msg) ({                                        \
+if (!(cond)) {                                                          \
+  fprintf(stderr, "ANT FATAL: %s\n  %s:%d\n", msg, __FILE__, __LINE__); \
+  abort();                                                              \
 }})
 
 #define ANT_STRING(s)         js_mkstr(js, s, sizeof(s) - 1)
@@ -33,8 +33,15 @@ if (!(cond)) {                                                              \
 #define JS_INF     ((double)INFINITY)
 #define JS_NEG_INF ((double)(-INFINITY))
 
+typedef struct ant_isolate_options {
+  size_t object_arena_bytes;
+} ant_isolate_options_t;
+
 // create a new ant isolate
-ant_t *ant_create();
+ant_t *ant_create(const ant_isolate_options_t *options);
+
+// clean up after a thread
+void ant_thread_cleanup(void);
 
 // globalThis
 ant_value_t js_glob(ant_t *);
@@ -42,6 +49,7 @@ ant_value_t js_glob(ant_t *);
 void init_intrinsic_symbols(ant_t *js);
 void js_init_function_has_instance(ant_t *js);
 bool js_realm_init_intrinsics(ant_t *js);
+bool js_realm_finish_intrinsics(ant_t *js);
 void js_mark_constructor(ant_value_t value, bool is_constructor);
 
 typedef enum: uint8_t {

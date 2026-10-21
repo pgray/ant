@@ -76,6 +76,7 @@ bool sv_op_stack_effect(
 );
 
 int *sv_func_stack_depth_map(const sv_func_t *func);
+int *sv_func_try_map(const sv_func_t *func);
 
 static const uint8_t sv_op_size[OP__COUNT] = {
 #define OP_DEF(name, size, n_pop, n_push, f) [OP_##name] = (size),
@@ -449,6 +450,7 @@ typedef struct {
 
 typedef struct {
   uint8_t *type_feedback;
+  uint8_t *elem_types;
   ant_shape_t *ctor_proto_shape;
   uint32_t ctor_proto_slot;
   bool ctor_proto_shape_registered;
@@ -942,6 +944,10 @@ static inline sv_closure_t *js_closure_alloc_finish(ant_t *js, sv_closure_t *c) 
 static inline sv_closure_t *js_closure_alloc(ant_t *js) {
   js_closure_alloc_prepare(js);
   sv_closure_t *c = (sv_closure_t *)fixed_arena_alloc(&js->closure_arena);
+  
+  if (!c && gc_reclaim_arena(js, &js->closure_arena)) 
+    c = (sv_closure_t *)fixed_arena_alloc(&js->closure_arena);
+  
   if (!c) return NULL;
   return js_closure_alloc_finish(js, c);
 }
@@ -949,6 +955,9 @@ static inline sv_closure_t *js_closure_alloc(ant_t *js) {
 static inline sv_closure_t *js_closure_alloc_hot(ant_t *js) {
   js_closure_alloc_prepare(js);
   sv_closure_t *c = (sv_closure_t *)fixed_arena_alloc_uninit(&js->closure_arena);
+  
+  if (!c && gc_reclaim_arena(js, &js->closure_arena)) 
+    c = (sv_closure_t *)fixed_arena_alloc_uninit(&js->closure_arena);
   
   if (!c) return NULL;
   c->call_flags = 0;
@@ -1064,6 +1073,8 @@ typedef struct {
 } sv_try_region_t;
 
 typedef struct sv_try_table {
+  int *map;
+  int *depth;
   int count;
   sv_try_region_t regions[];
 } sv_try_table_t;

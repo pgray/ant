@@ -77,8 +77,9 @@ enum {
   ENTRY_ONCE = 1u << 0,
   ENTRY_CONSUMED = 1u << 1,
   ENTRY_HAS_COLD = 1u << 2,
-  ENTRY_FLAG_MASK = 7u,
-  ENTRY_ID_SHIFT = 3,
+  ENTRY_DATA_ARG = 1u << 3,
+  ENTRY_FLAG_MASK = 15u,
+  ENTRY_ID_SHIFT = 4,
 };
 
 static const UT_icd event_listener_icd = { 
@@ -1031,7 +1032,8 @@ static bool parse_addEventListener_options(ant_native_params_t, bool *once, bool
 static int eventtarget_find_entry(EventType *evt, ant_value_t cb, bool capture) {
   for (unsigned int i = 0; i < utarray_len(evt->listeners); i++) {
     EventListenerEntry *e = (EventListenerEntry *)utarray_eltptr(evt->listeners, i);
-    if (entry_live(e) && e->callback == cb && entry_capture(evt, e) == capture) return (int)i;
+    if (!entry_live(e) || entry_capture(evt, e) != capture) continue;
+    if (e->callback == cb || ((e->meta & ENTRY_DATA_ARG) && entry_raw_callback(evt, e) == cb)) return (int)i;
   }
   return -1;
 }
@@ -1043,16 +1045,16 @@ static bool eventtarget_remove_entry(ant_t *js, EventType *evt, ant_value_t cb, 
   return true;
 }
 
-static ant_value_t eventtarget_add_entry(
+static ant_value_t eventtarget_add_entry_flags(
   ant_t *js, EventType *evt, ant_value_t cb,
-  bool once, bool capture, ant_value_t signal
+  bool once, bool capture, ant_value_t signal, uint32_t flags
 ) {
   if (eventtarget_find_entry(evt, cb, capture) >= 0) return js_mkundef();
 
   EventListenerEntry entry = {
     .callback = cb,
     .dead_gen = 0,
-    .meta = once ? ENTRY_ONCE : 0,
+    .meta = (once ? ENTRY_ONCE : 0) | flags,
   };
   if (once || capture || vtype(signal) != kTypeUndefined) {
     EventListenerCold *cold = entry_ensure_cold(evt, &entry);
@@ -1063,7 +1065,15 @@ static ant_value_t eventtarget_add_entry(
   }
   utarray_push_back(evt->listeners, &entry);
   emitter_write_barrier(js, evt->owner->target, cb);
+  evt_notify_listener_change(js, evt);
   return js_mkundef();
+}
+
+static ant_value_t eventtarget_add_entry(
+  ant_t *js, EventType *evt, ant_value_t cb,
+  bool once, bool capture, ant_value_t signal
+) {
+  return eventtarget_add_entry_flags(js, evt, cb, once, capture, signal, 0);
 }
 
 static ant_value_t add_listener_to(ant_native_params_t, EventType *evt) {
@@ -1142,6 +1152,14 @@ static ant_value_t eventtarget_handler_listener(ant_params_t) {
 
 static ant_value_t eventtarget_handler_trampoline(void) {
   return Ant_Function_Create(eventtarget_handler_listener);
+}
+
+static ant_value_t eventtarget_data_listener(ant_params_t) {
+  ant_value_t listener = js_get_slot(js->current_func, SLOT_DATA);
+  ant_value_t event = nargs > 0 ? args[0] : js_mkundef();
+  event_data_t *data = get_event_data(event);
+  ant_value_t arg = data && data->kind == ANT_EVENT_MESSAGE ? data->fields[ANT_EVENT_FIELD_MESSAGE_data] : event;
+  return sv_vm_call(js->vm, js, listener, js->this_val, &arg, 1, NULL, js_mkundef());
 }
 
 static ant_value_t dispatch_event_to(ant_t *js, ant_value_t event_obj, EventType *evt, ant_value_t target) {
@@ -2202,6 +2220,32 @@ bool Ant_EventTarget_AddListener(ant_t *js, ant_value_t target, ant_value_t type
   return evt && !is_err(eventtarget_add_entry(js, evt, listener, false, false, js_mkundef()));
 }
 
+bool Ant_EventTarget_AddDataListener(ant_t *js, ant_value_t target, ant_value_t type, ant_value_t listener, bool once, bool prepend) {
+  if (!is_object_type(target) || !is_callable(listener)) return false;
+  EventType *evt = find_or_create_emitter_event_type(js, target, type);
+  
+  if (!evt) return false;
+  if (eventtarget_find_entry(evt, listener, false) >= 0) return true;
+
+  ant_value_t wrapper = js_make_data_cfunc(js, listener, eventtarget_data_listener);
+  if (is_err(wrapper) || is_err(eventtarget_add_entry_flags(js, evt, wrapper, once, false, js_mkundef(), ENTRY_DATA_ARG))) return false;
+  
+  EventListenerEntry *added = (EventListenerEntry *)utarray_back(evt->listeners);
+  EventListenerCold *cold = entry_ensure_cold(evt, added);
+  if (!cold) return false;
+  
+  cold->raw_callback = listener;
+  emitter_write_barrier(js, evt->owner->target, listener);
+  
+  if (prepend && utarray_len(evt->listeners) > 1) {
+    EventListenerEntry entry = *(EventListenerEntry *)utarray_back(evt->listeners);
+    utarray_pop_back(evt->listeners);
+    utarray_insert(evt->listeners, &entry, 0);
+  }
+  
+  return true;
+}
+
 bool Ant_EventTarget_RemoveListener(ant_t *js, ant_value_t target, ant_value_t type, ant_value_t listener) {
   EventType *evt = is_object_type(target) ? find_emitter_event_type(js, target, type) : NULL;
   return eventtarget_remove_entry(js, evt, listener, false);
@@ -2235,6 +2279,44 @@ void Ant_EventTarget_SetHandler(ant_t *js, ant_value_t target, const char *type,
   evt->handler = handler;
   emitter_write_barrier(js, target, handler);
   eventtarget_add_entry(js, evt, trampoline, false, false, js_mkundef());
+}
+
+ant_value_t Ant_GlobalEvents_GetHandler(ant_t *js, const char *type, size_t len) {
+  ant_event_list_t *list = js->global_events;
+  EventType *evt = list ? evt_list_find_cstr(list, type, len) : NULL;
+  return evt ? evt->handler : js_mknull();
+}
+
+void Ant_GlobalEvents_SetHandler(ant_t *js, const char *type, size_t len, ant_value_t handler) {
+  ant_event_list_t *list = global_events_list(js);
+  if (!list) return;
+  EventType *evt = evt_list_find_cstr(list, type, len);
+  ant_value_t trampoline = eventtarget_handler_trampoline();
+
+  if (!is_object_type(handler)) {
+    if (!evt) return;
+    evt->handler = js_mknull();
+    eventtarget_remove_entry(js, evt, trampoline, false);
+    return;
+  }
+
+  if (!evt) evt = evt_list_find_or_create(js, list, js_mkstr(js, type, len));
+  if (!evt) return;
+  evt->handler = handler;
+  eventtarget_add_entry(js, evt, trampoline, false, false, js_mkundef());
+}
+
+void Ant_GlobalEvents_SetListenerChangeHook(ant_t *js, eventemitter_listener_change_fn hook, void *context) {
+  ant_event_list_t *list = global_events_list(js);
+  if (!list) return;
+  list->target = js_glob(js);
+  list->listener_change_hook = hook;
+  list->listener_change_context = context;
+}
+
+bool Ant_Event_Canceled(ant_value_t event) {
+  event_data_t *data = get_event_data(event);
+  return data && data->canceled;
 }
 
 void Ant_EventTarget_Dispatch(ant_t *js, ant_value_t target, ant_value_t event) {

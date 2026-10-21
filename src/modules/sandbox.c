@@ -8,6 +8,8 @@
 #include "cfunc.h"
 #include "errors.h"
 #include "gc/roots.h"
+#include <stdatomic.h>
+#include "list.h"
 #include "internal.h"
 #include "object.h"
 #include "ptr.h"
@@ -38,7 +40,7 @@
 
 static constexpr uint32_t SANDBOX_NATIVE_TAG = Ant_NativeTag("SBOX");
 
-typedef struct sandbox_state {
+struct sandbox_state {
   ant_sandbox_assets_t assets;
   ant_sandbox_launch_options_t launch;
   ant_sandbox_vm_session_t *session;
@@ -82,9 +84,10 @@ typedef struct sandbox_state {
   struct sandbox_message_node *message_tail;
   struct sandbox_message_waiter *waiter_head;
   struct sandbox_message_waiter *waiter_tail;
-  struct sandbox_state *next_active;
-  struct sandbox_state *prev_active;
-} sandbox_state_t;
+  
+  sandbox_state_t *next;
+  sandbox_state_t **pprev;
+};
 
 typedef struct sandbox_message_node {
   char *data;
@@ -98,8 +101,6 @@ typedef struct sandbox_message_waiter {
   bool iterator;
   struct sandbox_message_waiter *next;
 } sandbox_message_waiter_t;
-
-static sandbox_state_t *g_active_sandboxes = NULL;
 
 static bool sandbox_parse_memory_size(const char *input, unsigned long long *out) {
   if (!input || !input[0] || !out) return false;
@@ -136,6 +137,7 @@ typedef struct {
 } sandbox_guest_port_t;
 
 static sandbox_guest_port_t g_guest_port = {0};
+static _Atomic(ant_t *) g_guest_port_owner = NULL;
 
 static uint32_t sandbox_load_u32(const unsigned char *p) {
   return (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
@@ -282,6 +284,9 @@ static ant_value_t sandbox_guest_close(ant_params_t) {
 
 static ant_value_t sandbox_guest_parent_port(ant_t *js) {
   if (!ant_sandbox_is_guest_process()) return js_mkundef();
+  ant_t *owner = NULL;
+  
+  if (!atomic_compare_exchange_strong(&g_guest_port_owner, &owner, js) && owner != js) return js_mkundef();
   if (g_guest_port.js == js && is_object_type(g_guest_port.obj)) return g_guest_port.obj;
 
   memset(&g_guest_port, 0, sizeof(g_guest_port));
@@ -309,19 +314,11 @@ static inline sandbox_state_t *sandbox_get_state(ant_value_t value) {
 }
 
 static void sandbox_add_active(sandbox_state_t *state) {
-  if (!state || state->next_active || state->prev_active || g_active_sandboxes == state) return;
-  state->next_active = g_active_sandboxes;
-  if (g_active_sandboxes) g_active_sandboxes->prev_active = state;
-  g_active_sandboxes = state;
+  if (state) Ant_List_Insert(&state->js->sandboxes, state);
 }
 
 static void sandbox_remove_active(sandbox_state_t *state) {
-  if (!state) return;
-  if (state->prev_active) state->prev_active->next_active = state->next_active;
-  else if (g_active_sandboxes == state) g_active_sandboxes = state->next_active;
-  if (state->next_active) state->next_active->prev_active = state->prev_active;
-  state->next_active = NULL;
-  state->prev_active = NULL;
+  if (state) Ant_List_Remove(state);
 }
 
 static void sandbox_free_messages(sandbox_state_t *state) {
@@ -1431,8 +1428,7 @@ static ant_value_t sandbox_terminate(ant_params_t) {
 }
 
 void gc_mark_sandbox(ant_t *js, gc_mark_fn mark) {
-  for (sandbox_state_t *state = g_active_sandboxes; state; state = state->next_active) {
-    if (state->js != js) continue;
+  for (sandbox_state_t *state = js->sandboxes; state; state = state->next) {
     mark(js, state->self);
     if (state->has_run_promise) mark(js, state->run_promise);
     if (state->has_close_promise) mark(js, state->close_promise);
@@ -1459,7 +1455,6 @@ ant_value_t sandbox_library(ant_t *js) {
     js_set_sym(js, js->builtins.sandbox_proto, js->sym.asyncIterator_sym, Ant_Function_Create(sym_this_cb));
     js_set_tostringtag(js, js->builtins.sandbox_proto, js_mkstr(js, "Sandbox", 7));
     js->builtins.sandbox_ctor = Ant_Function_CreateConstructor(js, sandbox_ctor, js->builtins.sandbox_proto, "Sandbox", 0);
-    gc_register_root(&js->builtins.sandbox_ctor);
   }
 
   ant_value_t lib = Ant_Object_CreateBare(js);

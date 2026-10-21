@@ -31,8 +31,8 @@ static void check_child(ant_t *js, double tag) {
 
 int main(void) {
   char stack_base;
-  ant_t *a = ant_create();
-  ant_t *b = ant_create();
+  ant_t *a = ant_create(nullptr);
+  ant_t *b = ant_create(nullptr);
   assert(a && b);
   js_setstackbase(a, &stack_base);
   js_setstackbase(b, &stack_base);

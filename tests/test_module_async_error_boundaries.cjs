@@ -104,17 +104,6 @@ const cases = {
       await rejected(Sandbox.prototype[method].call({}), TypeError);
     }
   `,
-  workerMessageFallback: `
-    const fs = require('node:fs');
-    const { Worker } = require('node:worker_threads');
-    const filename = require('node:path').join(__dirname, 'worker-fallback.cjs');
-    fs.writeFileSync(filename, "process.stdout.write('ANT_WT_MSG:not-json\\\\n');");
-    const worker = new Worker(filename);
-    let message;
-    worker.on('message', value => { message = value; });
-    await new Promise(resolve => worker.on('exit', resolve));
-    assert(message === 'not-json', 'invalid worker JSON should fall back to text');
-  `,
   observableReports: `
     const reason = new Error('observer callback');
     const values = [];

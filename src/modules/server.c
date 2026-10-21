@@ -401,12 +401,22 @@ static void server_signal_close_cb(uv_handle_t *handle) {
   server_maybe_finish_stop(server);
 }
 
+static void server_close_idle_connections(server_runtime_t *server) {
+  for (ant_conn_t *conn = server->listener.connections, *next; conn; conn = next) {
+    next = conn->next;
+    server_conn_state_t *cs = (server_conn_state_t *)ant_conn_get_user_data(conn);
+    if (!cs || cs->active_req || is_object_type(cs->websocket_obj) || ant_conn_buffer_len(conn) > 0) continue;
+    if (!ant_conn_is_closing(conn)) ant_conn_close(conn);
+  }
+}
+
 static void server_begin_stop(server_runtime_t *server, bool force) {
   if (!server) return;
   if (force) server->force_stop = true;
   
   server->stopping = true;
   ant_listener_stop(&server->listener, server->force_stop);
+  if (!server->force_stop) server_close_idle_connections(server);
 
   if (!uv_is_closing((uv_handle_t *)&server->sigint_handle))
     uv_close((uv_handle_t *)&server->sigint_handle, server_signal_close_cb);
@@ -1108,6 +1118,7 @@ static void server_finish_with_response(server_request_t *req, ant_value_t respo
 
   req->response_obj = response_obj;
   req->response_started = true;
+  if (req->server && req->server->stopping) req->keep_alive = false;
   
   head_only = strcasecmp(request_get_data(req->request_obj)->method, "HEAD") == 0;
   status_text = (resp->status_text && resp->status_text[0]) ? resp->status_text : ant_http1_default_status_text(resp->status);
@@ -1356,29 +1367,41 @@ static void server_write_cb(ant_conn_t *conn, int status, void *user_data) {
 
   case SERVER_WRITE_KEEP_ALIVE:
     if (req) server_network_finish(req);
+    
+    if (cs && cs->server->stopping) {
+      ant_conn_close(conn);
+      break;
+    }
+    
     if (cs && req) {
       ant_conn_consume(conn, req->consumed_len);
       ant_http1_conn_parser_reset(&cs->parser);
       cs->active_req = NULL;
+      
       ant_conn_set_timeout_ms(conn, cs->server->idle_timeout_ms);
       ant_conn_resume_read(conn);
       server_request_release(req);
+      
       if (ant_conn_buffer_len(conn) > 0) server_schedule_drain(cs);
     }
     break;
 
   case SERVER_WRITE_WEBSOCKET_UPGRADE:
     if (req) server_network_finish(req);
+    
     if (cs && req) {
       ant_value_t websocket_obj = response_get_websocket(req->response_obj);
       ant_conn_consume(conn, req->consumed_len);
       ant_http1_conn_parser_free(&cs->parser);
+      
       cs->websocket_obj = websocket_obj;
       cs->active_req = NULL;
+      
       ant_conn_set_timeout_ms(conn, cs->server->websocket_idle_timeout_ms);
       ant_websocket_server_open(req->server->js, websocket_obj);
       server_request_release(req);
       ant_conn_resume_read(conn);
+      
       if (ant_conn_buffer_len(conn) > 0)
         ant_websocket_server_on_read(req->server->js, websocket_obj, conn);
     }
@@ -1614,6 +1637,7 @@ static void server_on_conn_close(ant_conn_t *conn, void *user_data) {
       server_cancel_response_body(cs->active_req, "Client disconnected");
       cs->active_req->conn = NULL;
       cs->active_req = NULL;
+      if (server && server->js->destroying) cs->request.refs = 1;
       server_request_release(&cs->request);
       cs = NULL;
     }
@@ -2004,8 +2028,11 @@ ant_value_t server_start_from_export(ant_t *js, ant_value_t default_export) {
   }
 
   server->port = ant_listener_port(&server->listener);
-  uv_signal_start(&server->sigint_handle, server_signal_cb, SIGINT);
-  uv_signal_start(&server->sigterm_handle, server_signal_cb, SIGTERM);
+  
+  if (!js->worker) {
+    uv_signal_start(&server->sigint_handle, server_signal_cb, SIGINT);
+    uv_signal_start(&server->sigterm_handle, server_signal_cb, SIGTERM);
+  }
 
   server->server_ctx = Ant_Object_CreateBare(js);
   js_set_native(server->server_ctx, server, SERVER_RUNTIME_NATIVE_TAG);
@@ -2037,6 +2064,13 @@ ant_value_t server_start_from_export(ant_t *js, ant_value_t default_export) {
   js_set(js, server->server_ctx, "eventSource", Ant_Function_Create(server_event_source));
 
   return server->server_ctx;
+}
+
+void cleanup_server_module(ant_t *js) {
+  for (server_runtime_t *server = js->server_runtimes, *next; server; server = next) {
+    next = server->next;
+    server_begin_stop(server, true);
+  }
 }
 
 void gc_mark_server(ant_t *js, gc_mark_fn mark) {

@@ -47,6 +47,7 @@ typedef struct {
   size_t young_cap;
 
   sv_code_unit_t *active;
+  sv_func_t *unowned_funcs;
   sv_func_t **fb_watch;
   size_t fb_watch_len;
   size_t fb_watch_cap;

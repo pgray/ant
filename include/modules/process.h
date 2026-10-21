@@ -7,8 +7,15 @@
 #include <stdint.h>
 #include <stddef.h>
 
-void init_process_module(ant_t *js);
 ant_value_t process_library(ant_t *js);
+
+void init_process_module(ant_t *js);
+void cleanup_process_module(ant_t *js);
+void free_process_module(ant_t *js);
+void process_set_private_env(ant_t *js, char **entries);
+
+char **process_env_snapshot(ant_t *js);
+char **process_private_env_snapshot(ant_t *js);
 
 uint64_t process_cwd_epoch_get(void);
 int process_signal_number(const char *name);
@@ -26,7 +33,7 @@ bool process_has_event_listeners(ant_t *js, const char *event_type);
 
 int process_exit_code(ant_t *js);
 int process_run_exit_handlers(ant_t *js, int status);
-[[noreturn]] void process_exit_with(ant_t *js, int status);
+void process_exit_with(ant_t *js, int status);
 
 static inline void process_report_uncaught_exception_if_pending(ant_t *js) {
   if (__builtin_expect(Ant_Exception_Pending(js), 0))

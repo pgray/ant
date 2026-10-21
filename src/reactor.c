@@ -65,7 +65,7 @@ static bool reactor_idle_gc(ant_t *js) {
 void js_run_event_loop(ant_t *js) {
   Ant_Performance_MarkLoopStart(js);
 drain:
-  while (event_loop_alive(js)) {
+  while (!js->terminating && event_loop_alive(js)) {
     process_report_uncaught_exception_if_pending(js);
     js_poll_events(js);
     work_flags_t work = get_pending_work(js);
@@ -79,13 +79,14 @@ drain:
     process_report_uncaught_exception_if_pending(js);
   }
   
+  if (js->terminating) return;
   process_report_uncaught_exception_if_pending(js);
   if (has_pending_immediates(js)) process_immediates(js);
   process_microtasks(js);
   
   ant_value_t code = js_mknum(process_exit_code(js));
   emit_process_event(js, "beforeExit", &code, 1);
-  if (event_loop_alive(js)) goto drain;
+  if (!js->terminating && event_loop_alive(js)) goto drain;
 }
 
 void js_reactor_pump_repl_nowait(ant_t *js) {

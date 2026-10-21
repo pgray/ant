@@ -8,7 +8,7 @@
 #include <stdio.h>
 
 static void check_prefix_copy(ant_t *js) {
-  ant_shape_t *shape = ant_shape_new();
+  ant_shape_t *shape = ant_shape_new(js);
   assert(ant_shape_add_interned_tr(js, &shape, "gc_plain_prefix", ANT_PROP_ATTR_DEFAULT, NULL));
   assert(!ant_shape_may_have_gc_refs(shape));
   ant_shape_t *prefix = shape;
@@ -34,7 +34,7 @@ static void check_prefix_copy(ant_t *js) {
 }
 
 int main(void) {
-  ant_t *js = ant_create();
+  ant_t *js = ant_create(nullptr);
   assert(js);
   check_prefix_copy(js);
   // Only explicit roots keep these objects alive. Conservative C-stack copies
@@ -51,7 +51,7 @@ int main(void) {
   assert(gc_obj_is_marked(js, js_obj_ptr(ordinary)));
 
   js_set(js, owner, "gc_accessor", js_mkundef());
-  int32_t slot = ant_shape_lookup_interned(ptr->shape, intern_string("gc_accessor", 11));
+  int32_t slot = ant_shape_lookup_interned(ptr->shape, intern_string(js, "gc_accessor", 11));
   assert(slot >= 0);
   ant_shape_prop_t *prop = ant_shape_prop_mut_at(ptr->shape, (uint32_t)slot);
   assert(prop && ant_shape_may_have_gc_refs(ptr->shape));
@@ -69,7 +69,7 @@ int main(void) {
   assert(js_symbol_gc_is_marked(symbol, gc_get_epoch(js)));
 
   ant_value_t young = Ant_Object_CreateBare(js);
-  slot = ant_shape_lookup_interned(ptr->shape, intern_string("gc_accessor", 11));
+  slot = ant_shape_lookup_interned(ptr->shape, intern_string(js, "gc_accessor", 11));
   prop = ant_shape_prop_mut_at(ptr->shape, (uint32_t)slot);
   assert(prop);
   prop->getter = young;

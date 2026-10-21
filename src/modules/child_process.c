@@ -1049,7 +1049,7 @@ static ant_value_t child_process_options_arg(ant_value_t *args, int nargs) {
 }
 
 static char **parse_env_object(ant_t *js, ant_value_t env_obj) {
-  if (!is_special_object(env_obj)) return NULL;
+  if (!is_special_object(env_obj)) return process_private_env_snapshot(js);
 
   ant_value_t keys = js_own_property_keys(js, env_obj, false, true);
   if (is_err(keys) || vtype(keys) != kTypeArray) return NULL;
@@ -2699,6 +2699,18 @@ ant_value_t child_process_library(ant_t *js) {
   js_set_tostringtag(js, lib, js_mkstr(js, "child_process", 13));
   
   return lib;
+}
+
+void cleanup_child_process_module(ant_t *js) {
+  for (child_process_t *cp = js->active_children; cp; cp = cp->next) {
+    cp->exited = true;
+    cp->close_emitted = true;
+    close_child_pipe(cp, CHILD_STREAM_STDIN, true);
+    close_child_pipe(cp, CHILD_STREAM_STDOUT, true);
+    close_child_pipe(cp, CHILD_STREAM_STDERR, true);
+    cp->stdout_closed = cp->stderr_closed = true;
+    ant_process_stage_close(&cp->process);
+  }
 }
 
 int has_pending_child_processes(ant_t *js) {

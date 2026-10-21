@@ -394,7 +394,7 @@ static bool wire_decode_value(
           return false;
         }
         const char *interned_key = intern_string(
-          (const char *)key_bytes, key_length
+          js, (const char *)key_bytes, key_length
         );
         if (!interned_key) {
           GC_ROOT_RESTORE(js, root_mark);
@@ -502,7 +502,7 @@ static bool define_payload_property(
   ant_t *js, ant_value_t payload, const char *name, size_t name_length,
   ant_value_t value
 ) {
-  const char *interned_name = intern_string(name, name_length);
+  const char *interned_name = intern_string(js, name, name_length);
   return interned_name && !is_err(
     mkprop_interned_exact(js, payload, interned_name, value, 0)
   );
@@ -674,7 +674,7 @@ ant_wasm_runtime_t *ant_wasm_create(void) {
   ant_wasm_runtime_t *runtime = calloc(1, sizeof(*runtime));
   if (!runtime) return NULL;
 
-  ant_t *js = ant_create();
+  ant_t *js = ant_create(nullptr);
   if (!js) {
     free(runtime);
     return NULL;
@@ -753,7 +753,7 @@ const uint8_t *ant_wasm_set_global(
     return response;
   }
 
-  const char *interned_name = intern_string(name, name_length);
+  const char *interned_name = intern_string(js, name, name_length);
   ant_value_t set_result = interned_name
     ? mkprop_interned_exact(js, js->global, interned_name, value, 0)
     : js_mkerr_typed(js, JS_ERR_INTERNAL, "Unable to intern global name");

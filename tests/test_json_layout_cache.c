@@ -38,7 +38,7 @@ static void check_budget(ant_t *js) {
 
 int main(void) {
   char stack_base;
-  ant_t *js = ant_create();
+  ant_t *js = ant_create(nullptr);
   assert(js);
   js_setstackbase(js, &stack_base);
   GC_ROOT_SAVE(roots, js);

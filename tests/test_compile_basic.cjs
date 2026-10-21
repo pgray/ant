@@ -70,7 +70,13 @@ try {
   assert.ok(r.stdout.includes('fork exit: 0'), r.stdout);
 
   r = spawnSync(out, ['--worker'], { encoding: 'utf8', cwd: os.homedir() });
-  assert.match(r.stderr, /Worker is not available in compiled executables/, r.stderr);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(r.stdout.includes('worker said: worker-ok:5'), r.stdout);
+  assert.ok(r.stdout.includes('worker exit: 0'), r.stdout);
+
+  r = spawnSync(out, ['--worker-relative'], { encoding: 'utf8', cwd: os.homedir() });
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(r.stdout.includes('worker said: worker-ok:7'), r.stdout);
 
   r = spawnSync(runtime, [], { encoding: 'utf8' });
   assert.equal(r.status, 1);

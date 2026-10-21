@@ -28,6 +28,7 @@ typedef struct {
   const uint8_t *body;
   size_t body_len;
   bool chunked_body;
+  struct ant_http_pool *pool;
 } ant_http_request_options_t;
 
 typedef struct {
@@ -69,9 +70,13 @@ int ant_http_request_start(
 
 uv_loop_t *Ant_Http_RequestLoop(const ant_http_request_t *req);
 int ant_http_request_cancel(ant_http_request_t *req);
+void ant_http_request_abort(ant_http_request_t *req);
 int ant_http_request_write(ant_http_request_t *req, const uint8_t *chunk, size_t len);
 
 void ant_http_request_end(ant_http_request_t *req);
 void ant_http_headers_free(ant_http_header_t *headers);
+
+struct ant_http_pool *ant_http_pool_create(uv_loop_t *loop);
+void ant_http_pool_free(struct ant_http_pool *pool);
 
 #endif

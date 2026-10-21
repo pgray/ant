@@ -1278,7 +1278,7 @@ static ant_value_t assert_strict_object(ant_t *js, ant_value_t assert_fn) {
   js_set_function_name(js, strict_obj, "strict", 6);
 
   for (size_t i = 0; i < countof(members); i++) {
-    const char *key = intern_string(members[i].name, strlen(members[i].name));
+    const char *key = intern_string(js, members[i].name, strlen(members[i].name));
     if (!key) { GC_ROOT_RESTORE(js, mark); return js_mkerr(js, "oom"); }
     mkprop_interned_exact(js, strict_obj, key, js_get(js, assert_fn, members[i].source), ANT_PROP_ATTR_DEFAULT);
   }

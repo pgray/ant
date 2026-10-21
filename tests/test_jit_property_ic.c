@@ -95,7 +95,7 @@ static void check_failed_fills(ant_t *js, ant_value_t object, ant_shape_t *old_s
   registrations_until_failure = 0;
   const char *keys[] = {"target", "absent"};
   for (size_t i = 0; i < sizeof(keys) / sizeof(*keys); i++) {
-    sv_atom_t atom = {.str = intern_string(keys[i], strlen(keys[i])), .len = (uint32_t)strlen(keys[i])};
+    sv_atom_t atom = {.str = intern_string(js, keys[i], strlen(keys[i])), .len = (uint32_t)strlen(keys[i])};
     sv_ic_entry_t ic = {.cached_shape = old_shape, .cached_index = 123, .get_kind = SV_GF_IC_PROTOTYPE};
     sv_func_t callee = {.ic_slots = &ic, .ic_count = 1};
     uint8_t code[] = {OP_GET_FIELD, 0, 0, 0, 0, 0, 0};
@@ -110,7 +110,7 @@ static void check_failed_fills(ant_t *js, ant_value_t object, ant_shape_t *old_s
     else assert(vtype(out) == kTypeUndefined);
   }
 
-  sv_atom_t atom = {.str = intern_string("target", 6), .len = 6};
+  sv_atom_t atom = {.str = intern_string(js, "target", 6), .len = 6};
   sv_ic_entry_t ic = {.cached_shape = old_shape, .cached_index = 123};
   int attempts = registration_attempts;
   assert(js_getnum(sv_put_field_cached(js, object, js_mknum(42), &atom, &ic)) == 42);
@@ -148,10 +148,10 @@ static void check_partial_transition(ant_t *js, ant_shape_t *from, ant_shape_t *
 // it has one owner (shape_prepare_metadata_write); a retained shape is shared,
 // and an edit goes to a copy, leaving the snapshotted shape as it was.
 static void check_shape_metadata_writes_need_one_owner(ant_t *js) {
-  const char *key = intern_string("snapshot", 8);
-  const char *extra = intern_string("extra", 5);
+  const char *key = intern_string(js, "snapshot", 8);
+  const char *extra = intern_string(js, "extra", 5);
   for (unsigned operation = 0; operation < 4; operation++) {
-    ant_shape_t *root = ant_shape_new();
+    ant_shape_t *root = ant_shape_new(js);
     ant_shape_t *shape = ant_shape_clone(root);
     ant_shape_release(root);
     uint32_t slot;
@@ -182,7 +182,7 @@ static void check_shape_metadata_writes_need_one_owner(ant_t *js) {
 
 int main(void) {
   char stack_base;
-  ant_t *js = ant_create();
+  ant_t *js = ant_create(nullptr);
   assert(js);
   js_setstackbase(js, &stack_base);
   check_shape_metadata_writes_need_one_owner(js);

@@ -3,12 +3,6 @@
 #include "silver/call.h"
 #include "napi_internal.h"
 
-static napi_external_entry_t *g_napi_externals = NULL;
-static napi_wrap_entry_t *g_napi_wraps = NULL;
-
-static uint64_t g_napi_external_next_id = 1;
-static uint64_t g_napi_wrap_next_id = 1;
-
 void ant_napi_link_objects(void) {}
 
 static bool napi_slot_get_u64(ant_t *js, ant_value_t obj, internal_slot_t slot, uint64_t *out) {
@@ -25,18 +19,24 @@ static void napi_slot_set_u64(ant_t *js, ant_value_t obj, internal_slot_t slot, 
 static napi_external_entry_t *napi_find_external(ant_t *js, napi_value value) {
   if (!is_object_type((ant_value_t)value)) return NULL;
   uint64_t id = 0;
+  
   if (!napi_slot_get_u64(js, (ant_value_t)value, SLOT_NAPI_EXTERNAL_ID, &id)) return NULL;
   napi_external_entry_t *entry = NULL;
-  HASH_FIND(hh, g_napi_externals, &id, sizeof(id), entry);
+  
+  if (js->napi_env) HASH_FIND(hh, js->napi_env->externals, &id, sizeof(id), entry);
+  
   return entry;
 }
 
 static napi_wrap_entry_t *napi_find_wrap(ant_t *js, napi_value value) {
   if (!is_object_type((ant_value_t)value)) return NULL;
   uint64_t id = 0;
+  
   if (!napi_slot_get_u64(js, (ant_value_t)value, SLOT_NAPI_WRAP_ID, &id)) return NULL;
   napi_wrap_entry_t *entry = NULL;
-  HASH_FIND(hh, g_napi_wraps, &id, sizeof(id), entry);
+  
+  if (js->napi_env) HASH_FIND(hh, js->napi_env->wraps, &id, sizeof(id), entry);
+  
   return entry;
 }
 
@@ -190,11 +190,11 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_create_external(
   napi_external_entry_t *entry = (napi_external_entry_t *)calloc(1, sizeof(*entry));
   if (!entry) return napi_set_last(env, napi_generic_failure, "out of memory");
 
-  entry->id = g_napi_external_next_id++;
+  entry->id = nenv->external_next_id++;
   entry->data = data;
   entry->finalize_cb = finalize_cb;
   entry->finalize_hint = finalize_hint;
-  HASH_ADD(hh, g_napi_externals, id, sizeof(entry->id), entry);
+  HASH_ADD(hh, nenv->externals, id, sizeof(entry->id), entry);
 
   ant_value_t obj = Ant_Object_CreateBare(nenv->js);
   napi_slot_set_u64(nenv->js, obj, SLOT_NAPI_EXTERNAL_ID, entry->id);
@@ -789,8 +789,8 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_wrap(
   if (!entry) {
     entry = (napi_wrap_entry_t *)calloc(1, sizeof(*entry));
     if (!entry) return napi_set_last(env, napi_generic_failure, "out of memory");
-    entry->id = g_napi_wrap_next_id++;
-    HASH_ADD(hh, g_napi_wraps, id, sizeof(entry->id), entry);
+    entry->id = nenv->wrap_next_id++;
+    HASH_ADD(hh, nenv->wraps, id, sizeof(entry->id), entry);
     napi_slot_set_u64(nenv->js, (ant_value_t)js_object, SLOT_NAPI_WRAP_ID, entry->id);
   }
 
@@ -822,8 +822,8 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_add_finalizer(
   if (!entry) {
     entry = (napi_wrap_entry_t *)calloc(1, sizeof(*entry));
     if (!entry) return napi_set_last(env, napi_generic_failure, "out of memory");
-    entry->id = g_napi_wrap_next_id++;
-    HASH_ADD(hh, g_napi_wraps, id, sizeof(entry->id), entry);
+    entry->id = nenv->wrap_next_id++;
+    HASH_ADD(hh, nenv->wraps, id, sizeof(entry->id), entry);
     napi_slot_set_u64(nenv->js, (ant_value_t)js_object, SLOT_NAPI_WRAP_ID, entry->id);
   }
 
@@ -870,7 +870,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_remove_wrap(
   entry->has_wrap = false;
 
   if (!entry->attached_finalize_cb) {
-    HASH_DEL(g_napi_wraps, entry);
+    HASH_DEL(nenv->wraps, entry);
     free(entry);
     js_set_slot((ant_value_t)js_object, SLOT_NAPI_WRAP_ID, js_mkundef());
   }

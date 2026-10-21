@@ -272,6 +272,8 @@ static ant_value_t make_error_value(
   }
   
   js_set_slot(err_obj, SLOT_ERR_TYPE, js_mknum((double)type_bits));
+  js_set_slot(err_obj, SLOT_ERROR_BRAND, js_true);
+  
   ant_value_t proto = js->error_realm
     ? js->error_realm->builtins.error_protos[base_type]
     : js->builtins.error_protos[base_type];

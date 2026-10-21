@@ -1,23 +1,32 @@
 diff --git a/src/http.c b/src/http.c
+index a8b69d1..ba33bcf 100644
 --- a/src/http.c
 +++ b/src/http.c
-@@ -1045,6 +1045,2 @@ void tlsuv_http_req_end(tlsuv_http_req_t *req) {
+@@ -1099,13 +1099,6 @@ void tlsuv_http_req_end(tlsuv_http_req_t *req) {
+ }
+ 
  int tlsuv_http_req_data(tlsuv_http_req_t *req, const char *body, size_t bodylen, tlsuv_http_body_cb cb) {
--    if (strcmp(req->method, "POST") != 0 && strcmp(req->method, "PUT") != 0) {
+-    if (strcmp(req->method, "POST") != 0 &&
+-        strcmp(req->method, "PUT") != 0 &&
+-        strcmp(req->method, "PATCH") != 0 &&
+-        strcmp(req->method, "DELETE") != 0) {
 -        return UV_EINVAL;
 -    }
 -
      if (req->state > headers_sent) {
+         return UV_EINVAL;
+     }
 diff --git a/src/http_req.c b/src/http_req.c
+index 171aede..e275ab7 100644
 --- a/src/http_req.c
 +++ b/src/http_req.c
-@@ -280,7 +280,8 @@ ssize_t http_req_write(tlsuv_http_req_t* req, char* buf, size_t maxlen) {
+@@ -291,7 +291,8 @@ l += a_size;\
      if (strcmp(req->method, "POST") == 0 ||
          strcmp(req->method, "PUT") == 0 ||
+         strcmp(req->method, "DELETE") == 0 ||
 -        strcmp(req->method, "PATCH") == 0) {
 +        strcmp(req->method, "PATCH") == 0 ||
 +        req->req_body != NULL) {
          if (!req->req_chunked && req->req_body_size == -1) {
              size_t req_len = 0;
              struct body_chunk_s* chunk = req->req_body;
-             while (chunk != NULL) {

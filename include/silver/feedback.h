@@ -4,6 +4,7 @@
 #include "debug.h"
 #include "silver/engine.h"
 #include "jit/entry_stub.h"
+#include "modules/buffer.h"
 
 typedef enum sv_tfb_class: uint8_t {
   SV_TFB_NUM   = 1u << 0,
@@ -316,10 +317,68 @@ static inline bool sv_tfb_dense_numeric_element(
   return true;
 }
 
-static inline bool sv_tfb_dense_numeric_get(
-  ant_value_t object, ant_value_t key
+static constexpr uint8_t SV_TFB_ELEM_TYPED_ARRAY = SV_TFB_NUM;
+static constexpr uint8_t SV_TFB_ELEM_TYPE_MIXED = UINT8_MAX;
+
+static inline bool sv_tfb_elem_saw_typed_array(uint8_t feedback) {
+  return (feedback & SV_TFB_ELEM_TYPED_ARRAY) != 0;
+}
+
+static inline int sv_tfb_elem_type(const sv_func_t *func, int bc_off) {
+  sv_func_sidecar_t *sidecar = sv_func_sidecar(func);
+  uint8_t seen = sidecar && sidecar->elem_types && bc_off >= 0 && bc_off < func->code_len
+    ? sidecar->elem_types[bc_off] : 0;
+  return seen && seen != SV_TFB_ELEM_TYPE_MIXED ? seen - 1 : -1;
+}
+
+static inline void sv_tfb_record_elem_type(sv_func_t *func, uint8_t *site, TypedArrayType type) {
+  size_t bc_off = (size_t)(site - sv_func_type_feedback(func));
+  sv_func_sidecar_t *sidecar = sv_func_ensure_sidecar(func);
+  
+  if (!sidecar) return;
+  if (!sidecar->elem_types && !(sidecar->elem_types = calloc((size_t)func->code_len, 1))) return;
+  
+  uint8_t *slot = &sidecar->elem_types[bc_off];
+  uint8_t seen = (uint8_t)(type + 1);
+  uint8_t next = *slot == 0 || *slot == seen ? seen : SV_TFB_ELEM_TYPE_MIXED;
+  
+  if (next != *slot) { *slot = next; func->tfb_version++; }
+}
+
+static inline void sv_tfb_record_typed_array_access(
+  sv_func_t *func, uint8_t *site, uint8_t old, buffer_ta_access_t access
 ) {
-  return sv_tfb_dense_numeric_element(object, key, NULL);
+  uint8_t neu = access != BUFFER_TA_ACCESS_NONE ? (uint8_t)(old | SV_TFB_ELEM_TYPED_ARRAY) : old;
+  sv_tfb_site_update(func, site, old, sv_tfb_add_specialization_sample(old, neu, access == BUFFER_TA_ACCESS_INLINE));
+}
+
+static inline __attribute__((noinline)) void sv_tfb_record_typed_array_get(
+  sv_func_t *func, uint8_t *site, uint8_t old, ant_value_t object, ant_value_t key
+) {
+  TypedArrayType type;
+  buffer_ta_access_t access = buffer_typedarray_inline_get(object, key, &type);
+  if (access != BUFFER_TA_ACCESS_NONE) sv_tfb_record_elem_type(func, site, type);
+  sv_tfb_record_typed_array_access(func, site, old, access);
+}
+
+static inline __attribute__((noinline)) void sv_tfb_record_typed_array_put(
+  sv_func_t *func, uint8_t *site, uint8_t old, ant_value_t object, ant_value_t key, ant_value_t value
+) {
+  TypedArrayType type;
+  buffer_ta_access_t access = buffer_typedarray_inline_put(object, key, value, &type);
+  if (access != BUFFER_TA_ACCESS_NONE) sv_tfb_record_elem_type(func, site, type);
+  sv_tfb_record_typed_array_access(func, site, old, access);
+}
+
+static inline void sv_tfb_record_dense_numeric_get(
+  sv_func_t *func, uint8_t *ip, ant_value_t object, ant_value_t key
+) {
+  uint8_t old;
+  uint8_t *site = sv_tfb_specialization_site(func, ip, &old);
+  if (!site) return;
+  
+  if (vtype(object) != kTypeArray) sv_tfb_record_typed_array_get(func, site, old, object, key);
+  else sv_tfb_record_specialization_at(func, site, old, sv_tfb_dense_numeric_element(object, key, NULL));
 }
 
 static inline bool sv_tfb_dense_numeric_put(
@@ -357,6 +416,11 @@ static inline void sv_tfb_record_dense_numeric_put(
   uint8_t old;
   uint8_t *site = sv_tfb_specialization_site(func, ip, &old);
   if (!site) return;
+  
+  if (vtype(object) != kTypeArray) {
+    sv_tfb_record_typed_array_put(func, site, old, object, key, value);
+    return;
+  }
 
   bool tagged_old = false;
   bool matches = sv_tfb_dense_numeric_put(object, key, value, &tagged_old);

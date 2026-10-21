@@ -709,6 +709,8 @@ static ant_value_t js_message_event_ctor(ant_params_t) {
   if (is_err(r = websocket_event_init_field(js, event, init, "data", ANT_EVENT_FIELD_MESSAGE_data, js_mknull(), NULL))) return r;
   if (is_err(r = websocket_event_init_field(js, event, init, "origin", ANT_EVENT_FIELD_MESSAGE_origin, empty, js_tostring_val))) return r;
   if (is_err(r = websocket_event_init_field(js, event, init, "lastEventId", ANT_EVENT_FIELD_MESSAGE_lastEventId, empty, js_tostring_val))) return r;
+  if (is_err(r = websocket_event_init_field(js, event, init, "source", ANT_EVENT_FIELD_MESSAGE_source, js_mknull(), NULL))) return r;
+  if (is_err(r = websocket_event_init_field(js, event, init, "ports", ANT_EVENT_FIELD_MESSAGE_ports, js_mkarr(js), NULL))) return r;
   
   return event;
 }

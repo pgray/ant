@@ -2,6 +2,7 @@
 #define ARENA_H
 
 #include "cage.h"
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,27 +19,58 @@
 
 typedef struct {
   uint8_t *base;
+  size_t used;
   size_t committed;
-  size_t reserved;
-  size_t watermark;
+} ant_arena_chunk_t;
+
+typedef struct ant_fixed_arena {
+  uint8_t *cursor;
+  uint8_t *end;
+  uint8_t *last_end;
+  void *free_list;
   size_t live_count;
   size_t elem_size;
   size_t epoch_offset;
-  void *free_list;
+  size_t chunk_bytes;
+  size_t committed;
+  size_t limit;
+  ant_arena_chunk_t *chunks;
+  uint32_t chunk_count;
+  uint32_t chunk_cap;
+  _Atomic(uint32_t) *owners;
+  _Atomic(uint16_t) *ordinals;
+  uintptr_t table_base;
+  size_t table_slots;
+  uint32_t id;
 } ant_fixed_arena_t;
 
 #ifdef ANT_WASM_EMBED
+static constexpr unsigned ANT_ARENA_CHUNK_SHIFT = 20;
 static constexpr size_t ANT_ARENA_MAX         = 8ULL * 1024 * 1024;
-static constexpr size_t ARENA_GROW_INCREMENT  = 1ULL * 1024 * 1024;
 static constexpr size_t ANT_CLOSURE_ARENA_MAX = 4ULL * 1024 * 1024;
 static constexpr size_t ANT_UPVALUE_ARENA_MAX = 2ULL * 1024 * 1024;
 static constexpr size_t ANT_PROMISE_ARENA_MAX = 2ULL * 1024 * 1024;
+static constexpr size_t ANT_ARENA_MIN         = 8ULL * 1024 * 1024;
 #else
+static constexpr unsigned ANT_ARENA_CHUNK_SHIFT = 23;
 static constexpr size_t ANT_ARENA_MAX         = 4ULL * 1024 * 1024 * 1024;
-static constexpr size_t ARENA_GROW_INCREMENT  = 8ULL * 1024 * 1024;
 static constexpr size_t ANT_CLOSURE_ARENA_MAX = 512ULL * 1024 * 1024;
 static constexpr size_t ANT_UPVALUE_ARENA_MAX = 512ULL * 1024 * 1024;
 static constexpr size_t ANT_PROMISE_ARENA_MAX = 512ULL * 1024 * 1024;
+static constexpr size_t ANT_ARENA_MIN         = 16ULL * 1024 * 1024;
+#endif
+
+static constexpr size_t ANT_ARENA_CHUNK_SIZE = (size_t)1 << ANT_ARENA_CHUNK_SHIFT;
+static constexpr size_t ARENA_GROW_INCREMENT = ANT_ARENA_CHUNK_SIZE;
+
+static constexpr uint32_t ANT_ARENA_MAX_CHUNKS = (uint32_t)UINT16_MAX + 1;
+static constexpr uint32_t ANT_ARENA_PARTIAL_CHUNK = (uint32_t)1 << 31;
+
+#ifndef ANT_WASM_EMBED
+static_assert(
+  ANT_ARENA_CHUNK_SIZE <= ANT_CAGE_ALIGNMENT, 
+  "arena chunks must not straddle cage-aligned table slots"
+);
 #endif
 
 static inline size_t ant_arena_page_size(void) {
@@ -88,7 +120,7 @@ static inline int ant_arena_commit(void *base, size_t old_size, size_t new_size)
 
   if (new_pages <= old_pages) return 0;
   void *p = VirtualAlloc((char *)base + old_pages, new_pages - old_pages, MEM_COMMIT, PAGE_READWRITE);
-  
+
   return p ? 0 : -1;
 }
 
@@ -96,11 +128,11 @@ static inline int ant_arena_decommit(void *base, size_t old_size, size_t new_siz
   if (new_size >= old_size) return 0;
   size_t new_pages = ant_arena_round_up_page(new_size);
   size_t old_pages = ant_arena_round_up_page(old_size);
-  
+
   if (new_pages >= old_pages) return 0;
   void *decommit_start = (char *)base + new_pages;
   size_t decommit_size = old_pages - new_pages;
-  
+
   return VirtualFree(decommit_start, decommit_size, MEM_DECOMMIT) ? 0 : -1;
 }
 
@@ -153,73 +185,51 @@ static inline int ant_arena_decommit(void *base, size_t old_size, size_t new_siz
 
 #endif
 
-static inline bool fixed_arena_init(ant_fixed_arena_t *a, size_t elem_size, size_t epoch_offset, size_t max_size) {
-  a->base = (uint8_t *)ant_cage_reserve(max_size, ant_arena_page_size());
-  if (!a->base) return false;
-  
-  a->reserved = max_size;
-  a->watermark = 0;
-  a->live_count = 0;
-  a->elem_size = elem_size;
-  a->epoch_offset = epoch_offset;
-  a->free_list = NULL;
-  
-  size_t initial = 2ULL * 1024 * 1024;
-  if (initial > max_size) initial = max_size;
-  
-  if (ant_arena_commit(a->base, 0, initial) != 0) {
-    ant_cage_free(a->base, max_size);
-    a->base = NULL;
-    return false;
-  }
-  
-  a->committed = initial;
-  return true;
+bool fixed_arena_refill(ant_fixed_arena_t *a);
+bool fixed_arena_init(ant_fixed_arena_t *a, size_t elem_size, size_t epoch_offset, size_t max_size);
+
+void fixed_arena_destroy(ant_fixed_arena_t *a);
+void fixed_arena_trim(ant_fixed_arena_t *a, uint32_t chunk, size_t used);
+
+static inline bool fixed_arena_table_slot(const ant_fixed_arena_t *a, const void *ptr, size_t *slot) {
+  uintptr_t index = ((uintptr_t)ptr - a->table_base) >> ANT_ARENA_CHUNK_SHIFT;
+  if (index >= a->table_slots) return false;
+  *slot = index;
+  return (atomic_load_explicit(&a->owners[index], memory_order_relaxed) & ~ANT_ARENA_PARTIAL_CHUNK) == a->id;
 }
 
-static inline void fixed_arena_destroy(ant_fixed_arena_t *a) {
-  if (a->base) ant_cage_free(a->base, a->reserved);
-  a->base = NULL;
-  a->committed = 0;
-  a->reserved = 0;
-  a->watermark = 0;
-  a->live_count = 0;
-  a->free_list = NULL;
+static inline size_t fixed_arena_chunk_used(const ant_fixed_arena_t *a, uint32_t chunk) {
+  return chunk + 1 == a->chunk_count ? (size_t)(a->cursor - a->chunks[chunk].base) : a->chunks[chunk].used;
 }
 
-static inline __attribute__((noinline)) bool fixed_arena_grow(ant_fixed_arena_t *a) {
-  size_t grow = a->committed / 4;
-  
-  if (grow < (64ULL * 1024)) grow = 64ULL * 1024;
-  if (grow > ARENA_GROW_INCREMENT) grow = ARENA_GROW_INCREMENT;
-  
-  size_t new_committed = a->committed + grow;
-  
-  if (new_committed > a->reserved) return false;
-  if (ant_arena_commit(a->base, a->committed, new_committed) != 0) return false;
-  
-  a->committed = new_committed;
-  
-  return true;
+static inline size_t fixed_arena_slots_per_chunk(const ant_fixed_arena_t *a) {
+  return a->chunk_bytes / a->elem_size;
+}
+
+static inline size_t fixed_arena_extent(const ant_fixed_arena_t *a) {
+  if (!a->chunk_count) return 0;
+  return (size_t)(a->chunk_count - 1) * a->chunk_bytes + fixed_arena_chunk_used(a, a->chunk_count - 1);
 }
 
 static inline void *fixed_arena_alloc_uninit(ant_fixed_arena_t *a) {
   if (a->free_list) {
     void *p = a->free_list;
-    
+
     a->free_list = *(void **)p;
     a->live_count++;
-    
+
     return p;
   }
 
-  size_t needed = a->watermark + a->elem_size;
-  if (__builtin_expect(needed > a->committed, 0) && !fixed_arena_grow(a)) return NULL;
+  uint8_t *p = a->cursor;
+  if (__builtin_expect((size_t)(a->end - p) < a->elem_size, 0)) {
+    if (!fixed_arena_refill(a)) return NULL;
+    p = a->cursor;
+  }
 
-  void *p = a->base + a->watermark;
-  a->watermark = needed;
+  a->cursor = p + a->elem_size;
   a->live_count++;
-  
+
   return p;
 }
 
@@ -236,11 +246,59 @@ static inline void fixed_arena_free_elem(ant_fixed_arena_t *a, void *p) {
   if (a->live_count > 0) a->live_count--;
 }
 
+static inline bool fixed_arena_owns(const ant_fixed_arena_t *a, const void *ptr) {
+  size_t slot;
+  return fixed_arena_table_slot(a, ptr, &slot);
+}
+
+static inline bool fixed_arena_past_cursor(const ant_fixed_arena_t *a, const void *ptr) {
+  return (const uint8_t *)ptr >= a->cursor && (const uint8_t *)ptr < a->last_end;
+}
+
+static inline bool fixed_arena_holds_offset(const ant_fixed_arena_t *a, uint64_t offset, const void *ptr) {
+  uint32_t owner = atomic_load_explicit(&a->owners[offset >> ANT_ARENA_CHUNK_SHIFT], memory_order_relaxed);
+  if (__builtin_expect(owner == a->id, 1)) return true;
+  return owner == (a->id | ANT_ARENA_PARTIAL_CHUNK) && !fixed_arena_past_cursor(a, ptr);
+}
+
+static inline bool fixed_arena_locate(const ant_fixed_arena_t *a, const void *ptr, uint32_t *chunk, size_t *offset) {
+  size_t slot;
+  if (!fixed_arena_table_slot(a, ptr, &slot)) return false;
+
+  uint32_t index = atomic_load_explicit(&a->ordinals[slot], memory_order_relaxed);
+  if (index >= a->chunk_count) return false;
+
+  size_t off = (size_t)((const uint8_t *)ptr - a->chunks[index].base);
+  if (off >= fixed_arena_chunk_used(a, index) || off % a->elem_size != 0) return false;
+
+  *chunk = index;
+  *offset = off;
+
+  return true;
+}
+
 static inline bool fixed_arena_contains(const ant_fixed_arena_t *a, const void *ptr) {
-  uintptr_t p = (uintptr_t)ptr;
-  uintptr_t lo = (uintptr_t)a->base;
-  if (p < lo || p >= lo + a->watermark) return false;
-  return ((p - lo) % a->elem_size) == 0;
+  uint32_t chunk;
+  size_t offset;
+  return fixed_arena_locate(a, ptr, &chunk, &offset);
+}
+
+static inline uint32_t fixed_arena_slot_index(const ant_fixed_arena_t *a, const void *ptr) {
+  uint32_t chunk;
+  size_t offset;
+  if (!fixed_arena_locate(a, ptr, &chunk, &offset)) return UINT32_MAX;
+  return (uint32_t)((size_t)chunk * fixed_arena_slots_per_chunk(a) + offset / a->elem_size);
+}
+
+static inline void *fixed_arena_slot_at(const ant_fixed_arena_t *a, uint32_t slot) {
+  size_t per_chunk = fixed_arena_slots_per_chunk(a);
+  size_t chunk = slot / per_chunk;
+  if (chunk >= a->chunk_count) return NULL;
+
+  size_t offset = (slot % per_chunk) * a->elem_size;
+  if (offset >= fixed_arena_chunk_used(a, (uint32_t)chunk)) return NULL;
+
+  return a->chunks[chunk].base + offset;
 }
 
 #endif

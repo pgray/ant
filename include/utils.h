@@ -21,7 +21,9 @@ uint16_t double_to_half(double value);
 char hex_char(int v);
 void hex_encode(const uint8_t *src, size_t len, char *dst);
 
+void ts_strip_thread_cleanup(void);
 int is_typescript_file(const char *filename);
+
 char *resolve_js_file(const char *filename);
 char *resolve_typescript_source_fallback(const char *filename);
 

@@ -1,8 +1,5 @@
 #include "process_stage.h"
-
 #include <string.h>
-
-static void process_stage_close(ant_process_stage_t *stage);
 
 static void process_stage_closed(uv_handle_t *handle) {
   ant_process_stage_t *stage = handle ? handle->data : NULL;
@@ -18,7 +15,7 @@ static void process_stage_exited(
   if (!stage) return;
   if (stage->exit_cb)
     stage->exit_cb(stage, exit_status, term_signal);
-  process_stage_close(stage);
+  ant_process_stage_close(stage);
 }
 
 void ant_process_stage_init(
@@ -61,14 +58,14 @@ int ant_process_stage_spawn(
   );
   stage->handle_open = true;
   if (result < 0) {
-    process_stage_close(stage);
+    ant_process_stage_close(stage);
     return result;
   }
   stage->started = true;
   return 0;
 }
 
-static void process_stage_close(ant_process_stage_t *stage) {
+void ant_process_stage_close(ant_process_stage_t *stage) {
   if (!stage || !stage->handle_open || stage->closed) return;
   uv_handle_t *handle = (uv_handle_t *)&stage->handle;
   if (!uv_is_closing(handle)) uv_close(handle, process_stage_closed);

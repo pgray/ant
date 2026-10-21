@@ -50,8 +50,8 @@ int main(void) {
   char stack_base;
 
   for (int destroy_first = 0; destroy_first < 2; destroy_first++) {
-    ant_t *a = ant_create();
-    ant_t *b = ant_create();
+    ant_t *a = ant_create(nullptr);
+    ant_t *b = ant_create(nullptr);
     assert(a && b);
     js_setstackbase(a, &stack_base);
     js_setstackbase(b, &stack_base);

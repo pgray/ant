@@ -8,8 +8,10 @@
 
 void init_atomics_module(ant_t *js);
 void cleanup_atomics_module(ant_t *js);
+void atomics_wake_isolate(ant_t *js);
 
 typedef struct WaitQueueEntry {
+  ant_t *js;
   pthread_cond_t cond;
   pthread_mutex_t mutex;
   int32_t *address;

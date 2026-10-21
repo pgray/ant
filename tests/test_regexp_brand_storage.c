@@ -7,7 +7,7 @@
 static_assert(sizeof(ant_object_flags_t) == 2, "object flags grew");
 
 int main(void) {
-  ant_t *js = ant_create();
+  ant_t *js = ant_create(nullptr);
   assert(js);
   js_setstackbase(js, NULL);
   assert(ant_object_flag_masks_match_layout());

@@ -178,11 +178,14 @@ void sv_code_unit_finish(sv_code_unit_t *unit) {
 }
 
 void sv_code_unit_add_func(ant_t *js, sv_func_t *func) {
+  if (!func) return;
+  
   sv_code_unit_t *unit = js->code_units.active;
-  if (!unit || !func) return;
+  sv_func_t **head = unit ? &unit->funcs : &js->code_units.unowned_funcs;
+  
   func->unit = unit;
-  func->unit_next = unit->funcs;
-  unit->funcs = func;
+  func->unit_next = *head;
+  *head = func;
 }
 
 bool sv_code_unit_root(ant_t *js, ant_value_t value) {
@@ -246,6 +249,7 @@ static void func_free_sidecar(sv_func_t *func) {
   sv_func_sidecar_t *sidecar = (sv_func_sidecar_t *)(raw & ~ant_sidecar);
   
   free(sidecar->type_feedback);
+  free(sidecar->elem_types);
   free(sidecar->jit_await_map);
   
   sv_try_table_free(sidecar->try_table);
@@ -356,6 +360,13 @@ static void units_check_pins(ant_t *js) {
 void sv_code_units_destroy(ant_t *js) {
   sv_code_units_t *u = &js->code_units;
   units_check_pins(js);
+
+  for (sv_func_t *func = u->unowned_funcs; func; func = func->unit_next) {
+    func_release(js, func);
+    func_free_sidecar(func);
+  }
+  
+  u->unowned_funcs = NULL;
 
   for (sv_code_unit_t *unit = u->units, *next; unit; unit = next) {
     next = unit->next;

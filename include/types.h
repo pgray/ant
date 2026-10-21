@@ -11,6 +11,8 @@ typedef struct ant_isolate_t      ant_t;
 typedef struct ant_realm          ant_realm_t;
 typedef struct ant_pool_block     ant_pool_block_t;
 typedef struct ant_http_request_s ant_http_request_t;
+typedef struct ant_http_pool      ant_http_pool_t;
+typedef struct ant_intern_table   ant_intern_table_t;
 typedef struct ant_process_state  ant_process_state_t;
 typedef struct ant_event_list     ant_event_list_t;
 typedef struct ant_esm_state      ant_esm_state_t;
@@ -62,6 +64,19 @@ typedef struct fs_watcher_s     fs_watcher_t;
 typedef struct fs_request_s     fs_request_t;
 typedef struct fetch_request_s  fetch_request_t;
 typedef struct rl_interface_s   rl_interface_t;
+typedef struct rpc_server       rpc_server_t;
+typedef struct rpc_client       rpc_client_t;
+typedef struct sandbox_state    sandbox_state_t;
+typedef struct lmdb_state       lmdb_state_t;
+typedef struct ant_napi_env__   ant_napi_env_t;
+typedef struct ant_port_binding ant_port_binding_t;
+typedef struct broadcast_member broadcast_member_t;
+typedef struct ant_worker       ant_worker_t;
+
+typedef struct ant_thread_mailbox ant_thread_mailbox_t;
+typedef struct ant_guest        ant_guest_t;
+typedef struct navigator_locks    navigator_locks_t;
+typedef struct perf_eld_monitor   perf_eld_monitor_t;
 
 typedef uint64_t ant_offset_t;
 typedef uint64_t ant_value_t;

@@ -73,6 +73,8 @@
 #include "modules/v8.h"
 #include "modules/vm.h"
 #include "modules/worker_threads.h"
+#include "modules/isolate.h"
+#include "modules/message_port.h"
 #include "modules/headers.h"
 #include "modules/blob.h"
 #include "modules/formdata.h"
@@ -105,6 +107,20 @@ void ant_bootstrap_realm_intrinsics(ant_t *js) {
   init_json_module(js);
   init_reflect_module(js);
   init_uri_module(js);
+}
+
+bool ant_bootstrap_bare(ant_t *js) {
+  js->primordials = js_mkundef();
+  for (size_t i = 0; i < ANT_PRIMORDIAL_COUNT; i++) js->primordial_values[i] = js_mkundef();
+  js->Ant = Ant_Object_Create(js);
+
+  init_well_known_symbols(js);
+  js_init_function_has_instance(js);
+  ant_bootstrap_realm_intrinsics(js);
+  if (!js_realm_finish_intrinsics(js)) return false;
+
+  init_console_module(js);
+  return !Ant_Exception_Pending(js);
 }
 
 void ant_bootstrap_modules(ant_t *js) {
@@ -152,6 +168,8 @@ void ant_bootstrap_modules(ant_t *js) {
   init_events_module(js);
   init_abort_module(js);
   init_websocket_module(js);
+  init_message_port_module(js);
+  init_web_worker_module(js);
   init_performance_module(js);
   init_uri_module(js);
   init_url_module(js);
@@ -164,6 +182,7 @@ void ant_bootstrap_modules(ant_t *js) {
   init_observable_module(js);
 
   ant_register_library(ffi_library, "ant:ffi");
+  ant_register_library(isolate_library, "ant:isolate");
   ant_register_library(lmdb_library, "ant:lmdb");
   ant_register_library(rpc_library, "ant:rpc");
   ant_register_library(syntax_library, "ant:syntax");

@@ -327,7 +327,7 @@ static bool json_prepare_object(
   size_t idx, max;
   yyjson_val *key, *item;
   yyjson_obj_foreach(val, idx, max, key, item) {
-    const char *interned = intern_string(yyjson_get_str(key), yyjson_get_len(key));
+    const char *interned = intern_string(js, yyjson_get_str(key), yyjson_get_len(key));
     if (!interned) return false;
     uint32_t slot;
     int32_t found = ant_shape_lookup_interned(obj->shape, interned);
@@ -432,7 +432,7 @@ static ant_value_t yyjson_to_jsval(
       }
       uint32_t slot = (uint32_t)idx;
       if (duplicates) {
-        const char *interned = intern_find(yyjson_get_str(key), yyjson_get_len(key));
+        const char *interned = intern_find(js, yyjson_get_str(key), yyjson_get_len(key));
         int32_t found = ant_shape_lookup_interned(ptr->shape, interned);
         assert(found >= 0);
         slot = (uint32_t)found;
@@ -1343,7 +1343,7 @@ ant_value_t js_json_stringify(ant_params_t) {
   ant_value_t root_holder = js_mkundef();
   if (nargs < 1) return js_mkerr(js, "JSON.stringify() requires at least 1 argument");
   
-  ctx.tojson_key = intern_string("toJSON", 6);
+  ctx.tojson_key = intern_string(js, "toJSON", 6);
   gc_temp_root_scope_begin(js, &ctx.temp_roots);
   ctx.error_handle = gc_temp_root_add(&ctx.temp_roots, ctx.error);
   ctx.holder_handle = gc_temp_root_add(&ctx.temp_roots, ctx.holder);

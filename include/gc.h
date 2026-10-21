@@ -14,6 +14,7 @@ static constexpr uint32_t GC_MAJOR_TIME_SHARE_HIGH = 102;
 static constexpr uint32_t GC_MAJOR_WORK_SHARE_HIGH = 800;
 
 static constexpr size_t GC_NURSERY_THRESHOLD = 32768;
+static constexpr size_t GC_RECLAIM_MIN_FREE_DIVISOR = 64;
 static constexpr size_t GC_CLOSURE_NURSERY_THRESHOLD = 131072;
 static constexpr size_t GC_CLOSURE_PROMOTED_MAJOR = 262144;
 
@@ -41,6 +42,8 @@ void gc_alloc_check(ant_t *js);
 void gc_pressure(ant_t *js);
 bool gc_alloc_due(ant_t *js);
 bool gc_idle_wanted(ant_t *js);
+bool gc_reclaim_arena(ant_t *js, const struct ant_fixed_arena *arena);
+
 size_t gc_alloc_marker(ant_t *js);
 void gc_idle(ant_t *js, int64_t budget_ms);
 

@@ -1,16 +1,21 @@
 #if defined(_WIN32)
 
 #define WIN32_LEAN_AND_MEAN
+#include <stdatomic.h>
 #include <windows.h>
 #include "heap.h"
 
 size_t jit_heap_page_round(size_t size) {
-  static size_t page = 0;
+  static _Atomic size_t cached = 0;
+  size_t page = atomic_load_explicit(&cached, memory_order_relaxed);
+  
   if (!page) {
     SYSTEM_INFO info;
     GetSystemInfo(&info);
     page = info.dwPageSize ? (size_t)info.dwPageSize : 4096u;
+    atomic_store_explicit(&cached, page, memory_order_relaxed);
   }
+  
   return (size + page - 1) / page * page;
 }
 

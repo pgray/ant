@@ -643,7 +643,7 @@ static inline bool sv_try_get_data_prop_no_effect(
   ant_value_t *out
 ) {
   if (!str || !out) return false;
-  const char *interned = intern_find(str, len);
+  const char *interned = intern_find(js, str, len);
   if (!interned) return false;
   return sv_try_get_data_prop_no_effect_interned(js, obj, interned, len, out);
 }
@@ -1143,7 +1143,7 @@ static inline bool sv_try_symbol_description_ic(
     return true;
   }
 
-  const char *interned = a->str ? a->str : intern_string("description", 11);
+  const char *interned = a->str ? a->str : intern_string(js, "description", 11);
   if (!interned) return false;
   
   if (receiver && ant_shape_lookup_interned(receiver->shape, interned) >= 0) return false;
@@ -1702,6 +1702,13 @@ static inline ant_value_t sv_op_put_elem(sv_vm_t *vm, ant_t *js) {
   ant_value_t val = vm->stack[vm->sp - 1];
   ant_value_t key = vm->stack[vm->sp - 2];
   ant_value_t obj = vm->stack[vm->sp - 3];
+  
+  uint32_t idx;
+  if (sv_number_key_index(key, &idx)) {
+    ant_value_t res = js_setprop_index(js, obj, idx, val);
+    vm->sp -= 3;
+    return res;
+  }
   
   ant_value_t prop_key = sv_key_to_property_key(js, key);
   if (is_err(prop_key)) { 

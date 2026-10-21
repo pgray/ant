@@ -49,27 +49,29 @@ typedef struct {
   size_t size;
 } esm_file_data_t;
 
-bool esm_hooks_present(ant_t *js);
-bool esm_is_json(const char *path);
-
-const char *esm_default_base_path(ant_t *js);
-char *esm_path_to_file_url(const char *path);
-char *esm_path_dirname(const char *path);
-char *esm_file_url_to_path(ant_t *js, const char *specifier);
-char *esm_resolve_path(ant_t *js, const char *specifier, const char *base_path);
-char *esm_resolve_path_require(ant_t *js, const char *specifier, const char *base_path);
-
-ant_module_format_t esm_decide_module_format(ant_t *js, const char *resolved_path);
-esm_module_kind_t esm_classify_kind_for_path(const char *resolved_path);
-esm_module_t *esm_find_module(ant_t *js, const char *module_key);
-
 typedef struct {
   const ant_builtin_bundle_alias_t *alias;
   ant_library_entry_t *library;
   ant_builtin_name_kind_t kind;
 } esm_builtin_t;
 
+bool esm_hooks_present(ant_t *js);
+bool esm_is_json(const char *path);
+bool esm_require_builtin_cacheable(ant_t *js);
+
+const char *esm_default_base_path(ant_t *js);
+char *esm_path_to_file_url(const char *path);
+char *esm_path_dirname(const char *path);
+char *esm_resolve_path(ant_t *js, const char *specifier, const char *base_path);
+char *esm_resolve_path_require(ant_t *js, const char *specifier, const char *base_path);
+
+ant_module_format_t esm_decide_module_format(ant_t *js, const char *resolved_path);
+esm_module_kind_t esm_classify_kind_for_path(const char *resolved_path);
+esm_module_t *esm_find_module(ant_t *js, const char *module_key);
 esm_builtin_t esm_find_builtin(const char *specifier, size_t spec_len);
+
+ant_value_t esm_require_load_builtin(ant_t *js, const char *specifier, esm_builtin_t builtin);
+ant_value_t esm_require_cstr(ant_t *js, const char *specifier, size_t spec_len, const char *base_path, bool not_builtin);
 ant_value_t esm_value_namespace(ant_t *js, ant_value_t value, ant_value_t default_value);
 
 ant_value_t esm_read_file(

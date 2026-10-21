@@ -141,6 +141,18 @@ void coroutine_clear_await_registration(coroutine_t *coro) {
   if (coroutine_detach_await_registration(coro)) coroutine_release(coro);
 }
 
+void coroutine_abandon_await(coroutine_t *coro) {
+  if (!coro) return;
+  
+  coro->await_registered = false;
+  coro->awaited_promise = js_mkundef();
+  
+  bool held = (coro->hold_bits & CORO_HOLD_AWAIT) != 0;
+  coro->hold_bits &= (uint8_t)~CORO_HOLD_AWAIT;
+  
+  if (held) coroutine_release(coro);
+}
+
 static void coroutine_activate(ant_t *js, coroutine_t *coro) {
   if (!js || !coro) return;
 

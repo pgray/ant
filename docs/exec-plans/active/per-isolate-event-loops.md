@@ -1,7 +1,7 @@
 # Per-Isolate Event Loops
 
 Status: active
-Last reviewed: 2026-10-14
+Last reviewed: 2026-10-17
 Owner: theMackabu
 
 ## Goal
@@ -72,7 +72,9 @@ their isolate with `Ant_Loop_Isolate(handle->loop)` instead of a stored
 ## Follow-ups
 
 - Multiple isolates on one thread must each be driven (`uv_run` per loop);
-  the reactor only runs its own isolate's loop.
-- Remaining modules with handles (net, tls, fs watchers, child_process, process
-  signals/tty, readline, server, rpc, atomics, sandbox, napi) need teardowns like
-  the three above before the default loop can be walked safely.
+  the reactor only runs its own isolate's loop. Workers sidestep this with one
+  isolate per thread.
+- Module teardowns now exist for net, `Ant.serve`, fetch, child_process, fs,
+  readline, N-API, message ports, process signals/stdin and worker children; see
+  [the worker threads plan](worker-threads-isolates.md#teardown). `Ant_Loop_Drain`
+  also waits for in-flight requests on owned loops.

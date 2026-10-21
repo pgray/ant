@@ -240,6 +240,33 @@ static void jit_sink_cold_blocks(jit_compile_t *c, MIR_insn_t body_tail) {
   }
 }
 
+static void jit_sync_try_stack(jit_compile_t *c) {
+  if (!c->try_at) return;
+  int *parent = c->try_at + c->func->code_len;
+  int chain[JIT_TRY_MAX];
+  int n = 0;
+  
+  for (int state = c->try_at[c->bc_off]; state >= 0; state = parent[state]) {
+    if (n == JIT_TRY_MAX) {
+      c->ok = false;
+      return;
+    }
+    chain[n++] = state;
+  }
+  
+  for (int i = 0; i < n; i++) {
+    int push = chain[n - 1 - i];
+    int catch_off = push + sv_op_size[OP_TRY_PUSH] + sv_get_i32(c->func->code + push + 1);
+    c->jit_try_stack[i] = (jit_try_entry_t){
+      .catch_label = label_for_offset(c->ctx, &c->lm, catch_off),
+      .catch_bc_off = catch_off,
+      .saved_sp = c->depth[push],
+    };
+  }
+  
+  c->jit_try_depth = n;
+}
+
 sv_jit_func_t sv_jit_compile(ant_t *js, sv_func_t *func, sv_closure_t *hint_closure) {
   return sv_jit_compile_tier(js, func, hint_closure, SV_JIT_TIER_AUTO);
 }
@@ -316,6 +343,11 @@ static sv_jit_func_t jit_compile_tier(ant_t *js, sv_func_t *func, sv_closure_t *
     free(c->call_tagging.sites);
     return NULL;
   }
+  
+  if (c->func->has_try) {
+    c->try_at = sv_func_try_map(c->func);
+    if (!c->try_at) c->ok = false;
+  }
 
   while (c->ip < c->end) {
     c->bc_off = (int)(c->ip - c->func->code);
@@ -327,13 +359,13 @@ static sv_jit_func_t jit_compile_tier(ant_t *js, sv_func_t *func, sv_closure_t *
     }
 
     if (c->depth[c->bc_off] < 0) {
-      if (c->op == OP_TRY_PUSH) c->dead_try_depth++;
-      else if (c->op == OP_TRY_POP && c->dead_try_depth > 0) c->dead_try_depth--;
-      else if (c->op == OP_TRY_POP && c->jit_try_depth > 0) c->jit_try_depth--;
       c->previous_ip = NULL;
       c->ip += c->sz;
       continue;
     }
+    
+    jit_sync_try_stack(c);
+    if (!c->ok) break;
 
     int i = jit_label_at(&c->lm, c->bc_off);
     if (i >= 0) {
@@ -675,6 +707,7 @@ static sv_jit_func_t jit_compile_tier(ant_t *js, sv_func_t *func, sv_closure_t *
   free(c->deferred_bails);
   free(c->lm.index);
   free(c->depth);
+  free(c->try_at);
 
   if (!c->ok) {
     if (sv_jit_warn_unlikely) fprintf(

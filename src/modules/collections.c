@@ -141,19 +141,13 @@ static bool map_store_entry(
     return true;
   }
 
-  entry = calloc(1, sizeof(map_entry_t));
+  entry = calloc(1, sizeof(map_entry_t) + key.len);
   if (!entry) {
     collection_key_free(&key);
     return false;
   }
 
-  entry->key = malloc(key.len);
-  if (!entry->key) {
-    collection_key_free(&key);
-    free(entry);
-    return false;
-  }
-
+  entry->key = (unsigned char *)(entry + 1);
   memcpy(entry->key, key.bytes, key.len);
   entry->key_len = key.len;
   entry->key_val = key_val;
@@ -180,19 +174,13 @@ static bool set_store_entry(ant_t *js, set_entry_t **set_ptr, ant_value_t value)
     return true;
   }
 
-  entry = calloc(1, sizeof(set_entry_t));
+  entry = calloc(1, sizeof(set_entry_t) + key.len);
   if (!entry) {
     collection_key_free(&key);
     return false;
   }
 
-  entry->key = malloc(key.len);
-  if (!entry->key) {
-    collection_key_free(&key);
-    free(entry);
-    return false;
-  }
-
+  entry->key = (unsigned char *)(entry + 1);
   memcpy(entry->key, key.bytes, key.len);
   entry->key_len = key.len;
   entry->value = stored_value;
@@ -208,6 +196,26 @@ bool collections_map_store_cloned_entry(
 ) {
   ant_value_t key_val = normalize_map_key(key);
   return map_store_entry(js, map_ptr, key, key_val, value);
+}
+
+ant_value_t collections_map_create(ant_t *js, map_entry_t ***out_map) {
+  ant_value_t map_obj = Ant_Object_CreateBare(js);
+  if (is_err(map_obj)) return map_obj;
+  js_obj_ptr(map_obj)->type_tag = kTypeMap;
+
+  ant_value_t map_proto = js->builtins.map_proto;
+  if (is_special_object(map_proto)) js_set_proto_init(map_obj, map_proto);
+
+  map_entry_t **map_head = calloc(1, sizeof(map_entry_t *));
+  if (!map_head) return js_mkerr(js, "out of memory");
+
+  js_set_native(map_obj, map_head, MAP_NATIVE_TAG);
+  if (out_map) *out_map = map_head;
+  return map_obj;
+}
+
+bool collections_set_store_cloned_entry(ant_t *js, set_entry_t **set_ptr, ant_value_t value) {
+  return set_store_entry(js, set_ptr, value);
 }
 
 map_entry_t **get_map_from_obj(ant_value_t obj) {
@@ -645,12 +653,13 @@ static ant_value_t map_delete(ant_params_t) {
   
   if (!map_ptr) return js_false;
   map_entry_t *entry = Ant_Map_Find(js, map_ptr, args[0]);
+  
   if (entry) {
     HASH_DEL(*map_ptr, entry);
-    free(entry->key);
     free(entry);
     return js_true;
   }
+  
   return js_false;
 }
 
@@ -662,11 +671,10 @@ static ant_value_t map_clear(ant_params_t) {
   map_entry_t *entry, *tmp;
   HASH_ITER(hh, *map_ptr, entry, tmp) {
     HASH_DEL(*map_ptr, entry);
-    free(entry->key);
     free(entry);
   }
-  *map_ptr = NULL;
   
+  *map_ptr = NULL;
   return js_mkundef();
 }
 
@@ -698,6 +706,14 @@ static ant_value_t map_forEach(ant_params_t) {
   }}
   
   return js_mkundef();
+}
+
+static void collection_iter_finalize(ant_t *js, ant_object_t *obj) {
+  ant_value_t value = js_obj_from_ptr(obj);
+  uint32_t tag = obj->native_tag;
+  if (tag != MAP_ITER_NATIVE_TAG && tag != SET_ITER_NATIVE_TAG) return;
+  free(js_get_native(value, tag));
+  js_clear_native(value, tag);
 }
 
 bool advance_map(ant_t *js, iterator_t *it, ant_value_t *out) {
@@ -744,6 +760,7 @@ static ant_value_t create_map_iterator(ant_t *js, ant_value_t map_obj, iter_type
   js_set_proto_init(iter, js->builtins.map_iter_proto);
   js_set_slot_wb(js, iter, SLOT_DATA, map_obj);
   js_set_native(iter, state, MAP_ITER_NATIVE_TAG);
+  js_set_finalizer(iter, collection_iter_finalize);
   
   return iter;
 }
@@ -797,6 +814,7 @@ static ant_value_t create_set_iterator(ant_t *js, ant_value_t set_obj, iter_type
   js_set_proto_init(iter, js->builtins.set_iter_proto);
   js_set_slot_wb(js, iter, SLOT_DATA, set_obj);
   js_set_native(iter, state, SET_ITER_NATIVE_TAG);
+  js_set_finalizer(iter, collection_iter_finalize);
   
   return iter;
 }
@@ -833,38 +851,35 @@ static ant_value_t set_delete(ant_params_t) {
   
   ant_value_t this_val = js->this_val;
   set_entry_t **set_ptr = get_set_from_obj(this_val);
+  
   if (!set_ptr) return js_false;
-
   set_entry_t *entry = Ant_Set_Find(js, set_ptr, args[0]);
   
   if (entry) {
     HASH_DEL(*set_ptr, entry);
-    free(entry->key);
     free(entry);
     return js_true;
   }
+  
   return js_false;
 }
 
 static ant_value_t set_clear(ant_params_t) {
-  (void)args; (void)nargs;
   ant_value_t this_val = js->this_val;
   set_entry_t **set_ptr = get_set_from_obj(this_val);
   if (!set_ptr) return js_mkundef();
-  
+
   set_entry_t *entry, *tmp;
   HASH_ITER(hh, *set_ptr, entry, tmp) {
     HASH_DEL(*set_ptr, entry);
-    free(entry->key);
     free(entry);
   }
-  *set_ptr = NULL;
   
+  *set_ptr = NULL;
   return js_mkundef();
 }
 
 static ant_value_t set_size(ant_params_t) {
-  (void)args; (void)nargs;
   ant_value_t this_val = js->this_val;
   set_entry_t **set_ptr = get_set_from_obj(this_val);
   if (!set_ptr) return js_mknum(0);
@@ -873,12 +888,10 @@ static ant_value_t set_size(ant_params_t) {
 }
 
 static ant_value_t set_values(ant_params_t) {
-  (void)args; (void)nargs;
   return create_set_iterator(js, js->this_val, ITER_TYPE_SET_VALUES);
 }
 
 static ant_value_t set_entries(ant_params_t) {
-  (void)args; (void)nargs;
   return create_set_iterator(js, js->this_val, ITER_TYPE_SET_ENTRIES);
 }
 
@@ -891,19 +904,21 @@ static ant_value_t set_forEach(ant_params_t) {
   
   ant_value_t callback = args[0];
   ant_value_t this_arg = nargs > 1 ? args[1] : js_mkundef();
-  if (set_ptr && *set_ptr) {
-  set_entry_t *entry, *tmp;
   
-  HASH_ITER(hh, *set_ptr, entry, tmp) {
-    ant_value_t call_args[3] = { entry->value, entry->value, this_val };
-    ant_value_t result = sv_vm_call(js->vm, js, callback, this_arg, call_args, 3, NULL, js_mkundef());
-    if (is_err(result)) return result;
-  }}
+  if (set_ptr && *set_ptr) {
+    set_entry_t *entry, *tmp;
+    
+    HASH_ITER(hh, *set_ptr, entry, tmp) {
+      ant_value_t call_args[3] = { entry->value, entry->value, this_val };
+      ant_value_t result = sv_vm_call(js->vm, js, callback, this_arg, call_args, 3, NULL, js_mkundef());
+      if (is_err(result)) return result;
+    }
+  }
   
   return js_mkundef();
 }
 
-static ant_value_t make_set_result(ant_t *js, set_entry_t ***out_set) {
+ant_value_t collections_set_create(ant_t *js, set_entry_t ***out_set) {
   ant_value_t set_obj = Ant_Object_CreateBare(js);
   if (is_err(set_obj)) return set_obj;
   js_obj_ptr(set_obj)->type_tag = kTypeSet;
@@ -932,7 +947,6 @@ static void set_result_delete(ant_t *js, set_entry_t **set_ptr, ant_value_t valu
   set_entry_t *entry = Ant_Set_Find(js, set_ptr, value);
   if (!entry) return;
   HASH_DEL(*set_ptr, entry);
-  free(entry->key);
   free(entry);
 }
 
@@ -1065,7 +1079,7 @@ static ant_value_t set_union(ant_params_t) {
   if (is_err(rec)) return rec;
 
   set_entry_t **out_set = NULL;
-  ant_value_t out = make_set_result(js, &out_set);
+  ant_value_t out = collections_set_create(js, &out_set);
   if (is_err(out)) return out;
   set_build_ctx_t build = { out, out_set };
 
@@ -1102,7 +1116,7 @@ static ant_value_t set_intersection(ant_params_t) {
   if (is_err(rec)) return rec;
 
   set_entry_t **out_set = NULL;
-  ant_value_t out = make_set_result(js, &out_set);
+  ant_value_t out = collections_set_create(js, &out_set);
   if (is_err(out)) return out;
 
   double this_size = (double)HASH_COUNT(*this_set);
@@ -1154,7 +1168,7 @@ static ant_value_t set_difference(ant_params_t) {
   if (is_err(rec)) return rec;
 
   set_entry_t **out_set = NULL;
-  ant_value_t out = make_set_result(js, &out_set);
+  ant_value_t out = collections_set_create(js, &out_set);
   if (is_err(out)) return out;
 
   set_entry_t *entry, *tmp;
@@ -1202,7 +1216,7 @@ static ant_value_t set_symmetricDifference(ant_params_t) {
   if (is_err(rec)) return rec;
 
   set_entry_t **out_set = NULL;
-  ant_value_t out = make_set_result(js, &out_set);
+  ant_value_t out = collections_set_create(js, &out_set);
   if (is_err(out)) return out;
 
   set_entry_t *entry, *tmp;

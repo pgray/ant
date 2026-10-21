@@ -95,6 +95,10 @@ bool weakmap_table_delete(weakmap_table_t *table, ant_value_t key);
 ant_value_t js_weakref_create(ant_t *js, ant_value_t target);
 weakmap_entry_t *weakmap_table_find(weakmap_table_t *table, ant_value_t key);
 
+ant_value_t collections_map_create(ant_t *js, map_entry_t ***out_map);
+ant_value_t collections_set_create(ant_t *js, set_entry_t ***out_set);
+bool collections_set_store_cloned_entry(ant_t *js, set_entry_t **set_ptr, ant_value_t value);
+
 bool collections_map_store_cloned_entry(
   ant_t *js, map_entry_t **map_ptr,
   ant_value_t key, ant_value_t value

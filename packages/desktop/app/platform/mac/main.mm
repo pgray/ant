@@ -117,7 +117,7 @@ int main(int argc, char **argv) {
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 
     volatile char stack_base;
-    ant_t *js = ant_create();
+    ant_t *js = ant_create(NULL);
     if (!js) {
       fputs("failed to create Ant runtime\n", stderr);
       ant_desktop_cef_shutdown();
