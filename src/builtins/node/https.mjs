@@ -1,10 +1,6 @@
 import * as http from 'node:http';
 import tls from 'node:tls';
 
-const kSecureContext = Symbol('ant.internal.https.secureContext');
-
-const TLS_CONTEXT_OPTION_KEYS = ['allowPartialChain', 'ca', 'cert', 'key'];
-
 const TLS_SERVER_OPTION_KEYS = [
   'ALPNProtocols',
   'SNICallback',
@@ -25,6 +21,7 @@ const TLS_SERVER_OPTION_KEYS = [
   'rejectUnauthorized',
   'requestCert',
   'secureOptions',
+  'secureContext',
   'secureProtocol',
   'sessionIdContext',
   'sigalgs',
@@ -59,21 +56,6 @@ function splitServerOptions(options) {
     tlsOptions: hasTlsOptions ? tlsOptions : undefined,
     hasTlsOptions
   };
-}
-
-function toContextOptions(options) {
-  const contextOptions = createPlainObject();
-
-  if (!options) return contextOptions;
-  TLS_CONTEXT_OPTION_KEYS.forEach(key => {
-    if (options[key] !== undefined) contextOptions[key] = options[key];
-  });
-  return contextOptions;
-}
-
-function maybeCreateSecureContext(options) {
-  if (!options) return undefined;
-  return tls.createSecureContext(toContextOptions(options));
 }
 
 function normalizeCreateServerArgs(options, requestListener) {
@@ -126,15 +108,48 @@ function applyDefaultHttpsProtocol(input, options) {
   return [{ ...input, protocol: input.protocol ?? 'https:' }, options];
 }
 
-// compatibility stub only
-export class Server extends http.Server {
+const HTTP_SERVER_METHODS = ['_attachSocket', '_drainSocket', 'closeAllConnections', 'closeIdleConnections', 'setTimeout'];
+
+export class Server extends tls.Server {
   constructor(options, requestListener) {
     const normalized = normalizeCreateServerArgs(options, requestListener);
     const split = splitServerOptions(normalized.serverOptions);
 
-    super(split.httpOptions, normalized.requestListener);
-    this[kSecureContext] = split.hasTlsOptions ? maybeCreateSecureContext(split.tlsOptions) : undefined;
+    super(split.tlsOptions);
+    this.timeout = 0;
+    this.headersTimeout = 60000;
+    this.requestTimeout = 300000;
+    this.keepAliveTimeout = 5000;
+    this.maxHeadersCount = 2000;
+    this._socketStates = new Set();
+    this._closing = false;
+
+    this.on('secureConnection', socket => {
+      this.emit('connection', socket);
+      this._attachSocket(socket);
+    });
+
+    if (typeof normalized.requestListener === 'function') this.on('request', normalized.requestListener);
   }
+
+  listen(...args) {
+    this._closing = false;
+    return super.listen(...args);
+  }
+
+  close(callback) {
+    this._closing = true;
+    this.closeIdleConnections();
+    return super.close(callback);
+  }
+}
+
+for (const name of HTTP_SERVER_METHODS) {
+  Object.defineProperty(Server.prototype, name, {
+    value: http.Server.prototype[name],
+    writable: true,
+    configurable: true
+  });
 }
 
 export class Agent extends http.Agent {

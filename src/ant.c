@@ -117,6 +117,7 @@
 #include "modules/fetch.h"
 #include "modules/http.h"
 #include "modules/net.h"
+#include "modules/tls.h"
 
 #define D(x) ((double)(x))
 
@@ -21103,6 +21104,7 @@ void js_destroy(ant_t *js) {
   cleanup_websocket_module(js);
   cleanup_dns_module(js);
   cleanup_net_module(js);
+  cleanup_tls_module(js);
   cleanup_server_module(js);
   cleanup_fetch_module(js);
   

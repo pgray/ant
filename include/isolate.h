@@ -151,6 +151,7 @@ struct ant_isolate_t {
   net_server_t *net_servers;
   net_socket_t *net_sockets;
   ant_tls_socket_t *tls_sockets;
+  ant_tls_server_t *tls_servers;
   rpc_server_t *rpc_servers;
   rpc_client_t *rpc_clients;
   sandbox_state_t *sandboxes;

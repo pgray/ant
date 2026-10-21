@@ -443,8 +443,11 @@ static bool ant_http_should_retry(const ant_http_request_t *req, int code) {
   if (req->retried || req->chunked || req->got_response || req->canceled) return false;
   if (!req->conn || !req->conn->host || req->conn->host->pool->closing) return false;
   if (!ant_http_method_idempotent(req->method)) return false;
-  if (code == UV_ETIMEDOUT) return true;
-  return req->reused && (code == UV_EOF || code == UV_ECONNRESET || code == UV_EPIPE || code == UV_ECONNABORTED);
+
+  return req->reused && (
+    code == UV_EOF || code == UV_ECONNRESET || code == UV_EPIPE ||
+    code == UV_ECONNABORTED || code == UV_ETIMEDOUT
+  );
 }
 
 static void ant_http_retry(ant_http_request_t *req) {

@@ -43,11 +43,11 @@ struct net_socket_s {
   ant_conn_t *conn;
   ant_listener_t client_listener;
   net_server_t *server;
-  ant_value_t encoding;
   net_socket_t *next;
   net_socket_t **pprev;
   struct net_socket_s *next_in_server;
   bool allow_half_open;
+  bool string_encoding;
   bool destroyed;
   bool connecting;
   bool had_error;
@@ -387,24 +387,21 @@ static void net_server_maybe_finish_close(net_server_t *server) {
   net_remove_active_server(server);
 }
 
-static void net_socket_detach(net_socket_t *socket) {
-  if (!socket) return;
+static void net_socket_unlink(net_socket_t *socket) {
+  net_server_t *server = socket->server;
 
-  if (socket->server) {
+  if (server) {
     net_socket_t **it = NULL;
     for (it = &socket->server->sockets; *it; it = &(*it)->next_in_server) if (*it == socket) {
       *it = socket->next_in_server;
       break;
     }
     socket->next_in_server = NULL;
+    socket->server = NULL;
   }
 
   net_remove_active_socket(socket);
-  if (is_object_type(socket->obj))
-    js_clear_native(socket->obj, NET_SOCKET_NATIVE_TAG);
-  
-  net_server_maybe_finish_close(socket->server);
-  free(socket);
+  net_server_maybe_finish_close(server);
 }
 
 static void net_server_finalize(ant_t *js, ant_object_t *obj) {
@@ -426,7 +423,10 @@ static void net_server_finalize(ant_t *js, ant_object_t *obj) {
 
 static void net_socket_finalize(ant_t *js, ant_object_t *obj) {
   net_socket_t *socket = net_socket_data(js_obj_from_ptr(obj));
-  if (socket && !socket->conn) net_socket_detach(socket);
+  if (!socket || socket->conn) return;
+  net_socket_unlink(socket);
+  js_clear_native(js_obj_from_ptr(obj), NET_SOCKET_NATIVE_TAG);
+  free(socket);
 }
 
 static ant_value_t net_socket_emit_connect_error(ant_params_t) {
@@ -467,7 +467,6 @@ static net_socket_t *net_socket_create(ant_t *js, bool allow_half_open, ant_valu
 
   socket->js = js;
   socket->obj = obj;
-  socket->encoding = js_mkundef();
   socket->allow_half_open = allow_half_open;
 
   js_set_native(obj, socket, NET_SOCKET_NATIVE_TAG);
@@ -591,7 +590,7 @@ static void net_socket_on_read(ant_conn_t *conn, ssize_t nread, void *user_data)
   offset = total - (size_t)nread;
   buffer = ant_conn_buffer(conn) + offset;
 
-  if (vtype(socket->encoding) == kTypeString)
+  if (socket->string_encoding)
     chunk = js_mkstr(socket->js, buffer, (size_t)nread);
   else chunk = net_make_buffer_chunk(socket->js, buffer, (size_t)nread);
 
@@ -646,10 +645,11 @@ static void net_server_on_conn_close(ant_conn_t *conn, void *user_data) {
   arg = js_bool(socket->had_error);
   socket->conn = NULL;
   socket->destroyed = true;
+  
   net_socket_sync_state(socket);
   net_emit(socket->js, socket->obj, "close", &arg, 1);
   ant_conn_set_user_data(conn, NULL);
-  net_socket_detach(socket);
+  net_socket_unlink(socket);
 }
 
 static void net_socket_on_connect(ant_conn_t *conn, int status, void *user_data) {
@@ -762,7 +762,7 @@ static ant_value_t js_net_socket_resume(ant_params_t) {
 static ant_value_t js_net_socket_setEncoding(ant_params_t) {
   net_socket_t *socket = net_require_socket(js, js_getthis(js));
   if (!socket) return Ant_Exception_Current(js);
-  socket->encoding = nargs > 0 && vtype(args[0]) != kTypeUndefined ? js_tostring_val(js, args[0]) : js_mkundef();
+  socket->string_encoding = nargs > 0 && vtype(args[0]) != kTypeUndefined;
   return js_getthis(js);
 }
 
@@ -867,6 +867,7 @@ static ant_value_t js_net_socket_end(ant_params_t) {
 static ant_value_t js_net_socket_destroy(ant_params_t) {
   net_socket_t *socket = net_require_socket(js, js_getthis(js));
   if (!socket) return Ant_Exception_Current(js);
+  if (socket->destroyed) return js_getthis(js);
 
   if (nargs > 0 && vtype(args[0]) != kTypeUndefined && vtype(args[0]) != kTypeNull) {
     ant_value_t err = args[0];
@@ -874,7 +875,12 @@ static ant_value_t js_net_socket_destroy(ant_params_t) {
     net_emit(js, socket->obj, "error", &err, 1);
   }
 
-  if (socket->conn) ant_conn_close(socket->conn);
+  socket->destroyed = true;
+  socket->connecting = false;
+  
+  net_socket_sync_state(socket);
+  if (socket->conn && !ant_conn_is_closing(socket->conn)) ant_conn_close(socket->conn);
+  
   return js_getthis(js);
 }
 
@@ -1266,11 +1272,6 @@ void gc_mark_net(ant_t *js, gc_mark_fn mark) {
   net_server_t *server = NULL;
   net_socket_t *socket = NULL;
 
-  for (server = js->net_servers; server; server = server->next)
-    mark(js, server->obj);
-    
-  for (socket = js->net_sockets; socket; socket = socket->next) {
-    mark(js, socket->obj);
-    if (vtype(socket->encoding) != kTypeUndefined) mark(js, socket->encoding);
-  }
+  for (server = js->net_servers; server; server = server->next) mark(js, server->obj);
+  for (socket = js->net_sockets; socket; socket = socket->next) mark(js, socket->obj);
 }

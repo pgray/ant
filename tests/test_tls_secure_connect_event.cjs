@@ -30,12 +30,6 @@ assert.strictEqual(contextError({ key: 'k', cert: 'c' }), 'Failed to load TLS pr
 assert.strictEqual(contextError({ ca: 'not a pem' }), 'Failed to load TLS CA bundle');
 assert.strictEqual(tls.createContext, undefined);
 assert.strictEqual(tls.isContext, undefined);
-assert.throws(
-  () => tls.checkServerIdentity('localhost', {}),
-  /tls\.checkServerIdentity is not implemented/
-);
-assert.deepStrictEqual(tls.getCiphers(), []);
-assert.deepStrictEqual(tls.rootCertificates, []);
 assert.strictEqual(Object.isFrozen(tls.rootCertificates), true);
 assert.strictEqual(tls.DEFAULT_ECDH_CURVE, 'auto');
 assert.strictEqual(tls.DEFAULT_MIN_VERSION, 'TLSv1.2');

@@ -63,6 +63,7 @@ export function targets() {
     'test_regexp_flag_accessors.cjs',
     'test_property_descriptor_objects.cjs',
     'test_inspect_extra_props.cjs',
+    'test_tls_server.mjs',
     'test_wasm_js_api_surface.cjs',
     'test_descriptor_proxy_error_inspect.cjs',
     'test_dataview_fast_path.cjs',
