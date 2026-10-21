@@ -991,9 +991,68 @@ static ant_value_t assert_not_deep_strict_equal(ant_params_t) {
   return js_mkundef();
 }
 
+static ant_value_t assert_regexp(ant_native_params_t, bool expect_match, const char *op) {
+  ant_value_t input = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t regexp = nargs > 1 ? args[1] : js_mkundef();
+  ant_value_t custom = nargs > 2 ? args[2] : js_mkundef();
+  
+  ant_object_t *re = is_object_type(regexp) ? js_obj_ptr(js_as_obj(regexp)) : NULL;
+  if (!re || !re->flags.regexp_brand) return Ant_Error_CreateInvalidArgType(js, "regexp", "an instance of RegExp", regexp);
+
+  bool is_string = vtype(input) == kTypeString;
+  if (is_string) {
+    ant_value_t test_fn = js_getprop_fallback(js, regexp, "test");
+    if (is_err(test_fn)) return test_fn;
+    ant_value_t result = sv_vm_call(js->vm, js, test_fn, regexp, &input, 1, NULL, js_mkundef());
+    if (is_err(result)) return result;
+    if (js_truthy(js, result) == expect_match) return js_mkundef();
+  }
+
+  assertion_info_t info = { op, input, regexp };
+  if (assert_is_error_instance(js, custom)) return js_throw(js, custom);
+  if (js_truthy(js, custom)) return assertion_throw(js, js_tostring_val(js, custom), false, info);
+
+  assert_inspected_t ii, ir = { 0 };
+  if (!assert_inspect(js, input, false, &ii) || (is_string && !assert_inspect(js, regexp, false, &ir))) {
+    assert_inspected_free(&ii);
+    assert_inspected_free(&ir);
+    return js_mkerr(js, "out of memory");
+  }
+
+  errbuf_t eb;
+  size_t n = 0;
+  if (!errbuf_init(&eb, 128)) n = 0;
+  else if (!is_string) n = errbuf_appendf(
+    &eb, n, "The \"string\" argument must be of type string. Received type %s (%s)",
+    typestr(vtype(input)), ii.text
+  );
+  
+  else n = errbuf_appendf(
+    &eb, n, "%s %s. Input:\n\n%s\n", expect_match 
+      ? "The input did not match the regular expression" 
+      : "The input was expected to not match the regular expression",
+    ir.text, ii.text
+  );
+
+  assert_inspected_free(&ii);
+  assert_inspected_free(&ir);
+  
+  return assertion_throw(js, eb.buf ? errbuf_take_string(js, &eb, n) : js_mkerr(js, "out of memory"), true, info);
+}
+
 static ant_value_t assert_exception_matches(
-  ant_t *js, ant_value_t thrown, ant_value_t expected, ant_value_t message
+  ant_t *js, ant_value_t thrown, ant_value_t expected, ant_value_t message, const char *op
 ) {
+  ant_object_t *re = is_object_type(expected) ? js_obj_ptr(js_as_obj(expected)) : NULL;
+  if (re && re->flags.regexp_brand) {
+    GC_ROOT_SAVE(mark, js);
+    ant_value_t match_args[3] = { coerce_to_str(js, thrown), expected, message };
+    GC_ROOT_PIN(js, match_args[0]);
+    ant_value_t result = is_err(match_args[0]) ? match_args[0] : assert_regexp(js, match_args, 3, true, op);
+    GC_ROOT_RESTORE(js, mark);
+    return result;
+  }
+
   if (!is_callable(expected)) return js_mkundef();
   ant_value_t prototype = js_get(js, expected, "prototype");
   if (is_err(prototype)) return prototype;
@@ -1008,7 +1067,7 @@ static ant_value_t assert_exception_matches(
   if (js_is_prototype_of(js, error_ctor, expected))
     return assertion_fail_text(
       js, message, "The error is expected to be an instance of the specified constructor",
-      (assertion_info_t){ "throws", thrown, expected }
+      (assertion_info_t){ op, thrown, expected }
     );
 
   ant_value_t receiver = Ant_Object_CreateBare(js);
@@ -1019,13 +1078,15 @@ static ant_value_t assert_exception_matches(
   if (valid != js_true)
     return assertion_fail_text(
       js, message, "The validation function is expected to return true",
-      (assertion_info_t){ "throws", thrown, expected }
+      (assertion_info_t){ op, thrown, expected }
     );
   
   return js_mkundef();
 }
 
-static ant_value_t assert_missing_exception(ant_t *js, ant_value_t expected, ant_value_t message) {
+static ant_value_t assert_missing_exception(
+  ant_t *js, ant_value_t expected, ant_value_t message, const char *what, const char *op
+) {
   if (assert_is_error_instance(js, message)) return js_throw(js, message);
 
   char kind[160] = "";
@@ -1033,10 +1094,10 @@ static ant_value_t assert_missing_exception(ant_t *js, ant_value_t expected, ant
   if (vtype(name) == kTypeString) snprintf(kind, sizeof(kind), " (%s)", js_getstr(js, name, NULL));
 
   char buf[512];
-  if (vtype(message) == kTypeString) snprintf(buf, sizeof(buf), "Missing expected exception%s: %s", kind, js_getstr(js, message, NULL));
-  else snprintf(buf, sizeof(buf), "Missing expected exception%s.", kind);
+  if (vtype(message) == kTypeString) snprintf(buf, sizeof(buf), "Missing expected %s%s: %s", what, kind, js_getstr(js, message, NULL));
+  else snprintf(buf, sizeof(buf), "Missing expected %s%s.", what, kind);
 
-  return assertion_throw_text(js, buf, false, (assertion_info_t){ "throws", js_mkundef(), expected });
+  return assertion_throw_text(js, buf, false, (assertion_info_t){ op, js_mkundef(), expected });
 }
 
 static ant_value_t assert_throws(ant_params_t) {
@@ -1059,10 +1120,10 @@ static ant_value_t assert_throws(ant_params_t) {
   GC_ROOT_PIN(js, thrown);
 
   ant_value_t result = sv_vm_call(js->vm, js, fn, js_mkundef(), NULL, 0, NULL, js_mkundef());
-  if (!is_err(result)) result = assert_missing_exception(js, expected, message);
+  if (!is_err(result)) result = assert_missing_exception(js, expected, message, "exception", "throws");
   else {
     thrown = js_take_thrown(js, result);
-    result = assert_exception_matches(js, thrown, expected, message);
+    result = assert_exception_matches(js, thrown, expected, message, "throws");
   } GC_ROOT_RESTORE(js, mark);
   
   return result;
@@ -1102,16 +1163,20 @@ static ant_value_t assert_does_not_throw(ant_params_t) {
 }
 
 static ant_value_t assert_rejection_settle(
-  ant_t *js, ant_value_t promise, ant_value_t result, bool expect_rejection
+  ant_t *js, ant_value_t promise, ant_value_t result, ant_value_t value,
+  ant_value_t expected, ant_value_t message, bool expect_rejection
 ) {
   bool rejected = promise_was_rejected(result);
   if (rejected) promise_mark_handled(result);
 
-  if (rejected == expect_rejection) js_resolve_promise(js, promise, js_mkundef());
-  else {
-    const char *message = expect_rejection ? "Missing expected rejection" : "Got unwanted rejection";
-    js_reject_promise(js, promise, Ant_Error_Create(js, JS_ERR_TYPE, message));
-  }
+  if (expect_rejection) {
+    ant_value_t check = rejected
+      ? assert_exception_matches(js, value, expected, message, "rejects")
+      : assert_missing_exception(js, expected, message, "rejection", "rejects");
+    if (is_err(check)) js_reject_promise(js, promise, check);
+    else js_resolve_promise(js, promise, js_mkundef());
+  } else if (!rejected) js_resolve_promise(js, promise, js_mkundef());
+  else js_reject_promise(js, promise, Ant_Error_Create(js, JS_ERR_TYPE, "Got unwanted rejection"));
 
   return js_mkundef();
 }
@@ -1119,7 +1184,8 @@ static ant_value_t assert_rejection_settle(
 static ant_value_t assert_rejection_on_settled(ant_params_t) {
   ant_value_t state = js_get_slot(js_getcurrentfunc(js), SLOT_DATA);
   return assert_rejection_settle(
-    js, js_get(js, state, "promise"), js_get(js, state, "result"),
+    js, js_get(js, state, "promise"), js_get(js, state, "result"), nargs > 0 ? args[0] : js_mkundef(),
+    js_get(js, state, "expected"), js_get(js, state, "message"),
     js_truthy(js, js_get(js, state, "expect_rejection"))
   );
 }
@@ -1129,28 +1195,45 @@ static ant_value_t assert_rejection(ant_native_params_t, bool expect_rejection) 
   if (nargs < 1) return js_mkerr(js, "assert.%s: first argument required", method);
 
   GC_ROOT_SAVE(mark, js);
+  ant_value_t expected = nargs >= 2 ? args[1] : js_mkundef();
+  ant_value_t message = nargs >= 3 ? args[2] : js_mkundef();
+  
+  if (vtype(expected) == kTypeString && nargs < 3) {
+    message = expected;
+    expected = js_mkundef();
+  }
+  
+  GC_ROOT_PIN(js, expected);
+  GC_ROOT_PIN(js, message);
+
   ant_value_t promise = js_mkpromise(js);
   GC_ROOT_PIN(js, promise);
+  
   ant_value_t result = vtype(args[0]) == kTypeFunction
     ? sv_vm_call(js->vm, js, args[0], js_mkundef(), NULL, 0, NULL, js_mkundef())
     : args[0];
+  
   GC_ROOT_PIN(js, result);
-
   if (is_err(result)) {
     js_reject_promise(js, promise, result);
   } else if (vtype(result) == kTypePromise) {
     ant_value_t state = Ant_Object_CreateBare(js);
     GC_ROOT_PIN(js, state);
+    
     js_set(js, state, "promise", promise);
     js_set(js, state, "result", result);
+    js_set(js, state, "expected", expected);
+    js_set(js, state, "message", message);
     js_set(js, state, "expect_rejection", js_bool(expect_rejection));
+    
     ant_value_t on_settled = js_heavy_mkfun(js, assert_rejection_on_settled, state);
     GC_ROOT_PIN(js, on_settled);
+    
     ant_value_t continuation = js_promise_then(js, result, on_settled, on_settled);
     if (is_err(continuation))
       js_reject_promise(js, promise, continuation);
     else promise_mark_handled(continuation);
-  } else assert_rejection_settle(js, promise, result, expect_rejection);
+  } else assert_rejection_settle(js, promise, result, result, expected, message, expect_rejection);
 
   GC_ROOT_RESTORE(js, mark);
   return promise;
@@ -1164,59 +1247,12 @@ static ant_value_t assert_does_not_reject(ant_params_t) {
   return assert_rejection(js, args, nargs, false);
 }
 
-static ant_value_t assert_regexp(ant_native_params_t, bool expect_match) {
-  ant_value_t input = nargs > 0 ? args[0] : js_mkundef();
-  ant_value_t regexp = nargs > 1 ? args[1] : js_mkundef();
-  ant_value_t custom = nargs > 2 ? args[2] : js_mkundef();
-  
-  ant_object_t *re = is_object_type(regexp) ? js_obj_ptr(js_as_obj(regexp)) : NULL;
-  if (!re || !re->flags.regexp_brand) return Ant_Error_CreateInvalidArgType(js, "regexp", "an instance of RegExp", regexp);
-
-  bool is_string = vtype(input) == kTypeString;
-  if (is_string) {
-    ant_value_t test_fn = js_getprop_fallback(js, regexp, "test");
-    if (is_err(test_fn)) return test_fn;
-    ant_value_t result = sv_vm_call(js->vm, js, test_fn, regexp, &input, 1, NULL, js_mkundef());
-    if (is_err(result)) return result;
-    if (js_truthy(js, result) == expect_match) return js_mkundef();
-  }
-
-  assertion_info_t info = { expect_match ? "match" : "doesNotMatch", input, regexp };
-  if (assert_is_error_instance(js, custom)) return js_throw(js, custom);
-  if (js_truthy(js, custom)) return assertion_throw(js, js_tostring_val(js, custom), false, info);
-
-  assert_inspected_t ii, ir = { 0 };
-  if (!assert_inspect(js, input, false, &ii) || (is_string && !assert_inspect(js, regexp, false, &ir))) {
-    assert_inspected_free(&ii);
-    assert_inspected_free(&ir);
-    return js_mkerr(js, "out of memory");
-  }
-
-  errbuf_t eb;
-  size_t n = 0;
-  if (!errbuf_init(&eb, 128)) n = 0;
-  else if (!is_string) n = errbuf_appendf(
-    &eb, n, "The \"string\" argument must be of type string. Received type %s (%s)",
-    typestr(vtype(input)), ii.text
-  );
-  else n = errbuf_appendf(
-    &eb, n, "%s %s. Input:\n\n%s\n", expect_match 
-      ? "The input did not match the regular expression" 
-      : "The input was expected to not match the regular expression",
-    ir.text, ii.text
-  );
-
-  assert_inspected_free(&ii);
-  assert_inspected_free(&ir);
-  return assertion_throw(js, eb.buf ? errbuf_take_string(js, &eb, n) : js_mkerr(js, "out of memory"), true, info);
-}
-
 static ant_value_t assert_match(ant_params_t) {
-  return assert_regexp(js, args, nargs, true);
+  return assert_regexp(js, args, nargs, true, "match");
 }
 
 static ant_value_t assert_does_not_match(ant_params_t) {
-  return assert_regexp(js, args, nargs, false);
+  return assert_regexp(js, args, nargs, false, "doesNotMatch");
 }
 
 static ant_value_t assert_assertion_error_ctor(ant_params_t) {

@@ -149,7 +149,7 @@ for (const length of [NaN, Infinity, -Infinity]) {
 }
 
 assert.throws(
-  () => Ant.unsafe.c({ entry: 'missing', returns: 'string' })`
+  () => Ant.unsafe.c({ entry: 'missing', returns: 'int' })`
     int main(void) { return 0; }
   `,
   /Ant\.unsafe\.c\(\) entry "missing" was not found/,

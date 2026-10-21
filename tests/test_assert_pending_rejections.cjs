@@ -16,7 +16,7 @@ function checkOutcome(method, rejected, outcome, label) {
   assert.strictEqual(outcome.rejected, rejected !== expectRejection, label);
   if (outcome.rejected) {
     assert.strictEqual(outcome.value.message,
-      expectRejection ? 'Missing expected rejection' : 'Got unwanted rejection', label);
+      expectRejection ? 'Missing expected rejection.' : 'Got unwanted rejection', label);
   } else {
     assert.strictEqual(outcome.value, undefined, label);
   }
@@ -59,6 +59,20 @@ async function main() {
     assert.strictEqual(outcome.rejected, true);
     assert.strictEqual(outcome.value, reason);
   }
+
+  // rejects() checks the rejection reason against `expected` like throws()
+  const boom = () => Promise.reject(new TypeError('boom'));
+  const failure = async (promise) => (await observe(promise)).value?.message;
+  assert.strictEqual(await failure(assert.rejects(boom, TypeError)), undefined);
+  assert.strictEqual(await failure(assert.rejects(boom, /^TypeError: boom$/)), undefined);
+  assert.strictEqual(await failure(assert.rejects(boom, e => e.message === 'boom')), undefined);
+  assert.match(await failure(assert.rejects(boom, RangeError)), /instance/);
+  assert.match(await failure(assert.rejects(boom, () => false)), /validation function/);
+  assert.strictEqual(await failure(assert.rejects(boom, /zzz/)),
+    "The input did not match the regular expression /zzz/. Input:\n\n'TypeError: boom'\n");
+  assert.strictEqual(await failure(assert.rejects(boom, /zzz/, 'custom')), 'custom');
+  assert.strictEqual(await failure(assert.rejects(Promise.resolve(1), TypeError)), 'Missing expected rejection (TypeError).');
+  assert.strictEqual(await failure(assert.rejects(Promise.resolve(1), 'custom')), 'Missing expected rejection: custom');
 
   await new Promise(resolve => setTimeout(resolve, 0));
   assert.strictEqual(unhandled.length, 0, 'input rejections must remain handled');

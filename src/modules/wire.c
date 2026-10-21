@@ -548,7 +548,7 @@ static ant_value_t wire_check_transfer(ant_t *js, ant_value_t list, ant_value_t 
   iterator_t it;
   if (!is_object_type(list) || !js_iter_open(js, list, &it)) return Ant_Exception_Pending(js)
     ? Ant_Exception_Current(js)
-    : js_mkerr_typed(js, JS_ERR_TYPE, "Optional transferList argument must be an iterable");
+    : js_mkerr_code(js, JS_ERR_TYPE, "ERR_INVALID_ARG_TYPE", "Optional transferList argument must be an iterable");
 
   ant_value_t items = js_mkarr(js);
   ant_value_t item;

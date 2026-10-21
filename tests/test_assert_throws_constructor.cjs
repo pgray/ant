@@ -34,4 +34,16 @@ try {
   Object.defineProperty(globalThis, 'Error', errorDescriptor);
 }
 assert.strictEqual(errorReads, 0);
-console.log('assert.throws constructors and validation callbacks ok');
+
+// a RegExp is tested against String(error), so it sees the name too
+assert.throws(() => { throw new TypeError('boom'); }, /^TypeError: boom$/);
+assert.throws(() => { throw 42; }, /^42$/);
+assert.throws(
+  () => assert.throws(() => { throw new TypeError('boom'); }, /nope/),
+  error => error.message === "The input did not match the regular expression /nope/. Input:\n\n'TypeError: boom'\n"
+);
+assert.throws(
+  () => assert.throws(() => { throw new TypeError('boom'); }, /nope/, 'custom'),
+  error => error.message === 'custom'
+);
+console.log('assert.throws constructors, validation callbacks and regexps ok');

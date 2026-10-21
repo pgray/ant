@@ -1069,6 +1069,10 @@ static void tls_copy_connect_options(ant_t *js, ant_value_t dst, ant_value_t src
   tls_copy_connect_option(js, dst, src, "port");
   tls_copy_connect_option(js, dst, src, "servername");
   tls_copy_connect_option(js, dst, src, "secureContext");
+  tls_copy_connect_option(js, dst, src, "ca");
+  tls_copy_connect_option(js, dst, src, "key");
+  tls_copy_connect_option(js, dst, src, "cert");
+  tls_copy_connect_option(js, dst, src, "allowPartialChain");
   tls_copy_connect_option(js, dst, src, "ALPNProtocols");
 }
 
@@ -1135,6 +1139,21 @@ static ant_value_t js_tls_connect_options(ant_t *js, ant_value_t options, ant_va
 
   value = js_get(js, options, "secureContext");
   ctx_wrap = tls_context_data(value);
+  
+  if (!ctx_wrap && (
+    vtype(js_get(js, options, "ca")) != kTypeUndefined  ||
+    vtype(js_get(js, options, "key")) != kTypeUndefined ||
+    vtype(js_get(js, options, "cert")) != kTypeUndefined)) {
+    value = js_tls_create_context(js, &options, 1, js_mkundef());
+    
+    if (is_err(value)) {
+      tls_socket_free(socket);
+      return value;
+    }
+    
+    ctx_wrap = tls_context_data(value);
+  }
+  
   if (ctx_wrap && !ctx_wrap->closed && ctx_wrap->ctx) {
     socket->ctx = ctx_wrap->ctx;
     socket->ctx_wrap = ctx_wrap;
@@ -1159,6 +1178,7 @@ static ant_value_t js_tls_connect_options(ant_t *js, ant_value_t options, ant_va
   obj = Ant_Object_CreateBare(js);
   js_set_proto_init(obj, js->builtins.tls_socket_proto);
   socket->obj = obj;
+  
   js_set_native(obj, socket, TLS_SOCKET_NATIVE_TAG);
   stream_init_duplex_object(js, obj, js_mkundef());
   tls_define_default_socket_state(js, obj);
@@ -1168,8 +1188,6 @@ static ant_value_t js_tls_connect_options(ant_t *js, ant_value_t options, ant_va
   socket->stream.data = socket;
   socket->connect_req.data = socket;
   
-  if (socket->servername) 
-    tlsuv_stream_set_hostname(&socket->stream, socket->servername);
   if (socket->alpn_count > 0)
     tlsuv_stream_set_protocols(&socket->stream, socket->alpn_count, (const char **)socket->alpn_protocols);
 
@@ -1177,10 +1195,13 @@ static ant_value_t js_tls_connect_options(ant_t *js, ant_value_t options, ant_va
   js_set(js, obj, "localPort", js_mkundef());
   js_set(js, obj, "localFamily", js_mkundef());
   js_set(js, obj, "alpnProtocol", js_false);
+  
   tls_socket_sync_state(socket);
   tls_add_active_socket(socket);
 
   rc = tlsuv_stream_connect(&socket->connect_req, &socket->stream, socket->host, socket->port, tls_socket_on_connect);
+  if (rc == 0) tlsuv_stream_set_hostname(&socket->stream, socket->servername);
+  
   if (rc != 0) {
     ant_value_t err = tls_stream_error(socket, rc, "TLS connect failed");
     socket->connecting = false;

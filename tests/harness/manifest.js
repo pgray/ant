@@ -306,6 +306,7 @@ export function targets() {
     'test_regexp_result_batch.cjs',
     'test_repl_global_descriptors.cjs',
     'test_require_builtin_cache.cjs',
+    'test_resizable_arraybuffer.cjs',
     'test_response_constructor_fast_path.cjs',
     'test_return_for_await_close.cjs',
     'test_return_for_of_close.cjs',
