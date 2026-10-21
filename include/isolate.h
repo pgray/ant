@@ -243,6 +243,7 @@ struct ant_isolate_t {
   _Atomic uint8_t interrupt_pending;
   
   bool interrupts_armed;
+  bool uncloneable_marked;
   bool terminating;
   vm_interrupt_t *interrupt_run;
   

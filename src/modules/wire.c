@@ -38,6 +38,7 @@ enum {
   WIRE_ERROR = 'Z',
   WIRE_ARRAY_BUFFER = 'Y',
   WIRE_SHARED_BUFFER = 'Q',
+  WIRE_MOVED_BUFFER = 'W',
   WIRE_VIEW = 'V',
   WIRE_BLOB = 'L',
   WIRE_PORT = 'P',
@@ -60,6 +61,9 @@ typedef struct {
   ant_value_t seen;
   ant_value_t transfer;
   ant_value_t source_port;
+  ArrayBufferData **moving;
+  uint32_t moving_count;
+  uint32_t moving_cap;
   int depth;
 } wire_writer_t;
 
@@ -82,9 +86,13 @@ void ant_wire_release(ant_wire_t *wire) {
   if (!wire || atomic_fetch_sub_explicit(&wire->refs, 1, memory_order_acq_rel) != 1) return;
   
   for (uint32_t i = 0; i < wire->shared_count; i++) free_array_buffer_data(NULL, wire->shared[i]);
+  for (uint32_t i = 0; i < wire->moved_count; i++) free_array_buffer_data(NULL, wire->moved[i]);
+  for (uint32_t i = 0; i < wire->blob_count; i++) blob_storage_release(wire->blobs[i]);
   for (uint32_t i = 0; i < wire->port_count; i++) ant_port_end_release(wire->ports[i]);
   
   free(wire->shared);
+  free(wire->moved);
+  free(wire->blobs);
   free(wire->ports);
   free(wire->data);
   free(wire);
@@ -278,6 +286,13 @@ static ant_value_t wire_write_primitive(wire_writer_t *w, ant_value_t value) {
   }
 }
 
+static bool wire_in_transfer(wire_writer_t *w, ant_value_t value) {
+  if (vtype(w->transfer) != kTypeArray) return false;
+  ant_offset_t len = js_arr_len(w->js, w->transfer);
+  for (ant_offset_t i = 0; i < len; i++) if (js_arr_get(w->js, w->transfer, i) == value) return true;
+  return false;
+}
+
 static ant_value_t wire_write_buffer(wire_writer_t *w, ant_value_t value, ArrayBufferData *data) {
   ant_t *js = w->js;
   if (data->is_detached) return wire_clone_error(js, "An ArrayBuffer is detached and could not be cloned.");
@@ -291,9 +306,25 @@ static ant_value_t wire_write_buffer(wire_writer_t *w, ant_value_t value, ArrayB
       wire->shared = next;
       wire->shared_cap = cap;
     }
+    
     data->ref_count++;
     wire->shared[wire->shared_count] = data;
+    
     if (!put_u8(w, WIRE_SHARED_BUFFER) || !put_varint(w, wire->shared_count++)) return wire_oom(js);
+    return wire_remember(w, value) ? js_mkundef() : wire_oom(js);
+  }
+
+  if (buffer_can_transfer(data) && wire_in_transfer(w, value)) {
+    if (w->moving_count == w->moving_cap) {
+      uint32_t cap = w->moving_cap ? w->moving_cap * 2 : 4;
+      ArrayBufferData **next = realloc(w->moving, cap * sizeof(*next));
+      if (!next) return wire_oom(js);
+      w->moving = next;
+      w->moving_cap = cap;
+    }
+    
+    w->moving[w->moving_count] = data;
+    if (!put_u8(w, WIRE_MOVED_BUFFER) || !put_varint(w, w->moving_count++)) return wire_oom(js);
     return wire_remember(w, value) ? js_mkundef() : wire_oom(js);
   }
 
@@ -357,11 +388,25 @@ static ant_value_t wire_write_error(wire_writer_t *w, ant_value_t value) {
   return wire_write_props(w, value, 0);
 }
 
+static bool wire_add_blob(ant_wire_t *wire, blob_storage_t *storage) {
+  if (wire->blob_count == wire->blob_cap) {
+    uint32_t cap = wire->blob_cap ? wire->blob_cap * 2 : 2;
+    blob_storage_t **next = realloc(wire->blobs, cap * sizeof(*next));
+    if (!next) return false;
+    wire->blobs = next;
+    wire->blob_cap = cap;
+  }
+  
+  wire->blobs[wire->blob_count++] = blob_storage_retain(storage);
+  
+  return true;
+}
+
 static ant_value_t wire_write_object(wire_writer_t *w, ant_value_t value) {
   ant_t *js = w->js;
   uint32_t id = 0;
   if (wire_lookup(w, value, &id)) return put_u8(w, WIRE_REF) && put_varint(w, id) ? js_mkundef() : wire_oom(js);
-  if (is_object_type(js->mutable_roots.uncloneable) && ant_wire_is_uncloneable(js, value))
+  if (ant_wire_is_uncloneable(js, value))
     return wire_clone_error(js, "Cannot clone object of unsupported type.");
 
   if (ant_message_port_is(value)) {
@@ -425,10 +470,11 @@ static ant_value_t wire_write_object(wire_writer_t *w, ant_value_t value) {
 
   if (js_get_slot(value, SLOT_ERROR_BRAND) == js_true) return wire_write_error(w, value);
 
-  blob_data_t *blob = js_is_prototype_of(js, js->builtins.blob_proto, value) ? blob_get_data(value) : NULL;
+  blob_data_t *blob = blob_is_blob(js, value) ? blob_get_data(value) : NULL;
   if (blob) {
     const char *type = blob->type ? blob->type : "";
-    if (!put_u8(w, WIRE_BLOB) || !put_str(w, type, strlen(type)) || !put_varint(w, blob->size) || !put_bytes(w, blob->data, blob->size))
+    if (!wire_add_blob(w->wire, blob->storage)) return wire_oom(js);
+    if (!put_u8(w, WIRE_BLOB) || !put_str(w, type, strlen(type)) || !put_varint(w, w->wire->blob_count - 1))
       return wire_oom(js);
     if (!put_u8(w, blob->name ? 1 : 0)) return wire_oom(js);
     if (blob->name && (!put_str(w, blob->name, strlen(blob->name)) || !put_f64(w, (double)blob->last_modified))) return wire_oom(js);
@@ -534,6 +580,29 @@ static void wire_free_refs(wire_writer_t *w) {
   }
 }
 
+static bool wire_take_moved(wire_writer_t *w) {
+  ant_wire_t *wire = w->wire;
+  if (!w->moving_count) return true;
+
+  wire->moved = calloc(w->moving_count, sizeof(*wire->moved));
+  if (!wire->moved) return false;
+  
+  for (uint32_t i = 0; i < w->moving_count; i++) {
+    if ((wire->moved[i] = buffer_storage_holder_new())) continue;
+    for (uint32_t j = 0; j < i; j++) free(wire->moved[j]);
+    
+    free(wire->moved);
+    wire->moved = NULL;
+    
+    return false;
+  }
+
+  for (uint32_t i = 0; i < w->moving_count; i++) buffer_move_storage(w->js, w->moving[i], wire->moved[i]);
+  wire->moved_count = w->moving_count;
+  
+  return true;
+}
+
 static bool wire_add_port(ant_wire_t *wire, ant_port_end_t *end) {
   if (wire->port_count == wire->port_cap) {
     uint32_t cap = wire->port_cap ? wire->port_cap * 2 : 2;
@@ -578,6 +647,7 @@ ant_value_t ant_wire_serialize(
   r = wire_write(&w, value);
   wire_free_refs(&w);
   if (is_err(r)) {
+    free(w.moving);
     ant_wire_release(wire);
     GC_ROOT_RESTORE(js, root_mark);
     return r;
@@ -596,9 +666,17 @@ ant_value_t ant_wire_serialize(
     }
   }
 
+  bool moved = wire_take_moved(&w);
+  free(w.moving);
+  if (!moved) {
+    ant_wire_release(wire);
+    GC_ROOT_RESTORE(js, root_mark);
+    return wire_oom(js);
+  }
+
   for (ant_offset_t i = 0; i < count; i++) {
     ArrayBufferData *data = buffer_get_arraybuffer_data(js_arr_get(js, transfer, i));
-    if (data) buffer_detach(js, data);
+    if (data && !data->is_detached) buffer_detach(js, data);
   }
 
   GC_ROOT_RESTORE(js, root_mark);
@@ -662,8 +740,10 @@ static ant_value_t wire_track(wire_reader_t *r, ant_value_t value) {
 
 static ant_value_t wire_read_props(wire_reader_t *r, ant_value_t obj) {
   ant_t *js = r->js;
+  
   for (;;) {
     uint8_t tag;
+    
     if (!get_u8(r, &tag)) return wire_corrupt(js);
     if (tag == WIRE_END) return obj;
     if (tag != WIRE_PROP) return wire_corrupt(js);
@@ -671,17 +751,17 @@ static ant_value_t wire_read_props(wire_reader_t *r, ant_value_t obj) {
     const char *key;
     size_t key_len;
     if (!get_str(r, &key, &key_len)) return wire_corrupt(js);
-    ant_value_t key_val = js_mkstr(js, key, key_len);
-    if (is_err(key_val)) return key_val;
-    GC_ROOT_SAVE(mark, js);
-    GC_ROOT_PIN(js, key_val);
+    
     ant_value_t value = wire_read(r);
-    if (is_err(value)) {
-      GC_ROOT_RESTORE(js, mark);
-      return value;
-    }
-    js_setprop(js, obj, key_val, value);
+    if (is_err(value)) return value;
+    
+    GC_ROOT_SAVE(mark, js);
+    GC_ROOT_PIN(js, value);
+    
+    ant_value_t defined = js_mkprop_fast(js, obj, key, key_len, value);
     GC_ROOT_RESTORE(js, mark);
+    
+    if (is_err(defined)) return defined;
   }
 }
 
@@ -886,33 +966,49 @@ static ant_value_t wire_read_object(wire_reader_t *r, uint8_t tag) {
       return wire_track(r, create_shared_arraybuffer_obj(js, r->wire->shared[index]));
     }
 
+    case WIRE_MOVED_BUFFER: {
+      uint64_t index;
+      if (!get_varint(r, &index) || index >= r->wire->moved_count) return wire_corrupt(js);
+      return wire_track(r, create_arraybuffer_obj(js, r->wire->moved[index]));
+    }
+
     case WIRE_VIEW: return wire_read_view(r);
 
     case WIRE_BLOB: {
       const char *type;
       size_t type_len;
-      uint64_t size;
-      const uint8_t *bytes;
+      
+      uint64_t index;
       uint8_t named;
-      if (!get_str(r, &type, &type_len) || !get_varint(r, &size) || !get_bytes(r, &bytes, (size_t)size) || !get_u8(r, &named))
+      
+      if (
+        !get_str(r, &type, &type_len) || !get_varint(r, &index) || index >= r->wire->blob_count || !get_u8(r, &named))
         return wire_corrupt(js);
+        
       char *type_z = strndup(type, type_len);
       if (!type_z) return wire_oom(js);
-      ant_value_t blob = blob_create(js, bytes, (size_t)size, type_z);
+      
+      ant_value_t blob = blob_create_shared(js, r->wire->blobs[index], type_z);
       free(type_z);
+      
       if (is_err(blob)) return blob;
+      
       if (named) {
         const char *name;
         size_t name_len;
         double modified;
+        
         if (!get_str(r, &name, &name_len) || !get_f64(r, &modified)) return wire_corrupt(js);
         blob_data_t *bd = blob_get_data(blob);
+        
         if (bd) {
           bd->name = strndup(name, name_len);
           bd->last_modified = (int64_t)modified;
         }
+        
         js_set_proto_init(blob, js->builtins.file_proto);
       }
+      
       return wire_track(r, blob);
     }
 
@@ -1009,9 +1105,11 @@ bool ant_wire_is_untransferable(ant_t *js, ant_value_t value) {
 
 ant_value_t ant_wire_mark_uncloneable(ant_t *js, ant_value_t value) {
   if (!is_object_type(value)) return js_mkundef();
-  return wire_weakset_add(js, &js->mutable_roots.uncloneable, value);
+  js_set_slot(value, SLOT_UNCLONEABLE, js_true);
+  js->uncloneable_marked = true;
+  return js_mkundef();
 }
 
 bool ant_wire_is_uncloneable(ant_t *js, ant_value_t value) {
-  return wire_weakset_has(js, js->mutable_roots.uncloneable, value);
+  return js->uncloneable_marked && js_get_slot(value, SLOT_UNCLONEABLE) == js_true;
 }

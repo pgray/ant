@@ -1468,45 +1468,68 @@ void gc_object_free(ant_t *js, ant_object_t *obj) {
     case kTypeMap: {
       ant_value_t value = js_obj_from_ptr(obj);
       map_entry_t **head = (map_entry_t **)js_get_native(value, MAP_NATIVE_TAG);
+      
       if (head) {
-        map_entry_t *e, *tmp;
-        HASH_ITER(hh, *head, e, tmp) { HASH_DEL(*head, e); free(e->key); free(e); }
+        map_entry_t *e = *head, *next;
+        HASH_CLEAR(hh, *head);
+        
+        for (; e; e = next) {
+          next = e->hh.next;
+          free(e);
+        }
+        
         free(head);
         js_clear_native(value, MAP_NATIVE_TAG);
       }
+      
       break;
     }
+    
     case kTypeSet: {
       ant_value_t value = js_obj_from_ptr(obj);
       set_entry_t **head = (set_entry_t **)js_get_native(value, SET_NATIVE_TAG);
+      
       if (head) {
-        set_entry_t *e, *tmp;
-        HASH_ITER(hh, *head, e, tmp) { HASH_DEL(*head, e); free(e->key); free(e); }
+        set_entry_t *e = *head, *next;
+        HASH_CLEAR(hh, *head);
+        
+        for (; e; e = next) {
+          next = e->hh.next;
+          free(e);
+        }
+        
         free(head);
         js_clear_native(value, SET_NATIVE_TAG);
       }
+      
       break;
     }
+    
     case kTypeWeakMap: {
       ant_value_t value = js_obj_from_ptr(obj);
       weakmap_table_t *table = js_get_native(value, WEAKMAP_NATIVE_TAG);
+      
       if (table) {
         weakmap_table_free(table);
         js_clear_native(value, WEAKMAP_NATIVE_TAG);
       }
       break;
     }
+    
     case kTypeWeakSet: {
       ant_value_t value = js_obj_from_ptr(obj);
       weakset_entry_t **head = (weakset_entry_t **)js_get_native(value, WEAKSET_NATIVE_TAG);
+      
       if (head) {
         weakset_entry_t *e, *tmp;
         HASH_ITER(hh, *head, e, tmp) { HASH_DEL(*head, e); free(e); }
         free(head);
         js_clear_native(value, WEAKSET_NATIVE_TAG);
       }
+      
       break;
     }
+    
     default: break;
   }
 

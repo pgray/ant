@@ -18,6 +18,11 @@ typedef struct ant_wire {
   ArrayBufferData **shared;
   uint32_t shared_count;
   uint32_t shared_cap;
+  ArrayBufferData **moved;
+  uint32_t moved_count;
+  struct blob_storage **blobs;
+  uint32_t blob_count;
+  uint32_t blob_cap;
   ant_port_end_t **ports;
   uint32_t port_count;
   uint32_t port_cap;

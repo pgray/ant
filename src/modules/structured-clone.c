@@ -148,7 +148,7 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
   ant_value_t existing = sc_lookup(seen, val);
   if (vtype(existing) != kTypeUndefined) return existing;
   
-  if (is_object_type(js->mutable_roots.uncloneable) && ant_wire_is_uncloneable(js, val))
+  if (ant_wire_is_uncloneable(js, val))
     return js_throw(js, make_dom_exception(js, "Cannot clone object of unsupported type.", "DataCloneError"));
 
   ArrayBufferData *abd = buffer_get_arraybuffer_data(val);
@@ -236,34 +236,19 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
     set_entry_t **new_head = calloc(1, sizeof(set_entry_t *));
     if (!new_head) return js_mkerr(js, "out of memory");
     *new_head = NULL;
+    
     js_set_native(clone, new_head, SET_NATIVE_TAG);
     sc_add(seen, val, clone);
 
     set_entry_t **src_head = get_set_from_obj(val);
     if (src_head && *src_head) {
-    set_entry_t *e, *tmp;
-    HASH_ITER(hh, *src_head, e, tmp) {
-      ant_value_t vc = sc_clone_rec(js, e->value, seen, transfer);
-      if (is_err(vc)) return vc;
-
-      set_entry_t *ne = calloc(1, sizeof(set_entry_t));
-      if (!ne) return js_mkerr(js, "out of memory");
-      
-      ne->key = malloc(e->key_len);
-      if (!ne->key) {
-        free(ne);
-        return js_mkerr(js, "out of memory");
+      set_entry_t *e, *tmp;
+      HASH_ITER(hh, *src_head, e, tmp) {
+        ant_value_t vc = sc_clone_rec(js, e->value, seen, transfer);
+        if (is_err(vc)) return vc;
+        if (!collections_set_store_cloned_entry(js, new_head, vc)) return js_mkerr(js, "out of memory");
       }
-
-      memcpy(ne->key, e->key, e->key_len);
-      ne->key_len = e->key_len;
-      ne->value = vc;
-      
-      HASH_ADD_KEYPTR_BYHASHVALUE(
-        hh, *new_head, ne->key, 
-        ne->key_len, e->hh.hashv, ne
-      );
-    }}
+    }
 
     return clone;
   }

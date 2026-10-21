@@ -29,27 +29,52 @@ blob_data_t *blob_get_data(ant_value_t obj) {
   return (blob_data_t *)js_get_native(obj, BLOB_NATIVE_TAG);
 }
 
-static blob_data_t *blob_data_new(const uint8_t *data, size_t size, const char *type) {
+blob_storage_t *blob_storage_retain(blob_storage_t *storage) {
+  if (storage) atomic_fetch_add_explicit(&storage->refs, 1, memory_order_relaxed);
+  return storage;
+}
+
+void blob_storage_release(blob_storage_t *storage) {
+  if (storage && atomic_fetch_sub_explicit(&storage->refs, 1, memory_order_acq_rel) == 1) free(storage);
+}
+
+static blob_data_t *blob_data_adopt(blob_storage_t *storage, const char *type) {
   blob_data_t *bd = calloc(1, sizeof(blob_data_t));
-  
   if (!bd) return NULL;
-  if (size > 0 && data) {
-    bd->data = malloc(size);
-    if (!bd->data) { free(bd); return NULL; }
-    memcpy(bd->data, data, size);
-  }
-  
-  bd->size = size;
+
+  bd->storage = storage;
+  bd->data = storage ? storage->bytes : NULL;
+  bd->size = storage ? storage->size : 0;
   bd->type = type ? strdup(type) : strdup("");
-  
+
+  return bd;
+}
+
+static blob_data_t *blob_data_new(const uint8_t *data, size_t size, const char *type) {
+  blob_storage_t *storage = NULL;
+  if (size > 0 && data) {
+    if (size > SIZE_MAX - sizeof(*storage)) return NULL;
+    storage = malloc(sizeof(*storage) + size);
+    
+    if (!storage) return NULL;
+    atomic_init(&storage->refs, 1);
+    
+    storage->size = size;
+    memcpy(storage->bytes, data, size);
+  }
+
+  blob_data_t *bd = blob_data_adopt(storage, type);
+  if (!bd) blob_storage_release(storage);
+  else bd->size = size;
+
   return bd;
 }
 
 static char *normalize_mime_type(const char *s) {
   if (!s) return strdup("");
-  for (const unsigned char *p = (const unsigned char *)s; *p; p++) {
+  
+  for (const unsigned char *p = (const unsigned char *)s; *p; p++)
     if (*p < 0x20 || *p > 0x7E) return strdup("");
-  }
   
   size_t len = strlen(s);
   char *out = malloc(len + 1);
@@ -157,21 +182,30 @@ static ant_value_t process_blob_parts(ant_t *js, byte_buf_t *buf, ant_value_t pa
 static void blob_finalize(ant_t *js, ant_object_t *obj) {
   ant_value_t value = js_obj_from_ptr(obj);
   blob_data_t *bd = (blob_data_t *)js_get_native(value, BLOB_NATIVE_TAG);
-  if (bd) { free(bd->data); free(bd->type); free(bd->name); free(bd); }
+  if (bd) { blob_storage_release(bd->storage); free(bd->type); free(bd->name); free(bd); }
   js_clear_native(value, BLOB_NATIVE_TAG);
 }
 
-ant_value_t blob_create(ant_t *js, const uint8_t *data, size_t size, const char *type) {
-  blob_data_t *bd = blob_data_new(data, size, type);
+static ant_value_t blob_wrap(ant_t *js, blob_data_t *bd) {
   if (!bd) return js_mkerr(js, "out of memory");
   ant_value_t obj = Ant_Object_CreateBare(js);
-  
+
   js_set_proto_init(obj, js->builtins.blob_proto);
   js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_BLOB));
   js_set_native(obj, bd, BLOB_NATIVE_TAG);
   js_set_finalizer(obj, blob_finalize);
-  
+
   return obj;
+}
+
+ant_value_t blob_create(ant_t *js, const uint8_t *data, size_t size, const char *type) {
+  return blob_wrap(js, blob_data_new(data, size, type));
+}
+
+ant_value_t blob_create_shared(ant_t *js, blob_storage_t *storage, const char *type) {
+  blob_data_t *bd = blob_data_adopt(blob_storage_retain(storage), type);
+  if (!bd) blob_storage_release(storage);
+  return blob_wrap(js, bd);
 }
 
 static ant_value_t blob_get_size(ant_params_t) {

@@ -141,19 +141,13 @@ static bool map_store_entry(
     return true;
   }
 
-  entry = calloc(1, sizeof(map_entry_t));
+  entry = calloc(1, sizeof(map_entry_t) + key.len);
   if (!entry) {
     collection_key_free(&key);
     return false;
   }
 
-  entry->key = malloc(key.len);
-  if (!entry->key) {
-    collection_key_free(&key);
-    free(entry);
-    return false;
-  }
-
+  entry->key = (unsigned char *)(entry + 1);
   memcpy(entry->key, key.bytes, key.len);
   entry->key_len = key.len;
   entry->key_val = key_val;
@@ -180,19 +174,13 @@ static bool set_store_entry(ant_t *js, set_entry_t **set_ptr, ant_value_t value)
     return true;
   }
 
-  entry = calloc(1, sizeof(set_entry_t));
+  entry = calloc(1, sizeof(set_entry_t) + key.len);
   if (!entry) {
     collection_key_free(&key);
     return false;
   }
 
-  entry->key = malloc(key.len);
-  if (!entry->key) {
-    collection_key_free(&key);
-    free(entry);
-    return false;
-  }
-
+  entry->key = (unsigned char *)(entry + 1);
   memcpy(entry->key, key.bytes, key.len);
   entry->key_len = key.len;
   entry->value = stored_value;
@@ -665,12 +653,13 @@ static ant_value_t map_delete(ant_params_t) {
   
   if (!map_ptr) return js_false;
   map_entry_t *entry = Ant_Map_Find(js, map_ptr, args[0]);
+  
   if (entry) {
     HASH_DEL(*map_ptr, entry);
-    free(entry->key);
     free(entry);
     return js_true;
   }
+  
   return js_false;
 }
 
@@ -682,11 +671,10 @@ static ant_value_t map_clear(ant_params_t) {
   map_entry_t *entry, *tmp;
   HASH_ITER(hh, *map_ptr, entry, tmp) {
     HASH_DEL(*map_ptr, entry);
-    free(entry->key);
     free(entry);
   }
-  *map_ptr = NULL;
   
+  *map_ptr = NULL;
   return js_mkundef();
 }
 
@@ -863,38 +851,35 @@ static ant_value_t set_delete(ant_params_t) {
   
   ant_value_t this_val = js->this_val;
   set_entry_t **set_ptr = get_set_from_obj(this_val);
+  
   if (!set_ptr) return js_false;
-
   set_entry_t *entry = Ant_Set_Find(js, set_ptr, args[0]);
   
   if (entry) {
     HASH_DEL(*set_ptr, entry);
-    free(entry->key);
     free(entry);
     return js_true;
   }
+  
   return js_false;
 }
 
 static ant_value_t set_clear(ant_params_t) {
-  (void)args; (void)nargs;
   ant_value_t this_val = js->this_val;
   set_entry_t **set_ptr = get_set_from_obj(this_val);
   if (!set_ptr) return js_mkundef();
-  
+
   set_entry_t *entry, *tmp;
   HASH_ITER(hh, *set_ptr, entry, tmp) {
     HASH_DEL(*set_ptr, entry);
-    free(entry->key);
     free(entry);
   }
-  *set_ptr = NULL;
   
+  *set_ptr = NULL;
   return js_mkundef();
 }
 
 static ant_value_t set_size(ant_params_t) {
-  (void)args; (void)nargs;
   ant_value_t this_val = js->this_val;
   set_entry_t **set_ptr = get_set_from_obj(this_val);
   if (!set_ptr) return js_mknum(0);
@@ -903,12 +888,10 @@ static ant_value_t set_size(ant_params_t) {
 }
 
 static ant_value_t set_values(ant_params_t) {
-  (void)args; (void)nargs;
   return create_set_iterator(js, js->this_val, ITER_TYPE_SET_VALUES);
 }
 
 static ant_value_t set_entries(ant_params_t) {
-  (void)args; (void)nargs;
   return create_set_iterator(js, js->this_val, ITER_TYPE_SET_ENTRIES);
 }
 
@@ -921,14 +904,16 @@ static ant_value_t set_forEach(ant_params_t) {
   
   ant_value_t callback = args[0];
   ant_value_t this_arg = nargs > 1 ? args[1] : js_mkundef();
-  if (set_ptr && *set_ptr) {
-  set_entry_t *entry, *tmp;
   
-  HASH_ITER(hh, *set_ptr, entry, tmp) {
-    ant_value_t call_args[3] = { entry->value, entry->value, this_val };
-    ant_value_t result = sv_vm_call(js->vm, js, callback, this_arg, call_args, 3, NULL, js_mkundef());
-    if (is_err(result)) return result;
-  }}
+  if (set_ptr && *set_ptr) {
+    set_entry_t *entry, *tmp;
+    
+    HASH_ITER(hh, *set_ptr, entry, tmp) {
+      ant_value_t call_args[3] = { entry->value, entry->value, this_val };
+      ant_value_t result = sv_vm_call(js->vm, js, callback, this_arg, call_args, 3, NULL, js_mkundef());
+      if (is_err(result)) return result;
+    }
+  }
   
   return js_mkundef();
 }
@@ -962,7 +947,6 @@ static void set_result_delete(ant_t *js, set_entry_t **set_ptr, ant_value_t valu
   set_entry_t *entry = Ant_Set_Find(js, set_ptr, value);
   if (!entry) return;
   HASH_DEL(*set_ptr, entry);
-  free(entry->key);
   free(entry);
 }
 

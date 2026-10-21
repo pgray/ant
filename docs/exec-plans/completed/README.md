@@ -36,6 +36,7 @@ removed during condensation. See the [plan lifecycle](../index.md).
 - [Async Error Boundaries](async-error-boundaries.md)
 - [Zlib Readable State](zlib-readable-state.md)
 - [Stream Close Semantics and Lazy Zlib Init](stream-close-zlib-lazy-init.md)
+- [Wire: Defined Properties, Moved Transfers, Shared Blobs](wire-transfer-and-define.md)
 
 - [Ant Cron API](ant-cron.md)
 - [ARM64 Nightly Benchmarks](arm64-nightly-benchmarks.md)

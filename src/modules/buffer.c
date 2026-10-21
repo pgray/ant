@@ -364,6 +364,17 @@ void buffer_transfer_storage(ant_t *js, ArrayBufferData *from, ArrayBufferData *
   buffer_detach(js, from);
 }
 
+ArrayBufferData *buffer_storage_holder_new(void) {
+  ArrayBufferData *data = calloc(1, sizeof(*data));
+  if (data) data->ref_count = 1;
+  return data;
+}
+
+void buffer_move_storage(ant_t *js, ArrayBufferData *from, ArrayBufferData *to) {
+  buffer_transfer_storage(js, from, to);
+  unregister_buffer(js, to->owner);
+}
+
 static size_t get_element_size(TypedArrayType type) {
   static const void *dispatch[] = {
     &&L_1, &&L_1, &&L_1, &&L_2, &&L_2,
