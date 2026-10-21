@@ -15,6 +15,7 @@ Store in-progress execution plans here.
 - [Compile Module Tracer](compile-module-tracer.md)
 - [Shared-Memory Threads](shared-memory-threads.md)
 - [ant:isolate](ant-isolate.md)
+- [Async Context: AsyncLocalStorage and async_hooks](async-context.md)
 - [Shared I/O Formatting in Wasm](wasm-shared-io.md)
 - [TypeScript Captured-variable Cleanup](tsc-upvalue-cleanup.md)
 - [Symbol Description Accessor IC](symbol-description-accessor-ic.md)
