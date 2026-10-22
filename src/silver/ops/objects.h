@@ -204,11 +204,7 @@ static inline ant_value_t sv_spread_into(sv_vm_t *vm, ant_t *js, ant_value_t arr
     ant_offset_t slen = str_len_fast(js, iterable);
     for (ant_offset_t i = 0; i < slen; ) {
       ant_offset_t off = vstr(js, iterable, NULL);
-      utf8proc_int32_t cp;
-      ant_offset_t cb_len = (ant_offset_t)utf8_next(
-        (const utf8proc_uint8_t *)(uintptr_t)(off + i),
-        (utf8proc_ssize_t)(slen - i), &cp
-      );
+      ant_offset_t cb_len = (ant_offset_t)utf8_char_len_at((const char *)(uintptr_t)off, (size_t)slen, (size_t)i);
       js_arr_push(js, arr, js_mkstr(js, (const void *)(uintptr_t)(off + i), cb_len));
       i += cb_len;
     }

@@ -133,6 +133,12 @@ static bool advance_array(ant_t *js, iterator_t *it, ant_value_t *out) {
 
 static bool advance_string(ant_t *js, iterator_t *it, ant_value_t *out) {
   ant_value_t iter = it->iterator;
+  
+  if (!js_check_brand(iter, BRAND_STRING_ITERATOR)) {
+    js_mkerr_typed(js, JS_ERR_TYPE, "String Iterator next called on incompatible receiver");
+    return false;
+  }
+
   ant_value_t str = js_get_slot(iter, SLOT_DATA);
   ant_value_t idx_v = js_get_slot(iter, SLOT_ITER_STATE);
   int idx = (vtype(idx_v) == kTypeNumber) ? (int)js_getnum(idx_v) : 0;
@@ -192,6 +198,8 @@ ant_value_t make_array_iterator(ant_t *js, ant_value_t array, array_iter_kind_t 
 }
 
 static ant_value_t str_iter_next(ant_params_t) {
+  if (!js_check_brand(js->this_val, BRAND_STRING_ITERATOR)) 
+    return js_mkerr_typed(js, JS_ERR_TYPE, "String Iterator next called on incompatible receiver");
   return js_iter_next_result(js, advance_string);
 }
 
@@ -214,16 +222,14 @@ static ant_value_t string_iterator(ant_params_t) {
     js, JS_ERR_TYPE, "String.prototype[Symbol.iterator] called on null or undefined"
   );
 
-  if (vtype(recv) == kTypeSymbol)
-    return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert a Symbol value to a string");
-
-  ant_value_t str = coerce_to_str(js, recv);
+  ant_value_t str = js_template_to_string(js, recv);
   if (is_err(str)) return str;
 
   GC_ROOT_SAVE(mark, js);
   GC_ROOT_PIN(js, str);
   ant_value_t iter = Ant_Object_CreateBare(js);
 
+  js_set_slot(iter, SLOT_BRAND, js_mknum(BRAND_STRING_ITERATOR));
   js_set_slot_wb(js, iter, SLOT_DATA, str);
   js_set_slot(iter, SLOT_ITER_STATE, js_mknum(0));
   js_set_proto_init(iter, get_string_iterator_prototype(js));

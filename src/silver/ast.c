@@ -417,6 +417,14 @@ static inline sv_ast_t *parse_dot_property_name(P) {
   return name;
 }
 
+static sv_ast_t *parse_with_in(P, sv_ast_t *(*parse)(P)) {
+  bool saved_no_in = p->no_in;
+  p->no_in = false;
+  sv_ast_t *n = parse(p);
+  p->no_in = saved_no_in;
+  return n;
+}
+
 static sv_ast_t *parse_member_suffix(P, sv_ast_t *left, uint8_t la) {
   if (la == TOK_DOT) {
     CONSUME();
@@ -445,7 +453,7 @@ static sv_ast_t *parse_member_suffix(P, sv_ast_t *left, uint8_t la) {
     CONSUME();
     sv_ast_t *mem = mk(N_MEMBER);
     mem->left = left;
-    mem->right = parse_expr(p);
+    mem->right = parse_with_in(p, parse_expr);
     mem->flags = 1;
     expect(p, TOK_RBRACKET);
     mem->src_off = left ? left->src_off : mem->src_off;
@@ -459,7 +467,10 @@ static sv_ast_t *parse_member_suffix(P, sv_ast_t *left, uint8_t la) {
 static sv_ast_t *parse_arrow_body(P, bool is_async) {
   bool saved_async = p->in_async;
   p->in_async = is_async;
-  sv_ast_t *body = NEXT() == TOK_LBRACE ? parse_block(p, true) : parse_assign(p);
+  bool saved_no_in = p->no_in;
+  if (NEXT() == TOK_LBRACE) p->no_in = false;
+  sv_ast_t *body = TOK == TOK_LBRACE ? parse_block(p, true) : parse_assign(p);
+  p->no_in = saved_no_in;
   p->in_async = saved_async;
   return body;
 }
@@ -657,7 +668,10 @@ static sv_ast_t *try_parse_async_arrow(P) {
     }
     sv_lexer_restore_state(&p->lx, &saved);
     NEXT(); CONSUME();
+    bool saved_no_in = p->no_in;
+    p->no_in = false;
     sv_ast_t *expr = parse_paren_list(p, true);
+    p->no_in = saved_no_in;
     expect(p, TOK_RPAREN);
     if (LA() == TOK_ARROW) {
       NEXT(); CONSUME();
@@ -796,14 +810,14 @@ static sv_ast_t *parse_primary(P) {
     return expr;
   }
 
-  l_array:  return parse_array(p);
-  l_object: return parse_object(p);
+  l_array:  return parse_with_in(p, parse_array);
+  l_object: return parse_with_in(p, parse_object);
   l_func:   { CONSUME(); return parse_func(p, false); }
 
   l_class: {
     uint32_t class_off = (uint32_t)TOFF;
     CONSUME();
-    sv_ast_t *cls = parse_class(p);
+    sv_ast_t *cls = parse_with_in(p, parse_class);
     cls->src_off = class_off;
     return cls;
   }
@@ -874,7 +888,7 @@ static sv_ast_t *parse_primary(P) {
         (ant_offset_t)expr_off, (ant_offset_t)(expr_off + expr_max_len)
       );
 
-      sv_ast_t *expr = parse_expr(p);
+      sv_ast_t *expr = parse_with_in(p, parse_expr);
       sv_ast_list_push(JS, &n->args, expr);
 
       if (NEXT() != TOK_RBRACE) {
@@ -930,9 +944,9 @@ static sv_ast_t *parse_primary(P) {
         if (TOK == TOK_REST) {
           CONSUME();
           sv_ast_t *spread = mk(N_SPREAD);
-          spread->right = parse_assign(p);
+          spread->right = parse_with_in(p, parse_assign);
           sv_ast_list_push(JS, &n->args, spread);
-        } else sv_ast_list_push(JS, &n->args, parse_assign(p));
+        } else sv_ast_list_push(JS, &n->args, parse_with_in(p, parse_assign));
         if (NEXT() == TOK_COMMA) CONSUME();
         else break;
       } expect(p, TOK_RPAREN);
@@ -1333,10 +1347,10 @@ static sv_ast_t *parse_call(P) {
         if (TOK == TOK_REST) {
           CONSUME();
           sv_ast_t *spread = mk(N_SPREAD);
-          spread->right = parse_assign(p);
+          spread->right = parse_with_in(p, parse_assign);
           sv_ast_list_push(JS, &call->args, spread);
         } else {
-          sv_ast_list_push(JS, &call->args, parse_assign(p));
+          sv_ast_list_push(JS, &call->args, parse_with_in(p, parse_assign));
         }
         if (NEXT() == TOK_COMMA) CONSUME();
         else break;
@@ -1354,7 +1368,7 @@ static sv_ast_t *parse_call(P) {
       opt->left = n;
       if (NEXT() == TOK_LBRACKET) {
         CONSUME();
-        opt->right = parse_expr(p);
+        opt->right = parse_with_in(p, parse_expr);
         opt->flags = 1;
         expect(p, TOK_RBRACKET);
         opt->src_end = (uint32_t)(TOFF + TLEN);
@@ -1363,7 +1377,7 @@ static sv_ast_t *parse_call(P) {
         call->left = opt;
         CONSUME();
         while (NEXT() != TOK_RPAREN && TOK != TOK_EOF) {
-          sv_ast_list_push(JS, &call->args, parse_assign(p));
+          sv_ast_list_push(JS, &call->args, parse_with_in(p, parse_assign));
           if (NEXT() == TOK_COMMA) CONSUME();
           else break;
         }
@@ -1498,7 +1512,7 @@ static sv_ast_t *parse_ternary(P) {
     CONSUME();
     sv_ast_t *n = mk(N_TERNARY);
     n->cond = cond;
-    n->left = parse_assign(p);
+    n->left = parse_with_in(p, parse_assign);
     expect(p, TOK_COLON);
     n->right = parse_assign(p);
     n->src_off = cond ? cond->src_off : n->src_off;
@@ -2064,11 +2078,14 @@ static sv_ast_t *parse_func(P, bool is_async) {
   }
 
   bool saved_async = p->in_async;
+  bool saved_no_in = p->no_in;
   p->in_async = is_async;
+  p->no_in = false;
   expect(p, TOK_LPAREN);
   parse_formal_params(p, fn, TOK_RPAREN);
   expect(p, TOK_RPAREN);
   fn->body = parse_block(p, true);
+  p->no_in = saved_no_in;
   p->in_async = saved_async;
 
   fn->src_end = (uint32_t)(TOFF + TLEN);
@@ -2223,9 +2240,9 @@ static sv_ast_t *parse_var_decl(P, sv_var_kind_t kind, bool allow_uninit_const) 
     sv_ast_t *decl = mk(N_VARDECL);
 
     if (TOK == TOK_LBRACKET) {
-      decl->left = parse_array(p);
+      decl->left = parse_with_in(p, parse_array);
     } else if (TOK == TOK_LBRACE) {
-      decl->left = parse_object(p);
+      decl->left = parse_with_in(p, parse_object);
     } else if (!binding_ident_here(p)) {
       sv_parse_unexpected_token(p);
       return var;

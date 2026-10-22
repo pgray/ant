@@ -45,6 +45,12 @@ typedef struct compiled_regex_cache_entry {
   uint8_t cache_refs;
   uint8_t required_literal_len;
   char required_literal[REGEXP_REQUIRED_LITERAL_MAX];
+  struct {
+    const char *str;
+    uint64_t epoch;
+    size_t utf16;
+    size_t byte;
+  } last_index_memo;
 } compiled_regex_cache_entry_t;
 
 typedef struct {
@@ -1707,13 +1713,60 @@ static ant_value_t builtin_regexp_groups_getter(ant_params_t) {
   return groups;
 }
 
-static ant_value_t regexp_build_indices_pair(ant_t *js, PCRE2_SIZE start, PCRE2_SIZE end) {
+static int regexp_utf16_to_byte_offset(const char *str_ptr, size_t str_len, size_t index) {
+  if (index > str_len) return -1;
+  size_t floor = utf16_index_to_byte_offset_floor(str_ptr, str_len, index);
+  size_t units = byte_offset_to_utf16(str_ptr, floor);
+  if (units == index) return (int)floor;
+  if (floor >= str_len) return -1;
+  return (int)(floor + utf8_char_len_at(str_ptr, str_len, floor));
+}
+
+typedef struct {
+  size_t byte;
+  size_t utf16;
+} regexp_offset_t;
+
+static size_t regexp_utf16_units(const unsigned char *p, size_t n) {
+  size_t units = 0;
+  for (size_t i = 0; i < n; i++) units += ((p[i] & 0xC0) != 0x80) + (p[i] >= 0xF0);
+  return units;
+}
+
+static size_t regexp_utf16_from(const char *str_ptr, regexp_offset_t base, size_t byte_off) {
+  if (base.utf16 == SIZE_MAX || byte_off < base.byte) return byte_offset_to_utf16(str_ptr, byte_off);
+  return base.utf16 + regexp_utf16_units((const unsigned char *)str_ptr + base.byte, byte_off - base.byte);
+}
+
+static __attribute__((noinline)) regexp_offset_t regexp_last_index_nonascii(
+  compiled_regex_cache_entry_t *compiled, const char *str_ptr, size_t str_len, size_t index
+) {
+  if (compiled && compiled->last_index_memo.str == str_ptr &&
+      compiled->last_index_memo.utf16 == index && compiled->last_index_memo.epoch == gc_strings_sweep_epoch())
+    return (regexp_offset_t){ compiled->last_index_memo.byte, index };
+  int byte = regexp_utf16_to_byte_offset(str_ptr, str_len, index);
+  return (regexp_offset_t){ byte < 0 ? SIZE_MAX : (size_t)byte, SIZE_MAX };
+}
+
+static __attribute__((noinline)) regexp_offset_t regexp_match_utf16_nonascii(
+  compiled_regex_cache_entry_t *compiled, const char *str_ptr, regexp_offset_t base,
+  size_t match_start, size_t match_end, bool remember
+) {
+  regexp_offset_t start = { match_start, regexp_utf16_from(str_ptr, base, match_start) };
+  size_t end_utf16 = regexp_utf16_from(str_ptr, start, match_end);
+  if (remember) compiled->last_index_memo = (typeof(compiled->last_index_memo)){
+    str_ptr, gc_strings_sweep_epoch(), end_utf16, match_end
+  };
+  return (regexp_offset_t){ start.utf16, end_utf16 };
+}
+
+static ant_value_t regexp_build_indices_pair(ant_t *js, const char *str_ptr, bool ascii, regexp_offset_t base, PCRE2_SIZE start, PCRE2_SIZE end) {
   if (start == PCRE2_UNSET) return js_mkundef();
 
   ant_value_t pair = js_mkarr(js);
   if (is_err(pair)) return pair;
-  js_arr_push(js, pair, tov((double)start));
-  js_arr_push(js, pair, tov((double)end));
+  js_arr_push(js, pair, tov((double)(ascii ? start : regexp_utf16_from(str_ptr, base, start))));
+  js_arr_push(js, pair, tov((double)(ascii ? end : regexp_utf16_from(str_ptr, base, end))));
   
   return pair;
 }
@@ -1748,6 +1801,9 @@ static ant_value_t regexp_build_indices_groups(
 static ant_value_t regexp_build_indices_result(
   ant_t *js,
   ant_value_t regexp,
+  const char *str_ptr,
+  bool ascii,
+  regexp_offset_t base,
   PCRE2_SIZE *ovector,
   uint32_t ovcount
 ) {
@@ -1755,7 +1811,7 @@ static ant_value_t regexp_build_indices_result(
   if (is_err(indices_arr)) return indices_arr;
 
   for (uint32_t i = 0; i < ovcount; i++) {
-    ant_value_t pair = regexp_build_indices_pair(js, ovector[2*i], ovector[2*i+1]);
+    ant_value_t pair = regexp_build_indices_pair(js, str_ptr, ascii, base, ovector[2*i], ovector[2*i+1]);
     if (is_err(pair)) return pair;
     js_arr_push(js, indices_arr, pair);
   }
@@ -2145,6 +2201,8 @@ ant_value_t regexp_exec_internal(ant_t *js, ant_value_t regexp, ant_value_t str_
   bool global_flag = (flags_mask & REGEXP_FLAG_GLOBAL) != 0;
   bool has_indices = (flags_mask & REGEXP_FLAG_HAS_INDICES) != 0;
   bool sticky_flag = (flags_mask & REGEXP_FLAG_STICKY) != 0;
+  bool ascii = str_is_ascii(str_ptr);
+  regexp_offset_t base = { 0, SIZE_MAX };
 
   // TODO: reduce nesting
   PCRE2_SIZE start_offset = 0;
@@ -2165,7 +2223,9 @@ ant_value_t regexp_exec_internal(ant_t *js, ant_value_t regexp, ant_value_t str_
     size_t li = 0;
     ant_value_t li_err = js_to_length_fast(js, li_val, &li);
     if (is_err(li_err)) return li_err;
-    if (li <= (size_t)str_len) start_offset = (PCRE2_SIZE)li;
+    if (ascii) base.byte = li <= (size_t)str_len ? li : SIZE_MAX;
+    else base = regexp_last_index_nonascii(compiled_hint, str_ptr, (size_t)str_len, li);
+    if (base.byte != SIZE_MAX) start_offset = (PCRE2_SIZE)base.byte;
     else {
       ant_value_t stored = regexp_set_lastindex(
         js, compiled_hint, regexp, tov(0)
@@ -2207,9 +2267,12 @@ ant_value_t regexp_exec_internal(ant_t *js, ant_value_t regexp, ant_value_t str_
   }
 
   update_regexp_statics(js, str_arg, ovector, ovcount);
+  regexp_offset_t match_utf16 = ascii
+    ? (regexp_offset_t){ ovector[0], ovector[1] }
+    : regexp_match_utf16_nonascii(compiled, str_ptr, base, ovector[0], ovector[1], global_flag || sticky_flag);
 
   if (global_flag || sticky_flag) {
-    ant_value_t next_idx = tov((double)ovector[1]);
+    ant_value_t next_idx = tov((double)match_utf16.utf16);
     ant_value_t stored = regexp_set_lastindex(
       js, compiled, regexp, next_idx
     );
@@ -2248,7 +2311,7 @@ ant_value_t regexp_exec_internal(ant_t *js, ant_value_t regexp, ant_value_t str_
 
   ant_value_t indices = js_mkundef();
   if (has_indices) {
-    indices = regexp_build_indices_result(js, regexp, ovector, ovcount);
+    indices = regexp_build_indices_result(js, regexp, str_ptr, ascii, (regexp_offset_t){ ovector[0], match_utf16.byte }, ovector, ovcount);
     if (is_err(indices)) {
       result = indices;
       goto done;
@@ -2257,7 +2320,7 @@ ant_value_t regexp_exec_internal(ant_t *js, ant_value_t regexp, ant_value_t str_
 
   result = regexp_attach_exec_result(js, &(regexp_exec_result_ctx_t) {
     .array = result_arr,
-    .index = tov((double)byte_offset_to_utf16(str_ptr, ovector[0])),
+    .index = tov((double)match_utf16.byte),
     .input = str_arg,
     .groups_meta = groups_meta,
     .indices = indices,
@@ -2777,6 +2840,13 @@ static ant_value_t regexp_match_batch_fast(
   return count == 0 ? js_mknull() : matches;
 }
 
+static double regexp_advance_string_index(ant_t *js, ant_value_t str, double index, bool unicode) {
+  if (!unicode || index < 0) return index + 1;
+  ant_offset_t len, off = vstr(js, str, &len);
+  uint32_t cp = utf16_codepoint_at((const char *)(uintptr_t)off, (size_t)len, (size_t)index);
+  return index + (cp != 0xFFFFFFFF && cp > 0xFFFF ? 2 : 1);
+}
+
 static ant_value_t builtin_regexp_symbol_match(ant_params_t) {
   ant_value_t rx = js->this_val;
   if (!is_object_type(rx))
@@ -2820,11 +2890,7 @@ static ant_value_t builtin_regexp_symbol_match(ant_params_t) {
       ant_value_t li_val = js_getprop_fallback(js, rx, "lastIndex");
       if (is_err(li_val)) return li_val;
       double li = vtype(li_val) == kTypeNumber ? tod(li_val) : 0;
-      ant_offset_t str_len, str_off = vstr(js, str, &str_len);
-      double advance = 1;
-      if (li >= 0 && li < (double)str_len)
-        advance = (double)utf8_char_len_at((const char *)(uintptr_t)(str_off), str_len, (ant_offset_t)li);
-      js_setprop(js, rx, js_mkstr(js, "lastIndex", 9), tov(li + advance));
+      js_setprop(js, rx, js_mkstr(js, "lastIndex", 9), tov(regexp_advance_string_index(js, str, li, js_truthy(js, unicode_val))));
     }
   }
 }
@@ -2856,11 +2922,9 @@ static ant_value_t regexp_matchall_next(ant_params_t) {
     if (mlen == 0) {
       ant_value_t li_val = js_getprop_fallback(js, rx, "lastIndex");
       double li = vtype(li_val) == kTypeNumber ? tod(li_val) : 0;
-      ant_offset_t sl, so = vstr(js, str, &sl);
-      double advance = 1;
-      if (li >= 0 && li < (double)sl)
-        advance = (double)utf8_char_len_at((const char *)(uintptr_t)so, sl, (ant_offset_t)li);
-      js_setprop(js, rx, js_mkstr(js, "lastIndex", 9), tov(li + advance));
+      ant_value_t unicode_val = regexp_read_flag(js, rx, REGEXP_FLAG_INDEX_UNICODE);
+      if (is_err(unicode_val)) return unicode_val;
+      js_setprop(js, rx, js_mkstr(js, "lastIndex", 9), tov(regexp_advance_string_index(js, str, li, js_truthy(js, unicode_val))));
     }
   } else js_set_slot(iter, SLOT_MATCHALL_DONE, js_true);
 
@@ -3472,9 +3536,11 @@ static ant_value_t builtin_regexp_symbol_replace(ant_params_t) {
   if (is_err(global_val)) return global_val;
   bool global = js_truthy(js, global_val);
 
+  bool full_unicode = false;
   if (global) {
     ant_value_t unicode_val = regexp_read_flag(js, rx, REGEXP_FLAG_INDEX_UNICODE);
     if (is_err(unicode_val)) return unicode_val;
+    full_unicode = js_truthy(js, unicode_val);
     ant_value_t stored = regexp_set_lastindex(
       js, js_get_native(rx, REGEXP_NATIVE_TAG), rx, tov(0)
     );
@@ -3516,11 +3582,7 @@ static ant_value_t builtin_regexp_symbol_replace(ant_params_t) {
       ant_value_t li_val = js_getprop_fallback(js, rx, "lastIndex");
       if (is_err(li_val)) return li_val;
       double li = vtype(li_val) == kTypeNumber ? tod(li_val) : 0;
-      ant_offset_t sl, so = vstr(js, str, &sl);
-      double advance = 1;
-      if (li >= 0 && li < (double)sl)
-        advance = (double)utf8_char_len_at((const char *)(uintptr_t)(so), sl, (ant_offset_t)li);
-      js_setprop(js, rx, js_mkstr(js, "lastIndex", 9), tov(li + advance));
+      js_setprop(js, rx, js_mkstr(js, "lastIndex", 9), tov(regexp_advance_string_index(js, str, li, full_unicode)));
     }
   }
 
@@ -3897,7 +3959,8 @@ static ant_value_t builtin_regexp_symbol_split(ant_params_t) {
   ant_value_t lastIndex_key = js_mkstr(js, "lastIndex", 9);
 
   while (q < size) {
-    js_setprop(js, splitter, lastIndex_key, tov((double)q));
+    str_off = vstr(js, str, NULL);
+    js_setprop(js, splitter, lastIndex_key, tov((double)byte_offset_to_utf16((const char *)(uintptr_t)str_off, q)));
 
     ant_value_t z = regexp_exec_abstract(js, splitter, str);
     if (is_err(z)) return z;
@@ -3911,7 +3974,9 @@ static ant_value_t builtin_regexp_symbol_split(ant_params_t) {
     ant_value_t li_val = js_get(js, splitter, "lastIndex");
     if (is_err(li_val)) return li_val;
     double e_raw = vtype(li_val) == kTypeNumber ? tod(li_val) : 0;
-    ant_offset_t e = (ant_offset_t)(e_raw < 0 ? 0 : (e_raw > (double)size ? (double)size : e_raw));
+    str_off = vstr(js, str, &str_len);
+    int e_bytes = e_raw < 0 ? 0 : regexp_utf16_to_byte_offset((const char *)(uintptr_t)str_off, (size_t)str_len, (size_t)e_raw);
+    ant_offset_t e = e_bytes < 0 ? size : (ant_offset_t)e_bytes;
 
     if (e == p) {
       str_off = vstr(js, str, &str_len);

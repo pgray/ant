@@ -101,6 +101,27 @@ for (let round = 0; round < 60; round++) {
   ]);
 }
 
+const shrinking = [0, 1, 2, 3];
+Object.defineProperty(shrinking, 1, { get() { shrinking.length = 2; return 'g'; }, enumerable: true, configurable: true });
+assert.deepStrictEqual(Object.values(shrinking), [0, 'g']);
+
+const shrinkingEntries = [0, 1, 2, 3];
+Object.defineProperty(shrinkingEntries, 0, { get() { shrinkingEntries.length = 1; return 'g'; }, enumerable: true, configurable: true });
+assert.deepStrictEqual(Object.entries(shrinkingEntries), [['0', 'g']]);
+
+let accessorReads = 0;
+const watched = [];
+Object.defineProperty(watched, 0, { get() { accessorReads++; return 1; }, enumerable: true });
+Object.keys(watched);
+watched.propertyIsEnumerable(0);
+Object.getOwnPropertyDescriptor(watched, 0);
+assert.strictEqual(accessorReads, 0);
+
+assert.deepStrictEqual(Object.entries(new Proxy({ a: 1, b: 2 }, { get: (t, k) => k + '!' })), [['a', 'a!'], ['b', 'b!']]);
+assert.deepStrictEqual(Object.entries(5), []);
+assert.deepStrictEqual(Object.entries(JSON.parse('{"__proto__":1}')), [['__proto__', 1]]);
+assert.deepStrictEqual(Object.entries({ 'a\0b': 1 }), [['a\0b', 1]]);
+
 for (const method of ['keys', 'values', 'entries']) {
   assert.throws(() => Object[method](null), TypeError);
   assert.throws(() => Object[method](undefined), TypeError);

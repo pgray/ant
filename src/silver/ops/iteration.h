@@ -270,21 +270,18 @@ static inline ant_value_t sv_iter_advance(
     ant_value_t str = vm->stack[vm->sp - 3];
     int idx = (int)js_getnum(vm->stack[vm->sp - 2]);
     ant_offset_t slen = str_len_fast(js, str);
+    
     if (idx >= (int)slen) {
       *out_value = js_mkundef();
       *out_done = true;
     } else {
       ant_offset_t off = vstr(js, str, NULL);
-      utf8proc_int32_t cp;
-      ant_offset_t cb_len = (ant_offset_t)utf8_next(
-        (const utf8proc_uint8_t *)(uintptr_t)(off + idx),
-        (utf8proc_ssize_t)(slen - idx),
-        &cp
-      );
+      ant_offset_t cb_len = (ant_offset_t)utf8_char_len_at((const char *)(uintptr_t)off, (size_t)slen, (size_t)idx);
       *out_value = js_mkstr(js, (const void *)(uintptr_t)(off + idx), cb_len);
       *out_done = false;
       vm->stack[vm->sp - 2] = tov(idx + (int)cb_len);
     }
+    
     return tov(0);
   }
 

@@ -629,6 +629,8 @@ static inline ant_object_t *array_method_elements(ant_value_t arr);
 static inline ant_value_t array_method_element(ant_t *js, ant_value_t arr, ant_object_t *elems, ant_offset_t idx, ant_value_t *out);
 static ant_value_t array_set_index_throw(ant_t *js, ant_value_t obj, ant_offset_t idx, ant_value_t value);
 static ant_value_t array_set_length_throw(ant_t *js, ant_value_t obj, ant_offset_t len);
+static ant_value_t array_truncate_length(ant_t *js, ant_value_t obj, ant_offset_t new_len, ant_offset_t *out_len);
+static ant_value_t array_truncate_stopped_error(ant_t *js, ant_offset_t final_len);
 
 #define PROXY_AWARE_LENGTH_OR_RETURN(obj_expr, out_var) \
   ant_offset_t out_var = 0; \
@@ -4186,6 +4188,13 @@ static inline void array_len_set(ant_t *js, ant_value_t obj, ant_offset_t new_le
   else js_mkprop_fast(js, obj, "length", 6, new_len_val);
 }
 
+static inline bool array_length_has_guarded_elements(ant_object_t *ptr) {
+  return 
+    ptr->flags.sealed || 
+    ptr->flags.frozen || 
+    !ptr->shape || ant_shape_may_have_index_keys(ptr->shape);
+}
+
 static constexpr ant_value_t JS_SETPROP_ARRAY_NOT_HANDLED = ANT_SENTINEL_TAG | 0xA551ULL;
 
 typedef enum {
@@ -4723,19 +4732,31 @@ static ant_value_t setprop_impl(ant_t *js, ant_value_t obj, ant_value_t k, ant_v
       array_length_readonly_slow(js, obj)
     ) return array_length_write_ignored(js, v, declined);
     
-    ant_offset_t doff = get_dense_buf(obj);
-    ant_offset_t cur_len = get_array_length(js, obj);
     ant_offset_t new_len_val = (ant_offset_t) tod(v);
-    
-    if (doff) {
-      ant_offset_t cap = dense_capacity(doff);
-      ant_offset_t clear_to = (cur_len < cap) ? cur_len : cap;
-      if (new_len_val < clear_to) 
-        for (ant_offset_t i = new_len_val; i < clear_to; i++) dense_set(js, doff, i, T_EMPTY);
+    if (__builtin_expect(!array_length_has_guarded_elements(len_obj), 1)) {
+      ant_offset_t doff = get_dense_buf(obj);
+      ant_offset_t cur_len = get_array_length(js, obj);
+      
+      if (doff) {
+        ant_offset_t cap = dense_capacity(doff);
+        ant_offset_t clear_to = (cur_len < cap) ? cur_len : cap;
+        if (new_len_val < clear_to) 
+          for (ant_offset_t i = new_len_val; i < clear_to; i++) dense_set(js, doff, i, T_EMPTY);
+      }
+      
+      if (new_len_val > cur_len) array_mark_may_have_holes(obj);
+      array_len_set(js, obj, new_len_val);
+      
+      return v;
     }
     
-    if (new_len_val > cur_len) array_mark_may_have_holes(obj);
-    array_len_set(js, obj, new_len_val);
+    ant_offset_t final_len = new_len_val;
+    ant_value_t truncated = array_truncate_length(js, obj, new_len_val, &final_len);
+    if (is_err(truncated)) return truncated;
+    
+    if (final_len != new_len_val) return sv_is_strict_context(js)
+      ? array_truncate_stopped_error(js, final_len)
+      : set_declined(declined, v);
     
     return v;
   }
@@ -8256,6 +8277,103 @@ static bool own_key_is_array_index(const char *key, size_t key_len, unsigned lon
   return true;
 }
 
+static ant_value_t array_delete_shape_indices(ant_t *js, ant_value_t obj, ant_object_t *ptr, ant_offset_t new_len, ant_offset_t *final_len) {
+  own_index_list_t indices;
+  own_index_list_init(&indices);
+  
+  ant_shape_t *shape = ptr->shape;
+  uint32_t count = ant_shape_count(shape);
+  
+  for (uint32_t i = 0; i < count && i < ptr->prop_count; i++) {
+    const ant_shape_prop_t *prop = ant_shape_prop_at(shape, i);
+    unsigned long index = 0;
+    
+    if (!prop || prop->type != ANT_SHAPE_KEY_STRING) continue;
+    if (!own_key_is_array_index(prop->key.interned, intern_length(prop->key.interned), &index)) continue;
+    if ((ant_offset_t)index < new_len) continue;
+    
+    if (!own_index_list_push(&indices, i, index)) {
+      own_index_list_free(&indices);
+      return js_mkerr(js, "out of memory");
+    }
+  }
+  
+  if (!indices.count) {
+    own_index_list_free(&indices);
+    return js_mkundef();
+  }
+  
+  own_index_keys_sort(indices.items, indices.count);
+  const char **keys = malloc(indices.count * sizeof(*keys));
+  
+  if (!keys) {
+    own_index_list_free(&indices);
+    return js_mkerr(js, "out of memory");
+  }
+  
+  for (uint32_t k = 0; k < indices.count; k++) 
+    keys[k] = ant_shape_prop_at(shape, indices.items[k].slot)->key.interned;
+  
+  ant_value_t result = js_mkundef();
+  for (uint32_t k = indices.count; k-- > 0;) {
+    ant_offset_t index = (ant_offset_t)indices.items[k].index;
+    if (index < *final_len) break;
+    ant_value_t deleted = js_delete_prop_ordinary(js, obj, keys[k], intern_length(keys[k]));
+    if (is_err(deleted)) { result = deleted; break; }
+    if (deleted == js_false) { *final_len = index + 1; break; }
+  }
+  
+  free(keys);
+  own_index_list_free(&indices);
+  
+  return result;
+}
+
+static ant_offset_t dense_filled_end(ant_offset_t doff, ant_offset_t end, ant_offset_t floor) {
+  while (end > floor && is_empty_slot(dense_get(doff, end - 1))) end--;
+  return end;
+}
+
+static ant_value_t array_truncate_length(ant_t *js, ant_value_t obj, ant_offset_t new_len, ant_offset_t *out_len) {
+  ant_object_t *ptr = js_obj_ptr(js_as_obj(obj));
+  ant_offset_t cur_len = get_array_length(js, obj);
+  ant_offset_t doff = get_dense_buf(obj);
+  
+  ant_offset_t dense_end = 0;
+  ant_offset_t final_len = new_len;
+  
+  if (doff) {
+    ant_offset_t cap = dense_capacity(doff);
+    dense_end = cur_len < cap ? cur_len : cap;
+  }
+  
+  bool shrinking = new_len < cur_len && ptr && ptr->shape;
+  if (shrinking && doff && (ptr->flags.sealed || ptr->flags.frozen))
+    final_len = dense_filled_end(doff, dense_end, new_len);
+
+  if (shrinking && ant_shape_may_have_index_keys(ptr->shape)) {
+    ant_value_t deleted = array_delete_shape_indices(js, obj, ptr, new_len, &final_len);
+    if (is_err(deleted)) return deleted;
+  }
+  
+  doff = get_dense_buf(obj);
+  if (doff) {
+    ant_offset_t cap = dense_capacity(doff);
+    if (dense_end > cap) dense_end = cap;
+    for (ant_offset_t i = final_len; i < dense_end; i++) dense_set(js, doff, i, T_EMPTY);
+  }
+  
+  if (final_len > cur_len) array_mark_may_have_holes(obj);
+  array_len_set(js, obj, final_len);
+  *out_len = final_len;
+  
+  return js_mkundef();
+}
+
+static ant_value_t array_truncate_stopped_error(ant_t *js, ant_offset_t final_len) {
+  return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot delete property '%llu' of [object Array]", (unsigned long long)(final_len - 1));
+}
+
 static bool arr_fill_numeric_typed(ant_t *js, ant_value_t arr, const TypedArrayData *ta) {
   if (ta->type == TYPED_ARRAY_BIGINT64 || ta->type == TYPED_ARRAY_BIGUINT64) return false;
   
@@ -10408,19 +10526,12 @@ static ant_value_t object_define_property_keyed(
       return obj;
     }
 
-    ant_offset_t doff = get_dense_buf(as_obj);
-    if (doff) {
-      ant_offset_t cap = dense_capacity(doff);
-      ant_offset_t cur_len = get_array_length(js, as_obj);
-      ant_offset_t clear_to = (cur_len < cap) ? cur_len : cap;
-      if (new_len < clear_to) {
-        for (ant_offset_t i = new_len; i < clear_to; i++) dense_set(js, doff, i, T_EMPTY);
-      }
-    }
+    ant_offset_t final_len = new_len;
+    ant_value_t truncated = array_truncate_length(js, as_obj, new_len, &final_len);
     
-    if (new_len > get_array_length(js, as_obj)) array_mark_may_have_holes(as_obj);
-    array_len_set(js, as_obj, new_len);
+    if (is_err(truncated)) return define_abrupt(fields, truncated);
     if (has_writable && !writable && !js_array_make_length_readonly(js, as_obj)) return js_mkerr(js, "oom");
+    if (final_len != new_len) return array_truncate_stopped_error(js, final_len);
     
     return obj;
   }
@@ -15659,6 +15770,7 @@ static iter_action_t array_from_iter_cb(ant_t *js, ant_value_t value, void *ctx,
   return ITER_CONTINUE;
 }
 
+// TODO: modularize
 static ant_value_t builtin_Array_from(ant_params_t) {
   if (nargs == 0) return mkarr(js);
 
@@ -15680,16 +15792,13 @@ static ant_value_t builtin_Array_from(ant_params_t) {
       src = str_materialize(js, src);
       if (is_err(src)) return src;
     }
+    
     ant_offset_t slen = str_len_fast(js, src);
     array_from_iter_ctx_t ctx = { write_target, result, mapFn, mapThis, 0 };
+    
     for (ant_offset_t i = 0; i < slen; ) {
       ant_offset_t off = vstr(js, src, NULL);
-      utf8proc_int32_t cp;
-      ant_offset_t cb_len = (ant_offset_t)utf8_next(
-        (const utf8proc_uint8_t *)(uintptr_t)(off + i),
-        (utf8proc_ssize_t)(slen - i),
-        &cp
-      );
+      ant_offset_t cb_len = (ant_offset_t)utf8_char_len_at((const char *)(uintptr_t)off, (size_t)slen, (size_t)i);
       ant_value_t ch = js_mkstr(js, (const void *)(uintptr_t)(off + i), cb_len);
       
       ant_value_t out;

@@ -563,25 +563,24 @@ static ant_value_t jit_iter_advance_from_buf(
   case SV_ITER_STRING: {
     ant_value_t str = iter_buf[0];
     GC_ROOT_PIN(js, str);
+    
     int idx = (int)js_getnum(iter_buf[1]);
     ant_offset_t slen = str_len_fast(js, str);
+    
     if (idx >= (int)slen) {
       *out_value = js_mkundef();
       *out_done = true;
     } else {
       ant_offset_t off = vstr(js, str, NULL);
-      utf8proc_int32_t cp;
-      ant_offset_t cb_len = (ant_offset_t)utf8_next(
-        (const utf8proc_uint8_t *)(uintptr_t)(off + idx),
-        (utf8proc_ssize_t)(slen - idx),
-        &cp
-      );
+      ant_offset_t cb_len = (ant_offset_t)utf8_char_len_at((const char *)(uintptr_t)off, (size_t)slen, (size_t)idx);
       *out_value = js_mkstr(js, (const void *)(uintptr_t)(off + idx), cb_len);
       *out_done = false;
       iter_buf[1] = tov(idx + (int)cb_len);
     }
+    
     GC_ROOT_PIN(js, *out_value);
     GC_ROOT_RESTORE(js, root_mark);
+    
     return tov(0);
   }
 
