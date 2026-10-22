@@ -83,12 +83,13 @@
   X(SLOT_MATCHALL_DONE)           \
   X(SLOT_EVAL_ENV)                \
   X(SLOT_ERROR_STACK)             \
-  X(SLOT_ERROR_STACK_TEXT)         \
+  X(SLOT_ERROR_STACK_TEXT)        \
   X(SLOT_VM_SANDBOX)              \
   X(SLOT_VM_CONTEXT)              \
   X(SLOT_VM_IMPORT)               \
   X(SLOT_VM_TERMINATION)          \
-  X(SLOT_UNCLONEABLE)
+  X(SLOT_UNCLONEABLE)             \
+  X(SLOT_STREAM_DESTROY_ERROR)
 
 #define ANT_DECLARE_INTERNAL_SLOT(name) name,
 typedef enum {
