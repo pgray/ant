@@ -27,6 +27,7 @@
 #include "cli/entry.h"
 #include "cli/options.h"
 #include "cli/pkg.h"
+#include "cli/preload.h"
 #include "cli/startup.h"
 #include "sandbox/host.h"
 #include "sandbox/transport.h"
@@ -193,7 +194,11 @@ static int run_in_runtime(ant_t *js, const ant_cli_t *cli, run_plan_t *plan, boo
   if (plan->mode == RUN_SANDBOX) return ant_cli_daemon_run(js, &plan->sandbox, cli->original_argv[0]);
   if (cli->inspector.enabled && !start_inspector(js, cli, plan)) return EXIT_FAILURE;
   if (crash_report) return ant_crash_run_internal_report(js);
-  return process_run_exit_handlers(js, run_mode(js, cli, plan, watch));
+
+  int code = plan->mode == RUN_PKG ? EXIT_SUCCESS : ant_preload_run(js, cli->preload, cli->preload_count);
+  if (code == EXIT_SUCCESS) code = run_mode(js, cli, plan, watch);
+  
+  return process_run_exit_handlers(js, code);
 }
 
 static int run_runtime(const ant_cli_t *cli, run_plan_t *plan, bool crash_report, ant_watch_t *watch) {
@@ -281,7 +286,9 @@ int main(int argc, char *argv[]) {
 
   ant_cli_t cli;
   int code = EXIT_SUCCESS;
-  if (ant_cli_parse(&cli, argc, argv, &code)) code = run_cli(&cli, crash_report);
+  
+  const char *env_options = crash_report ? NULL : getenv(ANT_OPTIONS_ENV);
+  if (ant_cli_parse(&cli, argc, argv, env_options, &code)) code = run_cli(&cli, crash_report);
 
   ant_cli_free(&cli);
   return code;

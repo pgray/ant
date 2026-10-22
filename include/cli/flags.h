@@ -3,6 +3,7 @@ CLI_FLAG(EVAL,              STR,  "e",  "eval",              "<script>",   "eval
 CLI_FLAG(REPL,              STR,  NULL, "repl",              "<script>",   "start REPL after evaluating script")
 CLI_FLAG(INPUT_TYPE,        STR,  NULL, "input-type",        "<type>",     "set string input type: commonjs or module")
 CLI_FLAG(PRINT,             LIT,  "p",  "print",             NULL,         "evaluate script and print result")
+CLI_FLAG(PRELOAD,           STRS, "r",  "preload",           "<file>",     "import a module before the entry point (repeatable)")
 CLI_FLAG(WATCH,             LIT,  "w",  "watch",             NULL,         "restart in a fresh isolate when an imported file changes")
 CLI_FLAG(HOT,               LIT,  NULL, "hot",               NULL,         "reload changed modules in place, keeping global state and servers")
 CLI_FLAG(WEB_COMPAT,        LIT,  NULL, "web-compat",        NULL,         "browser-compatible mode: location, relative URLs, browser package resolution")

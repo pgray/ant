@@ -27,6 +27,10 @@ typedef struct {
   const char *input_type;
   const char *location;
   const char *cron_period;
+  
+  const char **preload;
+  int preload_count;
+  
   struct arg_file *localstorage_file;
   const char **files;
   int file_count;
@@ -40,11 +44,13 @@ typedef struct {
   bool jitless;
 
   char **antx_argv;
+  char **env_options;
+  char **env_argv;
   char **filtered_argv;
   ant_cli_args_t *args;
 } ant_cli_t;
 
-bool ant_cli_parse(ant_cli_t *cli, int argc, char **argv, int *exit_code);
+bool ant_cli_parse(ant_cli_t *cli, int argc, char **argv, const char *env_options, int *exit_code);
 void ant_cli_free(ant_cli_t *cli);
 
 #endif

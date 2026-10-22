@@ -16,6 +16,7 @@
 #include "utils.h"
 #include "vfs_bundle.h"
 #include "silver/vm.h"
+#include "cli/preload.h"
 #include "cli/version.h"
 #include "esm/loader.h"
 #include "modules/server.h"
@@ -46,6 +47,27 @@ static int run_bundle_entry(ant_t *js, const ant_bundle_module_t *entry) {
 
   ant_value_t default_export = js_get(js, ns, "default");
   return server_maybe_start_from_export(js, default_export);
+}
+
+static int run_env_preloads(ant_t *js) {
+  int count = 0;
+  char **opts = ant_options_split(getenv(ANT_OPTIONS_ENV), &count);
+  if (!opts) return EXIT_SUCCESS;
+
+  const char **files = try_oom(sizeof(char *) * (size_t)count);
+  int n = 0;
+
+  for (int i = 0; i < count; i++) {
+    const char *arg = opts[i];
+    if (strncmp(arg, "--preload=", 10) == 0) files[n++] = arg + 10;
+    else if ((strcmp(arg, "--preload") == 0 || strcmp(arg, "-r") == 0) && i + 1 < count) files[n++] = opts[++i];
+  }
+
+  int code = ant_preload_run(js, files, n);
+  free(files);
+  free(opts);
+  
+  return code;
 }
 
 int main(int argc, char *argv[]) {
@@ -170,11 +192,15 @@ int main(int argc, char *argv[]) {
   }
 
   int js_result;
-  if (internal_crash_report_mode) {
-    js_result = ant_crash_run_internal_report(js);
-  } else {
-    js_result = run_bundle_entry(js, entry_mod);
-    js_run_event_loop(js);
+  if (internal_crash_report_mode) js_result = ant_crash_run_internal_report(js);
+  else {
+    js_result = run_env_preloads(js);
+    
+    if (js_result == EXIT_SUCCESS) {
+      js_result = run_bundle_entry(js, entry_mod);
+      js_run_event_loop(js);
+    }
+    
     js_result = process_run_exit_handlers(js, js_result);
   }
 

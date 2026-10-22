@@ -57,6 +57,7 @@
   "runtime": {
     "files": [
       "src/cli/misc.c",
+      "src/cli/preload.c",
       "src/cli/version.c",
       "src/sandbox/policy.c",
       "src/modules/sandbox_stub.c"

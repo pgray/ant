@@ -18,10 +18,12 @@
 #include "cli/misc.h"
 #include "cli/options.h"
 #include "cli/pkg.h"
+#include "cli/preload.h"
 #include "cli/version.h"
 
 typedef enum {
   OPT_KIND_STR,
+  OPT_KIND_STRS,
   OPT_KIND_LIT,
   OPT_KIND_FILE,
 } opt_kind_t;
@@ -51,9 +53,10 @@ struct ant_cli_args {
   void *table[OPT_COUNT];
 };
 
-static void *opt_new(const opt_spec_t *spec) {
+static void *opt_new(const opt_spec_t *spec, int max_values) {
   switch (spec->kind) {
     case OPT_KIND_STR: return arg_str0(spec->shortopts, spec->longopts, spec->datatype, spec->glossary);
+    case OPT_KIND_STRS: return arg_strn(spec->shortopts, spec->longopts, spec->datatype, 0, max_values, spec->glossary);
     case OPT_KIND_LIT: return arg_lit0(spec->shortopts, spec->longopts, spec->glossary);
     case OPT_KIND_FILE: return arg_file0(spec->shortopts, spec->longopts, spec->datatype, spec->glossary);
   }
@@ -62,7 +65,7 @@ static void *opt_new(const opt_spec_t *spec) {
 
 static ant_cli_args_t *cli_args_new(int max_files) {
   ant_cli_args_t *args = try_oom(sizeof(*args));
-  for (int i = 0; i < OPT_FILES; i++) args->table[i] = opt_new(&opt_specs[i]);
+  for (int i = 0; i < OPT_FILES; i++) args->table[i] = opt_new(&opt_specs[i], max_files);
   args->table[OPT_FILES] = arg_filen(NULL, NULL, NULL, 0, max_files, NULL);
   args->table[OPT_END] = arg_end(20);
   return args;
@@ -70,7 +73,8 @@ static ant_cli_args_t *cli_args_new(int max_files) {
 
 static bool opt_set(const ant_cli_args_t *args, opt_id_t id) {
   switch (opt_specs[id].kind) {
-    case OPT_KIND_STR: return ((struct arg_str *)args->table[id])->count > 0;
+    case OPT_KIND_STR:
+    case OPT_KIND_STRS: return ((struct arg_str *)args->table[id])->count > 0;
     case OPT_KIND_LIT: return ((struct arg_lit *)args->table[id])->count > 0;
     case OPT_KIND_FILE: return ((struct arg_file *)args->table[id])->count > 0;
   }
@@ -92,6 +96,8 @@ static bool is_valued_flag(const char *arg) {
     strcmp(arg, "--eval") == 0 ||
     strcmp(arg, "--repl") == 0 ||
     strcmp(arg, "--input-type") == 0 ||
+    strcmp(arg, "-r") == 0 ||
+    strcmp(arg, "--preload") == 0 ||
     strcmp(arg, "--location") == 0 ||
     strcmp(arg, "--localstorage-file") == 0 ||
     strcmp(arg, "--cron-title") == 0 ||
@@ -255,6 +261,22 @@ static bool filter_global_flags(ant_cli_t *cli, int argc, char **argv) {
   return true;
 }
 
+static char **prepend_env_options(ant_cli_t *cli, int *argc, char **argv, const char *env) {
+  int count = 0;
+  cli->env_options = ant_options_split(env, &count);
+  if (count == 0) return argv;
+
+  char **out = cli->env_argv = try_oom(sizeof(char *) * (size_t)(*argc + count + 1));
+  out[0] = argv[0];
+  memcpy(out + 1, cli->env_options, sizeof(char *) * (size_t)count);
+  memcpy(out + 1 + count, argv + 1, sizeof(char *) * (size_t)(*argc - 1));
+  
+  *argc += count;
+  out[*argc] = NULL;
+  
+  return out;
+}
+
 static ant_argv_t split_script_args(int *argc, char **argv) {
   bool has_code = false;
 
@@ -343,6 +365,8 @@ static void export_args(ant_cli_t *cli, ant_cli_args_t *args) {
   cli->input_type = opt_str(args, OPT_INPUT_TYPE);
   cli->location = opt_str(args, OPT_LOCATION);
   cli->cron_period = opt_str(args, OPT_CRON_PERIOD);
+  cli->preload = ((struct arg_str *)args->table[OPT_PRELOAD])->sval;
+  cli->preload_count = ((struct arg_str *)args->table[OPT_PRELOAD])->count;
   cli->localstorage_file = args->table[OPT_LOCALSTORAGE_FILE];
   cli->files = opt_files(args)->filename;
   cli->file_count = opt_files(args)->count;
@@ -354,7 +378,7 @@ static void export_args(ant_cli_t *cli, ant_cli_args_t *args) {
   cli->jitless = opt_set(args, OPT_JITLESS);
 }
 
-bool ant_cli_parse(ant_cli_t *cli, int argc, char **argv, int *exit_code) {
+bool ant_cli_parse(ant_cli_t *cli, int argc, char **argv, const char *env_options, int *exit_code) {
   *cli = (ant_cli_t){
     .original_argc = argc,
     .original_argv = argv,
@@ -364,6 +388,7 @@ bool ant_cli_parse(ant_cli_t *cli, int argc, char **argv, int *exit_code) {
 
   cli->antx_argv = pkg_antx_argv(&argc, argv);
   if (cli->antx_argv) argv = cli->antx_argv;
+  argv = prepend_env_options(cli, &argc, argv, env_options);
   if (!filter_global_flags(cli, argc, argv)) return false;
 
   cli->script_tail = split_script_args(&cli->argc, cli->argv);
@@ -382,5 +407,7 @@ void ant_cli_free(ant_cli_t *cli) {
   free(cli->args);
   free(cli->filtered_argv);
   free(cli->antx_argv);
+  free(cli->env_argv);
+  free(cli->env_options);
   *cli = (ant_cli_t){ 0 };
 }
