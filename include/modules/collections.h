@@ -3,11 +3,13 @@
 
 #include <uthash.h>
 #include "types.h"
+#include "value.h"
 #include "native_tag.h"
 
 typedef struct map_entry {
   unsigned char *key;
-  size_t key_len;
+  uint32_t key_len;
+  uint32_t cursored;
   ant_value_t key_val;
   ant_value_t value;
   UT_hash_handle hh;
@@ -16,7 +18,8 @@ typedef struct map_entry {
 typedef struct set_entry {
   ant_value_t value;
   unsigned char *key;
-  size_t key_len;
+  uint32_t key_len;
+  uint32_t cursored;
   UT_hash_handle hh;
 } set_entry_t;
 
@@ -50,17 +53,100 @@ typedef enum {
   ITER_TYPE_SET_ENTRIES
 } iter_type_t;
 
-typedef struct map_iterator_state {
-  map_entry_t **head;
-  map_entry_t *current;
-  iter_type_t type;
-} map_iterator_state_t;
+typedef struct collection_cursor collection_cursor_t;
 
-typedef struct set_iterator_state {
-  set_entry_t **head;
-  set_entry_t *current;
+typedef struct collection_cursors {
+  collection_cursor_t *head;
+  collection_cursor_t *end;
+  uint32_t flag_offset;
+} collection_cursors_t;
+
+struct collection_cursor {
+  void *entry;
+  collection_cursors_t *owner;
+  collection_cursor_t *forward;
+  collection_cursor_t *prev;
+  collection_cursor_t *next;
+  uint32_t refs;
+  bool embedded;
+};
+
+typedef struct collection_iter_state {
+  collection_cursor_t *at;
   iter_type_t type;
-} set_iterator_state_t;
+  bool live;
+  collection_cursor_t own;
+} collection_iter_state_t;
+
+typedef collection_iter_state_t map_iterator_state_t;
+typedef collection_iter_state_t set_iterator_state_t;
+
+typedef struct map_store {
+  map_entry_t *head;
+  collection_cursors_t cursors;
+} map_store_t;
+
+typedef struct set_store {
+  set_entry_t *head;
+  collection_cursors_t cursors;
+} set_store_t;
+
+static inline ant_value_t collections_iter_slot(collection_iter_state_t *st) {
+  return tov((double)(uintptr_t)st);
+}
+
+static inline collection_iter_state_t *collections_iter_from_slot(ant_value_t slot) {
+  return (collection_iter_state_t *)(uintptr_t)tod(slot);
+}
+
+map_entry_t *collections_map_iter_step(map_iterator_state_t *st);
+set_entry_t *collections_set_iter_step(set_iterator_state_t *st);
+ant_value_t collections_entry_pair(ant_t *js, ant_value_t first, ant_value_t second);
+
+static inline map_entry_t *map_iter_take(map_iterator_state_t *st) {
+  collection_cursor_t *at = st->at;
+  if (!at) return NULL;
+  
+  map_entry_t *entry = (map_entry_t *)at->entry;
+  map_entry_t *next = entry ? (map_entry_t *)entry->hh.next : NULL;
+  
+  if (!next || next->cursored || at->refs != 1)
+    return collections_map_iter_step(st);
+  
+  entry->cursored = 0;
+  next->cursored = 1;
+  at->entry = next;
+  
+  return entry;
+}
+
+static inline set_entry_t *set_iter_take(set_iterator_state_t *st) {
+  collection_cursor_t *at = st->at;
+  if (!at) return NULL;
+  
+  set_entry_t *entry = (set_entry_t *)at->entry;
+  set_entry_t *next = entry ? (set_entry_t *)entry->hh.next : NULL;
+  
+  if (!next || next->cursored || at->refs != 1)
+    return collections_set_iter_step(st);
+  
+  entry->cursored = 0;
+  next->cursored = 1;
+  at->entry = next;
+  
+  return entry;
+}
+
+static inline ant_value_t map_iter_value(ant_t *js, const map_iterator_state_t *st, const map_entry_t *entry) {
+  if (st->type == ITER_TYPE_MAP_VALUES) return entry->value;
+  if (st->type == ITER_TYPE_MAP_KEYS) return entry->key_val;
+  return collections_entry_pair(js, entry->key_val, entry->value);
+}
+
+static inline ant_value_t set_iter_value(ant_t *js, const set_iterator_state_t *st, const set_entry_t *entry) {
+  if (st->type == ITER_TYPE_SET_ENTRIES) return collections_entry_pair(js, entry->value, entry->value);
+  return entry->value;
+}
 
 static constexpr uint32_t MAP_NATIVE_TAG = Ant_NativeTag("MAPP");
 static constexpr uint32_t SET_NATIVE_TAG = Ant_NativeTag("SETP");
@@ -79,11 +165,26 @@ void weakmap_table_finish_prune(weakmap_table_t *table);
 map_entry_t **get_map_from_obj(ant_value_t obj);
 set_entry_t **get_set_from_obj(ant_value_t obj);
 
-map_entry_t *Ant_Map_Find(ant_t *js, map_entry_t **map_ptr, ant_value_t key);
-set_entry_t *Ant_Set_Find(ant_t *js, set_entry_t **set_ptr, ant_value_t value);
+map_entry_t **collections_map_store_new(void);
+set_entry_t **collections_set_store_new(void);
 
 map_iterator_state_t *get_map_iter_state(ant_value_t obj);
 set_iterator_state_t *get_set_iter_state(ant_value_t obj);
+
+map_entry_t *Ant_Map_Find(ant_t *js, map_entry_t **map_ptr, ant_value_t key);
+set_entry_t *Ant_Set_Find(ant_t *js, set_entry_t **set_ptr, ant_value_t value);
+
+void collections_map_store_free(map_entry_t **head);
+void collections_set_store_free(set_entry_t **head);
+void collections_map_remove(map_entry_t **head, map_entry_t *entry);
+void collections_set_remove(set_entry_t **head, set_entry_t *entry);
+void collections_map_clear(map_entry_t **head);
+void collections_set_clear(set_entry_t **head);
+
+void collections_map_iter_open(map_iterator_state_t *st, map_entry_t **head, iter_type_t type);
+void collections_set_iter_open(set_iterator_state_t *st, set_entry_t **head, iter_type_t type);
+void collections_map_iter_close(map_iterator_state_t *st);
+void collections_set_iter_close(set_iterator_state_t *st);
 
 bool advance_map(ant_t *js, iterator_t *it, ant_value_t *out);
 bool advance_set(ant_t *js, iterator_t *it, ant_value_t *out);

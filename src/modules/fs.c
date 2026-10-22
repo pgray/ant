@@ -1,5 +1,4 @@
 // TODO: split into multiple files src/fs 
-// AND move handles to isolate
 
 #include <compat.h> // IWYU pragma: keep
 
@@ -238,7 +237,11 @@ static ant_value_t fs_call_callback(
   return result;
 }
 
+#define FS_WRITE_FLAGS (O_WRONLY | O_CREAT | O_TRUNC)
+#define FS_APPEND_FLAGS (O_WRONLY | O_CREAT | O_APPEND)
+
 static int parse_open_flags(ant_t *js, ant_value_t arg);
+static bool fs_open_flags_of(ant_t *js, ant_value_t arg, int *out);
 static ant_value_t fs_coerce_path(ant_t *js, ant_value_t arg);
 static bool fs_buffer_encoding(ant_t *js, ant_value_t options);
 static ant_value_t fs_path_result(ant_t *js, const char *data, size_t len, bool as_buffer);
@@ -256,7 +259,7 @@ static ant_value_t fs_mk_uv_error(
 static bool fs_parse_mode(ant_t *js, ant_value_t arg, mode_t *out) {
   if (vtype(arg) == kTypeNumber) {
     double mode = js_getnum(arg);
-    if (mode < 0) return false;
+    if (!(mode >= 0 && mode <= 0xFFFFFFFF) || mode != (double)(uint32_t)mode) return false;
     *out = (mode_t)mode;
     return true;
   }
@@ -2570,12 +2573,36 @@ static ant_value_t builtin_fs_stream(ant_params_t) {
   return req->promise;
 }
 
+typedef struct {
+  int flags;
+  mode_t mode;
+} fs_write_options_t;
+
+static ant_value_t fs_parse_write_options(ant_t *js, ant_value_t options, fs_write_options_t *out) {
+  if (!is_object_type(options)) return js_mkundef();
+
+  ant_value_t flag = js_get(js, options, "flag");
+  if (!is_undefined(flag) && !fs_open_flags_of(js, flag, &out->flags))
+    return js_mkerr_code(js, JS_ERR_TYPE, "ERR_INVALID_ARG_VALUE", "The argument 'flag' is invalid");
+
+  ant_value_t mode = js_get(js, options, "mode");
+  if (!is_undefined(mode) && !fs_parse_mode(js, mode, &out->mode))
+    return js_mkerr_code(js, JS_ERR_TYPE, "ERR_INVALID_ARG_VALUE", "The argument 'mode' must be a 32-bit unsigned integer or an octal string");
+
+  return js_mkundef();
+}
+
 static ant_value_t fs_write_file_sync_impl(
   ant_native_params_t,
   const char *fn_name,
-  const char *mode
+  int default_flags
 ) {
   if (nargs < 2) return js_mkerr(js, "%s() requires path and data arguments", fn_name);
+
+  fs_write_options_t opts = { default_flags, 0666 };
+  ant_value_t opts_result = fs_parse_write_options(js, nargs > 2 ? args[2] : js_mkundef(), &opts);
+  if (is_err(opts_result)) return opts_result;
+
   args[0] = fs_coerce_path(js, args[0]);
   if (is_err(args[0])) return args[0];
   if (vtype(args[0]) != kTypeString) return js_mkerr(js, "%s() path must be a string", fn_name);
@@ -2591,82 +2618,52 @@ static ant_value_t fs_write_file_sync_impl(
   char *path_cstr = strndup(path, path_len);
   if (!path_cstr) return js_mkerr(js, "Out of memory");
 
-  FILE *file = fopen(path_cstr, mode);
-  if (!file) {
-    ant_value_t err = fs_mk_errno_error(js, errno, "open", path_cstr, NULL);
+  uv_fs_t req;
+  int fd = uv_fs_open(NULL, &req, path_cstr, opts.flags, opts.mode, NULL);
+  uv_fs_req_cleanup(&req);
+  
+  if (fd < 0) {
+    ant_value_t err = fs_mk_uv_error(js, fd, "open", path_cstr, NULL);
     free(path_cstr);
     return err;
   }
 
-  size_t bytes_written = fwrite(write_data.data, 1, write_data.len, file);
-  fclose(file);
-  free(path_cstr);
-
-  if (bytes_written != write_data.len) {
-    return js_mkerr(js, "Failed to write entire file");
+  size_t written = 0;
+  int rc = 0;
+  while (written < write_data.len) {
+    uv_buf_t buf = uv_buf_init(
+      (char *)write_data.data + written, 
+      (unsigned int)(write_data.len - written)
+    );
+    
+    rc = uv_fs_write(NULL, &req, fd, &buf, 1, -1, NULL);
+    uv_fs_req_cleanup(&req);
+    
+    if (rc <= 0) break;
+    written += (size_t)rc;
   }
 
+  int closed = uv_fs_close(NULL, &req, fd, NULL);
+  uv_fs_req_cleanup(&req);
+
+  if (written == write_data.len && closed < 0) {
+    ant_value_t err = fs_mk_uv_error(js, closed, "close", path_cstr, NULL);
+    free(path_cstr);
+    return err;
+  }
+
+  if (written != write_data.len) {
+    ant_value_t err = fs_mk_uv_error(js, rc < 0 ? rc : UV_EIO, "write", path_cstr, NULL);
+    free(path_cstr);
+    return err;
+  }
+
+  free(path_cstr);
   return js_mkundef();
 }
 
 static ant_value_t builtin_fs_writeFileSync(ant_params_t) {
-  return fs_write_file_sync_impl(js, args, nargs, "writeFileSync", "wb");
-}
-
-static ant_value_t builtin_fs_copyFileSync(ant_params_t) {
-  if (nargs < 2) return js_mkerr(js, "copyFileSync() requires src and dest arguments");
-  
-  args[0] = fs_coerce_path(js, args[0]);
-  if (is_err(args[0])) return args[0];
-  if (vtype(args[0]) != kTypeString) return js_mkerr(js, "copyFileSync() src must be a string");
-  args[1] = fs_coerce_path(js, args[1]);
-  if (is_err(args[1])) return args[1];
-  if (vtype(args[1]) != kTypeString) return js_mkerr(js, "copyFileSync() dest must be a string");
-  
-  size_t src_len, dest_len;
-  char *src = js_getstr(js, args[0], &src_len);
-  char *dest = js_getstr(js, args[1], &dest_len);
-  
-  if (!src || !dest) return js_mkerr(js, "Failed to get arguments");
-  
-  char *src_cstr = strndup(src, src_len);
-  char *dest_cstr = strndup(dest, dest_len);
-  if (!src_cstr || !dest_cstr) {
-    free(src_cstr);
-    free(dest_cstr);
-    return js_mkerr(js, "Out of memory");
-  }
-  
-  FILE *in = fopen(src_cstr, "rb");
-  if (!in) {
-    ant_value_t err = fs_mk_errno_error(js, errno, "copyfile", src_cstr, dest_cstr);
-    free(src_cstr); free(dest_cstr);
-    return err;  
-  }
-  
-  FILE *out = fopen(dest_cstr, "wb");
-  if (!out) {
-    ant_value_t err = fs_mk_errno_error(js, errno, "copyfile", src_cstr, dest_cstr);
-    fclose(in);
-    free(src_cstr); free(dest_cstr);
-    return err;
-  }
-  
-  char buf[8192];
-  size_t n;
-  
-  while ((n = fread(buf, 1, sizeof(buf), in)) > 0) {
-  if (fwrite(buf, 1, n, out) != n) {
-    ant_value_t err = fs_mk_errno_error(js, errno ? errno : EIO, "copyfile", src_cstr, dest_cstr);
-    fclose(in); fclose(out);
-    free(src_cstr); free(dest_cstr);
-    return err;
-  }}
-  
-  fclose(in); fclose(out);
-  free(src_cstr); free(dest_cstr);
-
-  return js_mkundef();
+  return fs_write_file_sync_impl(js, args, nargs, "writeFileSync", FS_WRITE_FLAGS);
 }
 
 typedef struct {
@@ -2809,8 +2806,52 @@ static ant_value_t builtin_fs_copyFile(ant_params_t) {
 
   if (is_err(result)) js_reject_promise(js, promise, result);
   else js_resolve_promise(js, promise, js_mkundef());
-  
+
   return promise;
+}
+
+static ant_value_t builtin_fs_copyFileSync(ant_params_t) {
+  if (nargs < 2) return js_mkerr(js, "copyFileSync() requires src and dest arguments");
+
+  args[0] = fs_coerce_path(js, args[0]);
+  if (is_err(args[0])) return args[0];
+  if (vtype(args[0]) != kTypeString) return js_mkerr(js, "copyFileSync() src must be a string");
+  
+  args[1] = fs_coerce_path(js, args[1]);
+  if (is_err(args[1])) return args[1];
+  if (vtype(args[1]) != kTypeString) return js_mkerr(js, "copyFileSync() dest must be a string");
+
+  size_t src_len = 0, dest_len = 0;
+  const char *src = js_getstr(js, args[0], &src_len);
+  const char *dest = js_getstr(js, args[1], &dest_len);
+  if (!src || !dest) return js_mkerr(js, "Failed to get arguments");
+
+  char *src_cstr = strndup(src, src_len);
+  char *dest_cstr = strndup(dest, dest_len);
+  
+  if (!src_cstr || !dest_cstr) {
+    free(src_cstr);
+    free(dest_cstr);
+    return js_mkerr(js, "Out of memory");
+  }
+
+  int mode = nargs > 2 && vtype(args[2]) == kTypeNumber ? (int)js_getnum(args[2]) : 0;
+  bool exclusive = (mode & 1) != 0;
+
+  fs_cp_options_t opts = {
+    .recursive = false,
+    .force = !exclusive,
+    .error_on_exist = exclusive,
+    .dereference = false,
+    .verbatim_symlinks = false,
+    .filter = 0,
+  };
+
+  ant_value_t result = fs_copy_file_sync_impl(js, src_cstr, dest_cstr, &opts, "copyfile");
+  free(src_cstr);
+  free(dest_cstr);
+  
+  return result;
 }
 
 static ant_value_t fs_copy_symlink_sync_impl(
@@ -3220,12 +3261,12 @@ static ant_value_t builtin_fs_fsyncSync(ant_params_t) {
 }
 
 static ant_value_t builtin_fs_appendFileSync(ant_params_t) {
-  return fs_write_file_sync_impl(js, args, nargs, "appendFileSync", "ab");
+  return fs_write_file_sync_impl(js, args, nargs, "appendFileSync", FS_APPEND_FLAGS);
 }
 
 static ant_value_t builtin_fs_appendFile(ant_params_t) {
   ant_value_t promise = js_mkpromise(js);
-  ant_value_t result = fs_write_file_sync_impl(js, args, nargs, "appendFile", "ab");
+  ant_value_t result = fs_write_file_sync_impl(js, args, nargs, "appendFile", FS_APPEND_FLAGS);
   if (is_err(result)) js_reject_promise(js, promise, result);
   else js_resolve_promise(js, promise, js_mkundef());
   return promise;
@@ -3233,6 +3274,11 @@ static ant_value_t builtin_fs_appendFile(ant_params_t) {
 
 static ant_value_t builtin_fs_writeFile(ant_params_t) {
   if (nargs < 2) return js_mkerr(js, "writeFile() requires path and data arguments");
+
+  fs_write_options_t opts = { FS_WRITE_FLAGS, 0666 };
+  ant_value_t opts_result = fs_parse_write_options(js, nargs > 2 ? args[2] : js_mkundef(), &opts);
+  if (is_err(opts_result)) return opts_result;
+
   args[0] = fs_coerce_path(js, args[0]);
   if (is_err(args[0])) return args[0];
   if (vtype(args[0]) != kTypeString) return js_mkerr(js, "writeFile() path must be a string");
@@ -3244,7 +3290,7 @@ static ant_value_t builtin_fs_writeFile(ant_params_t) {
   fs_write_data_t write_data;
   ant_value_t data_result = fs_get_write_data_arg(js, args[1], "writeFile", &write_data);
   if (is_err(data_result)) return data_result;
-  
+
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return js_mkerr(js, "Out of memory");
   
@@ -3264,7 +3310,7 @@ static ant_value_t builtin_fs_writeFile(ant_params_t) {
   req->uv_req.data = req;
   
   Ant_List_Insert(&js->fs_requests, req);
-  int result = uv_fs_open(js->loop, &req->uv_req, req->path, O_WRONLY | O_CREAT | O_TRUNC, 0644, on_open_for_write);
+  int result = uv_fs_open(js->loop, &req->uv_req, req->path, opts.flags, opts.mode, on_open_for_write);
   
   if (result < 0) {
     fs_request_fail(req, result);
@@ -5350,26 +5396,65 @@ static ant_value_t builtin_fs_writev_fd(ant_params_t) {
   return req->promise;
 }
 
-static int parse_open_flags(ant_t *js, ant_value_t arg) {
-  if (vtype(arg) == kTypeNumber) return (int)js_getnum(arg);
-  if (vtype(arg) != kTypeString) return O_RDONLY;
+typedef struct {
+  const char *name;
+  int flags;
+} fs_open_flag_t;
+
+static const fs_open_flag_t fs_open_flag_names[] = {
+  { "r",   O_RDONLY },
+  { "rs",  O_RDONLY | UV_FS_O_SYNC },
+  { "sr",  O_RDONLY | UV_FS_O_SYNC },
+  { "r+",  O_RDWR },
+  { "rs+", O_RDWR | UV_FS_O_SYNC },
+  { "sr+", O_RDWR | UV_FS_O_SYNC },
+  { "w",   O_WRONLY | O_CREAT | O_TRUNC },
+  { "wx",  O_WRONLY | O_CREAT | O_TRUNC | O_EXCL },
+  { "xw",  O_WRONLY | O_CREAT | O_TRUNC | O_EXCL },
+  { "w+",  O_RDWR | O_CREAT | O_TRUNC },
+  { "wx+", O_RDWR | O_CREAT | O_TRUNC | O_EXCL },
+  { "xw+", O_RDWR | O_CREAT | O_TRUNC | O_EXCL },
+  { "a",   O_WRONLY | O_CREAT | O_APPEND },
+  { "ax",  O_WRONLY | O_CREAT | O_APPEND | O_EXCL },
+  { "xa",  O_WRONLY | O_CREAT | O_APPEND | O_EXCL },
+  { "as",  O_WRONLY | O_CREAT | O_APPEND | UV_FS_O_SYNC },
+  { "sa",  O_WRONLY | O_CREAT | O_APPEND | UV_FS_O_SYNC },
+  { "a+",  O_RDWR | O_CREAT | O_APPEND },
+  { "ax+", O_RDWR | O_CREAT | O_APPEND | O_EXCL },
+  { "xa+", O_RDWR | O_CREAT | O_APPEND | O_EXCL },
+  { "as+", O_RDWR | O_CREAT | O_APPEND | UV_FS_O_SYNC },
+  { "sa+", O_RDWR | O_CREAT | O_APPEND | UV_FS_O_SYNC },
+};
+
+static bool fs_open_flags_of(ant_t *js, ant_value_t arg, int *out) {
+  if (vtype(arg) == kTypeNumber) {
+    double flags = js_getnum(arg);
+    if (!(flags >= INT32_MIN && flags <= INT32_MAX) || flags != (double)(int32_t)flags) return false;
+    *out = (int)flags;
+    return true;
+  }
   
-  size_t len;
+  if (vtype(arg) != kTypeString) return false;
+
+  size_t len = 0;
   const char *str = js_getstr(js, arg, &len);
-  if (!str) return O_RDONLY;
-  
-  if (len == 1 && str[0] == 'r')                      return O_RDONLY;
-  if (len == 2 && memcmp(str, "r+", 2) == 0)          return O_RDWR;
-  if (len == 1 && str[0] == 'w')                      return O_WRONLY | O_CREAT | O_TRUNC;
-  if (len == 2 && memcmp(str, "wx", 2) == 0)          return O_WRONLY | O_CREAT | O_TRUNC | O_EXCL;
-  if (len == 2 && memcmp(str, "w+", 2) == 0)          return O_RDWR | O_CREAT | O_TRUNC;
-  if (len == 3 && memcmp(str, "wx+", 3) == 0)         return O_RDWR | O_CREAT | O_TRUNC | O_EXCL;
-  if (len == 1 && str[0] == 'a')                      return O_WRONLY | O_CREAT | O_APPEND;
-  if (len == 2 && memcmp(str, "ax", 2) == 0)          return O_WRONLY | O_CREAT | O_APPEND | O_EXCL;
-  if (len == 2 && memcmp(str, "a+", 2) == 0)          return O_RDWR | O_CREAT | O_APPEND;
-  if (len == 3 && memcmp(str, "ax+", 3) == 0)         return O_RDWR | O_CREAT | O_APPEND | O_EXCL;
-  
-  return O_RDONLY;
+  if (!str) return false;
+
+  for (size_t i = 0; i < countof(fs_open_flag_names); i++) {
+    const fs_open_flag_t *entry = &fs_open_flag_names[i];
+    if (strlen(entry->name) == len && memcmp(entry->name, str, len) == 0) {
+      *out = entry->flags;
+      return true;
+    }
+  }
+
+  return false;
+}
+
+static int parse_open_flags(ant_t *js, ant_value_t arg) {
+  int flags = O_RDONLY;
+  fs_open_flags_of(js, arg, &flags);
+  return flags;
 }
 
 static ant_value_t builtin_fs_openSync(ant_params_t) {
@@ -6701,6 +6786,9 @@ ant_value_t fs_make_constants(ant_t *js) {
   js_set(js, constants, "R_OK", js_mknum(R_OK));
   js_set(js, constants, "W_OK", js_mknum(W_OK));
   js_set(js, constants, "X_OK", js_mknum(X_OK));
+  js_set(js, constants, "COPYFILE_EXCL", js_mknum(UV_FS_COPYFILE_EXCL));
+  js_set(js, constants, "COPYFILE_FICLONE", js_mknum(UV_FS_COPYFILE_FICLONE));
+  js_set(js, constants, "COPYFILE_FICLONE_FORCE", js_mknum(UV_FS_COPYFILE_FICLONE_FORCE));
   js_set(js, constants, "O_RDONLY", js_mknum(O_RDONLY));
   js_set(js, constants, "O_WRONLY", js_mknum(O_WRONLY));
   js_set(js, constants, "O_RDWR", js_mknum(O_RDWR));

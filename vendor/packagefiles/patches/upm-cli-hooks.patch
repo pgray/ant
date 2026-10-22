@@ -1,0 +1,120 @@
+diff --git a/src/cli.ts b/src/cli.ts
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -25,6 +25,7 @@
+   PruneResult,
+   RunOptions,
+   RunResult,
++  ScriptStart,
+ } from "./api.ts";
+ import { builtin } from "./builtin.ts";
+ import { formatLockfile, LOCKFILE } from "./lock.ts";
+@@ -681,10 +682,8 @@
+     ifPresent: cli.ifPresent,
+     log: note,
+     // What runs, on stderr, so the script's own stdout is all there is to pipe.
+-    onScript: ({ script, line, workspace }) => {
+-      if (quiet) return;
+-      const at = workspace === undefined ? "" : `${workspace}: `;
+-      write("stderr", `${paint("gray", `> ${at}${script}\n> ${line}`)}\n`);
++    onScript: (start) => {
++      if (!quiet) scriptBanner(start);
+     },
+   };
+   if (name === undefined) {
+@@ -821,36 +820,59 @@
+ let quiet = false;
+ let verbose = false;
+ 
++let program = "upm";
++let noteStyle: Style = "gray";
++
++export function setProgramName(name: string, style: Style = "gray"): void {
++  program = name;
++  noteStyle = style;
++}
++
+ /** Summaries go to stderr, so `--json` keeps stdout clean. */
+-function note(message: string, level: LogLevel = "info"): void {
++export function note(message: string, level: LogLevel = "info"): void {
+   if (quiet && level === "info") return;
+   if (level === "debug") {
+     if (!verbose && !DEBUG.has(globalThis.process?.env?.UPM_DEBUG ?? "")) return;
+-    write("stderr", `${paint("gray", `upm: ${message}`)}\n`);
++    write("stderr", `${paint("gray", `${program}: ${message}`)}\n`);
+   } else if (level === "warn") {
+-    write("stderr", `${paint("yellow", "upm:")} ${paint("yellow", message)}\n`);
++    write("stderr", `${paint("yellow", `${program}:`)} ${paint("yellow", message)}\n`);
+   } else {
+-    write("stderr", `${paint("gray", "upm:")} ${message}\n`);
+-  }
+-}
+-
+-function fail(message: string): void {
+-  write("stderr", `${paint(["red", "bold"], "upm:")} ${paint("red", message)}\n`);
+-}
+-
+-function usage(message: string): number {
++    write("stderr", `${paint(noteStyle, `${program}:`)} ${message}\n`);
++  }
++}
++
++export function fail(message: string): void {
++  write("stderr", `${paint(["red", "bold"], `${program}:`)} ${paint("red", message)}\n`);
++}
++
++export function usage(message: string): number {
+   fail(message);
+   write("stderr", `\n${help("stderr")}\n`);
+   return 2;
+ }
+ 
++let usageText = USAGE;
++
++export function setUsage(text: string): void {
++  usageText = text;
++}
++
++let scriptBanner = ({ script, line, workspace }: ScriptStart): void => {
++  const at = workspace === undefined ? "" : `${workspace}: `;
++  write("stderr", `${paint("gray", `> ${at}${script}\n> ${line}`)}\n`);
++};
++
++export function setScriptBanner(banner: (start: ScriptStart) => void): void {
++  scriptBanner = banner;
++}
++
+ /** The usage text with its section headings in bold. */
+-function help(to: Output): string {
+-  return USAGE.replace(/^[A-Z][a-z]+$/gm, (heading) => paint("bold", heading, to));
+-}
+-
+-type Style = Parameters<typeof import("node:util").styleText>[0];
+-type Output = "stdout" | "stderr";
++export function help(to: Output): string {
++  return usageText.replace(/^[A-Z][a-z]+$/gm, (heading) => paint("bold", heading, to));
++}
++
++export type Style = Parameters<typeof import("node:util").styleText>[0];
++export type Output = "stdout" | "stderr";
+ 
+ /** The progress line on stderr, while a command draws one. */
+ let bar: Bar | undefined;
+@@ -865,7 +887,7 @@
+ }
+ 
+ /** Where there is no `process`, as in a browser, the console stands in for both streams. */
+-function write(to: Output, text: string): void {
++export function write(to: Output, text: string): void {
+   // Cleared first, so a note is not written over it; the next tick draws it under the note.
+   bar?.clear();
+   const stream = globalThis.process?.[to];
+@@ -880,7 +902,7 @@
+  * `styleText` checks the stream: plain text unless it is a terminal that takes color, and
+  * NO_COLOR or FORCE_COLOR decide over that. Without `node:util` or the stream, text stays plain.
+  */
+-function paint(style: Style, text: string, to: Output = "stderr"): string {
++export function paint(style: Style, text: string, to: Output = "stderr"): string {
+   if (styleText === null) {
+     try {
+       styleText = builtin.util.styleText;

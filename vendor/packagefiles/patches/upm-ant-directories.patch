@@ -1,0 +1,24 @@
+diff --git a/src/util.ts b/src/util.ts
+--- a/src/util.ts
++++ b/src/util.ts
+@@ -326,6 +326,12 @@
+   return found;
+ }
+ 
++let homeOverride: ((kind: "data" | "cache") => string) | undefined;
++
++export function setHome(home: ((kind: "data" | "cache") => string) | undefined): void {
++  homeOverride = home;
++}
++
+ /**
+  * upm's own directory for what it keeps (`data`) or can make again (`cache`): the XDG base
+  * directory, set or by default off macOS and Windows (`~/.local/share/upm`, `~/.cache/upm`),
+@@ -340,6 +346,7 @@
+   home = builtin.os.homedir(),
+   platform = globalThis.process?.platform,
+ ): string {
++  if (homeOverride) return homeOverride(kind);
+   const { isAbsolute, join } = builtin.path;
+   const own = join(home, ".upm");
+   // The spec has a relative path ignored.

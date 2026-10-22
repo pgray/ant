@@ -112,7 +112,7 @@ static inline ant_value_t sv_op_for_of(sv_vm_t *vm, ant_t *js) {
   
   if (sv_is_map_iter(js, iterator, &map_st, &map_type)) {
     vm->stack[vm->sp++] = iterator;
-    vm->stack[vm->sp++] = tov((double)map_type);
+    vm->stack[vm->sp++] = collections_iter_slot(map_st);
     vm->stack[vm->sp++] = tov(SV_ITER_MAP);
     GC_ROOT_RESTORE(js, root_mark);
     return tov(0);
@@ -122,7 +122,7 @@ static inline ant_value_t sv_op_for_of(sv_vm_t *vm, ant_t *js) {
   iter_type_t set_type;
   if (sv_is_set_iter(js, iterator, &set_st, &set_type)) {
     vm->stack[vm->sp++] = iterator;
-    vm->stack[vm->sp++] = tov((double)set_type);
+    vm->stack[vm->sp++] = collections_iter_slot(set_st);
     vm->stack[vm->sp++] = tov(SV_ITER_SET);
     GC_ROOT_RESTORE(js, root_mark);
     return tov(0);
@@ -251,65 +251,18 @@ static inline ant_value_t sv_iter_advance(
   }
 
   case SV_ITER_MAP: {
-    map_iterator_state_t *st = get_map_iter_state(vm->stack[vm->sp - 3]);
-    if (!st) return js_mkerr(js, "Invalid Map iterator");
-    if (!st->current) {
-      *out_value = js_mkundef();
-      *out_done = true;
-    } else {
-      map_entry_t *entry = st->current;
-      ant_value_t value;
-      switch (st->type) {
-      case ITER_TYPE_MAP_VALUES:
-        value = entry->value;
-        break;
-      case ITER_TYPE_MAP_KEYS:
-        value = entry->key_val;
-        break;
-      case ITER_TYPE_MAP_ENTRIES: {
-        ant_value_t pair = js_mkarr(js);
-        GC_ROOT_SAVE(root_mark, js);
-        GC_ROOT_PIN(js, pair);
-        js_arr_push(js, pair, entry->key_val);
-        js_arr_push(js, pair, entry->value);
-        GC_ROOT_RESTORE(js, root_mark);
-        value = pair;
-        break;
-      }
-      default:
-        value = js_mkundef();
-      }
-      st->current = entry->hh.next;
-      *out_value = value;
-      *out_done = false;
-    }
+    map_iterator_state_t *st = collections_iter_from_slot(vm->stack[vm->sp - 2]);
+    map_entry_t *entry = map_iter_take(st);
+    *out_done = entry == NULL;
+    *out_value = entry ? map_iter_value(js, st, entry) : js_mkundef();
     return tov(0);
   }
 
   case SV_ITER_SET: {
-    set_iterator_state_t *st = get_set_iter_state(vm->stack[vm->sp - 3]);
-    if (!st) return js_mkerr(js, "Invalid Set iterator");
-    if (!st->current) {
-      *out_value = js_mkundef();
-      *out_done = true;
-    } else {
-      set_entry_t *entry = st->current;
-      ant_value_t value;
-      if (st->type == ITER_TYPE_SET_ENTRIES) {
-        ant_value_t pair = js_mkarr(js);
-        GC_ROOT_SAVE(root_mark, js);
-        GC_ROOT_PIN(js, pair);
-        js_arr_push(js, pair, entry->value);
-        js_arr_push(js, pair, entry->value);
-        GC_ROOT_RESTORE(js, root_mark);
-        value = pair;
-      } else {
-        value = entry->value;
-      }
-      st->current = entry->hh.next;
-      *out_value = value;
-      *out_done = false;
-    }
+    set_iterator_state_t *st = collections_iter_from_slot(vm->stack[vm->sp - 2]);
+    set_entry_t *entry = set_iter_take(st);
+    *out_done = entry == NULL;
+    *out_value = entry ? set_iter_value(js, st, entry) : js_mkundef();
     return tov(0);
   }
 

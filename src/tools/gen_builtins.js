@@ -91,15 +91,88 @@ const builtinExternals = {
   }
 };
 
+const BUNDLE_TARGET = ['es2022'];
+const upmSrc = process.env.ANT_UPM_SRC ? path.resolve(process.env.ANT_UPM_SRC) : undefined;
+
+async function bundleUpmWorker(workerPath, workingDir) {
+  const output = await esbuild.build({
+    entryPoints: [workerPath],
+    absWorkingDir: workingDir,
+    bundle: true,
+    write: false,
+    minify: true,
+    legalComments: 'none',
+    platform: 'neutral',
+    format: 'esm',
+    target: BUNDLE_TARGET,
+    plugins: [builtinExternals]
+  });
+
+  if (output.outputFiles.length !== 1) {
+    throw new Error(`Expected exactly one bundled output for ${workerPath}`);
+  }
+
+  return output.outputFiles[0].text.trim();
+}
+
+const UPM_EFFECTFUL = new Set(['trace.ts', 'workers.ts']);
+
+function upmSource(file) {
+  return { path: file, sideEffects: path.dirname(file) === upmSrc && !UPM_EFFECTFUL.has(path.basename(file)) ? false : undefined };
+}
+
+const upmSources = {
+  name: 'upm-sources',
+  setup(build) {
+    build.onResolve({ filter: /^upm\// }, args => {
+      if (!upmSrc) throw new Error(`${args.path}: ANT_UPM_SRC is not set; the upm subproject provides it`);
+      return upmSource(path.join(path.dirname(upmSrc), args.path.slice('upm/'.length)));
+    });
+
+    build.onResolve({ filter: /^\.\/[a-z-]+\.ts$/ }, args => {
+      if (!upmSrc || path.dirname(args.importer) !== upmSrc || UPM_EFFECTFUL.has(args.path.slice(2))) return undefined;
+      return upmSource(path.join(upmSrc, args.path.slice(2)));
+    });
+  }
+};
+
+const upmInlineWorkers = {
+  name: 'upm-inline-workers',
+  setup(build) {
+    build.onResolve({ filter: /^\.\/workers\.ts$/ }, args => {
+      if (!upmSrc || path.dirname(args.importer) !== upmSrc) return undefined;
+      const pool = args.importer.match(/[\\/]([a-z]+)-pool\.ts$/u);
+      if (!pool) return undefined;
+      return {
+        path: `${pool[1]}-worker.ts`,
+        namespace: 'upm-worker',
+        pluginData: { file: path.join(upmSrc, `${pool[1]}-worker.ts`), name: `${pool[1]}Worker` }
+      };
+    });
+
+    build.onLoad({ filter: /.*/, namespace: 'upm-worker' }, async args => {
+      const { file, name } = args.pluginData;
+      const code = (await bundleUpmWorker(file, build.initialOptions.absWorkingDir)).replace(/[%?#\t\n\r]/g, encodeURIComponent);
+      const url = JSON.stringify(`data:text/javascript,${code}`);
+      return {
+        contents: `export const ${name} = () => new URL(${url});`,
+        loader: 'js',
+        watchFiles: [file]
+      };
+    });
+  }
+};
+
 function wantsCompaction(entryPath) {
   const first = readFileSync(entryPath, 'utf8').split('\n', 1)[0];
   return first.includes('@ant: compact_on_build');
 }
 
-async function bundleBuiltin(entryPath, format) {
+async function bundleBuiltin(entryPath, format, workingDir) {
   const compact = wantsCompaction(entryPath);
   const output = await esbuild.build({
     entryPoints: [entryPath],
+    absWorkingDir: workingDir,
     bundle: true,
     write: false,
     minifyWhitespace: compact,
@@ -109,8 +182,8 @@ async function bundleBuiltin(entryPath, format) {
     nodePaths: [fileURLToPath(new URL('./node_modules/', import.meta.url))],
     platform: 'neutral',
     format: format === 'MODULE_EVAL_FORMAT_ESM' ? 'esm' : 'cjs',
-    target: ['es2020'],
-    plugins: [builtinExternals]
+    target: BUNDLE_TARGET,
+    plugins: [upmSources, upmInlineWorkers, builtinExternals]
   });
 
   if (output.outputFiles.length !== 1) {
@@ -227,17 +300,18 @@ async function main() {
   const rawDefinitions = args.slice(4, separator);
   const entryFiles = args.slice(separator + 1);
   const replacements = toDefineReplacements(rawDefinitions);
-  const bundles = [];
-
-  for (const entryPath of entryFiles) {
-    if (isBootstrapSource(builtinsRoot, entryPath)) continue;
-
-    const specifier = toSpecifier(builtinsRoot, entryPath);
-    const format = toFormat(entryPath);
-    const bytes = await bundleBuiltin(entryPath, format);
-    const specifiers = [specifier, ...toAliasSpecifiers(specifier)];
-    bundles.push({ entryPath, specifier, specifiers, format, bytes });
-  }
+  const workingDir = path.resolve(builtinsRoot, '../..');
+  const bundles = await Promise.all(
+    entryFiles
+      .filter(entryPath => !isBootstrapSource(builtinsRoot, entryPath))
+      .map(async entryPath => {
+        const specifier = toSpecifier(builtinsRoot, entryPath);
+        const format = toFormat(entryPath);
+        const bytes = await bundleBuiltin(entryPath, format, workingDir);
+        const specifiers = [specifier, ...toAliasSpecifiers(specifier)];
+        return { entryPath, specifier, specifiers, format, bytes };
+      })
+  );
 
   const snapshotBytes = await bundleBootstrap(bootstrapEntry, replacements);
   const builtinResult = generateBuiltinHeader(builtinsRoot, bundles);

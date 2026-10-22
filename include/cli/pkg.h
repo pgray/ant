@@ -2,25 +2,27 @@
 #define PKG_CMDS_H
 
 #include <stdbool.h>
+#include "types.h"
 
-extern bool pkg_verbose;
-extern bool pkg_force;
+typedef struct {
+  int argc;
+  char **argv;
+} pkg_argv_t;
 
-int pkg_cmd_init(int argc, char **argv);
-int pkg_cmd_install(int argc, char **argv);
-int pkg_cmd_update(int argc, char **argv);
-int pkg_cmd_add(int argc, char **argv);
-int pkg_cmd_remove(int argc, char **argv);
-int pkg_cmd_trust(int argc, char **argv);
-int pkg_cmd_run(int argc, char **argv);
-int pkg_cmd_exec(int argc, char **argv);
-int pkg_cmd_config(int argc, char **argv);
-int pkg_cmd_why(int argc, char **argv);
-int pkg_cmd_info(int argc, char **argv);
-int pkg_cmd_ls(int argc, char **argv);
-int pkg_cmd_cache(int argc, char **argv);
-int pkg_cmd_create(int argc, char **argv);
+pkg_argv_t pkg_command_argv(
+  const char *argv0, const char *command,
+  int argc, char **argv, int tail_argc, char **tail_argv
+);
 
-bool pkg_script_exists(const char *package_json_path, const char *script_name);
+bool pkg_script_argv(
+  pkg_argv_t *out, const char *argv0, const char *name,
+  int argc, char **argv, int tail_argc, char **tail_argv
+);
+
+int pkg_run(ant_t *js);
+void pkg_argv_free(pkg_argv_t *pkg);
+
+bool pkg_parse_global_flag(const char *arg);
+char **pkg_antx_argv(int *argc, char **argv);
 
 #endif
