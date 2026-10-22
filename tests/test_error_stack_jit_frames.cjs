@@ -104,6 +104,31 @@ const cases = {
     let last; for (let i = 0; i < 20000; i++) last = mk(i);
     console.log(last.stack);
   `,
+  inlinedPlainCtor: `
+    function helper() { return new Error('h'); }
+    function Ctor2() { this.e = helper(); }
+    function mkCtor2() { return new Ctor2(); }
+    const seen = new Set();
+    for (let i = 0; i < 20000; i++) seen.add(mkCtor2().e.stack);
+    console.log([...seen].join('\\n--\\n'));
+  `,
+  resumedCtor: `
+    function P2() { let x = 0; for (let i = 0; i < 200000; i++) x += 1; const m = 'osr' + x; this.e = new Error(m); }
+    console.log(new P2().e.stack);
+  `,
+  deepCtorChain: `
+    Error.stackTraceLimit = 2;
+    class A extends Error { constructor(m) { super(m); this.a = 1; } }
+    class B extends A { constructor(m) { super(m); this.b = 1; } }
+    class C extends B { constructor(m) { super(m); this.c = 1; } }
+    class D extends C { constructor(m) { super(m); this.d = 1; } }
+    function mk(i) { const e = new D('d' + i); return e; }
+    function f1(i) { const e = mk(i); return e; }
+    function f2(i) { const e = f1(i); return e; }
+    function f3(i) { const e = f2(i); return e; }
+    let last; for (let i = 0; i < 20000; i++) last = f3(i);
+    console.log(last.stack);
+  `,
   captureAbove: `
     function inner(fn) { const o = {}; Error.captureStackTrace(o, fn); return o.stack; }
     function outer(fn) { const s = inner(fn); return s; }

@@ -39,6 +39,12 @@ static void jit_emit_await_park_block(jit_compile_t *c) {
   MIR_append_insn(c->ctx, c->jit_func, MIR_new_ret_insn(c->ctx, 1, MIR_new_reg_op(c->ctx, r_res)));
 }
 
+static bool jit_resume_keeps_new_target(const jit_compile_t *c) {
+  const sv_func_t *f = c->func;
+  if (c->feat.needs_new_target || f->is_class_ctor) return true;
+  return !(f->is_arrow || f->is_method || f->is_async || f->is_generator || f->is_eval || f->is_tla);
+}
+
 static void jit_emit_resume_tramp(jit_compile_t *c, const jit_bailout_emit_t *bail, MIR_item_t imp, const char *res_name) {
   mir_emit_bailout_spill_block(c->ctx, c->jit_func, bail);
   MIR_append_insn(c->ctx, c->jit_func, bail->tramp);
@@ -87,7 +93,7 @@ static void jit_emit_resume_tramp(jit_compile_t *c, const jit_bailout_emit_t *ba
                                     MIR_new_reg_op(c->ctx, c->r_vm),
                                     MIR_new_reg_op(c->ctx, c->r_closure),
                                     MIR_new_reg_op(c->ctx, c->r_this_curr),
-                                    c->feat.needs_new_target ? MIR_new_reg_op(c->ctx, c->r_new_target)
+                                    jit_resume_keeps_new_target(c) ? MIR_new_reg_op(c->ctx, c->r_new_target)
                                       : MIR_new_uint_op(c->ctx, mkval(kTypeUndefined, 0)),
                                     c->feat.needs_super ? MIR_new_reg_op(c->ctx, c->r_super_val)
                                       : MIR_new_uint_op(c->ctx, mkval(kTypeUndefined, 0)),

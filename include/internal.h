@@ -207,6 +207,7 @@ bool js_obj_ensure_prop_capacity(ant_t *js, ant_object_t *obj, uint32_t needed);
 bool js_obj_ensure_unique_shape(ant_object_t *obj);
 bool js_get_plain_index(ant_t *js, ant_value_t obj, uint32_t idx, ant_value_t *out);
 bool js_string_past_end_is_undefined(ant_t *js, ant_value_t str);
+bool js_try_get_own_data_prop_interned(ant_t *js, ant_value_t obj, const char *interned, ant_value_t *out);
 
 ant_value_t js_string_from_utf16_code_unit(ant_t *js, uint32_t code_unit);
 ant_value_t js_get_index_fast(ant_t *js, ant_value_t obj, ant_value_t key);

@@ -30,12 +30,13 @@ ant_value_t errbuf_take_string(ant_t *js, errbuf_t *eb, size_t len);
 
 __attribute__((format(printf, 3, 4)))
 size_t errbuf_appendf(errbuf_t *eb, size_t used, const char *fmt, ...);
+size_t errbuf_append(errbuf_t *eb, size_t used, const char *s, size_t len);
 
 void error_line_col(const char *code, ant_offset_t code_len, ant_offset_t pos, int *out_line, int *out_col);
 size_t error_render_value(errbuf_t *eb, ant_t *js, size_t used, ant_value_t value);
 
 bool error_render_frame(
-  errbuf_t *eb, size_t *n, const char *name, bool construct, 
+  errbuf_t *eb, size_t *n, const char *name, bool construct,
   const char *file, int line, int col, error_frame_style_t style
 );
 

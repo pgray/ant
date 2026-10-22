@@ -294,6 +294,7 @@ struct ant_isolate_t {
     const char *then;
     const char *name;
     const char *message;
+    const char *stack_trace_limit;
     const char *done;
     const char *value;
     const char *get;

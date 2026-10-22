@@ -1,4 +1,5 @@
 #include "silver/stack_trace.h"
+#include "silver/engine.h"
 #include "cfunc.h"
 #include "errors.h"
 #include "error_render.h"
@@ -71,8 +72,14 @@ void sv_stack_iter_init(sv_vm_t *vm, sv_stack_iter_t *it, int limit, bool resolv
   it->skip = -1;
   it->n_pending = 0;
   it->resolve = resolve;
-  if (vm && vm->js->jit_active_depth)
-    it->n_acts = sv_jit_collect_activations(vm, &it->acts, SV_STACK_INLINE_ACTIVATIONS, limit);
+  it->truncated = false;
+  
+  if (!vm || !vm->js->jit_active_depth) return;
+  it->n_acts = sv_jit_collect_activations(vm, &it->acts, SV_STACK_INLINE_ACTIVATIONS, limit);
+  
+  int funcs = 0;
+  for (int i = 0; i < it->n_acts; i++) funcs += it->acts[i].func != NULL;
+  it->truncated = limit > 0 && funcs >= limit;
 }
 
 void sv_stack_iter_finish(sv_stack_iter_t *it) {
@@ -88,15 +95,20 @@ static int sv_stack_frame_bc_off(sv_stack_iter_t *it, int idx, const sv_frame_t 
   return it->seg && it->seg->entry_vm_fp == idx + 1 ? off : off - 1;
 }
 
-static bool sv_stack_construct(sv_vm_t *vm, const sv_func_t *func, int vm_fp) {
-  if (!func || func->is_arrow || func->is_eval) return false;
-  return func->is_class_ctor || (vm_fp >= 0 && vtype(vm->frames[vm_fp].new_target) != kTypeUndefined);
+static bool sv_func_may_construct(const sv_func_t *func) {
+  return func && !func->is_arrow && !func->is_eval;
 }
 
-static bool sv_inlined_construct(const sv_jit_frame_t *callee, const sv_jit_frame_t *caller) {
-  const sv_func_t *fn = callee->func, *f = caller->func;
-  if (!fn || fn->is_arrow || fn->is_eval) return false;
-  if (fn->is_class_ctor) return true;
+static bool sv_frame_is_construct(sv_vm_t *vm, const sv_func_t *func, int vm_fp) {
+  if (!sv_func_may_construct(func)) return false;
+  if (vm_fp >= 0) return vtype(vm->frames[vm_fp].new_target) != kTypeUndefined;
+  return func->is_class_ctor;
+}
+
+static bool sv_inlined_is_construct(const sv_jit_frame_t *callee, const sv_jit_frame_t *caller) {
+  const sv_func_t *f = caller->func;
+  if (!sv_func_may_construct(callee->func)) return false;
+  if (callee->func->is_class_ctor) return true;
   if (!f || !f->code || caller->bc_off < 0 || caller->bc_off >= f->code_len) return false;
   
   switch (f->code[caller->bc_off]) {
@@ -106,20 +118,23 @@ static bool sv_inlined_construct(const sv_jit_frame_t *callee, const sv_jit_fram
   }
 }
 
+static bool sv_jit_frame_is_construct(const sv_jit_frame_t *at, int i, int m, bool outer) {
+  return i == m - 1 ? outer : sv_inlined_is_construct(&at[i], &at[i + 1]);
+}
+
 static void sv_stack_resolve(sv_stack_iter_t *it, const sv_jit_activation_t *a, ant_value_t callee, int host_fp) {
   sv_jit_frame_t frames[SV_JIT_INLINE_FRAMES_MAX + 1];
   
   int n = sv_jit_frames_at(it->vm->js, a->pc, frames, SV_JIT_INLINE_FRAMES_MAX + 1);
   if (n <= 0) frames[n++] = (sv_jit_frame_t){ a->func, -1 };
   
+  bool outer = sv_frame_is_construct(it->vm, frames[n - 1].func, host_fp);
   for (int k = 0; k < n; k++) it->pending[n - 1 - k] = (sv_stack_entry_t){
     .func = frames[k].func,
     .callee = k == n - 1 ? callee : js_mkundef(),
     .bc_off = frames[k].bc_off,
     .frame_index = -1,
-    .construct = k == n - 1
-      ? sv_stack_construct(it->vm, frames[k].func, host_fp)
-      : sv_inlined_construct(&frames[k], &frames[k + 1]),
+    .construct = sv_jit_frame_is_construct(frames, k, n, outer),
   };
   
   it->n_pending = n;
@@ -147,7 +162,10 @@ bool sv_stack_iter_next(sv_stack_iter_t *it, sv_stack_entry_t *out) {
       if (it->resolve) {
         sv_stack_resolve(it, a, callee, host_fp);
         *out = it->pending[--it->n_pending];
-      } else *out = (sv_stack_entry_t){ a->func, callee, a->pc, -1, -1, sv_stack_construct(vm, a->func, host_fp) };
+      } else *out = (sv_stack_entry_t){
+        .func = a->func, .callee = callee, .pc = a->pc, .bc_off = -1, .frame_index = -1,
+        .construct = sv_frame_is_construct(vm, a->func, host_fp),
+      };
       
       return true;
     }
@@ -157,10 +175,10 @@ bool sv_stack_iter_next(sv_stack_iter_t *it, sv_stack_entry_t *out) {
     if (idx == it->skip) continue;
     
     sv_frame_t *frame = &vm->frames[idx];
-    *out = (sv_stack_entry_t){ 
-      frame->func, frame->callee, 0, 
-      sv_stack_frame_bc_off(it, idx, frame), idx,
-      sv_stack_construct(vm, frame->func, idx)
+    *out = (sv_stack_entry_t){
+      .func = frame->func, .callee = frame->callee,
+      .bc_off = sv_stack_frame_bc_off(it, idx, frame), .frame_index = idx,
+      .construct = sv_frame_is_construct(vm, frame->func, idx),
     };
     
     return true;
@@ -187,7 +205,7 @@ static int error_stack_trace_limit(ant_t *js) {
   ant_value_t ctor = js->builtins.error_ctor, limit;
   
   if (vtype(ctor) != kTypeFunction) return 10;
-  if (!js_try_get_own_data_prop(js, ctor, "stackTraceLimit", 15, &limit) || vtype(limit) != kTypeNumber) return -1;
+  if (!js_try_get_own_data_prop_interned(js, ctor, js->intern.stack_trace_limit, &limit) || vtype(limit) != kTypeNumber) return -1;
   
   double d = js_getnum(limit);
   if (!(d > 0)) return 0;
@@ -245,9 +263,17 @@ static error_frame_view_t error_frame_view(ant_t *js, const error_frame_t *f, co
   return view;
 }
 
+static error_frame_t error_frame_of(const sv_stack_entry_t *e) {
+  return (error_frame_t){
+    .func = e->func, .callee = e->callee, .pc = e->pc,
+    .bc_off = e->bc_off, .construct = e->construct
+  };
+}
+
 static bool error_entry_is_wrapper(ant_t *js, const sv_stack_entry_t *e, int newer) {
   if (e->frame_index != 0 || newer == 0) return false;
-  error_frame_view_t view = error_frame_view(js, &(error_frame_t){ e->func, e->callee, 0, e->bc_off, e->construct }, "");
+  error_frame_t f = error_frame_of(e);
+  error_frame_view_t view = error_frame_view(js, &f, "");
   return view.line == 1 && view.col == 1 && strcmp(view.name, "<anonymous>") == 0;
 }
 
@@ -257,8 +283,8 @@ static bool error_frames_reserve(error_frame_t **frames, error_frame_t *local, i
   if (need <= *cap) return true;
   int grown_cap = *cap * 2 > need ? *cap * 2 : need;
   
-  error_frame_t *grown = *frames == local 
-    ? malloc((size_t)grown_cap * sizeof(*grown)) 
+  error_frame_t *grown = *frames == local
+    ? malloc((size_t)grown_cap * sizeof(*grown))
     : realloc(*frames, (size_t)grown_cap * sizeof(*grown));
     
   if (!grown) return false;
@@ -280,39 +306,75 @@ static void error_append_frames(
   }
 }
 
-static sv_func_t *error_until_func(ant_value_t until) {
-  while (vtype(until) == kTypeFunction) {
-    sv_closure_t *c = js_func_closure(until);
-    if (c->func || !(c->call_flags & SV_CALL_IS_DEFAULT_CTOR)) return c->func;
-    until = c->super_val;
+typedef struct {
+  sv_func_t *func;
+  bool active;
+} error_above_t;
+
+static constexpr int ERROR_ABOVE_SLACK = 2;
+
+static error_above_t error_above_of(ant_t *js, ant_value_t fn) {
+  bool direct = true;
+  
+  while (fn != js->current_func) {
+    if (vtype(fn) == kTypeBuiltin) return (error_above_t){ NULL, direct };
+    if (vtype(fn) != kTypeFunction) break;
+
+    sv_closure_t *c = js_func_closure(fn);
+    if (c->func_obj && vtype(js_get_slot(c->func_obj, SLOT_TARGET_FUNC)) != kTypeUndefined) break;
+    if (!(c->call_flags & SV_CALL_IS_DEFAULT_CTOR)) {
+      if (c->func || direct) return (error_above_t){ c->func, true };
+      break;
+    }
+    fn = c->super_val;
+    direct = false;
   }
-  return NULL;
+  
+  return (error_above_t){ NULL, false };
 }
 
-static int error_live_frames(ant_t *js, int limit, ant_value_t until, error_frame_t *local, error_frame_t **out) {
+static int error_collect_frames(
+  ant_t *js, int limit, error_above_t above, bool resolve,
+  error_frame_t *local, error_frame_t **out
+) {
   *out = local;
-  if (!js || !js->vm || limit == 0) return 0;
+  if (!js || !js->vm || limit == 0 || (above.active && !above.func)) return 0;
   
-  sv_stack_iter_t it;
-  sv_stack_entry_t e;
-  int n = 0, cap = ERROR_FRAMES_INLINE;
-  sv_func_t *skip = error_until_func(until);
+  int cap = ERROR_FRAMES_INLINE;
+  int walk = !above.active ? limit
+    : limit >= 0 && limit < INT_MAX - ERROR_ABOVE_SLACK 
+    ? limit + ERROR_ABOVE_SLACK : -1;
   
-  sv_stack_iter_init(js->vm, &it, skip ? -1 : limit, true);
-  while ((limit < 0 || n < limit) && sv_stack_iter_next(&it, &e)) {
-    if (skip) { if (e.func == skip) skip = NULL; continue; }
-    if (error_entry_is_wrapper(js, &e, n)) continue;
-    if (!error_frames_reserve(out, local, &cap, n + 1)) break;
-    (*out)[n++] = (error_frame_t){ e.func, e.callee, 0, e.bc_off, e.construct };
+  for (;;) {
+    sv_stack_iter_t it;
+    sv_stack_entry_t e;
+    
+    sv_func_t *seek = above.func;
+    int n = 0;
+    
+    sv_stack_iter_init(js->vm, &it, walk, resolve || seek);
+    while ((limit < 0 || n < limit) && sv_stack_iter_next(&it, &e)) {
+      if (seek) {
+        if (e.func == seek) { seek = NULL; it.resolve = resolve; }
+        continue;
+      }
+      
+      if (error_entry_is_wrapper(js, &e, n)) continue;
+      if (!error_frames_reserve(out, local, &cap, n + 1)) break;
+      (*out)[n++] = error_frame_of(&e);
+    }
+    
+    bool cut_short = above.active && walk >= 0 && it.truncated && it.ai == it.n_acts;
+    sv_stack_iter_finish(&it);
+    
+    if (!cut_short) return n;
+    walk = walk <= INT_MAX / 4 ? walk * 4 : -1;
   }
-  
-  sv_stack_iter_finish(&it);
-  return n;
 }
 
 static size_t error_append_live_frames(ant_t *js, int limit, const char *file, errbuf_t *eb, size_t n, error_frame_style_t style) {
   error_frame_t local[ERROR_FRAMES_INLINE], *frames;
-  int count = error_live_frames(js, limit, js_mkundef(), local, &frames);
+  int count = error_collect_frames(js, limit, (error_above_t){0}, true, local, &frames);
   error_append_frames(js, frames, count, file, eb, &n, style);
   if (frames != local) free(frames);
   return n;
@@ -349,6 +411,7 @@ typedef enum {
 
 typedef struct {
   error_site_kind_t site_kind;
+  bool no_site_frame;
   sv_func_t *site_func;
   ant_offset_t site_pos, site_span;
   int line, col;
@@ -387,36 +450,28 @@ static void error_record_finalize(ant_t *js, ant_object_t *obj) {
   if (obj->native_tag == ERROR_RECORD_NATIVE_TAG) free(obj->native_ptr);
 }
 
-ant_value_t js_error_record_capture(ant_t *js, const js_error_site_t *at, ant_value_t until) {
+ant_value_t js_error_record_capture(ant_t *js, const js_error_site_t *at, ant_value_t above_fn) {
   int limit = error_stack_trace_limit(js);
   if (limit < 0) return js_mkundef();
 
-  error_frame_t local[ERROR_FRAMES_INLINE], *frames = local;
-  int n = 0, cap = ERROR_FRAMES_INLINE;
+  error_frame_t local[ERROR_FRAMES_INLINE], *frames;
+  error_above_t above = error_above_of(js, above_fn);
+  int n = error_collect_frames(js, limit, above, false, local, &frames);
   bool need_file = false;
-
-  sv_stack_iter_t it;
-  sv_stack_entry_t e;
-  sv_func_t *skip = limit > 0 ? error_until_func(until) : NULL;
-  sv_stack_iter_init(js->vm, &it, skip ? -1 : limit, skip != NULL);
   
-  while (n < limit && sv_stack_iter_next(&it, &e)) {
-    if (skip) { if (e.func == skip) skip = NULL; continue; }
-    if (error_entry_is_wrapper(js, &e, n)) continue;
-    if (!error_frames_reserve(&frames, local, &cap, n + 1)) break;
-    bool named = e.func && e.func->debug->name && e.func->debug->name[0];
-    frames[n++] = (error_frame_t){ e.func, named ? js_mkundef() : e.callee, e.pc, e.bc_off, e.construct };
-    if (!e.func || !e.func->debug->filename) need_file = true;
+  for (int i = 0; i < n; i++) {
+    error_frame_t *f = &frames[i];
+    if (f->func && f->func->debug->name && f->func->debug->name[0]) f->callee = js_mkundef();
+    if (!f->func || !f->func->debug->filename) need_file = true;
   }
-  
-  sv_stack_iter_finish(&it);
 
   error_record_t *rec = calloc(1, sizeof(*rec) + (size_t)n * sizeof(rec->frames[0]));
   if (rec) memcpy(rec->frames, frames, (size_t)n * sizeof(rec->frames[0]));
   if (frames != local) free(frames);
   if (!rec) return js_mkundef();
   
-  rec->limit = skip ? 0 : limit;
+  rec->limit = limit;
+  rec->no_site_frame = above.active;
   rec->n_frames = n;
 
   js_error_site_t es = at && at->valid ? *at : (js_error_site_t){0};
@@ -494,10 +549,11 @@ static void error_render_begin(ant_t *js, const error_record_t *rec, error_rende
     
     for (int i = 0; i < m && r->n < rec->limit; i++) {
       if (!error_frames_reserve(&r->frames, r->local, &cap, r->n + 1)) return;
-      bool outer = i == m - 1;
       r->frames[r->n++] = (error_frame_t){
-        at[i].func, outer ? f->callee : js_mkundef(), 0, at[i].bc_off,
-        outer ? f->construct : sv_inlined_construct(&at[i], &at[i + 1])
+        .func = at[i].func,
+        .callee = i == m - 1 ? f->callee : js_mkundef(),
+        .bc_off = at[i].bc_off,
+        .construct = sv_jit_frame_is_construct(at, i, m, f->construct),
       };
     }
   }
@@ -536,12 +592,12 @@ static void error_render_prefix(ant_t *js, error_render_t *r, errbuf_t *eb, size
   
   size_t len = 0;
   const char *text = vtype(r->rec->rendered_site) == kTypeString ? js_getstr(js, r->rec->rendered_site, &len) : NULL;
-  if (text) *n = errbuf_appendf(eb, *n, "%.*s", (int)len, text);
+  if (text) *n = errbuf_append(eb, *n, text, len);
 }
 
 static void error_render_frames(ant_t *js, const error_render_t *r, errbuf_t *eb, size_t *n, error_frame_style_t style) {
   error_append_frames(js, r->frames, r->n, r->file, eb, n, style);
-  if (r->n == 0 && r->rec->limit > 0) error_render_frame(eb, n, NULL, false, r->file, r->site.line, r->site.col, style);
+  if (r->n == 0 && r->rec->limit > 0 && !r->rec->no_site_frame) error_render_frame(eb, n, NULL, false, r->file, r->site.line, r->site.col, style);
 }
 
 char *js_error_render_pretty(ant_t *js, ant_value_t err, ant_value_t stack, size_t *out_len, size_t *header_at) {
@@ -605,7 +661,7 @@ ant_value_t js_error_record_stack_text(ant_t *js, ant_value_t header, ant_value_
 
   size_t len = 0;
   const char *text = js_getstr(js, header, &len);
-  size_t n = errbuf_appendf(&eb, 0, "%.*s", (int)len, text ? text : "");
+  size_t n = text ? errbuf_append(&eb, 0, text, len) : 0;
 
   error_render_t r;
   error_render_begin(js, rec, &r);
@@ -623,7 +679,7 @@ enum {
   CS_LINE,
   CS_COL,
   CS_NAME,
-  CS_CTOR
+  CS_CONSTRUCT
 };
 
 static ant_value_t callsite_field(ant_t *js, int field) {
@@ -636,7 +692,7 @@ static ant_value_t callsite_getFileName(ant_params_t) { return callsite_field(js
 static ant_value_t callsite_getLineNumber(ant_params_t) { return callsite_field(js, CS_LINE); }
 static ant_value_t callsite_getColumnNumber(ant_params_t) { return callsite_field(js, CS_COL); }
 static ant_value_t callsite_getFunctionName(ant_params_t) { return callsite_field(js, CS_NAME); }
-static ant_value_t callsite_isConstructor(ant_params_t) { return js_bool(js_truthy(js, callsite_field(js, CS_CTOR))); }
+static ant_value_t callsite_isConstructor(ant_params_t) { return js_bool(js_truthy(js, callsite_field(js, CS_CONSTRUCT))); }
 
 static ant_value_t callsite_null(ant_params_t) { return js_mknull(); }
 static ant_value_t callsite_false(ant_params_t) { return js_false; }
@@ -647,18 +703,20 @@ static ant_value_t callsite_toString(ant_params_t) {
   ant_value_t file = callsite_field(js, CS_FILE);
   ant_value_t line = callsite_field(js, CS_LINE);
   ant_value_t col  = callsite_field(js, CS_COL);
-  bool ctor = js_truthy(js, callsite_field(js, CS_CTOR));
+  bool construct = js_truthy(js, callsite_field(js, CS_CONSTRUCT));
 
+  const char *n = "", *f = "";
   size_t n_len = 0, f_len = 0;
-  const char *n = vtype(name) == kTypeString ? js_getstr(js, name, &n_len) : NULL;
-  const char *f = vtype(file) == kTypeString ? js_getstr(js, file, &f_len) : NULL;
+  
+  if (vtype(name) == kTypeString) n = js_getstr(js, name, &n_len);
+  if (vtype(file) == kTypeString) f = js_getstr(js, file, &f_len);
   int l = vtype(line) == kTypeNumber ? (int)js_getnum(line) : 0;
   int c = vtype(col)  == kTypeNumber ? (int)js_getnum(col)  : 0;
 
   errbuf_t eb;
   if (!errbuf_init(&eb, 256)) return js_mkerr(js, "out of memory");
-  size_t len = errbuf_appendf(&eb, 0, "%s%.*s (%.*s:%d:%d)",
-    ctor ? "new " : "", n ? (int)n_len : 0, n ? n : "", f ? (int)f_len : 0, f ? f : "", l, c);
+  size_t len = errbuf_appendf(&eb, 0, "%s%.*s (%.*s:%d:%d)", construct ? "new " : "", (int)n_len, n, (int)f_len, f, l, c);
+  
   return errbuf_take_string(js, &eb, len);
 }
 
@@ -690,14 +748,14 @@ static ant_value_t callsite_proto(ant_t *js) {
   return proto;
 }
 
-ant_value_t js_build_callsite_array(ant_t *js, ant_value_t until) {
+ant_value_t js_build_callsite_array(ant_t *js, ant_value_t above) {
   GC_ROOT_SAVE(root_mark, js);
   ant_value_t proto = callsite_proto(js);
   ant_value_t arr = js_mkarr(js);
   GC_ROOT_PIN(js, arr);
 
   error_frame_t local[ERROR_FRAMES_INLINE], *frames;
-  int count = error_live_frames(js, error_stack_trace_limit(js), until, local, &frames);
+  int count = error_collect_frames(js, error_stack_trace_limit(js), error_above_of(js, above), true, local, &frames);
   const char *file = js->filename ? js->filename : "<eval>";
 
   ant_value_t data = js_mkundef(), site = js_mkundef();

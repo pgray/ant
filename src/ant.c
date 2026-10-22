@@ -3433,6 +3433,7 @@ static void js_init_intern_cache(ant_t *js) {
   js->intern.then = intern_string(js, "then", 4);
   js->intern.name = intern_string(js, "name", 4);
   js->intern.message = intern_string(js, "message", 7);
+  js->intern.stack_trace_limit = intern_string(js, "stackTraceLimit", 15);
   js->intern.done = intern_string(js, "done", 4);
   js->intern.value = intern_string(js, "value", 5);
   js->intern.get = intern_string(js, "get", 3);
@@ -4427,6 +4428,28 @@ bool lookup_prop_meta(
   prop_meta_from_desc(out, desc);
 
   return true;
+}
+
+bool js_try_get_own_data_prop_interned(ant_t *js, ant_value_t obj, const char *interned, ant_value_t *out) {
+  *out = js_mkundef();
+  if (!interned) return false;
+  
+  ant_value_t as_obj = js_as_obj(vtype(obj) == kTypeFunction ? js_func_obj(obj) : obj);
+  ant_object_t *ptr = vtype(as_obj) == kTypeObject ? js_obj_ptr(as_obj) : NULL;
+  
+  if (ptr && ptr->shape && !ptr->flags.is_exotic) {
+    int32_t slot = ant_shape_lookup_interned(ptr->shape, interned);
+    const ant_shape_prop_t *prop = slot >= 0 ? ant_shape_prop_at(ptr->shape, (uint32_t)slot) : NULL;
+    
+    if (prop && (prop->has_getter || prop->has_setter)) return false;
+    
+    if (prop) {
+      *out = ant_object_prop_get_unchecked(ptr, (uint32_t)slot);
+      return true;
+    }
+  }
+  
+  return js_try_get_own_data_prop(js, obj, interned, strlen(interned), out);
 }
 
 bool js_try_get_own_data_prop(ant_t *js, ant_value_t obj, const char *key, size_t key_len, ant_value_t *out) {
@@ -7597,7 +7620,9 @@ static ant_value_t builtin_error_captureStackTrace(ant_params_t) {
     return js_mkerr(js, "argument must be an object");
 
   ant_value_t target = args[0];
-  ant_value_t until = nargs > 1 ? args[1] : js_mkundef();
+  ant_value_t above = nargs > 1 ? args[1] : js_mkundef();
+  
+  if (vtype(above) == kTypeBuiltin && js_as_cfunc(above) == builtin_error_captureStackTrace) above = js_mkundef();
   ant_value_t error_ctor = lkp_val(js, js_glob(js), "Error", 5);
   ant_value_t prep = js_mkundef();
 
@@ -7605,14 +7630,14 @@ static ant_value_t builtin_error_captureStackTrace(ant_params_t) {
     prep = lkp_val(js, js_func_obj(error_ctor), "prepareStackTrace", 17);
 
   if (vtype(prep) == kTypeFunction || vtype(prep) == kTypeBuiltin) {
-    ant_value_t callsites = js_build_callsite_array(js, until);
+    ant_value_t callsites = js_build_callsite_array(js, above);
     ant_value_t prep_args[2] = { target, callsites };
     
     ant_value_t result = sv_vm_call(js->vm, js, prep, js_mkundef(), prep_args, 2, NULL, js_mkundef());
     if (Ant_Exception_Pending(js)) return js_mkundef();
     
     js_error_define_stack(js, target, js_mkundef(), result);
-  } else js_capture_stack_above(js, target, until);
+  } else js_capture_stack_above(js, target, above);
 
   return js_mkundef();
 }
@@ -7628,7 +7653,7 @@ static ant_value_t error_install_message_cause(ant_t *js, ant_value_t err, ant_v
   if (vtype(message) != kTypeUndefined) {
     ant_value_t msg = js_template_to_string(js, message);
     if (is_err(msg)) return msg;
-    mkprop_bytes(js, err, "message", 7, msg, JS_DESC_W | JS_DESC_C);
+    mkprop_interned(js, err, js->intern.message, msg, ANT_PROP_ATTR_WRITABLE | ANT_PROP_ATTR_CONFIGURABLE);
   }
   
   if (is_object_type(options) && lkp_proto(js, options, "cause", 5).obj) {

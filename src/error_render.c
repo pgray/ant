@@ -55,6 +55,13 @@ static bool ensure_errbuf_capacity(errbuf_t *eb, size_t needed) {
   return true;
 }
 
+size_t errbuf_append(errbuf_t *eb, size_t used, const char *s, size_t len) {
+  if (len > SIZE_MAX - used - 1 || !ensure_errbuf_capacity(eb, used + len + 1)) return used;
+  memcpy(eb->buf + used, s, len);
+  eb->buf[used + len] = '\0';
+  return used + len;
+}
+
 __attribute__((format(printf, 3, 4)))
 size_t errbuf_appendf(errbuf_t *eb, size_t used, const char *fmt, ...) {
   for (;;) {
@@ -299,30 +306,103 @@ static size_t error_frame_path_prefix(const char *file) {
   return slash ? (size_t)(slash + 1 - file) : 0;
 }
 
+typedef struct { 
+  const char *s; 
+  size_t len; 
+} error_glyph_t;
+
+typedef struct {
+  error_glyph_t 
+    head, 
+    open, 
+    path, 
+    mid, 
+    line, 
+    col, 
+    end, 
+    close;
+} error_frame_glyphs_t;
+
+typedef enum { 
+  ERROR_GLYPHS_PLAIN, 
+  ERROR_GLYPHS_COMPACT, 
+  ERROR_GLYPHS_COLOR 
+} error_glyphs_kind_t;
+
+#define G(text) { text, sizeof(text) - 1 }
+static const error_glyph_t error_glyph_new = G("new ");
+static const error_frame_glyphs_t error_frame_glyphs[] = {
+  [ERROR_GLYPHS_PLAIN] = { G("\n    at "), G(" ("), G(""), G(""), G(":"), G(":"), G(""), G(")") },
+  [ERROR_GLYPHS_COMPACT] = { G("\n  at "), G(" ("), G(""), G(""), G(":"), G(":"), G(""), G(")") },
+  [ERROR_GLYPHS_COLOR] = {
+    G("\n  \x1b[2mat\x1b[0m "), G(" \x1b[2m("), G("\x1b[36m\x1b[2m"), G("\x1b[0m\x1b[36m"),
+    G("\x1b[0m\x1b[2m:\x1b[0m\x1b[33m"), G("\x1b[0m\x1b[2m:\x1b[33m"), G("\x1b[0m"), G("\x1b[2m)\x1b[0m"),
+  },
+};
+#undef G
+
+static char *error_put(char *p, const char *s, size_t len) {
+  memcpy(p, s, len);
+  return p + len;
+}
+
+static char *error_put_glyph(char *p, error_glyph_t g) {
+  return error_put(p, g.s, g.len);
+}
+
+static char *error_put_int(char *p, int value) {
+  char digits[12];
+  size_t at = sizeof(digits);
+  unsigned magnitude = value < 0 ? 0u - (unsigned)value : (unsigned)value;
+  
+  do digits[--at] = (char)('0' + magnitude % 10); while (magnitude /= 10);
+  if (value < 0) digits[--at] = '-';
+  
+  return error_put(p, digits + at, sizeof(digits) - at);
+}
+
 bool error_render_frame(
-  errbuf_t *eb, size_t *n, const char *name, bool construct, 
+  errbuf_t *eb, size_t *n, const char *name, bool construct,
   const char *file, int line, int col, error_frame_style_t style
 ) {
-  bool color = style == ERROR_FRAME_PRETTY;
-  const char *indent = style == ERROR_FRAME_PLAIN ? "    " : "  ";
-  const char *dim = color ? C_DIM : "";
-  const char *cyan = color ? C_CYAN : "";
-  const char *yellow = color ? C_YELLOW : "";
-  const char *reset = color ? C_RESET : "";
+  bool color = style == ERROR_FRAME_PRETTY && !io_no_color;
   
-  size_t prefix = color && !io_no_color ? error_frame_path_prefix(file) : 0;
-  size_t start = *n;
-
-  *n = errbuf_appendf(eb, *n, "\n%s%sat%s ", indent, dim, reset);
-  if (name) *n = errbuf_appendf(eb, *n, "%s%s %s(", construct ? "new " : "", name, dim);
-
-  *n = errbuf_appendf(eb, *n, "%s%s%.*s%s", cyan, dim, (int)prefix, file, reset);
-  *n = errbuf_appendf(eb, *n, "%s%s%s", cyan, file + prefix, reset);
-  *n = errbuf_appendf(eb, *n, "%s:%s%s%d%s", dim, reset, yellow, line, reset);
-  *n = errbuf_appendf(eb, *n, "%s:%s%d%s", dim, yellow, col, reset);
-
-  if (name) *n = errbuf_appendf(eb, *n, "%s)%s", dim, reset);
-  return *n > start;
+  const error_frame_glyphs_t *g = &error_frame_glyphs[
+    color ? ERROR_GLYPHS_COLOR : style == ERROR_FRAME_PLAIN 
+    ? ERROR_GLYPHS_PLAIN : ERROR_GLYPHS_COMPACT
+  ];
+  
+  if (!file) file = "";
+  size_t prefix = color ? error_frame_path_prefix(file) : 0;
+  size_t file_len = strlen(file), name_len = name ? strlen(name) : 0;
+  
+  if (file_len > SIZE_MAX / 4 || name_len > SIZE_MAX / 4) return false;
+  if (!ensure_errbuf_capacity(eb, *n + file_len + name_len + 128)) return false;
+  
+  char *p = eb->buf + *n;
+  p = error_put_glyph(p, g->head);
+  
+  if (name) {
+    if (construct) p = error_put_glyph(p, error_glyph_new);
+    p = error_put(p, name, name_len);
+    p = error_put_glyph(p, g->open);
+  }
+  
+  p = error_put_glyph(p, g->path);
+  p = error_put(p, file, prefix);
+  p = error_put_glyph(p, g->mid);
+  p = error_put(p, file + prefix, file_len - prefix);
+  p = error_put_glyph(p, g->line);
+  p = error_put_int(p, line);
+  p = error_put_glyph(p, g->col);
+  p = error_put_int(p, col);
+  p = error_put_glyph(p, g->end);
+  
+  if (name) p = error_put_glyph(p, g->close);
+  *p = '\0';
+  *n = (size_t)(p - eb->buf);
+  
+  return true;
 }
 
 static bool append_error_context(

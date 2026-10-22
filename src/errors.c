@@ -1,19 +1,20 @@
-#include "errors.h"
-#include "cfunc.h"
-#include "error_render.h"
-#include "internal.h"
-#include "descriptors.h"
-#include "output.h"
-#include "modules/io.h"
-#include "gc/roots.h"
-#include "silver/stack_trace.h"
-#include "modules/bigint.h"
-#include "realm.h"
-
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+
+#include "errors.h"
+#include "cfunc.h"
+#include "realm.h"
+#include "error_render.h"
+#include "internal.h"
+#include "descriptors.h"
+#include "output.h"
+#include "gc/roots.h"
+#include "silver/engine.h"
+#include "silver/stack_trace.h"
+#include "modules/io.h"
+#include "modules/bigint.h"
 
 void print_error_value(ant_t *js, ant_value_t value, ant_value_t fallback_stack, const char *prefix) {
   if (is_err(value)) {
@@ -120,7 +121,11 @@ ant_value_t js_error_display_name(ant_t *js, ant_value_t obj, ant_value_t name) 
   
   errbuf_t eb;
   if (!errbuf_init(&eb, name_len + code_len + 3)) return name;
-  size_t n = errbuf_appendf(&eb, 0, "%.*s [%.*s]", (int)name_len, name_text, (int)code_len, code_text);
+  size_t n = errbuf_append(&eb, 0, name_text, name_len);
+  
+  n = errbuf_append(&eb, n, " [", 2);
+  n = errbuf_append(&eb, n, code_text, code_len);
+  n = errbuf_append(&eb, n, "]", 1);
   
   return errbuf_take_string(js, &eb, n);
 }
@@ -160,7 +165,9 @@ ant_value_t js_error_header_text(ant_t *js, ant_value_t obj) {
   errbuf_t eb;
   
   if (name_len > 0 && msg_len > 0 && errbuf_init(&eb, name_len + msg_len + 3)) {
-    size_t n = errbuf_appendf(&eb, 0, "%.*s: %.*s", (int)name_len, name_text, (int)msg_len, msg_text);
+    size_t n = errbuf_append(&eb, 0, name_text, name_len);
+    n = errbuf_append(&eb, n, ": ", 2);
+    n = errbuf_append(&eb, n, msg_text, msg_len);
     text = errbuf_take_string(js, &eb, n);
   }
 
@@ -228,10 +235,10 @@ static bool error_has_captured_stack(ant_value_t obj) {
     vtype(js_get_slot(obj, SLOT_ERROR_STACK_TEXT)) != kTypeUndefined;
 }
 
-static void error_capture_stack_at(ant_t *js, ant_value_t err_obj, const js_error_site_t *site, ant_value_t until) {
+static void error_capture_stack_at(ant_t *js, ant_value_t err_obj, const js_error_site_t *site, ant_value_t above) {
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, err_obj);
-  js_error_define_stack(js, err_obj, js_error_record_capture(js, site, until), js_mkundef());
+  js_error_define_stack(js, err_obj, js_error_record_capture(js, site, above), js_mkundef());
   GC_ROOT_RESTORE(js, root_mark);
 }
 
@@ -239,8 +246,8 @@ void js_capture_stack(ant_t *js, ant_value_t err_obj) {
   error_capture_stack_at(js, err_obj, NULL, js_mkundef());
 }
 
-void js_capture_stack_above(ant_t *js, ant_value_t err_obj, ant_value_t fn) {
-  error_capture_stack_at(js, err_obj, NULL, fn);
+void js_capture_stack_above(ant_t *js, ant_value_t err_obj, ant_value_t above) {
+  error_capture_stack_at(js, err_obj, NULL, above);
 }
 
 static ant_value_t make_error_value(

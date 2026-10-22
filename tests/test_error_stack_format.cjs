@@ -69,18 +69,38 @@ assert.strictEqual(Reflect.construct(Error, ['detached'], function Detached() {}
 function traceInner(fn) { const o = {}; Error.captureStackTrace(o, fn); return o.stack; }
 function traceOuter(fn) { const s = traceInner(fn); return s; }
 function traceCaller(fn) { const s = traceOuter(fn); return s; }
-assert.match(lines(traceCaller(traceOuter))[1], /^ {4}at traceCaller \(/);
-assert.match(lines(traceCaller(traceInner))[1], /^ {4}at traceOuter \(/);
-assert.match(lines(traceCaller(undefined))[1], /^ {4}at traceInner \(/);
-assert.match(lines(traceCaller(42))[1], /^ {4}at traceInner \(/);
+const traced = (fn) => ({ stack: traceCaller(fn) });
+assert.match(frame(traced(traceOuter)), /^at traceCaller \(/);
+assert.match(frame(traced(traceInner)), /^at traceOuter \(/);
+assert.match(frame(traced(undefined)), /^at traceInner \(/);
+assert.match(frame(traced(42)), /^at traceInner \(/);
+assert.match(frame(traced(traceOuter.bind(null))), /^at traceInner \(/);
+assert.match(frame(traced(Error.captureStackTrace)), /^at traceInner \(/);
 assert.strictEqual(traceCaller(function notOnStack() {}), 'Error');
+assert.strictEqual(traceCaller(Math.max), 'Error');
+assert.strictEqual(Reflect.construct(TypeError, ['detached-native'], Map).stack, 'Error: detached-native');
+
+class TypeSub extends TypeError {}
+function makeTypeSub() { const e = new TypeSub('type-sub'); return e; }
+assert.strictEqual(frame(makeTypeSub()), `at makeTypeSub (${pos("TypeSub('type-sub')", 'new')})`);
+
+class NotCalled { constructor() {} }
+let notCalled;
+try { NotCalled(); } catch (e) { notCalled = e; }
+assert.doesNotMatch(notCalled.stack, /at new NotCalled/);
+
+queueMicrotask(function outermost() {
+  const o = {};
+  Error.captureStackTrace(o, outermost);
+  assert.strictEqual(o.stack, 'Error');
+});
 
 class Built { constructor() { this.err = new Error('built'); } }
 function FnBuilt() { this.err = new Error('fn-built'); }
 class Holder extends Object { constructor() { super(); this.err = new Error('holder'); } }
 assert.strictEqual(frame(new Built().err), `at new Built (${pos("Error('built')", 'new')})`);
 assert.strictEqual(frame(new FnBuilt().err), `at new FnBuilt (${pos("Error('fn-built')", 'new')})`);
-assert.strictEqual(frame(new Holder().err), `at new Holder (${pos("Error('holder')", 'new E')})`);
+assert.strictEqual(frame(new Holder().err), `at new Holder (${pos("Error('holder')", 'new')})`);
 
 class Throws { constructor(m) { throw new Error(m); } }
 class ThrowsSub extends Throws {
@@ -90,7 +110,7 @@ class ThrowsSub extends Throws {
 }
 let thrown;
 try { new ThrowsSub(); } catch (e) { thrown = e; }
-assert.strictEqual(frame(thrown, 1), `at new Throws (${pos('throw new Error(m)', 'new')})`);
+assert.strictEqual(frame(thrown), `at new Throws (${pos('throw new Error(m)', 'new')})`);
 assert.strictEqual(frame(thrown, 2), `at new ThrowsSub (${pos("super('via-super')", 'super')})`);
 
 function multiLineNew() {
