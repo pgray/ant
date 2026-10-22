@@ -40,7 +40,9 @@ export function narHash(root, entries) {
           .readdirSync(filename, { encoding: "buffer" })
           .map((name) => [name, Buffer.concat([Buffer.from(filename), Buffer.from(path.sep), name])]),
       );
-      const sorted = [...children].map(([name, child]) => [Buffer.from(name), child]);
+      const sorted = [...children]
+        .map(([name, child]) => [Buffer.from(name), child])
+        .filter(([name]) => !name.equals(Buffer.from(".DS_Store")));
       sorted.sort(([a], [b]) => Buffer.compare(a, b));
       for (const [name, child] of sorted) {
         for (const token of ["entry", "(", "name", name, "node"]) string(token);
