@@ -1,3 +1,5 @@
+// TODO: multiple files
+
 #include "silver/ast.h"
 #include "silver/lexer.h"
 #include "silver/directives.h"
@@ -101,6 +103,7 @@ static bool lookahead_crosses_line_terminator(P) {
 static sv_ast_t *parse_stmt(P);
 static sv_ast_t *parse_expr(P);
 static sv_ast_t *parse_paren_expr(P);
+static sv_ast_t *parse_paren_list(P, bool trailing_comma);
 static sv_ast_t *parse_assign(P);
 static sv_ast_t *parse_ternary(P);
 static sv_ast_t *parse_binary(P, int min_prec);
@@ -649,10 +652,12 @@ static sv_ast_t *try_parse_async_arrow(P) {
         fn->src_end = node_src_end(p, fn->body);
         return finish_arrow(p, fn);
       }
+      sv_lexer_restore_state(&p->lx, &saved);
+      return NULL;
     }
     sv_lexer_restore_state(&p->lx, &saved);
     NEXT(); CONSUME();
-    sv_ast_t *expr = parse_paren_expr(p);
+    sv_ast_t *expr = parse_paren_list(p, true);
     expect(p, TOK_RPAREN);
     if (LA() == TOK_ARROW) {
       NEXT(); CONSUME();
@@ -1574,11 +1579,11 @@ static sv_ast_t *parse_expr(P) {
   return left;
 }
 
-static sv_ast_t *parse_paren_expr(P) {
+static sv_ast_t *parse_paren_list(P, bool trailing_comma) {
   sv_ast_t *left = parse_assign(p);
   while (NEXT() == TOK_COMMA) {
     CONSUME();
-    if (NEXT() == TOK_RPAREN && LA() == TOK_ARROW) break;
+    if (NEXT() == TOK_RPAREN && (trailing_comma || LA() == TOK_ARROW)) break;
 
     sv_ast_t *n = mk(N_SEQUENCE);
     n->left = left;
@@ -1588,7 +1593,11 @@ static sv_ast_t *parse_paren_expr(P) {
   return left;
 }
 
-// TODO: move into a ast_contains 
+static sv_ast_t *parse_paren_expr(P) {
+  return parse_paren_list(p, false);
+}
+
+// TODO: move into a ast_contains
 bool ast_references_arguments(const sv_ast_t *node) {
   if (!node) return false;
   if (node->type == N_IDENT && node->len == 9 && memcmp(node->str, "arguments", 9) == 0)
