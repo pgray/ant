@@ -2,7 +2,6 @@
   "type": "module",
   "main": "src/index.ts",
   "dependencies": {
-    "hono": "^4.12.9",
-    "@ant/hono": "^0.0.5"
+    "hono": "^4.12.9"
   }
 }
