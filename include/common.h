@@ -88,8 +88,7 @@
   X(SLOT_VM_CONTEXT)              \
   X(SLOT_VM_IMPORT)               \
   X(SLOT_VM_TERMINATION)          \
-  X(SLOT_UNCLONEABLE)             \
-  X(SLOT_STREAM_DESTROY_ERROR)
+  X(SLOT_UNCLONEABLE)
 
 #define ANT_DECLARE_INTERNAL_SLOT(name) name,
 typedef enum {
