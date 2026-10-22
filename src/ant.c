@@ -21,6 +21,7 @@
 #include "runtime.h"
 #include "loop.h"
 #include "internal.h"
+#include "watch.h"
 #include "interrupt.h"
 #include "protectors.h"
 #include "errors.h"
@@ -22515,6 +22516,7 @@ static void report_unhandled_rejection(ant_t *js, ant_value_t promise, ant_value
     if (Ant_Exception_Pending(js)) {
       ant_value_t thrown = js_take_thrown(js, js_mkundef());
       if (js->worker) ant_worker_report_uncaught(js, thrown);
+      else if (ant_watch_supervises(js)) ant_watch_exit(js);
       else if (!js->uncaught_nonfatal) exit(7);
     }
     

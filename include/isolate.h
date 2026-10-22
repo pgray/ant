@@ -129,6 +129,7 @@ struct ant_isolate_t {
   
   ant_guest_t *guest;
   ant_guest_t *guests;
+  ant_watch_t *watch;
   
   // TODO: registry struct
   descriptor_entry_t *desc_registry;
@@ -561,6 +562,7 @@ struct ant_isolate_t {
   bool microtasks_draining;
   bool destroying;
   bool process_exiting;
+  bool loop_yield;
   
   struct coroutine *active_async_coro;
   struct gc_temp_root_scope *temp_roots;

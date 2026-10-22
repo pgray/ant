@@ -5,6 +5,7 @@
 
 ant_value_t js_interrupt_raise(ant_t *js);
 bool js_is_termination(ant_value_t value);
+bool js_termination_pending(ant_t *js);
 void sv_jit_arm_interrupts(ant_t *js);
 
 static inline bool js_interrupt_pending(ant_t *js) {

@@ -21,6 +21,7 @@ typedef struct ant_module_t {
 } ant_module_t;
 
 void js_esm_cleanup_module_cache(ant_t *js);
+void js_esm_invalidate_files(ant_t *js);
 
 ant_value_t js_esm_make_file_url(ant_t *js, const char *path);
 const char *esm_platform_condition(ant_t *js);
@@ -36,7 +37,6 @@ ant_value_t js_esm_resolve_specifier_require(ant_t *js, ant_value_t specifier, c
 char *esm_make_absolute_path(const char *path);
 char *esm_file_url_to_path(ant_t *js, const char *specifier);
 ant_value_t esm_node_module_paths(ant_t *js, const char *directory);
-char *js_esm_resolve_path_for_watch(ant_t *js, const char *specifier, const char *base_path, bool prefer_require);
 
 ant_value_t js_esm_import_sync_cstr_from(ant_t *js, const char *specifier, size_t spec_len, const char *base_path);
 ant_value_t js_esm_import_dynamic(ant_t *js, ant_value_t specifier, const char *base_path, ant_value_t *out_tla_promise);

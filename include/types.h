@@ -28,6 +28,8 @@ typedef struct gc_card_table   gc_card_table_t;
 
 typedef struct ant_object ant_object_t;
 typedef struct ant_shape  ant_shape_t;
+typedef struct ant_guest  ant_guest_t;
+typedef struct ant_watch  ant_watch_t;
 
 typedef struct sv_vm        sv_vm_t;
 typedef struct sv_ast       sv_ast_t;
@@ -76,7 +78,6 @@ typedef struct broadcast_member broadcast_member_t;
 typedef struct ant_worker       ant_worker_t;
 
 typedef struct ant_thread_mailbox ant_thread_mailbox_t;
-typedef struct ant_guest        ant_guest_t;
 typedef struct navigator_locks    navigator_locks_t;
 typedef struct perf_eld_monitor   perf_eld_monitor_t;
 

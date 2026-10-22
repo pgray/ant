@@ -1,6 +1,6 @@
 # Watch Supervisor
 
-Status: completed
+Status: completed (superseded by [Watch and Hot Reload on Isolates](watch-and-hot-isolates.md))
 Last reviewed: 2026-05-15
 Owner: theMackabu
 

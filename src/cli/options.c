@@ -317,7 +317,7 @@ static bool handle_info_flags(ant_cli_args_t *args, int nerrors, int *exit_code)
 }
 
 static bool check_combinations(ant_cli_args_t *args) {
-  if (opt_set(args, OPT_NO_CLEAR_SCREEN) && !opt_set(args, OPT_WATCH)) {
+  if (opt_set(args, OPT_NO_CLEAR_SCREEN) && !opt_set(args, OPT_WATCH) && !opt_set(args, OPT_HOT)) {
     crfprintf(stderr, msg.misuse_clear_screen);
     return false;
   }
@@ -348,6 +348,7 @@ static void export_args(ant_cli_t *cli, ant_cli_args_t *args) {
   cli->file_count = opt_files(args)->count;
   cli->print = opt_set(args, OPT_PRINT);
   cli->watch = opt_set(args, OPT_WATCH);
+  cli->hot = opt_set(args, OPT_HOT);
   cli->web_compat = opt_set(args, OPT_WEB_COMPAT);
   cli->no_clear_screen = opt_set(args, OPT_NO_CLEAR_SCREEN);
   cli->jitless = opt_set(args, OPT_JITLESS);

@@ -18,6 +18,7 @@
 #include "internal.h"
 #include "output.h"
 #include "ptr.h"
+#include "watch.h"
 
 #include "gc/modules.h"
 #include "net/connection.h"
@@ -127,6 +128,7 @@ struct server_runtime_s {
   size_t websocket_max_payload_len;
   
   int port;
+  uint32_t generation;
   bool websocket_per_message_deflate;
   bool sigint_closed;
   bool sigterm_closed;
@@ -1749,13 +1751,46 @@ static bool server_export_has_fetch_handler(ant_t *js, ant_value_t default_expor
   return false;
 }
 
+static bool server_running_current(ant_t *js) {
+  uint32_t generation = ant_watch_generation(js);
+  for (server_runtime_t *server = js->server_runtimes; server; server = server->next)
+    if (server->generation == generation) return true;
+  return false;
+}
+
+static server_runtime_t *server_find_reloadable(ant_t *js, const server_runtime_t *next) {
+  for (server_runtime_t *server = js->server_runtimes; server; server = server->next) {
+    if (server->stopping || server->generation >= next->generation) continue;
+    if (next->unix_path) {
+      if (server->unix_path && strcmp(server->unix_path, next->unix_path) == 0) return server;
+    } else if (!server->unix_path && next->port != 0 && server->port == next->port && strcmp(server->hostname, next->hostname) == 0) return server;
+  }
+  return NULL;
+}
+
+static ant_value_t server_reload_in_place(server_runtime_t *server, server_runtime_t *next) {
+  server->export_obj = next->export_obj;
+  server->fetch_fn = next->fetch_fn;
+  server->generation = next->generation;
+  server->request_timeout_ms = next->request_timeout_ms;
+  server->websocket_idle_timeout_ms = next->websocket_idle_timeout_ms;
+  server->websocket_max_payload_len = next->websocket_max_payload_len;
+  server->websocket_per_message_deflate = next->websocket_per_message_deflate;
+
+  free(next->unix_path);
+  free(next->hostname);
+  free(next);
+  
+  return server->server_ctx;
+}
+
 int server_maybe_start_from_export(ant_t *js, ant_value_t default_export) {
   bool looks_like_server = false;
   
   ant_value_t server_result = 0;
   const char *error = NULL;
 
-  if (js->server_runtimes) return EXIT_SUCCESS;
+  if (server_running_current(js)) return EXIT_SUCCESS;
   if (!server_export_has_fetch_handler(js, default_export, &looks_like_server)) {
     if (!looks_like_server) return EXIT_SUCCESS;
     error = "Module does not export a fetch handler";
@@ -1810,6 +1845,7 @@ ant_value_t server_start_from_export(ant_t *js, ant_value_t default_export) {
     .websocket_idle_timeout_ms = 120000,
     .websocket_max_payload_len = 16u * 1024u * 1024u,
     .loop = js->loop,
+    .generation = ant_watch_generation(js),
   };
 
   if (!server->hostname) {
@@ -1983,6 +2019,9 @@ ant_value_t server_start_from_export(ant_t *js, ant_value_t default_export) {
       server->websocket_per_message_deflate = is_object_type(ws_deflate_v) || js_truthy(js, ws_deflate_v);
     }
   }
+
+  server_runtime_t *running = server_find_reloadable(js, server);
+  if (running) return server_reload_in_place(running, server);
 
   uv_signal_init(server->loop, &server->sigint_handle);
   uv_signal_init(server->loop, &server->sigterm_handle);

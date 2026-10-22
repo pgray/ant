@@ -23,6 +23,7 @@
 #include "gc/modules.h"
 #include "net/connection.h"
 #include "net/listener.h"
+#include "watch.h"
 #include "sandbox/policy.h"
 #include "silver/call.h"
 
@@ -64,6 +65,7 @@ struct net_server_s {
   int port;
   int backlog;
   int max_connections;
+  uint32_t generation;
   bool listening;
   bool closing;
   bool allow_half_open;
@@ -1002,6 +1004,22 @@ static ant_value_t net_server_bind_listener(
   return js_mkundef();
 }
 
+static void net_server_take_over(ant_t *js, net_server_t *server, const net_listen_args_t *parsed) {
+  for (net_server_t *old = js->net_servers, *next; old; old = next) {
+    next = old->next;
+    if (old == server || !old->listening || old->closing || old->generation >= server->generation) continue;
+
+    bool same = parsed->path
+      ? old->path && strcmp(old->path, parsed->path) == 0
+      : !old->path && parsed->port != 0 && old->port == parsed->port;
+    if (!same) continue;
+
+    old->closing = true;
+    ant_listener_stop(&old->listener, false);
+    net_server_maybe_finish_close(old);
+  }
+}
+
 static ant_value_t net_server_emit_listening(ant_params_t) {
   ant_value_t obj = js_get_slot(js->current_func, SLOT_DATA);
   net_server_t *server = net_server_data(obj);
@@ -1045,7 +1063,10 @@ static ant_value_t js_net_server_listen(ant_params_t) {
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, parsed.callback);
   
+  server->generation = ant_watch_generation(js);
+  net_server_take_over(js, server, &parsed);
   ant_value_t bind_result = net_server_bind_listener(js, server, &parsed, &callbacks);
+  
   if (is_err(bind_result)) {
     GC_ROOT_RESTORE(js, root_mark);
     return bind_result;

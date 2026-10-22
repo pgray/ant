@@ -35,6 +35,7 @@
 #include "utils.h"
 #include "tty_ctrl.h"
 #include "internal.h"
+#include "watch.h"
 #include "interrupt.h"
 #include "descriptors.h"
 #include "silver/call.h"
@@ -359,7 +360,7 @@ bool process_has_event_listeners(ant_t *js, const char *event_type) {
 bool process_report_uncaught_exception(ant_t *js) {
   if (!js || !Ant_Exception_Pending(js)) return false;
 
-  if (js_is_termination(Ant_Exception_Peek(js))) {
+  if (js_termination_pending(js)) {
     js_take_thrown(js, js_mkundef());
     return false;
   }
@@ -381,6 +382,7 @@ bool process_report_uncaught_exception(ant_t *js) {
     if (Ant_Exception_Pending(js)) {
       ant_value_t thrown = js_take_thrown(js, js_mkundef());
       if (js->worker) ant_worker_report_uncaught(js, thrown);
+      else if (ant_watch_supervises(js)) ant_watch_exit(js);
       else if (!js->uncaught_nonfatal) exit(7);
     }
 
@@ -1910,6 +1912,7 @@ int process_run_exit_handlers(ant_t *js, int status) {
 void process_exit_with(ant_t *js, int status) {
   int code = process_run_exit_handlers(js, status);
   if (js->worker) ant_worker_exit(js, code);
+  else if (ant_watch_supervises(js)) ant_watch_exit(js);
   else exit(code);
 }
 
@@ -1921,7 +1924,14 @@ static ant_value_t process_exit(ant_params_t) {
     if (is_err(result)) return result;
   }
   
-  if (js->worker) return ant_worker_exit(js, process_run_exit_handlers(js, EXIT_SUCCESS));
+  if (js->worker) 
+    return ant_worker_exit(js, process_run_exit_handlers(js, EXIT_SUCCESS));
+  
+  if (ant_watch_supervises(js)) {
+    process_run_exit_handlers(js, EXIT_SUCCESS);
+    return ant_watch_exit(js);
+  }
+  
   process_exit_with(js, EXIT_SUCCESS);
   return js_mkundef();
 }

@@ -1,4 +1,5 @@
 #include "errors.h"
+#include "interrupt.h"
 #include "internal.h"
 #include "gc.h"
 #include "gc/roots.h"
@@ -126,8 +127,15 @@ ant_value_t Ant_Error_CallCallback(
 
 bool print_uncaught_throw(ant_t *js) {
   if (!Ant_Exception_Pending(js)) return false;
+  
+  if (js_termination_pending(js)) {
+    js_take_thrown(js, js_mkundef());
+    return true;
+  }
+  
   print_error_value(js, Ant_Exception_Value(js, Ant_Exception_Peek(js)), Ant_Exception_Stack(js, Ant_Exception_Peek(js)), NULL);
   js_take_thrown(js, js_mkundef());
+  
   return true;
 }
 

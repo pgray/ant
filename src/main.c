@@ -108,7 +108,7 @@ static bool plan_run(const ant_cli_t *cli, run_plan_t *plan, int *exit_code) {
     return false;
   }
 
-  if (cli->watch && (cli->eval || repl_mode || stdin_mode)) {
+  if ((cli->watch || cli->hot) && (cli->eval || repl_mode || stdin_mode)) {
     crfprintf(stderr, msg.watch_module_error);
     return false;
   }
@@ -129,18 +129,6 @@ static bool plan_run(const ant_cli_t *cli, run_plan_t *plan, int *exit_code) {
   }
 
   return true;
-}
-
-static int run_watch(const ant_cli_t *cli, const run_plan_t *plan) {
-  char *resolved = resolve_js_file(plan->module_file);
-  const char *entry = resolved ? resolved : plan->module_file;
-  int code = EXIT_FAILURE;
-
-  if (!entry || esm_is_url(entry)) crfprintf(stderr, msg.watch_entrypoint_error);
-  else code = ant_watch_run(cli->original_argc, cli->original_argv, entry, cli->no_clear_screen);
-
-  free(resolved);
-  return code;
 }
 
 static ant_argv_t process_argv(const ant_cli_t *cli, const run_plan_t *plan) {
@@ -178,7 +166,7 @@ static bool start_inspector(ant_t *js, const ant_cli_t *cli, const run_plan_t *p
   return true;
 }
 
-static int run_mode(ant_t *js, const ant_cli_t *cli, const run_plan_t *plan) {
+static int run_mode(ant_t *js, const ant_cli_t *cli, const run_plan_t *plan, ant_watch_t *watch) {
   switch (plan->mode) {
   case RUN_PKG: {
     int code = pkg_run(js);
@@ -193,6 +181,7 @@ static int run_mode(ant_t *js, const ant_cli_t *cli, const run_plan_t *plan) {
   case RUN_STDIN:
     return ant_entry_stdin(js, cli->print, plan->input, cli->inspector.enabled);
   case RUN_FILES:
+    if (ant_watch_hot(watch)) return ant_entry_files_hot(js, watch, cli->files, cli->file_count);
     return ant_entry_files(js, cli->files, cli->file_count, cli->cron_period);
   case RUN_SANDBOX:
     break;
@@ -200,14 +189,14 @@ static int run_mode(ant_t *js, const ant_cli_t *cli, const run_plan_t *plan) {
   return EXIT_FAILURE;
 }
 
-static int run_in_runtime(ant_t *js, const ant_cli_t *cli, run_plan_t *plan, bool crash_report) {
+static int run_in_runtime(ant_t *js, const ant_cli_t *cli, run_plan_t *plan, bool crash_report, ant_watch_t *watch) {
   if (plan->mode == RUN_SANDBOX) return ant_cli_daemon_run(js, &plan->sandbox, cli->original_argv[0]);
   if (cli->inspector.enabled && !start_inspector(js, cli, plan)) return EXIT_FAILURE;
   if (crash_report) return ant_crash_run_internal_report(js);
-  return process_run_exit_handlers(js, run_mode(js, cli, plan));
+  return process_run_exit_handlers(js, run_mode(js, cli, plan, watch));
 }
 
-static int run_runtime(const ant_cli_t *cli, run_plan_t *plan, bool crash_report) {
+static int run_runtime(const ant_cli_t *cli, run_plan_t *plan, bool crash_report, ant_watch_t *watch) {
   volatile char stack_base;
   ant_t *js = ant_create(nullptr);
   
@@ -233,7 +222,13 @@ static int run_runtime(const ant_cli_t *cli, run_plan_t *plan, bool crash_report
   ant_bootstrap_modules(js);
   ant_register_library(sandbox_library, "ant:sandbox");
 
-  int code = run_in_runtime(js, cli, plan, crash_report);
+  if (watch) ant_watch_attach(watch, js);
+  int code = run_in_runtime(js, cli, plan, crash_report, watch);
+
+  if (watch) {
+    ant_watch_detach(watch, js);
+    ant_inspector_stop();
+  }
 
   js->process_exiting = true;
   js_destroy(js);
@@ -242,15 +237,38 @@ static int run_runtime(const ant_cli_t *cli, run_plan_t *plan, bool crash_report
   return code;
 }
 
+static int run_watch(const ant_cli_t *cli, run_plan_t *plan) {
+  char *resolved = resolve_js_file(plan->module_file);
+  const char *entry = resolved ? resolved : plan->module_file;
+
+  if (!entry || esm_is_url(entry)) {
+    crfprintf(stderr, msg.watch_entrypoint_error);
+    free(resolved);
+    return EXIT_FAILURE;
+  }
+
+  ant_watch_t *watch = ant_watch_open(entry, cli->hot, !cli->no_clear_screen);
+  free(resolved);
+  if (!watch) return EXIT_FAILURE;
+
+  do run_runtime(cli, plan, false, watch);
+  while (!ant_watch_hot(watch) && ant_watch_wait(watch));
+
+  int code = ant_watch_shutdown_code(watch);
+  ant_watch_close(watch);
+  return code;
+}
+
 static int run_cli(const ant_cli_t *cli, bool crash_report) {
   run_plan_t plan = { 0 };
   int code = EXIT_FAILURE;
 
   if (plan_run(cli, &plan, &code))
-    code = cli->watch ? run_watch(cli, &plan) : run_runtime(cli, &plan, crash_report);
+    code = cli->watch || cli->hot ? run_watch(cli, &plan) : run_runtime(cli, &plan, crash_report, NULL);
 
   pkg_argv_free(&plan.pkg);
   ant_sandbox_request_free(&plan.sandbox);
+  
   return code;
 }
 

@@ -13,3 +13,7 @@ ant_value_t js_interrupt_raise(ant_t *js) {
 bool js_is_termination(ant_value_t value) {
   return is_object_type(value) && js_get_slot(value, SLOT_VM_TERMINATION) == js_true;
 }
+
+bool js_termination_pending(ant_t *js) {
+  return Ant_Exception_Pending(js) && js_is_termination(Ant_Exception_Value(js, Ant_Exception_Peek(js)));
+}

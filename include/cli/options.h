@@ -34,6 +34,7 @@ typedef struct {
   bool repl;
   bool print;
   bool watch;
+  bool hot;
   bool web_compat;
   bool no_clear_screen;
   bool jitless;

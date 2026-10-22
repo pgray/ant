@@ -68,5 +68,6 @@ removed during condensation. See the [plan lifecycle](../index.md).
 - [tlsuv HTTP Request Body Methods](tlsuv-http-request-body-methods.md)
 - [tlsuv WebSocket Buffered Read](tlsuv-websocket-buffered-read.md)
 - [UTF-16 Random-Access Index (fable carry-back)](utf16-random-access-index.md)
+- [Watch and Hot Reload on Isolates](watch-and-hot-isolates.md)
 - [Watch Supervisor](watch-supervisor.md)
 - [WebAssembly Embedding Package](wasm-embedding-package.md)

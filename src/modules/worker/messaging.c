@@ -166,6 +166,7 @@ static void thread_request_timeout(uv_timer_t *timer) {
 
 static thread_msg_status_t mailbox_deliver(ant_t *js, thread_msg_t *msg) {
   if (!process_has_event_listeners(js, "workerMessage")) return THREAD_MSG_FAILED;
+  
   ant_value_t value = ant_wire_deserialize(js, msg->wire, NULL);
   if (is_err(value)) {
     js_take_thrown(js, value);
@@ -174,12 +175,15 @@ static thread_msg_status_t mailbox_deliver(ant_t *js, thread_msg_t *msg) {
 
   GC_ROOT_SAVE(mark, js);
   ant_value_t argv[2] = { value, js_mknum((double)msg->source) };
+  
   GC_ROOT_PIN(js, argv[0]);
   emit_process_event(js, "workerMessage", argv, 2);
   GC_ROOT_RESTORE(js, mark);
+  
   if (!Ant_Exception_Pending(js)) return THREAD_MSG_DELIVERED;
-  if (js_is_termination(Ant_Exception_Peek(js))) return THREAD_MSG_FAILED;
+  if (js_termination_pending(js)) return THREAD_MSG_FAILED;
   js_take_thrown(js, js_mkundef());
+  
   return THREAD_MSG_ERRORED;
 }
 

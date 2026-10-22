@@ -25,6 +25,7 @@
 #include "vfs_bundle.h"
 #include "gc/roots.h"
 #include "utils.h"
+#include "watch.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -1343,10 +1344,6 @@ char *esm_resolve_path_require(ant_t *js, const char *specifier, const char *bas
   return esm_resolve_path_cond(js, specifier, base_path, true);
 }
 
-char *js_esm_resolve_path_for_watch(ant_t *js, const char *specifier, const char *base_path, bool prefer_require) {
-  return esm_resolve(js, specifier, base_path, prefer_require ? esm_resolve_path_require : esm_resolve_path);
-}
-
 static bool esm_has_suffix(const char *path, const char *ext) {
   size_t len = strlen(path);
   size_t elen = strlen(ext);
@@ -1656,7 +1653,34 @@ void js_esm_cleanup_module_cache(ant_t *js) {
   esm_loader_cache_cleanup(js);
 }
 
+static bool esm_module_reloadable(const esm_module_t *mod) {
+  if (mod->embedded_code || strstr(mod->resolved_path, "/node_modules/")) return false;
+  return mod->kind == ESM_MODULE_KIND_CODE
+    || mod->kind == ESM_MODULE_KIND_JSON
+    || mod->kind == ESM_MODULE_KIND_TEXT
+    || mod->kind == ESM_MODULE_KIND_IMAGE;
+}
+
+void js_esm_invalidate_files(ant_t *js) {
+  ant_esm_state_t *st = js->modules.state;
+  if (!st) return;
+
+  ant_value_t cache = esm_require_cache(js);
+  esm_module_t *mod, *tmp;
+
+  HASH_ITER(hh, st->modules, mod, tmp) {
+    if (!esm_module_reloadable(mod)) continue;
+    if (is_object_type(cache)) js_delete_prop(js, cache, mod->resolved_path, strlen(mod->resolved_path));
+    esm_remove_module(st, mod);
+  }
+
+  if (Ant_Exception_Pending(js)) js_take_thrown(js, js_mkundef());
+  esm_loader_cache_cleanup(js);
+}
+
 ant_value_t esm_read_file(ant_t *js, const char *path, const char *kind, esm_file_data_t *out) {
+  if (js->watch) ant_watch_track(js, path);
+  
   FILE *fp = fopen(path, "rb");
   if (!fp) return js_mkerr(js, "Cannot open %s: %s", kind, path);
 

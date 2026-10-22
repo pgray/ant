@@ -13,6 +13,7 @@
 #include "internal.h"
 #include "messages.h"
 #include "inspector.h"
+#include "watch.h"
 #include "esm/commonjs.h"
 #include "esm/loader.h"
 #include "esm/remote.h"
@@ -234,4 +235,20 @@ int ant_entry_files(ant_t *js, const char **files, int count, const char *cron_p
   }
 
   return code;
+}
+
+int ant_entry_files_hot(ant_t *js, ant_watch_t *watch, const char **files, int count) {
+  do {
+    for (int i = 0; i < count && !js->loop_yield && !js->terminating; i++) {
+      char *resolved = resolve_js_file(files[i]);
+      if (!resolved) crfprintf(stderr, msg.module_not_found, files[i]);
+      else ant_entry_module(js, resolved, NULL);
+      free(resolved);
+    }
+
+    if (!js->loop_yield && !js->terminating) js_run_event_loop(js);
+    js->loop_yield = false;
+  } while (!js->terminating && ant_watch_begin_reload(watch, js));
+
+  return ant_watch_shutdown_code(watch);
 }

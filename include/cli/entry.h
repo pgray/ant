@@ -20,6 +20,7 @@ int ant_entry_eval(
 int ant_entry_stdin(ant_t *js, bool print, ant_input_mode_t mode, bool inspect);
 int ant_entry_module(ant_t *js, const char *filename, const char *cron_period);
 int ant_entry_files(ant_t *js, const char **files, int count, const char *cron_period);
+int ant_entry_files_hot(ant_t *js, ant_watch_t *watch, const char **files, int count);
 
 ant_argv_t ant_entry_process_argv(const char *argv0, const char *first, bool resolve, ant_argv_t tail);
 

@@ -114,7 +114,7 @@ ant_route_t ant_cli_route(const ant_cli_t *cli, pkg_argv_t *pkg, int *exit_code)
   const subcommand_t *cmd = find_subcommand(positional);
 
   if (cmd) {
-    if (cli->watch) return refuse_watch(exit_code);
+    if (cli->watch || cli->hot) return refuse_watch(exit_code);
     if (cmd->kind == COMMAND_NATIVE) {
       *exit_code = run_native(cmd, argc, argv, tail);
       return ANT_ROUTE_EXIT;
@@ -124,5 +124,5 @@ ant_route_t ant_cli_route(const ant_cli_t *cli, pkg_argv_t *pkg, int *exit_code)
   }
 
   if (!pkg_script_argv(pkg, cli->argv[0], positional, argc, argv, tail.argc, tail.argv)) return ANT_ROUTE_NONE;
-  return cli->watch ? refuse_watch(exit_code) : ANT_ROUTE_PKG;
+  return cli->watch || cli->hot ? refuse_watch(exit_code) : ANT_ROUTE_PKG;
 }
