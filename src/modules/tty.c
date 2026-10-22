@@ -872,13 +872,7 @@ void init_tty_module(ant_t *js) {
   if (is_special_object(stdin_obj)) {
     ensure_stream_common_props(js, stdin_obj, ANT_STDIN_FD);
     if (vtype(js_get(js, stdin_obj, "isRaw")) == kTypeUndefined) js_set(js, stdin_obj, "isRaw", js_false);
-
-    ant_value_t stdin_proto = js_get_proto(js, stdin_obj);
-    if (is_special_object(stdin_proto)) {
-      js_set_proto_init(stdin_proto, stream_readable_prototype(js));
-      setup_readstream_proto(js, stdin_proto);
-    }
-    stream_init_readable_object(js, stdin_obj, js_mkundef());
+    setup_readstream_proto(js, js_get_proto(js, stdin_obj));
   }
 
   ant_value_t stdout_obj = js_get(js, process_obj, "stdout");

@@ -37,6 +37,7 @@
 #include "internal.h"
 #include "interrupt.h"
 #include "descriptors.h"
+#include "silver/call.h"
 #include "silver/engine.h"
 #include "gc/roots.h"
 #include "gc/modules.h"
@@ -52,7 +53,6 @@
 #include "modules/worker_threads.h"
 #include "sync.h"
 #include "modules/timer.h"
-#include "modules/string_decoder.h"
 #include "modules/fs.h"
 #include "modules/stream.h"
 
@@ -62,6 +62,8 @@ extern char **environ;
 #define environ _environ
 #endif
 
+static constexpr size_t STDIN_FILE_CHUNK = 65536;
+
 typedef struct {
   uv_signal_t handle;
   int signum;
@@ -69,13 +71,32 @@ typedef struct {
 } SignalHandle;
 
 typedef struct {
-  uv_tty_t tty;
-  bool tty_initialized;
+  uv_fs_t req;
+  ant_t *js;
+  bool pending;
+  bool detached;
+  char buf[STDIN_FILE_CHUNK];
+} stdin_file_read_t;
+
+typedef struct {
+  union {
+    uv_handle_t handle;
+    uv_stream_t stream;
+    uv_tty_t tty;
+    uv_pipe_t pipe;
+    uv_tcp_t tcp;
+  } h;
+  stdin_file_read_t *file;
+  uv_handle_type kind;
+  bool opened;
+  bool closed;
   bool reading;
+  bool eof;
+  bool started;
+  bool read_requested;
   bool paused;
   bool refed;
   bool keypress_enabled;
-  ant_value_t decoder;
   int escape_state;
   int escape_len;
   char escape_buf[16];
@@ -140,7 +161,6 @@ static ant_process_state_t *process_state(ant_t *js) {
 
   ps->sandbox_tty_rows = 24;
   ps->sandbox_tty_cols = 80;
-  ps->stdin_state.decoder = js_mkundef();
   ps->cached_cwd = js_mkundef();
   ps->stdin_state.refed = true;
 
@@ -727,6 +747,14 @@ static bool stdin_set_raw_mode(bool enable) {
   return tty_set_raw_mode(STDIN_FILENO, enable);
 }
 
+static bool stdin_is_stream_kind(uv_handle_type kind) {
+  return kind == UV_TTY || kind == UV_NAMED_PIPE || kind == UV_TCP;
+}
+
+static bool stdin_handle_live(stdin_state_t *st) {
+  return st->opened && !st->closed && stdin_is_stream_kind(st->kind);
+}
+
 static void stdin_alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
   buf->base = malloc(suggested_size);
 #ifdef _WIN32
@@ -736,122 +764,224 @@ static void stdin_alloc_buffer(uv_handle_t *handle, size_t suggested_size, uv_bu
 #endif
 }
 
-static void stdin_stop_reading(ant_t *js) {
-  ant_process_state_t *ps = process_state(js);
-  if (!ps) return;
-  if (!ps->stdin_state.reading) return;
-  uv_read_stop((uv_stream_t *)&ps->stdin_state.tty);
-  ps->stdin_state.reading = false;
-  uv_unref((uv_handle_t *)&ps->stdin_state.tty);
+static ant_value_t stdin_uv_error(ant_t *js, int status, const char *syscall) {
+  const char *code = uv_err_name(status);
+  ant_value_t props = Ant_Object_CreateBare(js);
+  js_set(js, props, "code", js_mkstr(js, code, strlen(code)));
+  js_set(js, props, "errno", js_mknum(status));
+  js_set(js, props, "syscall", js_mkstr(js, syscall, strlen(syscall)));
+  return js_take_thrown(js, js_mkerr_props(js, JS_ERR_GENERIC, props, "%s %s", syscall, code));
 }
 
-static inline ant_value_t make_stdin_data_value(ant_t *js, const uv_buf_t *buf, ssize_t nread) {
-  ant_process_state_t *ps = process_state(js);
-  if (!ps) return js_mkundef();
-  
-  ArrayBufferData *ab = create_array_buffer_data(js, (size_t)nread);
-  if (ab) memcpy(ab->data, buf->base, (size_t)nread);
+static bool stdin_open(ant_t *js, ant_process_state_t *ps) {
+  stdin_state_t *st = &ps->stdin_state;
+  if (st->opened) return !st->closed;
 
-  ant_value_t raw_val = ab
-    ? create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, (size_t)nread, js->builtins.buffer_proto)
-    : js_mkstr(js, buf->base, (size_t)nread);
+  int rc = UV_EINVAL;
+  st->opened = true;
+  st->kind = uv_guess_handle(STDIN_FILENO);
 
-  if (is_err(raw_val)) return raw_val;
-
-  ant_value_t data_val = is_object_type(ps->stdin_state.decoder)
-    ? string_decoder_decode_value(js, ps->stdin_state.decoder, raw_val, false)
-    : raw_val;
-
-  if (is_err(data_val)) {
-    js_take_thrown(js, data_val);
-    data_val = raw_val;
+  switch (st->kind) {
+    case UV_TTY:
+      rc = uv_tty_init(js->loop, &st->h.tty, STDIN_FILENO, 1);
+      break;
+    case UV_NAMED_PIPE:
+      rc = uv_pipe_init(js->loop, &st->h.pipe, 0);
+      if (rc == 0 && (rc = uv_pipe_open(&st->h.pipe, STDIN_FILENO)) != 0) uv_close(&st->h.handle, NULL);
+      break;
+    case UV_TCP:
+      rc = uv_tcp_init(js->loop, &st->h.tcp);
+      if (rc == 0 && (rc = uv_tcp_open(&st->h.tcp, (uv_os_sock_t)(uintptr_t)uv_get_osfhandle(STDIN_FILENO))) != 0) uv_close(&st->h.handle, NULL);
+      break;
+    case UV_FILE:
+      st->file = calloc(1, sizeof(*st->file));
+      rc = st->file ? 0 : UV_ENOMEM;
+      if (st->file) st->file->js = js;
+      break;
+    default: break;
   }
 
-  return data_val;
+  if (rc != 0) {
+    st->closed = true;
+    return false;
+  }
+
+  if (stdin_is_stream_kind(st->kind)) {
+    st->h.handle.data = js;
+    if (!st->refed) uv_unref(&st->h.handle);
+  }
+  return true;
+}
+
+static void stdin_release_file(stdin_state_t *st) {
+  stdin_file_read_t *file = st->file;
+  if (!file) return;
+  st->file = NULL;
+
+  if (!file->pending) {
+    free(file);
+    return;
+  }
+
+  file->detached = true;
+  uv_cancel((uv_req_t *)&file->req);
+}
+
+static void stdin_close(ant_process_state_t *ps) {
+  stdin_state_t *st = &ps->stdin_state;
+  bool live = stdin_handle_live(st);
+
+  stdin_release_file(st);
+  if (live && st->reading) uv_read_stop(&st->h.stream);
+  st->reading = false;
+  if (st->opened) st->closed = true;
+  if (live && !uv_is_closing(&st->h.handle)) uv_close(&st->h.handle, NULL);
+}
+
+static void stdin_finish(ant_t *js, ant_value_t error) {
+  ant_process_state_t *ps = process_state(js);
+  if (!ps || ps->stdin_state.eof) return;
+
+  GC_ROOT_SAVE(root_mark, js);
+  GC_ROOT_PIN(js, error);
+
+  ps->stdin_state.eof = true;
+  ps->stdin_state.read_requested = false;
+  stdin_update_reading(js);
+  if (ps->stdin_byte_eof) ps->stdin_byte_eof(js);
+
+  if (is_undefined(error)) stream_readable_push(js, ps->stdin_obj, js_mknull(), js_mkundef());
+  else stream_destroy(js, ps->stdin_obj, error);
+
+  GC_ROOT_RESTORE(js, root_mark);
+}
+
+static void stdin_deliver(ant_t *js, const char *base, size_t len) {
+  ant_process_state_t *ps = process_state(js);
+  if (!ps) return;
+  stdin_state_t *st = &ps->stdin_state;
+
+  if (st->started) {
+    ArrayBufferData *ab = create_array_buffer_data(js, len);
+    if (!ab) {
+      stdin_finish(js, stdin_uv_error(js, UV_ENOMEM, "read"));
+      return;
+    }
+
+    memcpy(ab->data, base, len);
+    ant_value_t chunk = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, js->builtins.buffer_proto);
+    if (is_err(chunk)) {
+      stdin_finish(js, js_take_thrown(js, chunk));
+      return;
+    }
+
+    GC_ROOT_SAVE(root_mark, js);
+    GC_ROOT_PIN(js, chunk);
+    ant_value_t pushed = stream_readable_push(js, ps->stdin_obj, chunk, js_mkundef());
+    
+    if (is_err(pushed)) js_take_thrown(js, pushed);
+    else if (pushed == js_false) st->read_requested = false;
+    GC_ROOT_RESTORE(js, root_mark);
+  }
+
+  bool want_keypress = st->keypress_enabled && eventemitter_listener_count(js, ps->stdin_obj, "keypress") > 0;
+  bool fed_keypress = false;
+
+  for (size_t i = 0; i < len; i++) {
+    if (st->paused) break;
+    if (ps->stdin_byte_consumer) ps->stdin_byte_consumer(js, base + i, 1);
+    if (want_keypress) {
+      process_keypress_data(js, base + i, 1);
+      fed_keypress = true;
+    }
+  }
+  
+  if (fed_keypress && !st->paused) process_keypress_flush(js);
+}
+
+static void stdin_handle_read(ant_t *js, const char *base, ssize_t nread) {
+  if (nread > 0) {
+    stdin_deliver(js, base, (size_t)nread);
+    stdin_update_reading(js);
+  } else if (nread == UV_EOF) stdin_finish(js, js_mkundef());
+  else if (nread < 0) stdin_finish(js, stdin_uv_error(js, (int)nread, "read"));
 }
 
 static void on_stdin_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
   ant_t *js = stream->data;
-  if (!js) goto cleanup;
-
-  ant_process_state_t *ps = process_state(js);
-  if (!ps) goto cleanup;
-  if (nread < 0) {
-    if (nread == UV_EOF && ps->stdin_byte_eof) ps->stdin_byte_eof(js);
-    goto cleanup;
-  }
-
-  if (nread == 0) goto cleanup;
-  bool want_data = !ps->stdin_state.paused && eventemitter_listener_count(js, ps->stdin_obj, "data") > 0;
-  bool want_readable = !ps->stdin_state.paused && eventemitter_listener_count(js, ps->stdin_obj, "readable") > 0;
-
-  if (want_data || want_readable) {
-    ant_value_t data_val = make_stdin_data_value(js, buf, nread);
-    if (is_err(data_val)) {
-      GC_ROOT_SAVE(root_mark, js);
-      ant_value_t error = js_take_thrown(js, data_val);
-
-      GC_ROOT_PIN(js, error);
-      ps->stdin_state.paused = true;
-      stdin_stop_reading(js);
-
-      eventemitter_emit_args(js, ps->stdin_obj, "error", &error, 1);
-      GC_ROOT_RESTORE(js, root_mark);
-
-      goto cleanup;
-    }
-
-    if (want_readable) {
-      ant_value_t pushed = stream_readable_push(js, ps->stdin_obj, data_val, js_mkundef());
-      if (!is_err(pushed)) eventemitter_emit_args(js, ps->stdin_obj, "readable", NULL, 0);
-    }
-
-    if (want_data) eventemitter_emit_args(js, ps->stdin_obj, "data", &data_val, 1);
-  }
-
-  bool want_keypress = ps->stdin_state.keypress_enabled
-    && eventemitter_listener_count(js, ps->stdin_obj, "keypress") > 0;
-  bool fed_keypress = false;
-
-  for (ssize_t i = 0; i < nread; i++) {
-    if (ps->stdin_state.paused) break;
-    if (ps->stdin_byte_consumer) ps->stdin_byte_consumer(js, buf->base + i, 1);
-    if (want_keypress) {
-      process_keypress_data(js, buf->base + i, 1);
-      fed_keypress = true;
-    }
-  }
-  if (fed_keypress && !ps->stdin_state.paused) process_keypress_flush(js);
-
-cleanup:
-  if (buf->base) free(buf->base);
+  if (js) stdin_handle_read(js, buf->base, nread);
+  free(buf->base);
 }
 
-static void stdin_start_reading(ant_t *js) {
+static void on_stdin_file_read(uv_fs_t *req) {
+  stdin_file_read_t *file = req->data;
+  ssize_t result = req->result;
+  uv_fs_req_cleanup(req);
+  file->pending = false;
+
+  if (file->detached) free(file);
+  else stdin_handle_read(file->js, file->buf, result == 0 ? UV_EOF : result);
+}
+
+static void stdin_file_read_next(ant_t *js) {
+  ant_process_state_t *ps = process_state(js);
+  if (!ps) return;
+  stdin_state_t *st = &ps->stdin_state;
+  stdin_file_read_t *file = st->file;
+  if (!st->reading || !file || file->pending || st->eof) return;
+
+  uv_buf_t buf = uv_buf_init(file->buf, (unsigned int)STDIN_FILE_CHUNK);
+  file->req.data = file;
+  int rc = uv_fs_read(js->loop, &file->req, STDIN_FILENO, &buf, 1, -1, on_stdin_file_read);
+  if (rc == 0) file->pending = true;
+  else stdin_finish(js, stdin_uv_error(js, rc, "read"));
+}
+
+static bool stdin_wants_bytes(ant_t *js, ant_process_state_t *ps) {
+  stdin_state_t *st = &ps->stdin_state;
+  if (st->eof) return false;
+  if (st->read_requested) return true;
+  if (st->paused) return false;
+  if (ps->stdin_byte_consumer) return true;
+  return eventemitter_listener_count(js, ps->stdin_obj, "keypress") > 0;
+}
+
+void stdin_update_reading(ant_t *js) {
   if (js->worker) return;
+  
   ant_process_state_t *ps = process_state(js);
   if (!ps) return;
-  if (ps->stdin_state.reading) return;
-  if (!ps->stdin_state.tty_initialized) {
-    uv_loop_t *loop = js->loop;
-    if (uv_tty_init(loop, &ps->stdin_state.tty, STDIN_FILENO, 1) != 0) return;
-    ps->stdin_state.tty.data = js;
-    ps->stdin_state.tty_initialized = true;
-  }
-  if (ps->stdin_state.refed) uv_ref((uv_handle_t *)&ps->stdin_state.tty);
-  else uv_unref((uv_handle_t *)&ps->stdin_state.tty);
-  ps->stdin_state.reading = true;
-  uv_read_start((uv_stream_t *)&ps->stdin_state.tty, stdin_alloc_buffer, on_stdin_read);
-}
+  
+  stdin_state_t *st = &ps->stdin_state;
+  bool want = stdin_wants_bytes(js, ps);
 
-static void stdin_stop_reading_if_idle(ant_t *js) {
-  ant_process_state_t *ps = process_state(js);
-  if (!ps) return;
-  if (ps->stdin_byte_consumer) return;
-  if (eventemitter_listener_count(js, ps->stdin_obj, "data") > 0) return;
-  if (eventemitter_listener_count(js, ps->stdin_obj, "keypress") > 0) return;
-  if (eventemitter_listener_count(js, ps->stdin_obj, "readable") > 0) return;
-  stdin_stop_reading(js);
+  if (!want) {
+    if (st->reading && stdin_handle_live(st)) uv_read_stop(&st->h.stream);
+    st->reading = false;
+    return;
+  }
+
+  if (st->reading) {
+    if (st->kind == UV_FILE) stdin_file_read_next(js);
+    return;
+  }
+
+  if (!stdin_open(js, ps)) {
+    stdin_finish(js, js_mkundef());
+    return;
+  }
+
+  st->reading = true;
+  if (st->kind == UV_FILE) {
+    stdin_file_read_next(js);
+    return;
+  }
+
+  int rc = uv_read_start(&st->h.stream, stdin_alloc_buffer, on_stdin_read);
+  if (rc != 0) {
+    st->reading = false;
+    stdin_finish(js, stdin_uv_error(js, rc, "read"));
+  }
 }
 
 void process_stdin_attach_reader(ant_t *js, stdin_byte_consumer_fn on_bytes, stdin_eof_fn on_eof) {
@@ -860,7 +990,7 @@ void process_stdin_attach_reader(ant_t *js, stdin_byte_consumer_fn on_bytes, std
   ps->stdin_byte_consumer = on_bytes;
   ps->stdin_byte_eof = on_eof;
   ps->stdin_state.paused = false;
-  stdin_start_reading(js);
+  stdin_update_reading(js);
 }
 
 void process_stdin_detach_reader(ant_t *js) {
@@ -868,7 +998,7 @@ void process_stdin_detach_reader(ant_t *js) {
   if (!ps) return;
   ps->stdin_byte_consumer = NULL;
   ps->stdin_byte_eof = NULL;
-  stdin_stop_reading_if_idle(js);
+  stdin_update_reading(js);
 }
 
 #ifndef _WIN32
@@ -947,12 +1077,7 @@ void cleanup_process_module(ant_t *js) {
     uv_close((uv_handle_t *)&sh->handle, on_signal_handle_close);
   }
 
-  uv_handle_t *tty = (uv_handle_t *)&ps->stdin_state.tty;
-  if (ps->stdin_state.tty_initialized && !uv_is_closing(tty)) {
-    if (ps->stdin_state.reading) uv_read_stop((uv_stream_t *)tty);
-    ps->stdin_state.reading = false;
-    uv_close(tty, NULL);
-  }
+  stdin_close(ps);
 
   stop_sigwinch_handler(js);
 }
@@ -961,6 +1086,7 @@ void free_process_module(ant_t *js) {
   ant_process_state_t *ps = js->process_state;
   if (!ps) return;
   private_env_free(&ps->private_env);
+  stdin_release_file(&ps->stdin_state);
   free(ps->sandbox_no_color);
   free(ps->sandbox_force_color);
   free(ps);
@@ -972,47 +1098,58 @@ static ant_value_t js_stdin_set_raw_mode(ant_params_t) {
   return js_bool(stdin_set_raw_mode(enable));
 }
 
-static ant_value_t js_stdin_set_encoding(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
+static ant_value_t js_stdin__read(ant_params_t) {
   ant_process_state_t *ps = process_state(js);
   if (!ps) return js_mkerr(js, "out of memory");
-  
-  ant_value_t encoding = nargs > 0 && !is_undefined(args[0]) ? args[0] : js_mkstr(js, "utf8", 4);
-  ant_value_t decoder = string_decoder_create(js, encoding, js_mkundef());
-  ant_value_t encoding_str = 0;
+  ps->stdin_state.started = true;
+  ps->stdin_state.read_requested = true;
+  ps->stdin_state.paused = false;
+  stdin_update_reading(js);
+  return js_mkundef();
+}
 
-  if (is_err(decoder)) return decoder;
-  encoding_str = js_tostring_val(js, encoding);
-  if (is_err(encoding_str)) return encoding_str;
+static ant_value_t js_stdin__destroy(ant_params_t) {
+  ant_process_state_t *ps = process_state(js);
+  ant_value_t error = nargs > 0 ? args[0] : js_mknull();
+  ant_value_t callback = nargs > 1 ? args[1] : js_mkundef();
 
-  ps->stdin_state.decoder = decoder;
-  js_set(js, this_obj, "encoding", encoding_str);
-  
-  return this_obj;
+  if (ps) {
+    ps->stdin_state.eof = true;
+    ps->stdin_state.read_requested = false;
+    stdin_update_reading(js);
+    stdin_close(ps);
+  }
+
+  if (is_callable(callback)) sv_call_value(js, callback, js_mkundef(), &error, 1);
+  return js_mkundef();
+}
+
+static ant_value_t stdin_set_paused(ant_t *js, bool paused) {
+  ant_process_state_t *ps = process_state(js);
+  if (!ps) return js_mkerr(js, "out of memory");
+
+  if (paused) stream_readable_pause(js, ps->stdin_obj);
+  else stream_readable_resume(js, ps->stdin_obj);
+
+  ps->stdin_state.paused = paused;
+  if (paused) ps->stdin_state.read_requested = false;
+  stdin_update_reading(js);
+  return ps->stdin_obj;
 }
 
 static ant_value_t js_stdin_resume(ant_params_t) {
-  ant_process_state_t *ps = process_state(js);
-  if (!ps) return js_mkerr(js, "out of memory");
-  ps->stdin_state.paused = false;
-  stdin_start_reading(js);
-  return js_getthis(js);
+  return stdin_set_paused(js, false);
 }
 
 static ant_value_t js_stdin_pause(ant_params_t) {
-  ant_process_state_t *ps = process_state(js);
-  if (!ps) return js_mkerr(js, "out of memory");
-  ps->stdin_state.paused = true;
-  stdin_stop_reading(js);
-  return js_getthis(js);
+  return stdin_set_paused(js, true);
 }
 
 static ant_value_t js_stdin_ref(ant_params_t) {
   ant_process_state_t *ps = process_state(js);
   if (!ps) return js_mkerr(js, "out of memory");
   ps->stdin_state.refed = true;
-  if (ps->stdin_state.tty_initialized)
-    uv_ref((uv_handle_t *)&ps->stdin_state.tty);
+  if (stdin_handle_live(&ps->stdin_state)) uv_ref(&ps->stdin_state.h.handle);
   return js_getthis(js);
 }
 
@@ -1020,8 +1157,7 @@ static ant_value_t js_stdin_unref(ant_params_t) {
   ant_process_state_t *ps = process_state(js);
   if (!ps) return js_mkerr(js, "out of memory");
   ps->stdin_state.refed = false;
-  if (ps->stdin_state.tty_initialized)
-    uv_unref((uv_handle_t *)&ps->stdin_state.tty);
+  if (stdin_handle_live(&ps->stdin_state)) uv_unref(&ps->stdin_state.h.handle);
   return js_getthis(js);
 }
 
@@ -2089,17 +2225,9 @@ static void process_listener_change(
     return;
   }
 
-  if (
-    target == ps->stdin_obj && (
-      process_event_key_is(js, key, "data") ||
-      process_event_key_is(js, key, "keypress") ||
-      process_event_key_is(js, key, "readable")
-    )
-  ) {
-    if (listener_count > 0) {
-      ps->stdin_state.paused = false;
-      stdin_start_reading(js);
-    } else stdin_stop_reading_if_idle(js);
+  if (target == ps->stdin_obj && process_event_key_is(js, key, "keypress")) {
+    if (listener_count > 0) ps->stdin_state.paused = false;
+    stdin_update_reading(js);
     return;
   }
 
@@ -2187,7 +2315,6 @@ void init_process_module(ant_t *js) {
 
   if (!ps) return;
 
-  ps->stdin_state.decoder = js_mkundef();
   ps->process_start_time = uv_hrtime();
   ant_value_t process_proto = Ant_Object_Create(js);
 
@@ -2301,21 +2428,20 @@ void init_process_module(ant_t *js) {
   #endif
   
   ant_value_t stdin_proto = Ant_Object_CreateBare(js);
-  if (is_object_type(ee_proto)) js_set_proto_init(stdin_proto, ee_proto);
+  js_set_proto_init(stdin_proto, stream_readable_prototype(js));
   js_set(js, stdin_proto, "setRawMode", Ant_Function_Create(js_stdin_set_raw_mode));
-  js_set(js, stdin_proto, "setEncoding", Ant_Function_Create(js_stdin_set_encoding));
+  js_set(js, stdin_proto, "_read", Ant_Function_CreateWithArity(js_stdin__read, 1));
+  js_set(js, stdin_proto, "_destroy", Ant_Function_CreateWithArity(js_stdin__destroy, 2));
   js_set(js, stdin_proto, "resume", Ant_Function_Create(js_stdin_resume));
   js_set(js, stdin_proto, "pause", Ant_Function_Create(js_stdin_pause));
   js_set(js, stdin_proto, "ref", Ant_Function_Create(js_stdin_ref));
   js_set(js, stdin_proto, "unref", Ant_Function_Create(js_stdin_unref));
   js_set_tostringtag(js, stdin_proto, js_mkstr(js, "ReadStream", 10));
   
-  ant_value_t stdin_obj = Ant_Object_CreateBare(js);
-  js_set_proto_init(stdin_obj, stdin_proto);
+  ant_value_t stdin_obj = stream_construct_readable(js, stdin_proto, js_mkundef(), js_mkundef());
   ps->stdin_obj = stdin_obj;
   eventemitter_set_listener_change_hook(js, stdin_obj, process_listener_change, ps);
   js_set(js, stdin_obj, "isTTY", js_bool(stdin_is_tty()));
-  js_set(js, stdin_obj, "encoding", js_mkundef());
   js_set(js, process_obj, "stdin", stdin_obj);
   
   ant_value_t stdout_proto = Ant_Object_CreateBare(js);
@@ -2361,7 +2487,6 @@ void gc_mark_process(ant_t *js, gc_mark_fn mark) {
   if (is_object_type(ps->stdin_obj)) mark(js, ps->stdin_obj);
   if (is_object_type(ps->stdout_obj)) mark(js, ps->stdout_obj);
   if (is_object_type(ps->stderr_obj)) mark(js, ps->stderr_obj);
-  if (is_object_type(ps->stdin_state.decoder)) mark(js, ps->stdin_state.decoder);
 }
 
 void process_enable_keypress_events(ant_t *js) {

@@ -13,6 +13,7 @@ void init_process_module(ant_t *js);
 void cleanup_process_module(ant_t *js);
 void free_process_module(ant_t *js);
 void process_set_private_env(ant_t *js, char **entries);
+void stdin_update_reading(ant_t *js);
 
 char **process_env_snapshot(ant_t *js);
 char **process_private_env_snapshot(ant_t *js);
