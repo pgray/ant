@@ -207,6 +207,7 @@ ant_value_t dns_lookup_impl(ant_t *js, ant_value_t *args, int nargs, bool promis
 
   if (js_truthy(js, hostname) && vtype(hostname) != kTypeString)
     return Ant_Error_CreateInvalidArgType(js, "hostname", "of type string", hostname);
+  if (is_err(r = Ant_Error_CheckNoNullBytes(js, "hostname", hostname))) return r;
 
   if (!promises && is_callable(options)) callback = options;
   else if (vtype(options) == kTypeNumber) {

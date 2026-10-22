@@ -126,7 +126,10 @@ function handleClientError(server, socket, error) {
   }
 
   if (socket && !socket.destroyed) {
-    socket.end(httpWriter.writeBasicResponse(400, 'Bad Request', 'text/plain;charset=UTF-8', 'Bad Request', false));
+    const response = error?.code === 'HPE_HEADER_OVERFLOW'
+      ? httpWriter.writeBasicResponse(431, 'Request Header Fields Too Large', 'text/plain;charset=UTF-8', 'Request Header Fields Too Large', false)
+      : httpWriter.writeBasicResponse(400, 'Bad Request', 'text/plain;charset=UTF-8', 'Bad Request', false);
+    socket.end(response);
   }
 }
 
@@ -1221,6 +1224,7 @@ export class Server extends net.Server {
     this.requestTimeout = 300000;
     this.keepAliveTimeout = 5000;
     this.maxHeadersCount = 2000;
+    this.maxHeaderSize = serverOptions?.maxHeaderSize > 0 ? serverOptions.maxHeaderSize : maxHeaderSize;
     this._socketStates = new Set();
     this._closing = false;
 
@@ -1291,7 +1295,7 @@ export class Server extends net.Server {
       if (state.buffered.length === 0) return;
 
       try {
-        parsed = httpParser.parseRequest(state.buffered);
+        parsed = httpParser.parseRequest(state.buffered, this.maxHeaderSize);
       } catch (error) {
         state.closed = true;
         handleClientError(this, socket, error);

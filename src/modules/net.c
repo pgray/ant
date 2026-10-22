@@ -32,7 +32,6 @@
 #include "modules/stream.h"
 #include "modules/timer.h"
 
-
 typedef struct net_listen_args_s net_listen_args_t;
 typedef struct net_connect_args_s net_connect_args_t;
 typedef struct net_write_args_s  net_write_args_t;
@@ -259,6 +258,16 @@ static bool net_parse_listen_args(ant_native_params_t, net_listen_args_t *out) {
   return true;
 }
 
+static bool net_take_string(ant_t *js, const char *name, ant_value_t value, const char **slot, net_connect_args_t *out) {
+  ant_value_t nul = Ant_Error_CheckNoNullBytes(js, name, value);
+  if (is_err(nul)) {
+    out->error = nul;
+    return false;
+  }
+  *slot = js_getstr(js, value, NULL);
+  return true;
+}
+
 static bool net_parse_connect_args(ant_native_params_t, net_connect_args_t *out) {
   ant_value_t value = 0;
 
@@ -276,33 +285,33 @@ static bool net_parse_connect_args(ant_native_params_t, net_connect_args_t *out)
 
   if (vtype(args[0]) == kTypeNumber) {
     out->port = (int)js_getnum(args[0]);
-    if (nargs > 1 && vtype(args[1]) == kTypeString) out->host = js_getstr(js, args[1], NULL);
+    if (nargs > 1 && vtype(args[1]) == kTypeString && !net_take_string(js, "host", args[1], &out->host, out)) return false;
     if (nargs > 2 && is_callable(args[2])) out->callback = args[2];
     else if (nargs > 1 && is_callable(args[1])) out->callback = args[1];
     return true;
   }
 
   if (vtype(args[0]) == kTypeString) {
-    out->path = js_getstr(js, args[0], NULL);
+    if (!net_take_string(js, "path", args[0], &out->path, out)) return false;
     if (nargs > 1 && is_callable(args[1])) out->callback = args[1];
     return true;
   }
 
   if (vtype(args[0]) == kTypeObject) {
     value = js_get(js, args[0], "path");
-    if (vtype(value) == kTypeString) out->path = js_getstr(js, value, NULL);
+    if (vtype(value) == kTypeString && !net_take_string(js, "path", value, &out->path, out)) return false;
 
     value = js_get(js, args[0], "socketPath");
-    if (!out->path && vtype(value) == kTypeString) out->path = js_getstr(js, value, NULL);
+    if (!out->path && vtype(value) == kTypeString && !net_take_string(js, "path", value, &out->path, out)) return false;
 
     value = js_get(js, args[0], "port");
     if (vtype(value) == kTypeNumber) out->port = (int)js_getnum(value);
 
     value = js_get(js, args[0], "host");
-    if (vtype(value) == kTypeString) out->host = js_getstr(js, value, NULL);
+    if (vtype(value) == kTypeString && !net_take_string(js, "host", value, &out->host, out)) return false;
 
     value = js_get(js, args[0], "hostname");
-    if (vtype(value) == kTypeString) out->host = js_getstr(js, value, NULL);
+    if (vtype(value) == kTypeString && !net_take_string(js, "hostname", value, &out->host, out)) return false;
 
     value = js_get(js, args[0], "allowHalfOpen");
     if (vtype(value) != kTypeUndefined) out->allow_half_open = js_truthy(js, value);

@@ -379,7 +379,11 @@ static void stream_init_base(ant_t *js, ant_value_t obj, ant_value_t raw_options
   ant_value_t construct_fn = stream_get_option(js, raw_options, "construct");
   ant_value_t destroy_fn = stream_get_option(js, raw_options, "destroy");
   
-  if (is_callable(construct_fn)) js_set(js, obj, "_construct", construct_fn);
+  if (is_callable(construct_fn)) {
+    js_set(js, obj, "_construct", construct_fn);
+    stream_begin_construct(js, obj);
+  }
+  
   if (is_callable(destroy_fn)) js_set(js, obj, "_destroy", destroy_fn);
   
   js_set(js, obj, "readable", js_true);
@@ -2542,38 +2546,28 @@ static ant_value_t js_writable_has_instance(ant_params_t) {
   return js_bool(js_instance_of_proto(js, obj, js->builtins.duplex_proto));
 }
 
-static ant_value_t js_duplex_ctor(ant_params_t) {
-  ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.duplex_proto, call_new_target);
-  ant_value_t obj = stream_make_base_object(js, is_object_type(proto) ? proto : js->builtins.duplex_proto);
-  ant_value_t options = nargs > 0 ? args[0] : js_mkundef();
-  ant_value_t options_obj = is_object_type(options) ? options : Ant_Object_CreateBare(js);
-
+static void stream_init_duplex(ant_t *js, ant_value_t obj, ant_value_t options) {
   stream_init_readable(js, obj, options);
   stream_init_writable(js, obj, options);
-  
   js_set(js, obj, "readable", js_true);
-  js_set(js, obj, "allowHalfOpen", js_bool(stream_get_option(js, options_obj, "allowHalfOpen") != js_false));
-  
+}
+
+static ant_value_t stream_construct_duplex_like(ant_t *js, ant_value_t base_proto, ant_value_t options, ant_value_t new_target) {
+  ant_value_t obj = stream_construct(js, base_proto, options, stream_init_duplex, new_target);
+  js_set(js, obj, "allowHalfOpen", js_bool(stream_get_option(js, options, "allowHalfOpen") != js_false));
   return obj;
 }
 
-static ant_value_t js_transform_ctor(ant_params_t) {
-  ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.stream_transform_proto, call_new_target);
-  ant_value_t obj = stream_make_base_object(js, is_object_type(proto) ? proto : js->builtins.stream_transform_proto);
+static ant_value_t js_duplex_ctor(ant_params_t) {
   ant_value_t options = nargs > 0 ? args[0] : js_mkundef();
-  ant_value_t options_obj = is_object_type(options) ? options : Ant_Object_CreateBare(js);
-  
-  ant_value_t transform_fn = 0;
-  ant_value_t flush_fn = 0;
+  return stream_construct_duplex_like(js, js->builtins.duplex_proto, options, call_new_target);
+}
 
-  stream_init_readable(js, obj, options);
-  stream_init_writable(js, obj, options);
-  
-  js_set(js, obj, "readable", js_true);
-  js_set(js, obj, "allowHalfOpen", js_bool(stream_get_option(js, options_obj, "allowHalfOpen") != js_false));
-
-  transform_fn = stream_get_option(js, options_obj, "transform");
-  flush_fn = stream_get_option(js, options_obj, "flush");
+static ant_value_t js_transform_ctor(ant_params_t) {
+  ant_value_t options = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t obj = stream_construct_duplex_like(js, js->builtins.stream_transform_proto, options, call_new_target);
+  ant_value_t transform_fn = stream_get_option(js, options, "transform");
+  ant_value_t flush_fn = stream_get_option(js, options, "flush");
   
   if (is_callable(transform_fn)) js_set(js, obj, "_transform", transform_fn);
   if (is_callable(flush_fn)) js_set(js, obj, "_flush", flush_fn);
@@ -2582,18 +2576,8 @@ static ant_value_t js_transform_ctor(ant_params_t) {
 }
 
 static ant_value_t js_passthrough_ctor(ant_params_t) {
-  ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.passthrough_proto, call_new_target);
-  ant_value_t obj = stream_make_base_object(js, is_object_type(proto) ? proto : js->builtins.passthrough_proto);
   ant_value_t options = nargs > 0 ? args[0] : js_mkundef();
-  ant_value_t options_obj = is_object_type(options) ? options : Ant_Object_CreateBare(js);
-
-  stream_init_readable(js, obj, options);
-  stream_init_writable(js, obj, options);
-  
-  js_set(js, obj, "readable", js_true);
-  js_set(js, obj, "allowHalfOpen", js_bool(stream_get_option(js, options_obj, "allowHalfOpen") != js_false));
-  
-  return obj;
+  return stream_construct_duplex_like(js, js->builtins.passthrough_proto, options, call_new_target);
 }
 
 void stream_init_constructors(ant_t *js) {
@@ -2717,11 +2701,6 @@ ant_value_t stream_construct_writable(ant_t *js, ant_value_t base_proto, ant_val
   return stream_construct(js, base_proto, options, stream_init_writable, new_target);
 }
 
-static void stream_init_duplex(ant_t *js, ant_value_t obj, ant_value_t options) {
-  stream_init_readable(js, obj, options);
-  stream_init_writable(js, obj, options);
-  js_set(js, obj, "readable", js_true);
-}
 
 ant_value_t stream_construct_duplex(ant_t *js, ant_value_t base_proto, ant_value_t options, ant_value_t new_target) {
   stream_init_constructors(js);
@@ -2802,21 +2781,24 @@ static ant_value_t stream_construct_tick(ant_params_t) {
   return js_mkundef();
 }
 
-static void stream_schedule_construct(ant_t *js, ant_value_t stream_obj) {
+void stream_begin_construct(ant_t *js, ant_value_t stream_obj) {
   stream_private_state_t *priv = stream_private_state(stream_obj);
-  if (!priv || !is_callable(js_getprop_fallback(js, stream_obj, "_construct"))) return;
+  if (!priv || priv->constructing) return;
   priv->constructing = true;
   stream_schedule_microtask(js, stream_construct_tick, stream_obj);
 }
 
-static ant_value_t stream_construct(
+ant_value_t stream_construct(
   ant_t *js, ant_value_t base_proto, ant_value_t raw_options,
   void (*init_fn)(ant_t *, ant_value_t, ant_value_t), ant_value_t new_target
 ) {
   ant_value_t proto = js_instance_proto_from_new_target(js, base_proto, new_target);
-  ant_value_t obj = stream_make_base_object(js, is_object_type(proto) ? proto : base_proto);
+  bool subclassed = is_object_type(proto) && proto != base_proto;
+  ant_value_t obj = stream_make_base_object(js, subclassed ? proto : base_proto);
+
   init_fn(js, obj, raw_options);
-  stream_schedule_construct(js, obj);
+  if (subclassed && is_callable(js_getprop_fallback(js, obj, "_construct"))) stream_begin_construct(js, obj);
+  
   return obj;
 }
 

@@ -89,7 +89,7 @@ deps_info = {
     'build_dir': true,
   },
   'google-brotli': {
-    'dir': 'brotli-1.1.0',
+    'dir': 'brotli-1.2.1',
     'inc': 'c/include',
   },
 }

@@ -28,12 +28,10 @@ static ant_value_t http_parser_make_error(
   const char *code,
   size_t bytes_parsed
 ) {
-  ant_value_t err = js_mkerr_typed(js, JS_ERR_SYNTAX, "%s", message ? message : "Invalid HTTP request");
-
-  if (!is_err(err)) return err;
-  if (code) js_set(js, err, "code", js_mkstr(js, code, strlen(code)));
-  js_set(js, err, "bytesParsed", js_mknum((double)bytes_parsed));
-  return err;
+  ant_value_t props = Ant_Object_CreateBare(js);
+  if (code) js_set(js, props, "code", js_mkstr(js, code, strlen(code)));
+  js_set(js, props, "bytesParsed", js_mknum((double)bytes_parsed));
+  return js_mkerr_props(js, JS_ERR_SYNTAX, props, "%s", message ? message : "Invalid HTTP request");
 }
 
 static ant_value_t http_parser_raw_headers_array(ant_t *js, const ant_http1_parsed_request_t *parsed) {
@@ -77,7 +75,11 @@ static ant_value_t js_http_parser_parse_request(ant_params_t) {
     bytes = (const uint8_t *)str;
   }
 
-  result = ant_http1_parse_request((const char *)bytes, len, &parsed, &error_reason, &error_code);
+  size_t max_header_size = 0;
+  if (nargs > 1 && vtype(args[1]) == kTypeNumber && js_getnum(args[1]) >= 1)
+    max_header_size = (size_t)js_getnum(args[1]);
+
+  result = ant_http1_parse_request((const char *)bytes, len, max_header_size, &parsed, &error_reason, &error_code);
   if (result == ANT_HTTP1_PARSE_INCOMPLETE) return js_mknull();
   if (result == ANT_HTTP1_PARSE_ERROR) return http_parser_make_error(js, error_reason, error_code, parsed.consumed_len);
 

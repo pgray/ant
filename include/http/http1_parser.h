@@ -34,9 +34,14 @@ typedef struct {
   ant_http1_buffer_t header_value;
   ant_http1_buffer_t body;
   ant_http_header_t **header_tail;
+  size_t header_bytes;
+  size_t header_limit;
+  bool header_overflow;
   bool message_complete;
   bool target_root_candidate;
 } ant_http1_parser_ctx_t;
+
+static constexpr size_t ANT_HTTP1_DEFAULT_MAX_HEADER_SIZE = 16 * 1024;
 
 typedef struct {
   llhttp_t parser;
@@ -57,6 +62,7 @@ void ant_http1_conn_parser_free(ant_http1_conn_parser_t *cp);
 
 ant_http1_parse_result_t ant_http1_parse_request(
   const char *data, size_t len,
+  size_t max_header_size,
   ant_http1_parsed_request_t *out,
   const char **error_reason,
   const char **error_code

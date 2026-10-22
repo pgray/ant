@@ -616,6 +616,7 @@ static ant_value_t fs_create_readstream_impl(ant_t *js, ant_value_t path_arg, an
   js_set(js, stream_obj, "end", vtype(end_val) == kTypeNumber ? end_val : js_mkundef());
   js_set(js, stream_obj, "pos", js_mknum(vtype(start_val) == kTypeNumber ? js_getnum(start_val) : 0.0));
   js_set_slot(stream_obj, SLOT_FS_FLAGS, js_mknum((double)flags));
+  if (vtype(fd_val) != kTypeNumber) stream_begin_construct(js, stream_obj);
   
   return stream_obj;
 }
@@ -656,6 +657,7 @@ static ant_value_t fs_create_writestream_impl(ant_t *js, ant_value_t path_arg, a
   js_set(js, stream_obj, "start", vtype(start_val) == kTypeNumber ? start_val : js_mkundef());
   js_set(js, stream_obj, "pos", js_mknum(start_pos));
   js_set_slot(stream_obj, SLOT_FS_FLAGS, js_mknum((double)flags));
+  if (vtype(fd_val) != kTypeNumber) stream_begin_construct(js, stream_obj);
   
   return stream_obj;
 }

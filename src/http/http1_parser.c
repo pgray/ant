@@ -132,10 +132,19 @@ static bool parser_copy_header(parser_ctx_t *ctx) {
   return true;
 }
 
+static bool parser_charge_header_bytes(parser_ctx_t *ctx, size_t length) {
+  size_t limit = ctx->header_limit ? ctx->header_limit : ANT_HTTP1_DEFAULT_MAX_HEADER_SIZE;
+  ctx->header_bytes += length;
+  if (ctx->header_bytes <= limit) return true;
+  ctx->header_overflow = true;
+  return false;
+}
+
 static int parser_on_url(llhttp_t *parser, const char *at, size_t length) {
   parser_ctx_t *ctx = (parser_ctx_t *)parser->data;
 
   if (length == 0) return 0;
+  if (!parser_charge_header_bytes(ctx, length)) return -1;
   if (ctx->target_root_candidate) {
     if (ctx->target.len == 0 && length == 1 && at[0] == '/') {
       ctx->target.len = 1;
@@ -152,16 +161,19 @@ static int parser_on_url(llhttp_t *parser, const char *at, size_t length) {
 
 static int parser_on_header_field(llhttp_t *parser, const char *at, size_t length) {
   parser_ctx_t *ctx = (parser_ctx_t *)parser->data;
+  if (!parser_charge_header_bytes(ctx, length)) return -1;
   return ant_http1_buffer_append(&ctx->header_field, at, length) ? 0 : -1;
 }
 
 static int parser_on_header_value(llhttp_t *parser, const char *at, size_t length) {
   parser_ctx_t *ctx = (parser_ctx_t *)parser->data;
+  if (!parser_charge_header_bytes(ctx, length)) return -1;
   return ant_http1_buffer_append(&ctx->header_value, at, length) ? 0 : -1;
 }
 
 static int parser_on_header_value_complete(llhttp_t *parser) {
   parser_ctx_t *ctx = (parser_ctx_t *)parser->data;
+  if (!parser_charge_header_bytes(ctx, 4)) return -1;
   return parser_copy_header(ctx) ? 0 : -1;
 }
 
@@ -197,6 +209,7 @@ static llhttp_settings_t g_request_settings = {
 ant_http1_parse_result_t ant_http1_parse_request(
   const char *data,
   size_t len,
+  size_t max_header_size,
   ant_http1_parsed_request_t *out,
   const char **error_reason,
   const char **error_code
@@ -210,6 +223,7 @@ ant_http1_parse_result_t ant_http1_parse_request(
 
   memset(out, 0, sizeof(*out));
   ctx.header_tail = &ctx.req.headers;
+  ctx.header_limit = max_header_size;
   ctx.target_root_candidate = true;
 
   ant_http1_buffer_init(&ctx.target);
@@ -224,8 +238,8 @@ ant_http1_parse_result_t ant_http1_parse_request(
   if (llhttp_get_error_pos(&parser)) out->consumed_len = (size_t)(llhttp_get_error_pos(&parser) - data);
 
   if (err != HPE_OK && err != HPE_PAUSED) {
-    if (error_reason) *error_reason = llhttp_get_error_reason(&parser);
-    if (error_code) *error_code = llhttp_errno_name(err);
+    if (error_reason) *error_reason = ctx.header_overflow ? "Header overflow" : llhttp_get_error_reason(&parser);
+    if (error_code) *error_code = ctx.header_overflow ? "HPE_HEADER_OVERFLOW" : llhttp_errno_name(err);
     parser_ctx_free(&ctx);
     return ANT_HTTP1_PARSE_ERROR;
   }

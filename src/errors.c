@@ -483,6 +483,22 @@ __attribute__((noinline, cold)) ant_value_t Ant_Error_CreateInvalidArgValue(
   return js_mkerr_code(js, JS_ERR_TYPE, "ERR_INVALID_ARG_VALUE", message);
 }
 
+ant_value_t Ant_Error_CheckNoNullBytes(ant_t *js, const char *name, ant_value_t value) {
+  size_t len = 0;
+  const char *str = vtype(value) == kTypeString ? js_getstr(js, value, &len) : NULL;
+  if (!str || !memchr(str, '\0', len)) return js_mkundef();
+
+  char inspected[160], message[384];
+  js_cstr_t text = js_inspect_cstr(js, value, inspected, sizeof(inspected));
+  snprintf(
+    message, sizeof(message), "The %s '%s' must be a string without null bytes. Received %s",
+    js_arg_kind(name), name, text.ptr
+  );
+  
+  if (text.needs_free) free((void *)text.ptr);
+  return js_mkerr_code(js, JS_ERR_TYPE, "ERR_INVALID_ARG_VALUE", message);
+}
+
 static void js_group_digits(const char *digits, char *out, size_t len) {
   size_t n = strlen(digits), start = digits[0] == '-' ? 1 : 0, head = n;
   while (head >= start + 4) head -= 3;

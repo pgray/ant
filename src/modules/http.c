@@ -1,4 +1,5 @@
 #include <uv.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -262,8 +263,8 @@ static void ant_http_conn_client_closed(tlsuv_http_t *client) {
   ant_http_conn_handle_closed(client->data);
 }
 
-static void ant_http_conn_close(ant_http_conn_t *conn) {
-  if (conn->closing) return;
+static ant_http_host_t *ant_http_conn_shutdown(ant_http_conn_t *conn) {
+  if (conn->closing) return NULL;
   conn->closing = true;
 
   ant_http_host_t *host = conn->host;
@@ -287,7 +288,11 @@ static void ant_http_conn_close(ant_http_conn_t *conn) {
 
   uv_close((uv_handle_t *)&conn->idle_timer, ant_http_conn_timer_closed);
   if (tlsuv_http_close(&conn->client, ant_http_conn_client_closed) != 0) ant_http_conn_handle_closed(conn);
+  return host;
+}
 
+static void ant_http_conn_close(ant_http_conn_t *conn) {
+  ant_http_host_t *host = ant_http_conn_shutdown(conn);
   if (host) {
     ant_http_host_kick(host);
     ant_http_host_maybe_free(host);
@@ -351,13 +356,52 @@ static int ant_http_dispatch(ant_http_request_t *req, ant_http_conn_t *conn) {
   return 0;
 }
 
+static bool ant_http_conn_has_pending_read(ant_http_conn_t *conn) {
+  uv_handle_t *tr = conn->client.tr;
+  uv_os_sock_t sock;
+  if (!tr) return false;
+
+  if (conn->client.ssl) sock = ((tlsuv_stream_t *)tr)->sock;
+  else {
+    uv_os_fd_t fd;
+    if (uv_fileno(tr, &fd) != 0) return false;
+    sock = (uv_os_sock_t)(intptr_t)fd;
+  }
+
+#ifdef _WIN32
+  u_long available = 0;
+  return ioctlsocket(sock, FIONREAD, &available) == 0 && available > 0;
+#else
+  char byte;
+  ssize_t r;
+  do r = recv(sock, &byte, 1, MSG_PEEK | MSG_DONTWAIT);
+  while (r < 0 && errno == EINTR);
+  if (r >= 0) return true;
+  return errno != EAGAIN && errno != EWOULDBLOCK && errno != ENOTCONN && errno != ENOTSOCK;
+#endif
+}
+
 static ant_http_conn_t *ant_http_host_idle_conn(ant_http_host_t *host) {
   ant_http_conn_t *fallback = NULL;
-  for (ant_http_conn_t *conn = host->conns; conn; conn = conn->next) {
-    if (conn->req || conn->closing) continue;
+  for (ant_http_conn_t *conn = host->conns; conn;) {
+    ant_http_conn_t *next = conn->next;
+    if (conn->req || conn->closing) {
+      conn = next;
+      continue;
+    }
+    
+    if (conn->client.tr && ant_http_conn_has_pending_read(conn)) {
+      ant_http_conn_shutdown(conn);
+      conn = host->conns;
+      fallback = NULL;
+      continue;
+    }
+    
     if (conn->client.tr) return conn;
     if (!fallback) fallback = conn;
+    conn = next;
   }
+  
   return fallback;
 }
 
@@ -368,6 +412,11 @@ static void ant_http_start_or_fail(ant_http_request_t *req, ant_http_conn_t *con
 
 static void ant_http_conn_release(ant_http_conn_t *conn) {
   ant_http_host_t *host = conn->host;
+  if (host && host->pending_head && ant_http_conn_has_pending_read(conn)) {
+    ant_http_conn_close(conn);
+    return;
+  }
+
   ant_http_request_t *next = host ? ant_http_host_dequeue(host) : NULL;
 
   if (next) {

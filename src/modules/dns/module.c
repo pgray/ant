@@ -79,6 +79,8 @@ static ant_value_t dns_resolver_set_local_address(ant_params_t) {
   for (int i = 0; i < 2 && i < nargs; i++) {
     if (vtype(args[i]) == kTypeUndefined) continue;
     if (vtype(args[i]) != kTypeString) return Ant_Error_CreateInvalidArgType(js, i ? "ipv6" : "ipv4", "of type string", args[i]);
+    ant_value_t nul = Ant_Error_CheckNoNullBytes(js, i ? "ipv6" : "ipv4", args[i]);
+    if (is_err(nul)) return nul;
 
     const char *text = js_getstr(js, args[i], NULL);
     unsigned char raw[16];

@@ -95,7 +95,7 @@ and are fetched automatically:
 - argtable3 3.3.1
 - BoringSSL `297b11798a0ed6bc7736aa57328909a4afbbf67a`
 - crprintf `HEAD`
-- google-brotli 1.1.0
+- google-brotli 1.2.1
 - libffi 3.5.2
 - libuv 1.53.0
 - llhttp 9.3.1

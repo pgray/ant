@@ -265,6 +265,9 @@ ant_value_t dns_resolve_impl(ant_t *js, ant_value_t *args, int nargs, int rr, bo
 
   if (rr != DNS_RR_A && rr != DNS_RR_AAAA) ttl = false;
   if (vtype(hostname) != kTypeString) return Ant_Error_CreateInvalidArgType(js, "name", "of type string", hostname);
+  ant_value_t nul = Ant_Error_CheckNoNullBytes(js, "name", hostname);
+  
+  if (is_err(nul)) return nul;
   if (!promises && !is_callable(callback)) return Ant_Error_CreateInvalidArgType(js, "callback", "of type function", callback);
 
   dns_channel_t *channel = dns_this_channel(js);
@@ -275,6 +278,9 @@ ant_value_t dns_reverse_impl(ant_t *js, ant_value_t *args, int nargs, bool promi
   ant_value_t ip = nargs > 0 ? args[0] : js_mkundef();
   ant_value_t callback = promises ? js_mkundef() : nargs > 1 ? args[1] : js_mkundef();
   if (vtype(ip) != kTypeString) return Ant_Error_CreateInvalidArgType(js, "ip", "of type string", ip);
+  
+  ant_value_t nul = Ant_Error_CheckNoNullBytes(js, "name", ip);
+  if (is_err(nul)) return nul;
   if (!promises && !is_callable(callback)) return Ant_Error_CreateInvalidArgType(js, "callback", "of type function", callback);
 
   const char *text = js_getstr(js, ip, NULL);

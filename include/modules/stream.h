@@ -22,6 +22,12 @@ typedef struct {
 } stream_private_state_t;
 
 void stream_init_constructors(ant_t *js);
+void stream_begin_construct(ant_t *js, ant_value_t stream_obj);
+
+ant_value_t stream_construct(
+  ant_t *js, ant_value_t base_proto, ant_value_t raw_options,
+  void (*init_fn)(ant_t *, ant_value_t, ant_value_t), ant_value_t new_target
+);
 
 ant_value_t stream_library(ant_t *js);
 ant_value_t stream_promises_library(ant_t *js);

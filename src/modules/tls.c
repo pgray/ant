@@ -1253,16 +1253,25 @@ static ant_value_t js_tls_connect_options(ant_t *js, ant_value_t options, ant_va
   if (vtype(options) != kTypeObject)
     return js_mkerr_typed(js, JS_ERR_TYPE, "tls.connect requires an options object");
 
+  static const char *const string_options[] = { "host", "hostname", "servername" };
+  for (size_t i = 0; i < sizeof(string_options) / sizeof(string_options[0]); i++) {
+    ant_value_t nul = Ant_Error_CheckNoNullBytes(js, string_options[i], js_get(js, options, string_options[i]));
+    if (is_err(nul)) return nul;
+  }
+
   value = js_get(js, options, "host");
   if (vtype(value) == kTypeString) host = js_getstr(js, value, NULL);
+  
   value = js_get(js, options, "hostname");
   if (vtype(value) == kTypeString) host = js_getstr(js, value, NULL);
+  
   value = js_get(js, options, "port");
   if (vtype(value) == kTypeNumber) port = (int)js_getnum(value);
+  
   value = js_get(js, options, "servername");
   if (vtype(value) == kTypeString) servername = js_getstr(js, value, NULL);
+  
   if (!servername || !*servername) servername = host;
-
   tls_init_socket_proto(js);
 
   socket = calloc(1, sizeof(*socket));
@@ -1809,6 +1818,73 @@ static bool tls_canonical_ip(const char *ip, char *out, size_t out_len) {
   return false;
 }
 
+static bool tls_host_ipv4_strict(const char *host) {
+  int parts = 0;
+  const char *p = host;
+
+  while (parts < 4) {
+    unsigned value = 0;
+    const char *start = p;
+    while (*p >= '0' && *p <= '9') {
+      value = value * 10 + (unsigned)(*p - '0');
+      if (value > 255) return false;
+      p++;
+    }
+    if (p == start || (p - start > 1 && *start == '0')) return false;
+    parts++;
+    if (parts < 4 && *p++ != '.') return false;
+  }
+  
+  return *p == '\0';
+}
+
+static bool tls_host_ip(const char *host, char *out, size_t out_len) {
+  unsigned char addr[sizeof(struct in6_addr)];
+  if (strchr(host, ':'))
+    return inet_pton(AF_INET6, host, addr) == 1 && inet_ntop(AF_INET6, addr, out, (socklen_t)out_len) != NULL;
+  return tls_host_ipv4_strict(host) &&
+    inet_pton(AF_INET, host, addr) == 1 &&
+    inet_ntop(AF_INET, addr, out, (socklen_t)out_len) != NULL;
+}
+
+static bool tls_host_loose_ipv4(const char *host) {
+  uint64_t parts[4];
+  int count = 0;
+  const char *p = host;
+
+  for (;;) {
+    uint64_t value = 0;
+    int base = 10;
+    const char *digits = p;
+
+    if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
+      base = 16;
+      p += 2;
+      digits = p;
+    } else if (p[0] == '0' && p[1] >= '0' && p[1] <= '9') base = 8;
+
+    for (;; p++) {
+      int digit;
+      if (*p >= '0' && *p <= '9') digit = *p - '0';
+      else if (base == 16 && *p >= 'a' && *p <= 'f') digit = *p - 'a' + 10;
+      else if (base == 16 && *p >= 'A' && *p <= 'F') digit = *p - 'A' + 10;
+      else break;
+      if (digit >= base) return false;
+      value = value * (uint64_t)base + (uint64_t)digit;
+      if (value > 0xffffffffULL) return false;
+    }
+
+    if (p == digits) return false;
+    if (count == 4) return false;
+    parts[count++] = value;
+    if (*p == '\0') break;
+    if (*p++ != '.') return false;
+  }
+
+  for (int i = 0; i < count - 1; i++) if (parts[i] > 255) return false;
+  return parts[count - 1] <= (0xffffffffULL >> (8 * (count - 1)));
+}
+
 static int tls_split_host(char *host, char **parts, int max_parts) {
   size_t len = strlen(host);
   int count = 0;
@@ -1936,7 +2012,11 @@ static ant_value_t js_tls_check_server_identity(ant_params_t) {
     entry = saved ? end + 2 : end;
   }
 
-  if (tls_canonical_ip(hostname, canonical, sizeof(canonical))) {
+  bool host_is_ip = tls_host_ip(hostname, canonical, sizeof(canonical));
+  if (!host_is_ip && tls_host_loose_ipv4(hostname)) {
+    valid = false;
+    tls_strbuf_puts(&reason, "Host is a non-canonical IP address");
+  } else if (host_is_ip) {
     valid = false;
     for (char *ip = ips.data; ip && *ip;) {
       char *sep = strstr(ip, ", ");

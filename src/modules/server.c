@@ -1607,7 +1607,9 @@ static void server_on_read(ant_conn_t *conn, ssize_t nread, void *user_data) {
   
   if (parse_result == ANT_HTTP1_PARSE_ERROR) {
     ant_http1_free_parsed_request(&parsed);
-    server_send_text_response(conn, 400, "Bad Request", "Bad Request");
+    if (cs->parser.ctx.header_overflow)
+      server_send_text_response(conn, 431, "Request Header Fields Too Large", "Request Header Fields Too Large");
+    else server_send_text_response(conn, 400, "Bad Request", "Bad Request");
     return;
   }
 

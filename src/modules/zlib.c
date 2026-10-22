@@ -339,6 +339,13 @@ static ant_value_t zlib_error(ant_t *js, const char *message, const char *code, 
   return js_mkerr_props(js, JS_ERR_GENERIC, props, "%s", message);
 }
 
+static ant_value_t zlib_brotli_error(ant_t *js, int code, const char *name) {
+  if (code >= 0) return zlib_error(js, "unexpected end of file", "Z_BUF_ERROR", Z_BUF_ERROR);
+  char code_name[96];
+  snprintf(code_name, sizeof(code_name), "ERR_%s", name ? name : "BROTLI");
+  return zlib_error(js, "Decompression failed", code_name, code);
+}
+
 static ant_value_t zlib_stream_error(ant_t *js, int ret, const z_stream *strm) {
   if (ret == Z_BUF_ERROR) return zlib_error(js, "unexpected end of file", "Z_BUF_ERROR", Z_BUF_ERROR);
   if (ret == Z_NEED_DICT) return zlib_error(js, "Missing dictionary", "Z_NEED_DICT", Z_NEED_DICT);
@@ -370,8 +377,14 @@ static ant_value_t zlib_do_process(
 
     if (is_err(ctx.error)) return ctx.error;
     if (Ant_Exception_Pending(js)) return js_mkundef();
+    
+    if (rc < 0 && st->kind == ZLIB_KIND_BROTLI_DECOMPRESS) {
+      const char *error_name = NULL;
+      int error_code = brotli_stream_decoder_error(st->brotli, &error_name);
+      return zlib_brotli_error(js, error_code < 0 ? error_code : -1, error_name);
+    }
+    
     if (rc < 0) return js_mkerr(js, "brotli operation failed");
-
     return js_mkundef();
   }
 
@@ -789,7 +802,11 @@ typedef struct {
 } zbuf_t;
 
 static int zbuf_append(zbuf_t *b, const uint8_t *chunk, size_t n) {
-  if (b->limit && b->len + n > b->limit) { b->overflow = 1; return -1; }
+  if (b->limit && b->len + n > b->limit) { 
+    b->overflow = 1; 
+    return -1;
+  }
+  
   if (b->len + n > b->cap) {
     size_t newcap = b->cap ? b->cap * 2 : 4096;
     while (newcap < b->len + n) newcap *= 2;
@@ -815,13 +832,6 @@ static ant_value_t zlib_too_large(ant_t *js, size_t limit) {
   js_set(js, props, "code", js_mkstr(js, "ERR_BUFFER_TOO_LARGE", 20));
   return js_mkerr_props(js, JS_ERR_RANGE, props,
     "Cannot create a Buffer larger than %zu bytes", limit);
-}
-
-static ant_value_t zlib_brotli_error(ant_t *js, int code, const char *name) {
-  if (code >= 0) return zlib_error(js, "unexpected end of file", "Z_BUF_ERROR", Z_BUF_ERROR);
-  char code_name[96];
-  snprintf(code_name, sizeof(code_name), "ERR_%s", name ? name : "BROTLI");
-  return zlib_error(js, "Decompression failed", code_name, code);
 }
 
 static ant_value_t zlib_sync_op(
@@ -1133,6 +1143,12 @@ static void zlib_install_constants(ant_t *js, ant_value_t c) {
   zlib_set_num(js, c, "BROTLI_DECODER_PARAM_DISABLE_RING_BUFFER_REALLOCATION", BROTLI_DECODER_PARAM_DISABLE_RING_BUFFER_REALLOCATION);
   zlib_set_num(js, c, "BROTLI_DECODER_PARAM_LARGE_WINDOW", BROTLI_DECODER_PARAM_LARGE_WINDOW);
 
+#define ZLIB_BROTLI_ERROR_CODE(PREFIX, NAME, CODE) zlib_set_num(js, c, "BROTLI_DECODER" #PREFIX #NAME, CODE);
+#define ZLIB_BROTLI_ERROR_SEPARATOR
+  BROTLI_DECODER_ERROR_CODES_LIST(ZLIB_BROTLI_ERROR_CODE, ZLIB_BROTLI_ERROR_SEPARATOR)
+#undef ZLIB_BROTLI_ERROR_CODE
+#undef ZLIB_BROTLI_ERROR_SEPARATOR
+
   zlib_set_num(js, c, "ZSTD_e_continue", 0);
   zlib_set_num(js, c, "ZSTD_e_flush", 1);
   zlib_set_num(js, c, "ZSTD_e_end", 2);
@@ -1146,6 +1162,7 @@ static ant_value_t make_constants(ant_t *js) {
 
 static ant_value_t make_codes(ant_t *js) {
   ant_value_t codes = Ant_Object_CreateBare(js);
+  
   js_set(js, codes, "0", js_mkstr(js, "Z_OK", 4));
   js_set(js, codes, "1", js_mkstr(js, "Z_STREAM_END", 12));
   js_set(js, codes, "2", js_mkstr(js, "Z_NEED_DICT", 11));
@@ -1155,6 +1172,7 @@ static ant_value_t make_codes(ant_t *js) {
   js_set(js, codes, "-4", js_mkstr(js, "Z_MEM_ERROR", 11));
   js_set(js, codes, "-5", js_mkstr(js, "Z_BUF_ERROR", 11));
   js_set(js, codes, "-6", js_mkstr(js, "Z_VERSION_ERROR", 15));
+  
   zlib_set_num(js, codes, "Z_OK", Z_OK);
   zlib_set_num(js, codes, "Z_STREAM_END", Z_STREAM_END);
   zlib_set_num(js, codes, "Z_NEED_DICT", Z_NEED_DICT);
@@ -1164,6 +1182,7 @@ static ant_value_t make_codes(ant_t *js) {
   zlib_set_num(js, codes, "Z_MEM_ERROR", Z_MEM_ERROR);
   zlib_set_num(js, codes, "Z_BUF_ERROR", Z_BUF_ERROR);
   zlib_set_num(js, codes, "Z_VERSION_ERROR", Z_VERSION_ERROR);
+  
   return codes;
 }
 

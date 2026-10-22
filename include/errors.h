@@ -48,6 +48,7 @@ void js_describe_received(ant_t *js, ant_value_t value, char *out, size_t out_le
 ant_value_t Ant_Error_CreateStackOverflow(ant_t *js);
 ant_value_t Ant_Error_CreateInvalidArgType(ant_t *js, const char *name, const char *expected, ant_value_t received);
 ant_value_t Ant_Error_CreateInvalidArgValue(ant_t *js, const char *name, const char *expected, ant_value_t received);
+ant_value_t Ant_Error_CheckNoNullBytes(ant_t *js, const char *name, ant_value_t value);
 ant_value_t Ant_Error_CreateOutOfRange(ant_t *js, const char *name, const char *range, ant_value_t received);
 
 bool print_uncaught_throw(ant_t *js);
