@@ -72,7 +72,18 @@ typedef enum {
   STDIO_PIPE = 0,
   STDIO_INHERIT,
   STDIO_IGNORE,
+  STDIO_FD,
 } stdio_mode_t;
+
+typedef struct {
+  stdio_mode_t mode[3];
+  int fd[3];
+} stdio_spec_t;
+
+static const stdio_spec_t STDIO_SPEC_DEFAULT = {
+  .mode = { STDIO_PIPE, STDIO_PIPE, STDIO_PIPE },
+  .fd = { STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO },
+};
 
 struct child_process_s {
   ant_t *js;
@@ -1111,24 +1122,38 @@ static void free_env_array(char **env) {
   free(env);
 }
 
-static stdio_mode_t parse_stdio_mode(ant_t *js, ant_value_t val) {
+static bool stdio_fd_of(ant_value_t val, int *fd) {
+  if (vtype(val) != kTypeNumber) return false;
+  double num = js_getnum(val);
+  if (!(num >= 0 && num <= INT32_MAX) || num != (double)(int32_t)num) return false;
+  *fd = (int)num;
+  return true;
+}
+
+static stdio_mode_t parse_stdio_mode(ant_t *js, ant_value_t val, int *fd) {
+  if (stdio_fd_of(val, fd)) return STDIO_FD;
+  if (is_object_type(val) && stdio_fd_of(js_get(js, val, "fd"), fd)) return STDIO_FD;
   if (vtype(val) != kTypeString) return STDIO_PIPE;
+  
   char *s = js_getstr(js, val, NULL);
   if (strcmp(s, "inherit") == 0) return STDIO_INHERIT;
   if (strcmp(s, "ignore") == 0) return STDIO_IGNORE;
+  
   return STDIO_PIPE;
 }
 
-static void parse_stdio_option(ant_t *js, ant_value_t stdio_val, stdio_mode_t *modes) {
-if (vtype(stdio_val) == kTypeString) {
-  stdio_mode_t mode = parse_stdio_mode(js, stdio_val);
-  for (int i = CHILD_STREAM_STDIN; i <= CHILD_STREAM_STDERR; i++) modes[i] = mode;
-} else if (is_special_object(stdio_val)) {
-  ant_offset_t len = js_arr_len(js, stdio_val);
-  if (len > 3) len = 3;
-  for (ant_offset_t i = 0; i < len; i++) 
-    modes[i] = parse_stdio_mode(js, js_arr_get(js, stdio_val, i));
-}}
+static void parse_stdio_option(ant_t *js, ant_value_t stdio_val, stdio_spec_t *spec) {
+  if (vtype(stdio_val) == kTypeString) {
+    int fd = -1;
+    stdio_mode_t mode = parse_stdio_mode(js, stdio_val, &fd);
+    for (int i = CHILD_STREAM_STDIN; i <= CHILD_STREAM_STDERR; i++) spec->mode[i] = mode;
+  } else if (is_special_object(stdio_val)) {
+    ant_offset_t len = js_arr_len(js, stdio_val);
+    if (len > 3) len = 3;
+    for (ant_offset_t i = 0; i < len; i++)
+      spec->mode[i] = parse_stdio_mode(js, js_arr_get(js, stdio_val, i), &spec->fd[i]);
+  }
+}
 
 static ant_value_t builtin_spawn(ant_params_t) {
   if (nargs < 1) return js_mkerr(js, "spawn() requires a command");
@@ -1154,9 +1179,7 @@ static ant_value_t builtin_spawn(ant_params_t) {
     return Ant_Exception_Current(js);
   }
   
-  stdio_mode_t stdio_modes[3] = { 
-    STDIO_PIPE, STDIO_PIPE, STDIO_PIPE 
-  };
+  stdio_spec_t stdio_spec = STDIO_SPEC_DEFAULT;
   
   if (is_special_object(options_arg)) {
     ant_value_t cwd_val = js_get(js, options_arg, "cwd");
@@ -1173,7 +1196,7 @@ static ant_value_t builtin_spawn(ant_params_t) {
     detached = js_truthy(js, detached_val);
     
     ant_value_t stdio_val = js_get(js, options_arg, "stdio");
-    parse_stdio_option(js, stdio_val, stdio_modes);
+    parse_stdio_option(js, stdio_val, &stdio_spec);
 
     ant_value_t env_val = js_get(js, options_arg, "env");
     env = parse_env_object(js, env_val);
@@ -1194,30 +1217,25 @@ static ant_value_t builtin_spawn(ant_params_t) {
   cp->cwd = cwd;
   cp->promise = js_mkundef();
   cp->keep_alive = true;
-  memcpy(cp->stdio_modes, stdio_modes, sizeof(stdio_modes));
-  ant_process_stage_init(
-    &cp->process, cp, on_process_exit, on_process_close
-  );
   
-  for (int i = CHILD_STREAM_STDIN; i <= CHILD_STREAM_STDERR; i++) {
-  if (stdio_modes[i] == STDIO_PIPE) {
+  memcpy(cp->stdio_modes, stdio_spec.mode, sizeof(stdio_spec.mode));
+  ant_process_stage_init(&cp->process, cp, on_process_exit, on_process_close);
+  
+  for (int i = CHILD_STREAM_STDIN; i <= CHILD_STREAM_STDERR; i++) if (stdio_spec.mode[i] == STDIO_PIPE) {
     uv_pipe_t *p = child_pipe(cp, i);
     uv_pipe_init(js->loop, p, 0);
     p->data = cp;
-  }}
+  }
   
   uv_stdio_container_t stdio[3];
-  for (int i = CHILD_STREAM_STDIN; i <= CHILD_STREAM_STDERR; i++) {
-  if (stdio_modes[i] == STDIO_INHERIT) {
-    ant_process_stdio_inherit_fd(&stdio[i], i);
-  } else if (stdio_modes[i] == STDIO_IGNORE) {
-    ant_process_stdio_ignore(&stdio[i]);
-  } else {
-    ant_process_stdio_create_pipe(
+  for (int i = CHILD_STREAM_STDIN; i <= CHILD_STREAM_STDERR; i++)
+    if (stdio_spec.mode[i] == STDIO_INHERIT || stdio_spec.mode[i] == STDIO_FD) 
+      ant_process_stdio_inherit_fd(&stdio[i], stdio_spec.fd[i]);
+    else if (stdio_spec.mode[i] == STDIO_IGNORE) ant_process_stdio_ignore(&stdio[i]);
+    else ant_process_stdio_create_pipe(
       &stdio[i], (uv_stream_t *)child_pipe(cp, i),
       i == CHILD_STREAM_STDIN
     );
-  }}
   
   char **final_args;
   int final_argc;
@@ -1310,9 +1328,9 @@ static ant_value_t builtin_spawn(ant_params_t) {
   bool *closed[] = { &cp->stdin_closed, &cp->stdout_closed, &cp->stderr_closed };
   
   for (int i = CHILD_STREAM_STDIN; i <= CHILD_STREAM_STDERR; i++) {
-    if (stdio_modes[i] == STDIO_PIPE && read_cbs[i]) {
+    if (stdio_spec.mode[i] == STDIO_PIPE && read_cbs[i]) {
       uv_read_start((uv_stream_t *)child_pipe(cp, i), alloc_buffer, read_cbs[i]);
-    } else if (stdio_modes[i] != STDIO_PIPE) *closed[i] = true;
+    } else if (stdio_spec.mode[i] != STDIO_PIPE) *closed[i] = true;
   }
   
   Ant_List_Insert(&js->active_children, cp);
@@ -1740,7 +1758,101 @@ static ant_value_t sync_make_output(ant_t *js, const char *bytes, size_t len, bo
   return create_typed_array(js, TYPED_ARRAY_UINT8, buffer, 0, len, js->builtins.buffer_proto);
 }
 
+static ant_value_t sync_error_result(ant_t *js, ant_value_t error) {
+  ant_value_t result = Ant_Object_Create(js);
+  js_set(js, result, "error", error);
+  js_set(js, result, "status", js_mknull());
+  js_set(js, result, "signal", js_mknull());
+  js_set(js, result, "output", js_mknull());
+  js_set(js, result, "pid", js_mknum(0));
+  return result;
+}
+
 #ifdef _WIN32
+static void win_close_handle(HANDLE *h) {
+  if (*h && *h != INVALID_HANDLE_VALUE) CloseHandle(*h);
+  *h = NULL;
+}
+
+static void win_close_handles(HANDLE *h) {
+  for (int i = 0; i < 3; i++) win_close_handle(&h[i]);
+}
+
+static HANDLE win_inheritable_handle(HANDLE h) {
+  HANDLE dup = NULL;
+  if (!h || h == INVALID_HANDLE_VALUE) return NULL;
+  if (!DuplicateHandle(GetCurrentProcess(), h, GetCurrentProcess(), &dup, 0, TRUE, DUPLICATE_SAME_ACCESS)) return NULL;
+  return dup;
+}
+
+static int win_sync_stdio_open(const stdio_spec_t *spec, SECURITY_ATTRIBUTES *sa, HANDLE *child_end, HANDLE *parent_end) {
+  for (int i = CHILD_STREAM_STDIN; i <= CHILD_STREAM_STDERR; i++)
+    if (spec->mode[i] == STDIO_PIPE) {
+      HANDLE read_end = NULL, write_end = NULL;
+      if (!CreatePipe(&read_end, &write_end, sa, 0)) return uv_translate_sys_error(GetLastError());
+      child_end[i] = i == CHILD_STREAM_STDIN ? read_end : write_end;
+      parent_end[i] = i == CHILD_STREAM_STDIN ? write_end : read_end;
+      SetHandleInformation(parent_end[i], HANDLE_FLAG_INHERIT, 0);
+    } else if (spec->mode[i] == STDIO_IGNORE) {
+      DWORD access = i == CHILD_STREAM_STDIN ? GENERIC_READ : GENERIC_WRITE;
+      HANDLE h = CreateFileA("NUL", access, FILE_SHARE_READ | FILE_SHARE_WRITE, sa, OPEN_EXISTING, 0, NULL);
+      if (h == INVALID_HANDLE_VALUE) return uv_translate_sys_error(GetLastError());
+      child_end[i] = h;
+    } else {
+      child_end[i] = win_inheritable_handle(uv_get_osfhandle(spec->fd[i]));
+      if (!child_end[i] && spec->mode[i] == STDIO_FD) return UV_EBADF;
+    }
+  return 0;
+}
+
+typedef struct {
+  HANDLE pipe;
+  HANDLE thread;
+  char *buf;
+  size_t len;
+  bool ok;
+} win_sync_reader_t;
+
+static DWORD WINAPI win_sync_reader_main(LPVOID arg) {
+  win_sync_reader_t *r = arg;
+  size_t cap = 4096;
+  char chunk[4096];
+  DWORD n;
+
+  r->buf = malloc(cap);
+  r->len = 0;
+  r->ok = r->buf != NULL;
+
+  while (r->ok && ReadFile(r->pipe, chunk, sizeof(chunk), &n, NULL) && n > 0) {
+    if (r->len + n > cap) {
+      while (r->len + n > cap) cap *= 2;
+      char *grown = realloc(r->buf, cap);
+      if (!grown) {
+        r->ok = false;
+        break;
+      }
+      r->buf = grown;
+    }
+    memcpy(r->buf + r->len, chunk, n);
+    r->len += n;
+  }
+  return 0;
+}
+
+static bool win_sync_reader_start(win_sync_reader_t *r, HANDLE pipe) {
+  *r = (win_sync_reader_t){ .pipe = pipe, .ok = true };
+  if (!pipe) return true;
+  r->thread = CreateThread(NULL, 0, win_sync_reader_main, r, 0, NULL);
+  return r->thread != NULL;
+}
+
+static void win_sync_reader_join(win_sync_reader_t *r) {
+  if (!r->thread) return;
+  WaitForSingleObject(r->thread, INFINITE);
+  CloseHandle(r->thread);
+  r->thread = NULL;
+}
+
 static ant_value_t spawn_sync_impl(ant_native_params_t, bool force_shell) {
   if (nargs < 1) return js_mkerr(js, "spawnSync() requires a command");
   if (vtype(args[0]) != kTypeString) return js_mkerr(js, "Command must be a string");
@@ -1755,6 +1867,7 @@ static ant_value_t spawn_sync_impl(ant_native_params_t, bool force_shell) {
   size_t input_len = 0;
   bool use_shell = force_shell;
   ant_value_t options_arg = child_process_options_arg(args, nargs);
+  stdio_spec_t stdio_spec = STDIO_SPEC_DEFAULT;
 
   if (nargs >= 2 && js_is_array(args[1])) spawn_args = parse_args_array(js, args[1], &spawn_argc);
   if (spawn_argc < 0) {
@@ -1768,6 +1881,7 @@ static ant_value_t spawn_sync_impl(ant_native_params_t, bool force_shell) {
       input = js_getstr(js, input_val, &input_len);
     }
     if (!use_shell) use_shell = js_truthy(js, js_get(js, options_arg, "shell"));
+    parse_stdio_option(js, js_get(js, options_arg, "stdio"), &stdio_spec);
   }
 
   size_t cmdline_len = cmd_len + 3;
@@ -1804,83 +1918,68 @@ static ant_value_t spawn_sync_impl(ant_native_params_t, bool force_shell) {
   }
   
   SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), NULL, TRUE };
-  HANDLE stdin_read = NULL, stdin_write = NULL;
-  HANDLE stdout_read = NULL, stdout_write = NULL;
-  HANDLE stderr_read = NULL, stderr_write = NULL;
-  
-  if (!CreatePipe(&stdin_read, &stdin_write, &sa, 0) ||
-      !CreatePipe(&stdout_read, &stdout_write, &sa, 0) ||
-      !CreatePipe(&stderr_read, &stderr_write, &sa, 0)) {
+  HANDLE child_end[3] = { NULL, NULL, NULL };
+  HANDLE parent_end[3] = { NULL, NULL, NULL };
+
+  int stdio_rc = win_sync_stdio_open(&stdio_spec, &sa, child_end, parent_end);
+  if (stdio_rc < 0) {
+    win_close_handles(child_end);
+    win_close_handles(parent_end);
+    if (cmdline != raw_cmdline) free(raw_cmdline);
     free(cmdline);
-    free(cmd_str);
     free_args_array(spawn_args, spawn_argc);
-    return js_mkerr(js, "Failed to create pipes");
+
+    ant_value_t result;
+    if (stdio_rc == UV_EBADF) {
+      char syscall[224];
+      snprintf(syscall, sizeof(syscall), "spawnSync %.*s", (int)(cmd_len < 120 ? cmd_len : 120), cmd_str);
+      result = sync_error_result(js, child_syscall_error(js, stdio_rc, syscall, cmd_str));
+    } else result = js_mkerr(js, "Failed to create pipes");
+    
+    free(cmd_str);
+    return result;
   }
-  
-  SetHandleInformation(stdin_write, HANDLE_FLAG_INHERIT, 0);
-  SetHandleInformation(stdout_read, HANDLE_FLAG_INHERIT, 0);
-  SetHandleInformation(stderr_read, HANDLE_FLAG_INHERIT, 0);
   
   STARTUPINFOA si = {0};
   si.cb = sizeof(si);
   si.dwFlags = STARTF_USESTDHANDLES;
-  si.hStdInput = stdin_read;
-  si.hStdOutput = stdout_write;
-  si.hStdError = stderr_write;
+  si.hStdInput = child_end[CHILD_STREAM_STDIN];
+  si.hStdOutput = child_end[CHILD_STREAM_STDOUT];
+  si.hStdError = child_end[CHILD_STREAM_STDERR];
   
   PROCESS_INFORMATION pi = {0};
-  
   BOOL success = CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi);
   
   free(cmdline);
   if (cmdline != raw_cmdline) free(raw_cmdline);
+  
   free(cmd_str);
   free_args_array(spawn_args, spawn_argc);
-  
-  CloseHandle(stdin_read);
-  CloseHandle(stdout_write);
-  CloseHandle(stderr_write);
+  win_close_handles(child_end);
   
   if (!success) {
-    CloseHandle(stdin_write);
-    CloseHandle(stdout_read);
-    CloseHandle(stderr_read);
+    win_close_handles(parent_end);
     return js_mkerr(js, "Failed to create process");
   }
   
-  if (input && input_len > 0) {
+  win_sync_reader_t out, err;
+  bool started = win_sync_reader_start(&out, parent_end[CHILD_STREAM_STDOUT]);
+  started = win_sync_reader_start(&err, parent_end[CHILD_STREAM_STDERR]) && started;
+  if (!started) TerminateProcess(pi.hProcess, 1);
+
+  if (started && parent_end[CHILD_STREAM_STDIN] && input && input_len > 0) {
     DWORD written;
-    WriteFile(stdin_write, input, (DWORD)input_len, &written, NULL);
+    WriteFile(parent_end[CHILD_STREAM_STDIN], input, (DWORD)input_len, &written, NULL);
   }
-  CloseHandle(stdin_write);
   
-  char *stdout_buf = malloc(4096);
-  size_t stdout_len = 0, stdout_cap = 4096;
-  char *stderr_buf = malloc(4096);
-  size_t stderr_len = 0, stderr_cap = 4096;
+  win_close_handle(&parent_end[CHILD_STREAM_STDIN]);
+  win_sync_reader_join(&out);
+  win_sync_reader_join(&err);
+  win_close_handles(parent_end);
   
-  char buffer[4096];
-  DWORD n;
-  
-  while (ReadFile(stdout_read, buffer, sizeof(buffer), &n, NULL) && n > 0) {
-    if (stdout_len + n >= stdout_cap) {
-      stdout_cap *= 2;
-      stdout_buf = realloc(stdout_buf, stdout_cap);
-    }
-    memcpy(stdout_buf + stdout_len, buffer, n);
-    stdout_len += n;
-  }
-  CloseHandle(stdout_read);
-  
-  while (ReadFile(stderr_read, buffer, sizeof(buffer), &n, NULL) && n > 0) {
-    if (stderr_len + n >= stderr_cap) {
-      stderr_cap *= 2;
-      stderr_buf = realloc(stderr_buf, stderr_cap);
-    }
-    memcpy(stderr_buf + stderr_len, buffer, n);
-    stderr_len += n;
-  }
-  CloseHandle(stderr_read);
+  char *stdout_buf = out.buf, *stderr_buf = err.buf;
+  size_t stdout_len = out.len, stderr_len = err.len;
+  bool read_ok = started && out.ok && err.ok;
   
   WaitForSingleObject(pi.hProcess, INFINITE);
   
@@ -1890,6 +1989,12 @@ static ant_value_t spawn_sync_impl(ant_native_params_t, bool force_shell) {
   
   CloseHandle(pi.hProcess);
   CloseHandle(pi.hThread);
+  
+  if (!read_ok) {
+    free(stdout_buf);
+    free(stderr_buf);
+    return js_mkerr(js, "Failed to read process output");
+  }
   
   bool as_string = sync_encoding_wants_string(js, options_arg);
 
@@ -2181,7 +2286,7 @@ typedef struct {
   int timeout_ms;
   int kill_signal;
   size_t max_buffer;
-  stdio_mode_t stdio[3];
+  stdio_spec_t stdio;
   char label[128];
 } sync_opts_t;
 
@@ -2214,8 +2319,9 @@ static void sync_parse_options(
     .use_shell = force_shell,
     .kill_signal = SIGTERM,
     .max_buffer = SYNC_MAX_BUFFER_DEFAULT,
-    .stdio = { STDIO_PIPE, STDIO_PIPE, STDIO_PIPE },
+    .stdio = STDIO_SPEC_DEFAULT,
   };
+  
   if (!is_special_object(options)) return;
 
   ant_value_t cwd_val = js_get(js, options, "cwd");
@@ -2226,7 +2332,7 @@ static void sync_parse_options(
   }
 
   sync_value_bytes(js, js_get(js, options, "input"), &opts->input, &opts->input_len);
-  parse_stdio_option(js, js_get(js, options, "stdio"), opts->stdio);
+  parse_stdio_option(js, js_get(js, options, "stdio"), &opts->stdio);
   res->env = parse_env_object(js, js_get(js, options, "env"));
 
   ant_value_t shell_val = js_get(js, options, "shell");
@@ -2304,9 +2410,19 @@ static void sync_child_exec(
 
   static const int target_fd[3] = { STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO };
   static const int null_flags[3] = { O_RDONLY, O_WRONLY, O_WRONLY };
+  int source_fd[3] = { -1, -1, -1 };
 
   for (int i = 0; i < 3; i++) {
-    if (opts->stdio[i] == STDIO_PIPE) {
+    if (opts->stdio.mode[i] != STDIO_FD) continue;
+    source_fd[i] = fcntl(opts->stdio.fd[i], F_DUPFD_CLOEXEC, 3);
+    if (source_fd[i] < 0) sync_child_fail(report_fd);
+  }
+
+  for (int i = 0; i < 3; i++) {
+    if (opts->stdio.mode[i] == STDIO_FD) {
+      if (dup2(source_fd[i], target_fd[i]) < 0) sync_child_fail(report_fd);
+      close(source_fd[i]);
+    } else if (opts->stdio.mode[i] == STDIO_PIPE) {
       bool reading = i == CHILD_STREAM_STDIN;
       int keep = reading ? pipes->fds[i][0] : pipes->fds[i][1];
       int drop = reading ? pipes->fds[i][1] : pipes->fds[i][0];
@@ -2314,7 +2430,7 @@ static void sync_child_exec(
       close_if_valid(drop);
       dup2(keep, target_fd[i]);
       close_if_valid(keep);
-    } else if (opts->stdio[i] == STDIO_IGNORE) {
+    } else if (opts->stdio.mode[i] == STDIO_IGNORE) {
       child_redirect_stdio_to_devnull(target_fd[i], null_flags[i]);
     }
   }
@@ -2344,14 +2460,7 @@ static ant_value_t sync_build_spawn_error(
     js_set(js, error, "spawnargs", spawnargs);
   }
 
-  ant_value_t result = Ant_Object_Create(js);
-  js_set(js, result, "error", error);
-  js_set(js, result, "status", js_mknull());
-  js_set(js, result, "signal", js_mknull());
-  js_set(js, result, "output", js_mknull());
-  js_set(js, result, "pid", js_mknum(0));
-
-  return result;
+  return sync_error_result(js, error);
 }
 
 static ant_value_t sync_build_result(
@@ -2429,7 +2538,7 @@ static ant_value_t spawn_sync_impl(ant_native_params_t, bool force_shell) {
   sync_pipes_t pipes;
   sync_pipes_init(&pipes);
 
-  if (!sync_pipes_open(&pipes, opts.stdio)) {
+  if (!sync_pipes_open(&pipes, opts.stdio.mode)) {
     sync_pipes_close_all(&pipes);
     sync_res_free(&res);
     return js_mkerr(js, "Failed to create pipes");
@@ -2467,7 +2576,7 @@ static ant_value_t spawn_sync_impl(ant_native_params_t, bool force_shell) {
     return result;
   }
 
-  bool want_stdin = opts.stdio[CHILD_STREAM_STDIN] == STDIO_PIPE;
+  bool want_stdin = opts.stdio.mode[CHILD_STREAM_STDIN] == STDIO_PIPE;
 
   close_if_valid(pipes.fds[CHILD_STREAM_STDIN][0]);
   close_if_valid(pipes.fds[CHILD_STREAM_STDOUT][1]);
