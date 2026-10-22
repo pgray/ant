@@ -72,7 +72,7 @@ char *cstr_init(
 );
 
 #define CSTR_BUF(name, size) \
-  char name##_stack[size]; \
+  char name##_stack[size];   \
   cstr_buf_t name = {0}
 
 #define CSTR_INIT(buf, src, len) \
@@ -83,11 +83,22 @@ typedef struct {
   size_t len;
 } repl_capture_t;
 
+typedef struct {
+  bool (*lookup)(
+    void *ctx, 
+    const char *name, 
+    size_t name_len, 
+    repl_capture_t *out
+  );
+  void *ctx;
+} repl_named_t;
+
 bool repl_template(
   const char *repl, size_t repl_len,
   const char *matched, size_t matched_len,
   const char *str, size_t str_len, size_t position,
   const repl_capture_t *caps, int ncaptures,
+  const repl_named_t *named,
   char **buf, size_t *buf_len, size_t *buf_cap
 );
 

@@ -1,7 +1,7 @@
 # Technical Debt Tracker
 
 Status: active
-Last reviewed: 2026-10-17
+Last reviewed: 2026-10-22
 Owner: theMackabu
 
 Use this file to record debt that is important enough to preserve but not yet
@@ -44,12 +44,6 @@ scheduled.
   | win32.resolve (absolute) | 960.83 | 113.88 | 20.72 |
   | win32.relative (absolute) | 27.67 | 142.84 | 36.54 |
   | posix.parse | 23.10 | 19.01 | 2.39 |
-
-- Area: primitive receivers + prototype accessors
-  - Issue: A getter/setter defined on a type prototype (e.g. `Object.defineProperty(String.prototype, 'x', { get() {...} })`) never fires for primitive receivers — `"s".x` returns undefined where node runs the getter. Pre-existing on all binaries (installed release, pre-port master, current); the primitive lookup paths (`js_try_get_len` boxing path, `sv_prop_get_at` fallback) skip accessor invocation for proto-held accessors on primitives.
-  - Impact: Rare pattern (accessors on builtin prototypes), but a silent wrong-value divergence from node. The primitive-IC regression test pins only "warmed site agrees with cold access" for this case; fix the engine gap and the test can assert node's value.
-  - Proposed fix: In the primitive branch of `js_try_get_len` (and the field-IC slow path), when the proto-chain lookup lands on an accessor, invoke the getter with the primitive as `this` (`try_accessor_getter` with the unboxed receiver) instead of falling through to paths that load nothing.
-  - Status: backlog
 
 - Area: `src/modules/child_process.c` — Windows `spawnSync` option parity
   - Issue: The win32 `spawn_sync_impl` branch ignores `timeout`, `killSignal`, and `maxBuffer` entirely (the POSIX branch implements all three via the select loop and `sync_read_ctl_t`). The `output` array and `error` shape gaps were fixed 2026-08-02, but the three options silently do nothing on Windows.
@@ -112,12 +106,6 @@ scheduled.
   - Proposed fix: Continue expanding `Intl` incrementally: replace `strcoll`-only collation, deepen `resolvedOptions()`, make `DateTimeFormat` actually honor stored timezone and locale options, and move `Segmenter` closer to the expected iterable/result object shape.
   - Status: backlog
 
-- Area: `src/modules/timer.c`
-  - Issue: `node:timers/promises setInterval()` is still explicitly unimplemented.
-  - Impact: Promise-based timer APIs remain incomplete and can block compatibility with code that expects the Node timers/promises interval surface.
-  - Proposed fix: Implement `setInterval()` on top of the existing timer promise scheduling machinery, including cancellation and signal handling behavior consistent with the existing `setTimeout()` and `setImmediate()` support.
-  - Status: backlog
-
 - Area: `src/modules/dns.c`
   - Issue: `node:dns` is still a minimal shim centered on `dns.promises.lookup`.
   - Impact: Tooling or apps that expect more of the Node DNS surface still need polyfills or will fail outright.
@@ -165,11 +153,11 @@ scheduled.
   - Status: backlog (targeted `RGI_Emoji` false-positive fix exists; complete property-of-strings and Unicode-version conformance remain open)
 
 - Area: `src/modules/regex.c` / remaining RegExp divergences from node
-  - Issue: A 68-probe node-differential harness (2026-08-06 validation of the regex rework) leaves 15 pre-existing divergences, all reproduced identically on the installed release and on pre-rework binaries — untouched by and out of scope for the rework. Families: (1) exec-result `groups` is an accessor property where node has a plain writable/enumerable/configurable data property (affects `Object.getOwnPropertyDescriptor` shape on `exec`/`d`-flag results); (2) `$<name>` named-group references in string replacements are not substituted (`'abc'.replace(/(?<m>b)/g, '[$<m>]')` emits the literal text) and the function-replacer named-`groups` trailing argument is missing; (3) legacy statics `RegExp.leftContext`/`rightContext` are undefined after matches ( `$1..$9`/`lastMatch` work); (4) subclass/own-property dispatch: an own or subclass `global`/`flags` getter and a subclass `exec` override are bypassed by the built-in `@@match`/`@@replace` fast paths (a swapped `RegExp.prototype.exec` data property IS honored); (5) `lastIndex` string values are not coerced before use, `lastIndex` is defined non-configurable so accessor redefinition throws where node allows it pre-first-exec; (6) `new RegExp('').source` is `""` instead of `"(?:)"`, and `/(?:)/g`-style empty-match iteration over non-BMP text without `u` advances by code point instead of code unit.
-  - Impact: Silent wrong values or missing substitutions for code relying on named-group replacement strings, legacy statics, or RegExp subclassing; all are node-observable divergences that a differential test will keep flagging. None affect the perf-critical exec/match/replace fast paths' results for ordinary regexps.
-  - Proposed fix: Fix per family, cheapest first: `source` normalization and `lastIndex` ToNumber coercion are one-liners; `$<name>` substitution + replacer `groups` argument extend the existing `repl_template`/replacer marshaling with the already-cached named-groups meta; `groups`-as-data-property is a result-shape change (canonical shape already exists — add the slot); leftContext/rightContext extend `update_regexp_statics`; subclass/own-getter dispatch requires the batch/fast-path guards to also check `global`/`flags`/`exec` own-or-overridden state (guards already exist for `exec` data-property swaps — extend to accessors and subclass prototypes).
+  - Issue: Remaining node-differential divergences, all pre-existing on the installed release: (1) exec-result `groups` is an accessor property where node has a plain writable/enumerable/configurable data property (affects `Object.getOwnPropertyDescriptor` shape on `exec`/`d`-flag results); (2) legacy statics `RegExp.leftContext`/`rightContext` are undefined after matches (`$1..$9`/`lastMatch` work); (3) `/(?:)/g`-style empty-match iteration over non-BMP text without `u` advances by code point instead of code unit (`'😀'.replace(/(?:)/g, '-')`); (4) `lastIndex` is stored and consumed as a UTF-8 byte offset, so after `/x/g.exec('éx')` it is 3 where node has 2, and a user-assigned `lastIndex` on non-ASCII input starts the search at the wrong position. Fixed 2026-10-22: `$<name>` substitution, the replacer's trailing `groups` argument, and `lastIndex` ToLength coercion (`tests/test_regexp_replace_named_groups.cjs`, `tests/test_regexp_lastindex_coercion.cjs`); `source` normalization, own/subclass `flags`/`exec` dispatch and `lastIndex` accessor redefinition already matched node by then.
+  - Impact: Silent wrong values for code relying on legacy statics, `groups` descriptor shape, empty matches over astral text, or `lastIndex` arithmetic on non-ASCII strings.
+  - Proposed fix: `groups`-as-data-property is a result-shape change (canonical shape already exists — add the slot); leftContext/rightContext extend `update_regexp_statics`; the `lastIndex` unit fix converts between UTF-16 units and byte offsets at the `regexp_exec_internal` read and every `regexp_set_lastindex` write (the result `index` already converts with `byte_offset_to_utf16`), and the empty-match advance must use code units when `u`/`v` is absent.
   - Owner: theMackabu
-  - Status: backlog (pre-existing node-parity gaps; validation harnesses in /tmp/v_regex*.cjs shapes, recreate if wiped)
+  - Status: backlog
 
 - Area: compiled-code lifetime — permanent strings, BigInt literals and pinned template objects (`src/runtime.c` code arena, `js_mkstr_permanent`, `js_mkbigint_permanent`, `gc_pin_permanent`)
   - Issue: Compiled functions (`sv_func_t`, bytecode, constants) live in the code arena and are never freed individually. Every compile-time string literal, including tagged-template cooked and raw strings, is allocated by `js_mkstr_permanent` in `js->pool.permanent`, which is only released at isolate teardown. BigInt literals are the same: the compiler builds them with `js_mkbigint_permanent` (`src/silver/compiler.c`), whose payload comes from `js_permanent_alloc` in the same pool, because the collector does not trace constant tables and a collected payload would be swept while the function still refers to it. Runtime BigInts (arithmetic results, `BigInt()`, conversions) stay in the collected BigInt pool; only the `permanent` flag threaded through `bigint_alloc_payload_in`, `js_mkbigint_limbs_in` and `bigint_from_string_digits` separates the two. Tagged-template objects (`OP_PUT_CONST`) and JIT object-literal templates (`jit_helper_object_template`) are kept alive with `gc_pin_permanent`, which is sound only because the code that owns them is immortal. Code compiled repeatedly at runtime (`eval`, `new Function`, VM scripts, template engines that compile on the fly, REPL input, hot module reload) therefore grows memory without bound, including pinned objects that every major collection traces. V8 instead keeps template objects alive through the code that owns their site and collects both when that code dies.

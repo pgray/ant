@@ -90,6 +90,7 @@ typedef struct {
   size_t position;
   const repl_capture_t *caps;
   int ncaptures;
+  const repl_named_t *named;
   char **buf;
   size_t *buf_len;
   size_t *buf_cap;
@@ -158,6 +159,25 @@ static bool rt_capture(rt_ctx_t *c) {
   return true;
 }
 
+static bool rt_named(rt_ctx_t *c) {
+  size_t start = *c->ri + 2;
+  const char *close = c->named
+    ? memchr(c->repl + start, '>', c->repl_len - start)
+    : NULL;
+  if (!close) {
+    *c->ri += 2;
+    return rt_append(c, "$<", 2);
+  }
+
+  size_t name_len = (size_t)(close - (c->repl + start));
+  repl_capture_t cap = { NULL, 0 };
+  
+  if (!c->named->lookup(c->named->ctx, c->repl + start, name_len, &cap)) return false;
+  *c->ri = start + name_len + 1;
+  
+  return rt_append(c, cap.ptr, cap.len);
+}
+
 typedef bool (*rt_handler_t)(rt_ctx_t *);
 static const rt_handler_t rt_dispatch[128] = {
   ['$'] = rt_dollar,
@@ -165,6 +185,7 @@ static const rt_handler_t rt_dispatch[128] = {
   ['`'] = rt_prefix,
   ['\''] = rt_suffix,
   ['0' ... '9'] = rt_capture,
+  ['<'] = rt_named,
 };
 
 bool repl_template(
@@ -172,13 +193,14 @@ bool repl_template(
   const char *matched, size_t matched_len,
   const char *str, size_t str_len, size_t position,
   const repl_capture_t *caps, int ncaptures,
+  const repl_named_t *named,
   char **buf, size_t *buf_len, size_t *buf_cap
 ) {
   rt_ctx_t c = {
     repl, repl_len, NULL,
     matched, matched_len,
     str, str_len, position,
-    caps, ncaptures,
+    caps, ncaptures, named,
     buf, buf_len, buf_cap,
   };
   

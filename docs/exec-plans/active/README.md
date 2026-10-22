@@ -1,7 +1,7 @@
 # Active Plans
 
 Status: active
-Last reviewed: 2026-09-10
+Last reviewed: 2026-10-22
 Owner: theMackabu
 
 Store in-progress execution plans here.
@@ -35,12 +35,10 @@ Store in-progress execution plans here.
   - [Dynamic Property Performance Extras](dynamic-property-perf-extras.md)
 - [Elysia 200k RPS](elysia-200k-rps.md)
 - [EventEmitter Node Parity](eventemitter-node-parity.md)
-- [for-of JIT Ineligibility](for-of-jit-ineligibility.md)
 - [OSR Size-Scaled Tiering](osr-size-scaled-tiering.md)
 - [Hash Seed Randomization](hash-seed-randomization.md)
 - [Large AST Workload Performance](large-ast-workload-perf.md)
 - [LLVM 21 Codegen Investigation](llvm-21-codegen-investigation.md)
-- [Microtask Checkpoint Timing](microtask-checkpoint-timing.md)
 - [Async Await Performance and Settle Order](async-await-performance.md)
 - [Nanos Sandbox](nanos-sandbox.md)
 - [Node–Ant Differential Runner](node-ant-differential-runner.md)

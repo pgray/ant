@@ -1,7 +1,7 @@
 # Completed Plans
 
 Status: active
-Last reviewed: 2026-09-10
+Last reviewed: 2026-10-22
 Owner: theMackabu
 
 This is a historical archive. Open an individual plan only when its decision
@@ -48,9 +48,11 @@ removed during condensation. See the [plan lifecycle](../index.md).
 - [Darwin Lazy Framework Startup](darwin-lazy-framework-startup.md)
 - [EventEmitter, Process, and Child Stream Unification](event-emitter-process-child-streams.md)
 - [Eval Binding Fixes](eval-binding-fixes.md)
+- [for-of JIT Ineligibility](for-of-jit-ineligibility.md)
 - [fable-perf-fixes Landing](fable-perf-fixes-landing.md)
 - [Guarded charCodeAt Opcode](charcode-intrinsic.md)
 - [Listener Accept Bursts](listener-accept-burst.md)
+- [Microtask Checkpoint Timing](microtask-checkpoint-timing.md)
 - [Module Import GC Flake](module-import-gc-flake.md)
 - [NUL Property Keys and Array Includes Correctness](nul-keys-and-array-includes.md)
 - [PAX Tar Extraction](tar-pax-extraction.md)

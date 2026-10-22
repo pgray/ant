@@ -9,6 +9,7 @@
 #include "ascii.h"
 #include "descriptors.h"
 #include "ptr.h"
+#include "index.h"
 #include "gc/roots.h"
 
 #include <stdlib.h>
@@ -2161,16 +2162,16 @@ ant_value_t regexp_exec_internal(ant_t *js, ant_value_t regexp, ant_value_t str_
         ? js_prop_load(lastindex_off)
         : js_mkundef();
     }
-    if (vtype(li_val) == kTypeNumber) {
-      double li = tod(li_val);
-      if (li >= 0 && li <= (double)str_len) start_offset = (PCRE2_SIZE)li;
-      else {
-        ant_value_t stored = regexp_set_lastindex(
-          js, compiled_hint, regexp, tov(0)
-        );
-        if (is_err(stored)) return stored;
-        return js_mknull();
-      }
+    size_t li = 0;
+    ant_value_t li_err = js_to_length_fast(js, li_val, &li);
+    if (is_err(li_err)) return li_err;
+    if (li <= (size_t)str_len) start_offset = (PCRE2_SIZE)li;
+    else {
+      ant_value_t stored = regexp_set_lastindex(
+        js, compiled_hint, regexp, tov(0)
+      );
+      if (is_err(stored)) return stored;
+      return js_mknull();
     }
   }
 
@@ -3122,6 +3123,51 @@ static ant_value_t regexp_replace_plain_literal_fast(
   return ret;
 }
 
+typedef struct {
+  ant_t *js;
+  ant_value_t meta;
+  const repl_capture_t *caps;
+  int ncaptures;
+} regexp_meta_named_ctx_t;
+
+static bool regexp_meta_named_lookup(void *ctx, const char *name, size_t name_len, repl_capture_t *out) {
+  regexp_meta_named_ctx_t *c = ctx;
+  ant_offset_t n = js_arr_len(c->js, c->meta);
+  for (ant_offset_t i = 0; i + 1 < n; i += 2) {
+    ant_offset_t len, off = vstr(c->js, js_arr_get(c->js, c->meta, i), &len);
+    if ((size_t)len != name_len || memcmp((const char *)(uintptr_t)off, name, name_len) != 0) continue;
+    int idx = (int)tod(js_arr_get(c->js, c->meta, i + 1));
+    if (idx >= 1 && idx <= c->ncaptures && c->caps[idx - 1].ptr) {
+      *out = c->caps[idx - 1];
+      return true;
+    }
+  }
+  return true;
+}
+
+typedef struct {
+  ant_t *js;
+  ant_value_t groups;
+  ant_value_t value;
+  ant_value_t err;
+} regexp_groups_named_ctx_t;
+
+static bool regexp_groups_named_lookup(void *ctx, const char *name, size_t name_len, repl_capture_t *out) {
+  regexp_groups_named_ctx_t *c = ctx;
+  ant_value_t value = js_getprop_fallback_len(c->js, c->groups, name, name_len);
+  if (!is_err(value) && vtype(value) != kTypeUndefined) value = js_tostring_val(c->js, value);
+  if (is_err(value)) {
+    c->err = value;
+    return false;
+  }
+  if (vtype(value) == kTypeUndefined) return true;
+
+  c->value = value;
+  ant_offset_t len, off = vstr(c->js, value, &len);
+  *out = (repl_capture_t){ (const char *)(uintptr_t)off, (size_t)len };
+  return true;
+}
+
 static ant_value_t regexp_replace_batch_fast(
   ant_t *js,
   ant_value_t rx,
@@ -3160,6 +3206,10 @@ static ant_value_t regexp_replace_batch_fast(
   size_t buf_cap = 0;
   char *buf = NULL;
   size_t buf_len = 0;
+
+  ant_value_t groups_meta = js_get_slot(rx, SLOT_REGEXP_NAMED_GROUPS);
+  regexp_meta_named_ctx_t named_ctx = { js, groups_meta, NULL, 0 };
+  repl_named_t named = { regexp_meta_named_lookup, &named_ctx };
 
   bool sticky = (flags & REGEXP_FLAG_STICKY) != 0;
   PCRE2_SIZE offset = 0;
@@ -3229,11 +3279,14 @@ static ant_value_t regexp_replace_batch_fast(
         }
 
         update_regexp_statics(js, str, ovector, ovcount);
+        named_ctx.caps = captures;
+        named_ctx.ncaptures = capture_count;
         replaced = repl_template(
           replacement_ptr, replacement_len,
           str_ptr + start, end - start,
           str_ptr, str_len, start,
           captures, capture_count,
+          is_object_type(groups_meta) ? &named : NULL,
           &buf, &buf_len, &buf_cap
         );
         if (captures != captures_inline) free(captures);
@@ -3522,14 +3575,18 @@ static ant_value_t builtin_regexp_symbol_replace(ant_params_t) {
       ? str_len
       : (ant_offset_t)position_bytes;
 
+    ant_value_t groups = js_getprop_fallback(js, result, "groups");
+    if (is_err(groups)) { free(buf); return groups; }
+    bool has_groups = vtype(groups) != kTypeUndefined;
+
     ant_value_t replacement;
     if (func_replace) {
       ant_offset_t ncaptures = js_arr_len(js, result);
-      if (ncaptures > INT_MAX - 2) {
+      if (ncaptures > INT_MAX - 3) {
         free(buf);
         return js_mkerr(js, "too many regexp captures");
       }
-      int call_capacity = (int)ncaptures + 2;
+      int call_capacity = (int)ncaptures + 3;
       ant_value_t call_args_inline[REGEXP_INLINE_CAPTURES];
       ant_value_t *call_args = call_capacity <= REGEXP_INLINE_CAPTURES
         ? call_args_inline
@@ -3543,6 +3600,7 @@ static ant_value_t builtin_regexp_symbol_replace(ant_params_t) {
         call_args[ca++] = js_arr_get(js, result, c);
       call_args[ca++] = tov(position_units);
       call_args[ca++] = str;
+      if (has_groups) call_args[ca++] = groups;
       replacement = sv_vm_call(js->vm, js, replace_value, js_mkundef(), call_args, ca, NULL, js_mkundef());
       if (call_args != call_args_inline) free(call_args);
     } else {
@@ -3574,16 +3632,19 @@ static ant_value_t builtin_regexp_symbol_replace(ant_params_t) {
         }
         ant_offset_t mlen, moff = vstr(js, matched, &mlen);
         str_off = vstr(js, str, &str_len);
+        regexp_groups_named_ctx_t named_ctx = { js, groups, js_mkundef(), js_mkundef() };
+        repl_named_t named = { regexp_groups_named_lookup, &named_ctx };
         bool ok = repl_template(
           (const char *)(uintptr_t)(rep_off), rep_len,
           (const char *)(uintptr_t)(moff), mlen,
           (const char *)(uintptr_t)(str_off), str_len, position,
-          caps, num_caps, &buf, &buf_len, &buf_cap
+          caps, num_caps, has_groups ? &named : NULL,
+          &buf, &buf_len, &buf_cap
         );
         if (caps != caps_buf) free(caps);
         if (!ok) {
           free(buf);
-          return js_mkerr(js, "oom");
+          return is_err(named_ctx.err) ? named_ctx.err : js_mkerr(js, "oom");
         }
       }
       double match_end_units = position_units + (double)str_utf16_len(js, matched);
