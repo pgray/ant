@@ -24,6 +24,7 @@ typedef struct {
   uintptr_t pc;
   int bc_off;
   int frame_index;
+  bool construct;
 } sv_stack_entry_t;
 
 typedef struct {
@@ -47,7 +48,7 @@ void sv_stack_iter_finish(sv_stack_iter_t *it);
 int sv_jit_collect_activations(sv_vm_t *vm, sv_jit_activation_t **acts, int cap, int limit);
 int sv_jit_frames_at(ant_t *js, uintptr_t pc, sv_jit_frame_t *out, int cap);
 
-ant_value_t js_error_record_capture(ant_t *js, const js_error_site_t *site);
+ant_value_t js_error_record_capture(ant_t *js, const js_error_site_t *site, ant_value_t until);
 ant_value_t js_error_record_stack_text(ant_t *js, ant_value_t header, ant_value_t record);
 ant_value_t js_error_record_throw_text(ant_t *js, ant_value_t value, ant_value_t record);
 

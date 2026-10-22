@@ -27,7 +27,7 @@ try {
     const stderr = result.stderr.replace(/\x1b\[[0-9;]*m/g, '');
     assert.strictEqual(result.status, 1, JSON.stringify(result));
     const name = path.basename(file).replace('.', '\\.');
-    assert.match(stderr, new RegExp(`${name}:11:25`), stderr);
+    assert.match(stderr, new RegExp(`${name}:11:15`), stderr);
     assert.doesNotMatch(stderr, new RegExp(`${name}:7:`), stderr);
     assert.strictEqual(stderr.match(/^Error: actual-callback-failure$/gm)?.length, 1, `reported once:\n${stderr}`);
   }

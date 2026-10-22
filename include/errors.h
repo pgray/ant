@@ -60,6 +60,7 @@ bool js_mark_errorlike_no_stack(ant_t *js, ant_value_t value);
 
 void js_print_stack_trace_vm(ant_t *js, FILE *stream);
 void js_capture_stack(ant_t *js, ant_value_t err_obj);
+void js_capture_stack_above(ant_t *js, ant_value_t err_obj, ant_value_t fn);
 void js_error_define_stack(ant_t *js, ant_value_t obj, ant_value_t record, ant_value_t text);
 
 ant_value_t js_error_header_text(ant_t *js, ant_value_t obj);
@@ -98,7 +99,7 @@ __attribute__((format(printf, 3, 4)))
 ant_value_t Ant_Error_CreateFormatted(ant_t *js, js_err_type_t err_type, const char *fmt, ...);
 
 ant_value_t js_capture_raw_stack(ant_t *js);
-ant_value_t js_build_callsite_array(ant_t *js);
+ant_value_t js_build_callsite_array(ant_t *js, ant_value_t until);
 ant_value_t js_throw(ant_t *js, ant_value_t value);
 ant_value_t js_take_thrown(ant_t *js, ant_value_t fallback);
 

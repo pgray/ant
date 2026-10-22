@@ -5058,12 +5058,14 @@ void compile_new(sv_compiler_t *c, sv_ast_t *node) {
   emit_op(c, OP_DUP);
   if (call_has_spread_arg(node)) {
     compile_call_args_array(c, node);
+    emit_srcpos(c, node);
     emit_op(c, OP_NEW_APPLY);
     emit_u16(c, 1);
   } else {
     int argc = node->args.count;
     for (int i = 0; i < argc; i++)
       compile_expr(c, node->args.items[i]);
+    emit_srcpos(c, node);
     emit_op(c, OP_NEW);
     emit_u16(c, (uint16_t)argc);
   }

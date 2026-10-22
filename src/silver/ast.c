@@ -1002,8 +1002,11 @@ static sv_ast_t *parse_primary(P) {
   }
 
   l_super: {
+    sv_ast_t *n = mk_ident(p, "super", 5);
+    n->src_off = (uint32_t)TOFF;
+    n->src_end = (uint32_t)(TOFF + TLEN);
     CONSUME();
-    return mk_ident(p, "super", 5);
+    return n;
   }
 
   l_spread: {

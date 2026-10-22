@@ -228,15 +228,19 @@ static bool error_has_captured_stack(ant_value_t obj) {
     vtype(js_get_slot(obj, SLOT_ERROR_STACK_TEXT)) != kTypeUndefined;
 }
 
-static void error_capture_stack_at(ant_t *js, ant_value_t err_obj, const js_error_site_t *site) {
+static void error_capture_stack_at(ant_t *js, ant_value_t err_obj, const js_error_site_t *site, ant_value_t until) {
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, err_obj);
-  js_error_define_stack(js, err_obj, js_error_record_capture(js, site), js_mkundef());
+  js_error_define_stack(js, err_obj, js_error_record_capture(js, site, until), js_mkundef());
   GC_ROOT_RESTORE(js, root_mark);
 }
 
 void js_capture_stack(ant_t *js, ant_value_t err_obj) {
-  error_capture_stack_at(js, err_obj, NULL);
+  error_capture_stack_at(js, err_obj, NULL, js_mkundef());
+}
+
+void js_capture_stack_above(ant_t *js, ant_value_t err_obj, ant_value_t fn) {
+  error_capture_stack_at(js, err_obj, NULL, fn);
 }
 
 static ant_value_t make_error_value(
@@ -287,7 +291,7 @@ static ant_value_t make_error_value(
     js_set_descriptor(js, err_obj, "name", 4, JS_DESC_W | JS_DESC_C);
   }
 
-  if (!no_stack) error_capture_stack_at(js, err_obj, site);
+  if (!no_stack) error_capture_stack_at(js, err_obj, site, js_mkundef());
   GC_ROOT_RESTORE(js, mark);
 
   return err_obj;
@@ -403,7 +407,7 @@ ant_value_t js_throw(ant_t *js, ant_value_t value) {
     if (vtype(stack) != kTypeString) stack = js_mkundef();
   }
 
-  if (!no_stack) stack = js_error_record_capture(js, NULL);
+  if (!no_stack) stack = js_error_record_capture(js, NULL, js_mkundef());
   ant_value_t result = Ant_Exception_Raise(js, value, stack);
 
   GC_ROOT_RESTORE(js, mark);

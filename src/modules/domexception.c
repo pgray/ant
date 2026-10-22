@@ -107,7 +107,7 @@ static ant_value_t domexception_ctor(ant_params_t) {
   js_set(js, self, "code",    js_mknum(code));
 
   js_set_slot(self, SLOT_ERROR_BRAND, js_true);
-  js_capture_stack(js, self);
+  js_capture_stack_above(js, self, call_new_target);
   
   return js_mkundef();
 }

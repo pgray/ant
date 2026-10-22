@@ -35,8 +35,8 @@ void error_line_col(const char *code, ant_offset_t code_len, ant_offset_t pos, i
 size_t error_render_value(errbuf_t *eb, ant_t *js, size_t used, ant_value_t value);
 
 bool error_render_frame(
-  errbuf_t *eb, size_t *n, const char *name, const char *file,
-  int line, int col, error_frame_style_t style
+  errbuf_t *eb, size_t *n, const char *name, bool construct, 
+  const char *file, int line, int col, error_frame_style_t style
 );
 
 void error_render_site_init(const js_error_site_t *es, js_error_render_site_t *site);

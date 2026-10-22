@@ -90,6 +90,27 @@ const cases = {
     let s; for (let i = 0; i < 20000; i++) s = outer(i).stack;
     console.log(s);
   `,
+  subclassSkip: `
+    class Named extends Error { constructor(m) { super(m); } }
+    class Sub extends Named {}
+    function mk(i) { const e = i & 1 ? new Named('n' + i) : new Sub('s' + i); return e; }
+    let a, b; for (let i = 0; i < 20000; i++) { if (i & 1) a = mk(i); else b = mk(i); }
+    console.log(a.stack); console.log(b.stack);
+  `,
+  constructorFrames: `
+    class P { constructor(i) { this.e = new Error('p' + i); } }
+    class Q extends P { constructor(i) { super(i); } }
+    function mk(i) { const q = new Q(i); return q.e; }
+    let last; for (let i = 0; i < 20000; i++) last = mk(i);
+    console.log(last.stack);
+  `,
+  captureAbove: `
+    function inner(fn) { const o = {}; Error.captureStackTrace(o, fn); return o.stack; }
+    function outer(fn) { const s = inner(fn); return s; }
+    function caller(fn) { const s = outer(fn); return s; }
+    let s; for (let i = 0; i < 20000; i++) s = caller(outer);
+    console.log(s);
+  `,
   uncaught: `
     function c(i) { if (i === 19999) throw new Error('boom ' + i); return i; }
     function b(i) { const r = c(i); return r; }

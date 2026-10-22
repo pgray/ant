@@ -300,7 +300,8 @@ static size_t error_frame_path_prefix(const char *file) {
 }
 
 bool error_render_frame(
-  errbuf_t *eb, size_t *n, const char *name, const char *file, int line, int col, error_frame_style_t style
+  errbuf_t *eb, size_t *n, const char *name, bool construct, 
+  const char *file, int line, int col, error_frame_style_t style
 ) {
   bool color = style == ERROR_FRAME_PRETTY;
   const char *indent = style == ERROR_FRAME_PLAIN ? "    " : "  ";
@@ -312,17 +313,15 @@ bool error_render_frame(
   size_t prefix = color && !io_no_color ? error_frame_path_prefix(file) : 0;
   size_t start = *n;
 
-  *n = errbuf_appendf(eb, *n,
-    "\n%s%sat%s %s%s%s%s"
-    "%s%s%.*s%s%s%s%s"
-    "%s:%s%s%d%s%s:%s%d%s"
-    "%s%s%s",
-    indent, dim, reset, name ? name : "", name ? " " : "", dim, name ? "(" : "",
-    cyan, dim, (int)prefix, file, reset, cyan, file + prefix, reset,
-    dim, reset, yellow, line, reset, dim, yellow, col, reset,
-    dim, name ? ")" : "", reset
-  );
-  
+  *n = errbuf_appendf(eb, *n, "\n%s%sat%s ", indent, dim, reset);
+  if (name) *n = errbuf_appendf(eb, *n, "%s%s %s(", construct ? "new " : "", name, dim);
+
+  *n = errbuf_appendf(eb, *n, "%s%s%.*s%s", cyan, dim, (int)prefix, file, reset);
+  *n = errbuf_appendf(eb, *n, "%s%s%s", cyan, file + prefix, reset);
+  *n = errbuf_appendf(eb, *n, "%s:%s%s%d%s", dim, reset, yellow, line, reset);
+  *n = errbuf_appendf(eb, *n, "%s:%s%d%s", dim, yellow, col, reset);
+
+  if (name) *n = errbuf_appendf(eb, *n, "%s)%s", dim, reset);
   return *n > start;
 }
 

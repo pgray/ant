@@ -36,6 +36,81 @@ const named = new Named('n');
 assert.strictEqual(lines(named.stack)[0], 'Named: n');
 assert.doesNotMatch(util.inspect(named), /name:/);
 
+const src = fs.readFileSync(__filename, 'utf8').split('\n');
+const pos = (marker, token) => {
+  const i = src.findIndex((l) => l.includes(marker));
+  return `${__filename}:${i + 1}:${src[i].indexOf(token) + 1}`;
+};
+const frame = (err, i = 1) => lines(err.stack)[i].trim();
+
+function makeNamed() { const e = new Named('first-frame'); return e; }
+assert.strictEqual(frame(makeNamed()), `at makeNamed (${pos("Named('first-frame')", 'new')})`);
+
+const BoundNamed = Named.bind(null);
+function makeBound() { const e = new BoundNamed('bound-frame'); return e; }
+assert.strictEqual(frame(makeBound()), `at makeBound (${pos("BoundNamed('bound-frame')", 'new')})`);
+
+class SubNamed extends Named {}
+function makeSub() { const e = new SubNamed('sub-frame'); return e; }
+assert.strictEqual(frame(makeSub()), `at makeSub (${pos("SubNamed('sub-frame')", 'new')})`);
+
+class MyAgg extends AggregateError { constructor() { super([], 'agg-sub'); } }
+class MySup extends SuppressedError { constructor() { super(1, 2, 'sup-sub'); } }
+class DomSub extends DOMException { constructor() { super('dom-sub', 'AbortError'); } }
+function makeAgg() { const e = new MyAgg(); return e; }
+function makeSup() { const e = new MySup(); return e; }
+function makeDom() { const e = new DomSub(); return e; }
+assert.match(frame(makeAgg()), /^at makeAgg \(/);
+assert.match(frame(makeSup()), /^at makeSup \(/);
+assert.match(frame(makeDom()), /^at makeDom \(/);
+
+assert.strictEqual(Reflect.construct(Error, ['detached'], function Detached() {}).stack, 'Error: detached');
+
+function traceInner(fn) { const o = {}; Error.captureStackTrace(o, fn); return o.stack; }
+function traceOuter(fn) { const s = traceInner(fn); return s; }
+function traceCaller(fn) { const s = traceOuter(fn); return s; }
+assert.match(lines(traceCaller(traceOuter))[1], /^ {4}at traceCaller \(/);
+assert.match(lines(traceCaller(traceInner))[1], /^ {4}at traceOuter \(/);
+assert.match(lines(traceCaller(undefined))[1], /^ {4}at traceInner \(/);
+assert.match(lines(traceCaller(42))[1], /^ {4}at traceInner \(/);
+assert.strictEqual(traceCaller(function notOnStack() {}), 'Error');
+
+class Built { constructor() { this.err = new Error('built'); } }
+function FnBuilt() { this.err = new Error('fn-built'); }
+class Holder extends Object { constructor() { super(); this.err = new Error('holder'); } }
+assert.strictEqual(frame(new Built().err), `at new Built (${pos("Error('built')", 'new')})`);
+assert.strictEqual(frame(new FnBuilt().err), `at new FnBuilt (${pos("Error('fn-built')", 'new')})`);
+assert.strictEqual(frame(new Holder().err), `at new Holder (${pos("Error('holder')", 'new E')})`);
+
+class Throws { constructor(m) { throw new Error(m); } }
+class ThrowsSub extends Throws {
+  constructor() {
+    super('via-super');
+  }
+}
+let thrown;
+try { new ThrowsSub(); } catch (e) { thrown = e; }
+assert.strictEqual(frame(thrown, 1), `at new Throws (${pos('throw new Error(m)', 'new')})`);
+assert.strictEqual(frame(thrown, 2), `at new ThrowsSub (${pos("super('via-super')", 'super')})`);
+
+function multiLineNew() {
+  const e =
+    new Error('multi-line');
+  return e;
+}
+assert.strictEqual(frame(multiLineNew()), `at multiLineNew (${pos("Error('multi-line')", 'new')})`);
+
+class SiteProbe { constructor() { const o = {}; Error.captureStackTrace(o); this.sites = o.stack; } }
+const savedPrepare = Error.prepareStackTrace;
+Error.prepareStackTrace = (_, cs) => cs;
+const probeSites = new SiteProbe().sites;
+const skippedSites = traceCaller(traceOuter);
+Error.prepareStackTrace = savedPrepare;
+assert.strictEqual(probeSites[0].isConstructor(), true);
+assert.strictEqual(probeSites[1].isConstructor(), false);
+assert.strictEqual(String(probeSites[0]), `new SiteProbe (${pos('this.sites = o.stack', 'captureStackTrace')})`);
+assert.strictEqual(skippedSites[0].getFunctionName(), 'traceCaller');
+
 const early = new Error('early');
 const firstRead = early.stack;
 early.message = 'changed';

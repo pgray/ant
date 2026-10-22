@@ -88,7 +88,25 @@ static int sv_stack_frame_bc_off(sv_stack_iter_t *it, int idx, const sv_frame_t 
   return it->seg && it->seg->entry_vm_fp == idx + 1 ? off : off - 1;
 }
 
-static void sv_stack_resolve(sv_stack_iter_t *it, const sv_jit_activation_t *a, ant_value_t callee) {
+static bool sv_stack_construct(sv_vm_t *vm, const sv_func_t *func, int vm_fp) {
+  if (!func || func->is_arrow || func->is_eval) return false;
+  return func->is_class_ctor || (vm_fp >= 0 && vtype(vm->frames[vm_fp].new_target) != kTypeUndefined);
+}
+
+static bool sv_inlined_construct(const sv_jit_frame_t *callee, const sv_jit_frame_t *caller) {
+  const sv_func_t *fn = callee->func, *f = caller->func;
+  if (!fn || fn->is_arrow || fn->is_eval) return false;
+  if (fn->is_class_ctor) return true;
+  if (!f || !f->code || caller->bc_off < 0 || caller->bc_off >= f->code_len) return false;
+  
+  switch (f->code[caller->bc_off]) {
+    case OP_NEW: case OP_NEW_APPLY:
+    case OP_CALL_SUPER: case OP_SUPER_APPLY: case OP_SUPER_FORWARD: return true;
+    default: return false;
+  }
+}
+
+static void sv_stack_resolve(sv_stack_iter_t *it, const sv_jit_activation_t *a, ant_value_t callee, int host_fp) {
   sv_jit_frame_t frames[SV_JIT_INLINE_FRAMES_MAX + 1];
   
   int n = sv_jit_frames_at(it->vm->js, a->pc, frames, SV_JIT_INLINE_FRAMES_MAX + 1);
@@ -99,6 +117,9 @@ static void sv_stack_resolve(sv_stack_iter_t *it, const sv_jit_activation_t *a, 
     .callee = k == n - 1 ? callee : js_mkundef(),
     .bc_off = frames[k].bc_off,
     .frame_index = -1,
+    .construct = k == n - 1
+      ? sv_stack_construct(it->vm, frames[k].func, host_fp)
+      : sv_inlined_construct(&frames[k], &frames[k + 1]),
   };
   
   it->n_pending = n;
@@ -121,11 +142,12 @@ bool sv_stack_iter_next(sv_stack_iter_t *it, sv_stack_entry_t *out) {
       if (host) it->skip = a->vm_fp;
       if (!a->func) continue;
       
+      int host_fp = host ? a->vm_fp : -1;
       ant_value_t callee = host ? vm->frames[a->vm_fp].callee : js_mkundef();
       if (it->resolve) {
-        sv_stack_resolve(it, a, callee);
+        sv_stack_resolve(it, a, callee, host_fp);
         *out = it->pending[--it->n_pending];
-      } else *out = (sv_stack_entry_t){ a->func, callee, a->pc, -1, -1 };
+      } else *out = (sv_stack_entry_t){ a->func, callee, a->pc, -1, -1, sv_stack_construct(vm, a->func, host_fp) };
       
       return true;
     }
@@ -137,7 +159,8 @@ bool sv_stack_iter_next(sv_stack_iter_t *it, sv_stack_entry_t *out) {
     sv_frame_t *frame = &vm->frames[idx];
     *out = (sv_stack_entry_t){ 
       frame->func, frame->callee, 0, 
-      sv_stack_frame_bc_off(it, idx, frame), idx 
+      sv_stack_frame_bc_off(it, idx, frame), idx,
+      sv_stack_construct(vm, frame->func, idx)
     };
     
     return true;
@@ -193,6 +216,7 @@ typedef struct {
   const char *file;
   int line;
   int col;
+  bool construct;
 } error_frame_view_t;
 
 typedef struct {
@@ -200,6 +224,7 @@ typedef struct {
   ant_value_t callee;
   uintptr_t pc;
   int bc_off;
+  bool construct;
 } error_frame_t;
 
 static error_frame_view_t error_frame_view(ant_t *js, const error_frame_t *f, const char *fallback_file) {
@@ -208,6 +233,7 @@ static error_frame_view_t error_frame_view(ant_t *js, const error_frame_t *f, co
     .file = f->func && f->func->debug->filename ? f->func->debug->filename : fallback_file,
     .line = f->func && f->func->debug->source_line > 0 ? f->func->debug->source_line : 1,
     .col = 1,
+    .construct = f->construct,
   };
 
   uint32_t l, c;
@@ -221,7 +247,7 @@ static error_frame_view_t error_frame_view(ant_t *js, const error_frame_t *f, co
 
 static bool error_entry_is_wrapper(ant_t *js, const sv_stack_entry_t *e, int newer) {
   if (e->frame_index != 0 || newer == 0) return false;
-  error_frame_view_t view = error_frame_view(js, &(error_frame_t){ e->func, e->callee, 0, e->bc_off }, "");
+  error_frame_view_t view = error_frame_view(js, &(error_frame_t){ e->func, e->callee, 0, e->bc_off, e->construct }, "");
   return view.line == 1 && view.col == 1 && strcmp(view.name, "<anonymous>") == 0;
 }
 
@@ -250,23 +276,34 @@ static void error_append_frames(
 ) {
   for (int i = 0; i < count; i++) {
     error_frame_view_t view = error_frame_view(js, &frames[i], fallback_file);
-    if (!error_render_frame(eb, n, view.name, view.file, view.line, view.col, style)) return;
+    if (!error_render_frame(eb, n, view.name, view.construct, view.file, view.line, view.col, style)) return;
   }
 }
 
-static int error_live_frames(ant_t *js, int limit, error_frame_t *local, error_frame_t **out) {
+static sv_func_t *error_until_func(ant_value_t until) {
+  while (vtype(until) == kTypeFunction) {
+    sv_closure_t *c = js_func_closure(until);
+    if (c->func || !(c->call_flags & SV_CALL_IS_DEFAULT_CTOR)) return c->func;
+    until = c->super_val;
+  }
+  return NULL;
+}
+
+static int error_live_frames(ant_t *js, int limit, ant_value_t until, error_frame_t *local, error_frame_t **out) {
   *out = local;
   if (!js || !js->vm || limit == 0) return 0;
   
   sv_stack_iter_t it;
   sv_stack_entry_t e;
   int n = 0, cap = ERROR_FRAMES_INLINE;
+  sv_func_t *skip = error_until_func(until);
   
-  sv_stack_iter_init(js->vm, &it, limit, true);
+  sv_stack_iter_init(js->vm, &it, skip ? -1 : limit, true);
   while ((limit < 0 || n < limit) && sv_stack_iter_next(&it, &e)) {
+    if (skip) { if (e.func == skip) skip = NULL; continue; }
     if (error_entry_is_wrapper(js, &e, n)) continue;
     if (!error_frames_reserve(out, local, &cap, n + 1)) break;
-    (*out)[n++] = (error_frame_t){ e.func, e.callee, 0, e.bc_off };
+    (*out)[n++] = (error_frame_t){ e.func, e.callee, 0, e.bc_off, e.construct };
   }
   
   sv_stack_iter_finish(&it);
@@ -275,7 +312,7 @@ static int error_live_frames(ant_t *js, int limit, error_frame_t *local, error_f
 
 static size_t error_append_live_frames(ant_t *js, int limit, const char *file, errbuf_t *eb, size_t n, error_frame_style_t style) {
   error_frame_t local[ERROR_FRAMES_INLINE], *frames;
-  int count = error_live_frames(js, limit, local, &frames);
+  int count = error_live_frames(js, limit, js_mkundef(), local, &frames);
   error_append_frames(js, frames, count, file, eb, &n, style);
   if (frames != local) free(frames);
   return n;
@@ -350,7 +387,7 @@ static void error_record_finalize(ant_t *js, ant_object_t *obj) {
   if (obj->native_tag == ERROR_RECORD_NATIVE_TAG) free(obj->native_ptr);
 }
 
-ant_value_t js_error_record_capture(ant_t *js, const js_error_site_t *at) {
+ant_value_t js_error_record_capture(ant_t *js, const js_error_site_t *at, ant_value_t until) {
   int limit = error_stack_trace_limit(js);
   if (limit < 0) return js_mkundef();
 
@@ -360,13 +397,15 @@ ant_value_t js_error_record_capture(ant_t *js, const js_error_site_t *at) {
 
   sv_stack_iter_t it;
   sv_stack_entry_t e;
-  sv_stack_iter_init(js->vm, &it, limit, false);
+  sv_func_t *skip = limit > 0 ? error_until_func(until) : NULL;
+  sv_stack_iter_init(js->vm, &it, skip ? -1 : limit, skip != NULL);
   
   while (n < limit && sv_stack_iter_next(&it, &e)) {
+    if (skip) { if (e.func == skip) skip = NULL; continue; }
     if (error_entry_is_wrapper(js, &e, n)) continue;
     if (!error_frames_reserve(&frames, local, &cap, n + 1)) break;
     bool named = e.func && e.func->debug->name && e.func->debug->name[0];
-    frames[n++] = (error_frame_t){ e.func, named ? js_mkundef() : e.callee, e.pc, e.bc_off };
+    frames[n++] = (error_frame_t){ e.func, named ? js_mkundef() : e.callee, e.pc, e.bc_off, e.construct };
     if (!e.func || !e.func->debug->filename) need_file = true;
   }
   
@@ -377,7 +416,7 @@ ant_value_t js_error_record_capture(ant_t *js, const js_error_site_t *at) {
   if (frames != local) free(frames);
   if (!rec) return js_mkundef();
   
-  rec->limit = limit;
+  rec->limit = skip ? 0 : limit;
   rec->n_frames = n;
 
   js_error_site_t es = at && at->valid ? *at : (js_error_site_t){0};
@@ -455,7 +494,11 @@ static void error_render_begin(ant_t *js, const error_record_t *rec, error_rende
     
     for (int i = 0; i < m && r->n < rec->limit; i++) {
       if (!error_frames_reserve(&r->frames, r->local, &cap, r->n + 1)) return;
-      r->frames[r->n++] = (error_frame_t){ at[i].func, i == m - 1 ? f->callee : js_mkundef(), 0, at[i].bc_off };
+      bool outer = i == m - 1;
+      r->frames[r->n++] = (error_frame_t){
+        at[i].func, outer ? f->callee : js_mkundef(), 0, at[i].bc_off,
+        outer ? f->construct : sv_inlined_construct(&at[i], &at[i + 1])
+      };
     }
   }
 
@@ -498,7 +541,7 @@ static void error_render_prefix(ant_t *js, error_render_t *r, errbuf_t *eb, size
 
 static void error_render_frames(ant_t *js, const error_render_t *r, errbuf_t *eb, size_t *n, error_frame_style_t style) {
   error_append_frames(js, r->frames, r->n, r->file, eb, n, style);
-  if (r->n == 0 && r->rec->limit > 0) error_render_frame(eb, n, NULL, r->file, r->site.line, r->site.col, style);
+  if (r->n == 0 && r->rec->limit > 0) error_render_frame(eb, n, NULL, false, r->file, r->site.line, r->site.col, style);
 }
 
 char *js_error_render_pretty(ant_t *js, ant_value_t err, ant_value_t stack, size_t *out_len, size_t *header_at) {
@@ -579,7 +622,8 @@ enum {
   CS_FILE = 0,
   CS_LINE,
   CS_COL,
-  CS_NAME
+  CS_NAME,
+  CS_CTOR
 };
 
 static ant_value_t callsite_field(ant_t *js, int field) {
@@ -592,6 +636,7 @@ static ant_value_t callsite_getFileName(ant_params_t) { return callsite_field(js
 static ant_value_t callsite_getLineNumber(ant_params_t) { return callsite_field(js, CS_LINE); }
 static ant_value_t callsite_getColumnNumber(ant_params_t) { return callsite_field(js, CS_COL); }
 static ant_value_t callsite_getFunctionName(ant_params_t) { return callsite_field(js, CS_NAME); }
+static ant_value_t callsite_isConstructor(ant_params_t) { return js_bool(js_truthy(js, callsite_field(js, CS_CTOR))); }
 
 static ant_value_t callsite_null(ant_params_t) { return js_mknull(); }
 static ant_value_t callsite_false(ant_params_t) { return js_false; }
@@ -602,16 +647,19 @@ static ant_value_t callsite_toString(ant_params_t) {
   ant_value_t file = callsite_field(js, CS_FILE);
   ant_value_t line = callsite_field(js, CS_LINE);
   ant_value_t col  = callsite_field(js, CS_COL);
+  bool ctor = js_truthy(js, callsite_field(js, CS_CTOR));
 
-  const char *n = js_str(js, name);
-  const char *f = js_str(js, file);
+  size_t n_len = 0, f_len = 0;
+  const char *n = vtype(name) == kTypeString ? js_getstr(js, name, &n_len) : NULL;
+  const char *f = vtype(file) == kTypeString ? js_getstr(js, file, &f_len) : NULL;
   int l = vtype(line) == kTypeNumber ? (int)js_getnum(line) : 0;
   int c = vtype(col)  == kTypeNumber ? (int)js_getnum(col)  : 0;
 
-  char buf[512];
-  int len = snprintf(buf, sizeof(buf), "%s (%s:%d:%d)", n, f, l, c);
-  if (len < 0) len = 0;
-  return js_mkstr(js, buf, (size_t)len);
+  errbuf_t eb;
+  if (!errbuf_init(&eb, 256)) return js_mkerr(js, "out of memory");
+  size_t len = errbuf_appendf(&eb, 0, "%s%.*s (%.*s:%d:%d)",
+    ctor ? "new " : "", n ? (int)n_len : 0, n ? n : "", f ? (int)f_len : 0, f ? f : "", l, c);
+  return errbuf_take_string(js, &eb, len);
 }
 
 static const ant_cfunc_meta_t callsite_methods[] = {
@@ -624,7 +672,7 @@ static const ant_cfunc_meta_t callsite_methods[] = {
   { callsite_false, "isNative", 0, 0 },
   { callsite_false, "isToplevel", 0, 0 },
   { callsite_false, "isEval", 0, 0 },
-  { callsite_false, "isConstructor", 0, 0 },
+  { callsite_isConstructor, "isConstructor", 0, 0 },
   { callsite_undefined, "getEvalOrigin", 0, 0 },
   { callsite_undefined, "getThis", 0, 0 },
   { callsite_toString, "toString", 0, 0 },
@@ -642,14 +690,14 @@ static ant_value_t callsite_proto(ant_t *js) {
   return proto;
 }
 
-ant_value_t js_build_callsite_array(ant_t *js) {
+ant_value_t js_build_callsite_array(ant_t *js, ant_value_t until) {
   GC_ROOT_SAVE(root_mark, js);
   ant_value_t proto = callsite_proto(js);
   ant_value_t arr = js_mkarr(js);
   GC_ROOT_PIN(js, arr);
 
   error_frame_t local[ERROR_FRAMES_INLINE], *frames;
-  int count = error_live_frames(js, error_stack_trace_limit(js), local, &frames);
+  int count = error_live_frames(js, error_stack_trace_limit(js), until, local, &frames);
   const char *file = js->filename ? js->filename : "<eval>";
 
   ant_value_t data = js_mkundef(), site = js_mkundef();
@@ -663,6 +711,7 @@ ant_value_t js_build_callsite_array(ant_t *js) {
     js_arr_push(js, data, js_mknum((double)view.line));
     js_arr_push(js, data, js_mknum((double)view.col));
     js_arr_push(js, data, js_mkstr(js, view.name, strlen(view.name)));
+    js_arr_push(js, data, js_bool(view.construct));
 
     site = Ant_Object_CreateBare(js);
     js_set_proto_init(site, proto);
