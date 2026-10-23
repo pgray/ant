@@ -4195,6 +4195,21 @@ static inline bool array_length_has_guarded_elements(ant_object_t *ptr) {
     !ptr->shape || ant_shape_may_have_index_keys(ptr->shape);
 }
 
+static inline void array_length_set_unguarded(ant_t *js, ant_value_t obj, ant_offset_t new_len) {
+  ant_offset_t doff = get_dense_buf(obj);
+  ant_offset_t cur_len = get_array_length(js, obj);
+  
+  if (doff) {
+    ant_offset_t cap = dense_capacity(doff);
+    ant_offset_t clear_to = (cur_len < cap) ? cur_len : cap;
+    if (new_len < clear_to) 
+      for (ant_offset_t i = new_len; i < clear_to; i++) dense_set(js, doff, i, T_EMPTY);
+  }
+  
+  if (new_len > cur_len) array_mark_may_have_holes(obj);
+  array_len_set(js, obj, new_len);
+}
+
 static constexpr ant_value_t JS_SETPROP_ARRAY_NOT_HANDLED = ANT_SENTINEL_TAG | 0xA551ULL;
 
 typedef enum {
@@ -4734,19 +4749,7 @@ static ant_value_t setprop_impl(ant_t *js, ant_value_t obj, ant_value_t k, ant_v
     
     ant_offset_t new_len_val = (ant_offset_t) tod(v);
     if (__builtin_expect(!array_length_has_guarded_elements(len_obj), 1)) {
-      ant_offset_t doff = get_dense_buf(obj);
-      ant_offset_t cur_len = get_array_length(js, obj);
-      
-      if (doff) {
-        ant_offset_t cap = dense_capacity(doff);
-        ant_offset_t clear_to = (cur_len < cap) ? cur_len : cap;
-        if (new_len_val < clear_to) 
-          for (ant_offset_t i = new_len_val; i < clear_to; i++) dense_set(js, doff, i, T_EMPTY);
-      }
-      
-      if (new_len_val > cur_len) array_mark_may_have_holes(obj);
-      array_len_set(js, obj, new_len_val);
-      
+      array_length_set_unguarded(js, obj, new_len_val);
       return v;
     }
     
@@ -8938,9 +8941,9 @@ static ant_proxy_state_t *get_proxy_data(ant_value_t obj) {
 }
 
 bool is_proxy(ant_value_t obj) {
-  ant_object_t *ptr = js_obj_ptr(obj);
-  if (!ptr || !ptr->flags.is_exotic) return false;
-  return get_proxy_data(obj) != NULL;
+  if (vtype(obj) != kTypeObject) return false;
+  ant_object_t *ptr = (ant_object_t *)vptr(obj);
+  return ptr && ptr->flags.is_exotic && ant_object_proxy_state(ptr) != NULL;
 }
 
 bool js_proxy_is_host(ant_value_t obj) {
@@ -10523,6 +10526,12 @@ static ant_value_t object_define_property_keyed(
     if (array_length_readonly(js, as_obj)) {
       if ((has_writable && writable) || new_len != get_array_length(js, as_obj))
         return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot redefine property: length");
+      return obj;
+    }
+
+    if (__builtin_expect(!array_length_has_guarded_elements(arr_ptr), 1)) {
+      array_length_set_unguarded(js, as_obj, new_len);
+      if (has_writable && !writable && !js_array_make_length_readonly(js, as_obj)) return js_mkerr(js, "oom");
       return obj;
     }
 

@@ -79,4 +79,28 @@ assert.strictEqual('é'.replace(/(?:)/g, '-'), '-é-');
 assert.deepStrictEqual('😀a'.split(/(?:)/u), ['😀', 'a']);
 assert.deepStrictEqual('éa'.split(/(?:)/), ['é', 'a']);
 
+{
+  const pieces = ['a', 'é', '€', '😀', 'bc', 'ł', 'x'];
+  let seed = 7;
+  let input = '';
+  for (let i = 0; i < 4000; i++) {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    input += pieces[seed % pieces.length].repeat(1 + (seed >> 8) % 11);
+  }
+  const expected = [];
+  for (let i = 0; i < input.length; i++) if (input[i] === 'x') expected.push(i);
+  for (const flags of ['g', 'gu', 'y']) {
+    const re = new RegExp(flags === 'y' ? '[^x]*x' : 'x', flags);
+    const seen = [];
+    let m;
+    while ((m = re.exec(input))) {
+      const at = m.index + m[0].length - 1;
+      assert.strictEqual(input[at], 'x', flags);
+      assert.strictEqual(re.lastIndex, at + 1, flags);
+      seen.push(at);
+    }
+    assert.deepStrictEqual(seen, expected, flags);
+  }
+}
+
 console.log('regexp utf16 offsets ok');

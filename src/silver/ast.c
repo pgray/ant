@@ -417,11 +417,11 @@ static inline sv_ast_t *parse_dot_property_name(P) {
   return name;
 }
 
-static sv_ast_t *parse_with_in(P, sv_ast_t *(*parse)(P)) {
-  bool saved_no_in = p->no_in;
+static inline __attribute__((always_inline)) sv_ast_t *parse_with_in(P, sv_ast_t *(*parse)(P)) {
+  if (__builtin_expect(!p->no_in, 1)) return parse(p);
   p->no_in = false;
   sv_ast_t *n = parse(p);
-  p->no_in = saved_no_in;
+  p->no_in = true;
   return n;
 }
 

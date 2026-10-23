@@ -80,7 +80,7 @@
   X(SLOT_REGEXP_GROUPS_CACHE)     \
   X(SLOT_MATCHALL_RX)             \
   X(SLOT_MATCHALL_STR)            \
-  X(SLOT_MATCHALL_DONE)           \
+  X(SLOT_MATCHALL_STATE)          \
   X(SLOT_EVAL_ENV)                \
   X(SLOT_ERROR_STACK)             \
   X(SLOT_ERROR_STACK_TEXT)        \
@@ -133,8 +133,7 @@ typedef enum {
   BRAND_EVENTTARGET,
   BRAND_DISPOSABLE_STACK,
   BRAND_ASYNC_DISPOSABLE_STACK,
-  BRAND_TEMPLATE_OBJECT,
-  BRAND_STRING_ITERATOR
+  BRAND_TEMPLATE_OBJECT
 } object_brand_id_t;
 
 #endif

@@ -19,6 +19,8 @@
 #include "modules/iterator.h"
 #include "modules/symbol.h"
 
+static constexpr uint32_t STRING_ITERATOR_NATIVE_TAG = Ant_NativeTag("STRI");
+
 ant_value_t Ant_Iterator_CreateResult(ant_t *js, ant_value_t value, bool done) {
   GC_ROOT_SAVE(mark, js);
   GC_ROOT_PIN(js, value);
@@ -131,31 +133,26 @@ static bool advance_array(ant_t *js, iterator_t *it, ant_value_t *out) {
   return true;
 }
 
-static bool advance_string(ant_t *js, iterator_t *it, ant_value_t *out) {
+static bool string_iter_step(ant_t *js, iterator_t *it, ant_value_t *out) {
   ant_value_t iter = it->iterator;
-  
-  if (!js_check_brand(iter, BRAND_STRING_ITERATOR)) {
-    js_mkerr_typed(js, JS_ERR_TYPE, "String Iterator next called on incompatible receiver");
-    return false;
-  }
-
-  ant_value_t str = js_get_slot(iter, SLOT_DATA);
-  ant_value_t idx_v = js_get_slot(iter, SLOT_ITER_STATE);
-  int idx = (vtype(idx_v) == kTypeNumber) ? (int)js_getnum(idx_v) : 0;
+  ant_object_t *obj = js_obj_ptr(iter);
+  size_t idx = (size_t)(uintptr_t)js_get_native(iter, STRING_ITERATOR_NATIVE_TAG);
 
   size_t slen;
-  char *s = js_getstr(js, str, &slen);
-  if (idx >= (int)slen) return false;
+  char *s = js_getstr(js, obj->u.data.value, &slen);
+  if (idx >= slen) return false;
 
-  unsigned char c = (unsigned char)s[idx];
-  int char_bytes = utf8_sequence_length(c);
-  if (char_bytes < 1) char_bytes = 1;
-  if (idx + char_bytes > (int)slen) char_bytes = (int)slen - idx;
-
+  size_t char_bytes = utf8_char_len_at(s, slen, idx);
   *out = js_mkstr(js, s + idx, (ant_offset_t)char_bytes);
-  js_set_slot(iter, SLOT_ITER_STATE, js_mknum(idx + char_bytes));
+  js_set_native(iter, (void *)(uintptr_t)(idx + char_bytes), STRING_ITERATOR_NATIVE_TAG);
   
   return true;
+}
+
+static bool advance_string(ant_t *js, iterator_t *it, ant_value_t *out) {
+  if (js_check_native_tag(it->iterator, STRING_ITERATOR_NATIVE_TAG)) return string_iter_step(js, it, out);
+  js_mkerr_typed(js, JS_ERR_TYPE, "String Iterator next called on incompatible receiver");
+  return false;
 }
 
 static ant_value_t arr_iter_next(ant_params_t) {
@@ -198,9 +195,9 @@ ant_value_t make_array_iterator(ant_t *js, ant_value_t array, array_iter_kind_t 
 }
 
 static ant_value_t str_iter_next(ant_params_t) {
-  if (!js_check_brand(js->this_val, BRAND_STRING_ITERATOR)) 
+  if (!js_check_native_tag(js->this_val, STRING_ITERATOR_NATIVE_TAG))
     return js_mkerr_typed(js, JS_ERR_TYPE, "String Iterator next called on incompatible receiver");
-  return js_iter_next_result(js, advance_string);
+  return js_iter_next_result(js, string_iter_step);
 }
 
 static ant_value_t get_string_iterator_prototype(ant_t *js) {
@@ -229,9 +226,8 @@ static ant_value_t string_iterator(ant_params_t) {
   GC_ROOT_PIN(js, str);
   ant_value_t iter = Ant_Object_CreateBare(js);
 
-  js_set_slot(iter, SLOT_BRAND, js_mknum(BRAND_STRING_ITERATOR));
+  js_set_native(iter, (void *)(uintptr_t)0, STRING_ITERATOR_NATIVE_TAG);
   js_set_slot_wb(js, iter, SLOT_DATA, str);
-  js_set_slot(iter, SLOT_ITER_STATE, js_mknum(0));
   js_set_proto_init(iter, get_string_iterator_prototype(js));
   GC_ROOT_RESTORE(js, mark);
 
