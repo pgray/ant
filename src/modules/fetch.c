@@ -154,49 +154,21 @@ static bool fetch_redirect_rewrites_to_get(int status, const char *method) {
   return (status == 301 || status == 302) && strcasecmp(method, "POST") == 0;
 }
 
-typedef struct {
-  ant_t *js;
-  ant_value_t headers;
-  bool drop_body_headers;
-  bool failed;
-} fetch_redirect_headers_ctx_t;
+static const char *const fetch_body_headers[] = {
+  "content-encoding", "content-language", "content-location", "content-type", NULL
+};
 
-static void fetch_copy_redirect_header(const char *name, const char *value, void *ctx) {
-  fetch_redirect_headers_ctx_t *copy = (fetch_redirect_headers_ctx_t *)ctx;
-  ant_value_t step = 0;
+static const char *const fetch_credential_headers[] = {
+  "authorization", "proxy-authorization", "cookie", "host", NULL
+};
 
-  if (!copy || copy->failed) return;
-  if (copy->drop_body_headers && name && strcasecmp(name, "content-type") == 0) return;
-
-  step = headers_append_literal(copy->js, copy->headers, name, value);
-  if (is_err(step)) copy->failed = true;
-}
-
-static ant_value_t fetch_replace_request_headers(fetch_request_t *req, bool drop_body_headers) {
-  ant_t *js = req->js;
-  
-  ant_value_t current = request_get_headers(req->request_obj);
-  ant_value_t headers = headers_create_empty(js);
-  
-  fetch_redirect_headers_ctx_t ctx = {
-    .js = js,
-    .headers = headers,
-    .drop_body_headers = drop_body_headers,
-    .failed = false,
-  };
-
-  if (is_err(headers)) return headers;
-  headers_data_for_each(headers_get_data(current), fetch_copy_redirect_header, &ctx);
-  
-  if (ctx.failed) return Ant_Error_CreateOutOfMemory(js);
-  js_set_slot_wb(js, req->request_obj, SLOT_REQUEST_HEADERS, headers);
-  
-  return js_mkundef();
+static void fetch_drop_request_headers(fetch_request_t *req, const char *const *names) {
+  headers_data_t *data = headers_get_data(request_get_headers(req->request_obj));
+  for (; *names; names++) headers_data_delete_literal(data, *names);
 }
 
 static ant_value_t fetch_clear_redirect_request_body(fetch_request_t *req) {
   request_data_t *request = request_get_data(req->request_obj);
-  ant_value_t headers_step = 0;
   
   if (!request)
     return fetch_type_error(req->js, "Invalid Request object");
@@ -210,9 +182,6 @@ static ant_value_t fetch_clear_redirect_request_body(fetch_request_t *req) {
   request->has_body = false;
   request->body_used = false;
   js_set_slot_wb(req->js, req->request_obj, SLOT_REQUEST_BODY_STREAM, js_mkundef());
-
-  headers_step = fetch_replace_request_headers(req, true);
-  if (is_err(headers_step)) return headers_step;
   
   return js_mkundef();
 }
@@ -232,57 +201,80 @@ static ant_value_t fetch_set_redirect_method(fetch_request_t *req, const char *m
   return js_mkundef();
 }
 
-static ant_value_t fetch_update_request_url(fetch_request_t *req, const char *location) {
+static bool fetch_str_eq(const char *a, const char *b) {
+  return strcmp(a ? a : "", b ? b : "") == 0;
+}
+
+static bool fetch_same_origin(const url_state_t *a, const url_state_t *b) {
+  return
+    fetch_str_eq(a->protocol, b->protocol) &&
+    fetch_str_eq(a->hostname, b->hostname) &&
+    fetch_str_eq(a->port, b->port);
+}
+
+static ant_value_t fetch_parse_redirect_url(fetch_request_t *req, const char *location, url_state_t *next) {
   request_data_t *request = request_get_data(req->request_obj);
-  url_state_t next = {0};
   char *base = NULL;
+  int rc = 0;
 
   if (!request || !location) return fetch_type_error(req->js, "Invalid redirect URL");
   base = fetch_build_request_url(request);
   if (!base) return fetch_type_error(req->js, "Invalid request URL");
 
-  if (parse_url_to_state(location, base, &next) != 0) {
-    free(base);
-    url_state_clear(&next);
+  rc = parse_url_to_state(location, base, next);
+  free(base);
+
+  if (rc != 0) {
+    url_state_clear(next);
     return fetch_type_error(req->js, "Invalid redirect URL");
   }
 
-  free(base);
-  url_state_clear(&request->url);
-  request->url = next;
-  js_set_slot(req->request_obj, SLOT_REQUEST_URL, js_mkundef());
-  
+  if (!fetch_str_eq(next->protocol, "http:") && !fetch_str_eq(next->protocol, "https:")) {
+    url_state_clear(next);
+    return fetch_type_error(req->js, "fetch failed: redirect location is not an HTTP(S) URL");
+  }
+
   return js_mkundef();
 }
 
 static ant_value_t fetch_prepare_redirect(fetch_request_t *req, const ant_http_response_t *resp) {
   request_data_t *request = request_get_data(req->request_obj);
   const char *location = fetch_find_header_value(resp->headers, "location");
+  
   ant_value_t step = 0;
+  url_state_t next = {0};
+  
   bool rewrite_to_get = false;
+  bool cross_origin = false;
 
   if (!request || !location || location[0] == '\0') return js_mkundef();
-  if (req->redirect_count >= FETCH_MAX_REDIRECTS) {
+  if (req->redirect_count >= FETCH_MAX_REDIRECTS)
     return fetch_type_error(req->js, "fetch failed: too many redirects");
-  }
 
   rewrite_to_get = fetch_redirect_rewrites_to_get(resp->status, request->method);
-  if (!rewrite_to_get && request->body_is_stream) {
+  if (!rewrite_to_get && request->body_is_stream)
     return fetch_type_error(req->js, "fetch failed: cannot follow redirect with a streamed request body");
-  }
+
+  step = fetch_parse_redirect_url(req, location, &next);
+  if (is_err(step)) return step;
+  cross_origin = !fetch_same_origin(&request->url, &next);
 
   if (rewrite_to_get) {
     step = fetch_set_redirect_method(req, strcasecmp(request->method, "HEAD") == 0 ? "HEAD" : "GET");
-    if (is_err(step)) return step;
-    step = fetch_clear_redirect_request_body(req);
-    if (is_err(step)) return step;
+    if (!is_err(step)) step = fetch_clear_redirect_request_body(req);
+    if (is_err(step)) { url_state_clear(&next); return step; }
   }
 
-  step = fetch_update_request_url(req, location);
-  if (is_err(step)) return step;
+  if (rewrite_to_get) fetch_drop_request_headers(req, fetch_body_headers);
+  if (cross_origin) fetch_drop_request_headers(req, fetch_credential_headers);
+
+  url_state_clear(&request->url);
+  request->url = next;
+  js_set_slot(req->request_obj, SLOT_REQUEST_URL, js_mkundef());
 
   req->redirect_count++;
   req->restart_pending = true;
+  
   return js_mkundef();
 }
 

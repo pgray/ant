@@ -1014,6 +1014,10 @@ size_t headers_data_find_literal(
   return count;
 }
 
+void headers_data_delete_literal(headers_data_t *data, const char *lower_name) {
+  if (data && lower_name) list_delete_name(data, lower_name);
+}
+
 void headers_set_immutable(ant_value_t hdrs, bool immutable) {
   js_set_slot(hdrs, SLOT_HEADERS_GUARD, js_bool(immutable));
 }

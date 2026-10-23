@@ -20,6 +20,7 @@ size_t headers_data_find_literal(
 void init_headers_module(ant_t *js);
 void headers_data_destroy(headers_data_t *data);
 void headers_set_immutable(ant_value_t hdrs, bool immutable);
+void headers_data_delete_literal(headers_data_t *data, const char *lower_name);
 void headers_data_for_each(const headers_data_t *data, headers_foreach_cb cb, void *ctx);
 
 bool headers_is_headers(ant_value_t obj);
