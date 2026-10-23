@@ -999,57 +999,58 @@ static char **parse_args_array(ant_t *js, ant_value_t arr, int *count) {
   return args;
 }
 
+static bool child_process_command_append(char **buf, size_t *len, size_t *cap, const char *text, size_t text_len) {
+  if (text_len > SIZE_MAX - *len - 1) return false;
+  size_t need = *len + text_len + 1;
+  
+  if (need > *cap) {
+    size_t next = *cap > SIZE_MAX / 2 ? need : *cap * 2;
+    if (next < need) next = need;
+    
+    char *grown = realloc(*buf, next);
+    if (!grown) return false;
+    
+    *buf = grown;
+    *cap = next;
+  }
+  
+  if (text_len) memcpy(*buf + *len, text, text_len);
+  *len += text_len;
+  
+  return true;
+}
+
 static ant_value_t child_process_command_value(ant_t *js, ant_value_t file, ant_value_t argv) {
-  size_t file_len = 0;
-  char *file_text;
-  ant_offset_t argc;
-  size_t total;
-  char *command;
-  size_t at;
-
   if (vtype(file) != kTypeString) return js_mkundef();
-  file_text = js_getstr(js, file, &file_len);
-  argc = js_is_array(argv) ? js_arr_len(js, argv) : 0;
-  total = file_len;
 
-  for (ant_offset_t i = 0; i < argc; i++) {
+  size_t file_len = 0;
+  char *file_text = js_getstr(js, file, &file_len);
+  size_t len = 0, cap = file_len + 64;
+  
+  char *command = malloc(cap);
+  bool ok = command && child_process_command_append(&command, &len, &cap, file_text, file_len);
+
+  ant_offset_t argc = js_is_array(argv) ? js_arr_len(js, argv) : 0;
+  for (ant_offset_t i = 0; ok && i < argc; i++) {
     ant_value_t arg = js_arr_get(js, argv, i);
     size_t arg_len = 0;
-    if (vtype(arg) == kTypeString) js_getstr(js, arg, &arg_len);
-    if (arg_len > SIZE_MAX - 2 || total > SIZE_MAX - arg_len - 2)
-      return js_mkundef();
-    total += arg_len + 1;
+    
+    char *arg_text = vtype(arg) == kTypeString ? js_getstr(js, arg, &arg_len) : NULL;
+    ok = 
+      child_process_command_append(&command, &len, &cap, " ", 1) && 
+      child_process_command_append(&command, &len, &cap, arg_text, arg_len);
   }
 
-  command = malloc(total + 1);
-  if (!command) return js_mkundef();
-
-  memcpy(command, file_text, file_len);
-  at = file_len;
-  for (ant_offset_t i = 0; i < argc; i++) {
-    ant_value_t arg = js_arr_get(js, argv, i);
-    size_t arg_len = 0;
-    char *arg_text = vtype(arg) == kTypeString
-      ? js_getstr(js, arg, &arg_len)
-      : NULL;
-    command[at++] = ' ';
-    if (arg_len > 0) {
-      memcpy(command + at, arg_text, arg_len);
-      at += arg_len;
-    }
-  }
-  command[at] = '\0';
-
-  ant_value_t result = js_mkstr(js, command, at);
+  ant_value_t result = ok ? js_mkstr(js, command, len) : js_mkundef();
   free(command);
+  
   return result;
 }
 
 static void free_args_array(char **args, int count) {
   if (!args) return;
-  for (int i = 0; i < count; i++) {
+  for (int i = 0; i < count; i++)
     if (args[i]) free(args[i]);
-  }
   free(args);
 }
 

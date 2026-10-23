@@ -190,7 +190,9 @@ wamr_lib = static_library(
 )
 
 wamr_link_deps = [dependency('threads')]
-if host_machine.system() != 'windows'
+if host_machine.system() == 'windows'
+  wamr_link_deps += [cc.find_library('bcrypt', required: true)]
+else
   wamr_link_deps += [cc.find_library('m', required: true)]
 endif
 

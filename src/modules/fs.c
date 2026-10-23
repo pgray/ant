@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <limits.h>
+#include <math.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #ifndef _WIN32
@@ -134,6 +135,53 @@ static bool fs_view_bytes(ant_value_t value, uint8_t **bytes, size_t *len) {
   else if (dv) Ant_Buffer_GetViewBytes(dv, bytes, len);
   else return false;
   return true;
+}
+
+typedef struct {
+  double offset;
+  double length;
+  int64_t position;
+} fs_io_args_t;
+
+typedef enum {
+  FS_IO_OK,
+  FS_IO_BAD_OFFSET,
+  FS_IO_BAD_LENGTH,
+} fs_io_window_t;
+
+static fs_io_args_t fs_io_args_init(void) {
+  return (fs_io_args_t){ .offset = (double)NAN, .length = (double)NAN, .position = -1 };
+}
+
+static double fs_number_or_nan(ant_value_t value) {
+  return vtype(value) == kTypeNumber ? js_getnum(value) : (double)NAN;
+}
+
+static void fs_io_args_from_options(ant_t *js, ant_value_t options, fs_io_args_t *io) {
+  io->offset = fs_number_or_nan(js_get(js, options, "offset"));
+  io->length = fs_number_or_nan(js_get(js, options, "length"));
+  ant_value_t position = js_get(js, options, "position");
+  if (vtype(position) == kTypeNumber) io->position = (int64_t)js_getnum(position);
+}
+
+static void fs_io_args_from_list(ant_value_t *args, int nargs, int first, fs_io_args_t *io) {
+  if (nargs > first) io->offset = fs_number_or_nan(args[first]);
+  if (nargs > first + 1) io->length = fs_number_or_nan(args[first + 1]);
+  if (nargs > first + 2 && vtype(args[first + 2]) == kTypeNumber) io->position = (int64_t)js_getnum(args[first + 2]);
+}
+
+static fs_io_window_t fs_io_window(const fs_io_args_t *io, size_t buf_len, size_t *offset, size_t *length) {
+  double off = isnan(io->offset) ? 0 : io->offset;
+  if (!(off >= 0 && off <= (double)buf_len)) return FS_IO_BAD_OFFSET;
+  *offset = (size_t)off;
+
+  size_t room = buf_len - *offset;
+  double len = isnan(io->length) ? (double)room : io->length;
+  
+  if (!(len >= 0 && len <= (double)room)) return FS_IO_BAD_LENGTH;
+  *length = (size_t)len;
+  
+  return FS_IO_OK;
 }
 
 static ant_value_t fs_get_write_data_arg(
@@ -1736,27 +1784,26 @@ static ant_value_t builtin_fs_filehandle_read(ant_params_t) {
 
   TypedArrayData *ta_data = buffer_get_typedarray_data(args[0]);
   uint8_t *buf_data; size_t buf_len;
+  
   if (!Ant_Buffer_GetViewBytes(ta_data, &buf_data, &buf_len))
     return fs_rejected_promise(js, js_mkerr(js, "FileHandle.read() buffer must be a Buffer or TypedArray"));
 
-  size_t offset = 0;
-  size_t length = buf_len;
-  int64_t position = -1;
+  fs_io_args_t io = fs_io_args_init();
+  fs_io_args_from_list(args, nargs, 1, &io);
 
-  if (nargs >= 2 && vtype(args[1]) == kTypeNumber) offset = (size_t)js_getnum(args[1]);
-  if (nargs >= 3 && vtype(args[2]) == kTypeNumber) length = (size_t)js_getnum(args[2]);
-  if (nargs >= 4 && vtype(args[3]) == kTypeNumber) position = (int64_t)js_getnum(args[3]);
+  size_t offset = 0, length = 0;
+  switch (fs_io_window(&io, buf_len, &offset, &length)) {
+    case FS_IO_BAD_OFFSET: return fs_rejected_promise(js, js_mkerr_typed(js, JS_ERR_RANGE, "offset is out of bounds"));
+    case FS_IO_BAD_LENGTH: return fs_rejected_promise(js, js_mkerr_typed(js, JS_ERR_RANGE, "length extends beyond buffer"));
+    case FS_IO_OK: break;
+  }
 
-  if (offset > buf_len) return fs_rejected_promise(js, js_mkerr(js, "offset is out of bounds"));
-  if (offset + length > buf_len) return fs_rejected_promise(js, js_mkerr(js, "length extends beyond buffer"));
-
-  uv_buf_t buf = uv_buf_init((char *)(buf_data + offset), (unsigned int)length);
+  uv_buf_t buf = uv_buf_init((char *)(buf_data + offset), (unsigned int)length); uv_fs_t req;
+  int result = uv_fs_read(js->loop, &req, (uv_file)(int)js_getnum(fd_val), &buf, 1, io.position, NULL);
   
-  uv_fs_t req;
-  int result = uv_fs_read(js->loop, &req, (uv_file)(int)js_getnum(fd_val), &buf, 1, position, NULL);
   uv_fs_req_cleanup(&req);
   if (result < 0) return fs_rejected_promise(js, fs_mk_uv_error(js, result, "read", NULL, NULL));
-
+  
   ant_value_t out = fs_new_io_result(js, false, (double)result, args[0]);
   if (is_err(out)) return fs_rejected_promise(js, out);
   
@@ -1780,38 +1827,29 @@ static ant_value_t builtin_fs_filehandle_write(ant_params_t) {
     if (!write_data) return fs_rejected_promise(js, js_mkerr(js, "Failed to get string"));
     if (nargs >= 2 && vtype(args[1]) == kTypeNumber) position = (int64_t)js_getnum(args[1]);
   } else {
+    fs_io_args_t io = fs_io_args_init();
+    if (nargs >= 2 && vtype(args[1]) == kTypeObject) fs_io_args_from_options(js, args[1], &io);
+    else if (nargs >= 2 && vtype(args[1]) == kTypeNumber) fs_io_args_from_list(args, nargs, 1, &io);
+    position = io.position;
+
     uint8_t *buf_data; size_t buf_len;
     if (!fs_view_bytes(args[0], &buf_data, &buf_len))
       return fs_rejected_promise(js, js_mkerr(js, "FileHandle.write() data must be a Buffer, TypedArray, DataView, or string"));
-      
-    size_t offset = 0;
-    size_t length = buf_len;
 
-    if (nargs >= 2) {
-    if (vtype(args[1]) == kTypeObject) {
-      ant_value_t off_val = js_get(js, args[1], "offset");
-      ant_value_t len_val = js_get(js, args[1], "length");
-      ant_value_t pos_val = js_get(js, args[1], "position");
-      if (vtype(off_val) == kTypeNumber) offset = (size_t)js_getnum(off_val);
-      if (vtype(len_val) == kTypeNumber) length = (size_t)js_getnum(len_val);
-      else length = buf_len - offset;
-      if (vtype(pos_val) == kTypeNumber) position = (int64_t)js_getnum(pos_val);
-    } else if (vtype(args[1]) == kTypeNumber) {
-      offset = (size_t)js_getnum(args[1]);
-      length = buf_len - offset;
-      if (nargs >= 3 && vtype(args[2]) == kTypeNumber) length = (size_t)js_getnum(args[2]);
-      if (nargs >= 4 && vtype(args[3]) == kTypeNumber) position = (int64_t)js_getnum(args[3]);
-    }}
-
-    if (offset > buf_len) return fs_rejected_promise(js, js_mkerr(js, "offset is out of bounds"));
-    if (offset + length > buf_len) return fs_rejected_promise(js, js_mkerr(js, "length extends beyond buffer"));
+    size_t offset = 0, length = 0;
+    switch (fs_io_window(&io, buf_len, &offset, &length)) {
+      case FS_IO_BAD_OFFSET: return fs_rejected_promise(js, js_mkerr_typed(js, JS_ERR_RANGE, "offset is out of bounds"));
+      case FS_IO_BAD_LENGTH: return fs_rejected_promise(js, js_mkerr_typed(js, JS_ERR_RANGE, "length extends beyond buffer"));
+      case FS_IO_OK: break;
+    }
+    
     write_data = (const char *)(buf_data + offset);
     write_len = length;
   }
 
-  uv_buf_t buf = uv_buf_init((char *)write_data, (unsigned int)write_len);
-  uv_fs_t req;
+  uv_buf_t buf = uv_buf_init((char *)write_data, (unsigned int)write_len); uv_fs_t req;
   int result = uv_fs_write(js->loop, &req, (uv_file)(int)js_getnum(fd_val), &buf, 1, position, NULL);
+  
   uv_fs_req_cleanup(&req);
   if (result < 0) return fs_rejected_promise(js, fs_mk_uv_error(js, result, "write", NULL, NULL));
 
@@ -5091,22 +5129,26 @@ static void on_read_fd_complete(uv_fs_t *uv_req) {
   if (req->data && bytes_read > 0) {
     TypedArrayData *ta = buffer_get_typedarray_data(req->target_buffer);
     uint8_t *bytes; size_t len;
-    if (Ant_Buffer_GetViewBytes(ta, &bytes, &len)) {
-      uint8_t *dest = bytes + req->buf_offset;
-      memcpy(dest, req->data, (size_t)bytes_read);
+    
+    if (Ant_Buffer_GetViewBytes(ta, &bytes, &len) && req->buf_offset < len) {
+      size_t room = len - req->buf_offset;
+      memcpy(bytes + req->buf_offset, req->data, (size_t)bytes_read < room ? (size_t)bytes_read : room);
     }
   }
 
   if (is_callable(req->callback_fn)) {
     ant_value_t cb_args[3] = { js_mknull(), js_mknum((double)bytes_read), req->target_buffer };
     fs_call_callback(fs_req_isolate(req), req->callback_fn, cb_args, 3);
+    
     Ant_List_Remove(req);
     free_fs_request(req);
+    
     return;
   }
 
   req->completed = 1;
   js_resolve_promise(fs_req_isolate(req), req->promise, js_mknum((double)bytes_read));
+  
   Ant_List_Remove(req);
   free_fs_request(req);
 }
@@ -5123,23 +5165,24 @@ static ant_value_t builtin_fs_read_fd(ant_params_t) {
     return js_mkerr(js, "read() buffer argument must be a Buffer or TypedArray");
 
   size_t buf_len = ta_data->byte_length;
-  size_t offset = 0;
-  size_t length = buf_len;
-  int64_t position = -1;
-
   ant_value_t callback = js_mkundef();
+  
   int data_nargs = nargs;
   if (nargs >= 3 && is_callable(args[nargs - 1])) {
     callback = args[nargs - 1];
     data_nargs = nargs - 1;
   }
 
-  if (data_nargs >= 3 && vtype(args[2]) == kTypeNumber) offset = (size_t)js_getnum(args[2]);
-  if (data_nargs >= 4 && vtype(args[3]) == kTypeNumber) length = (size_t)js_getnum(args[3]);
-  if (data_nargs >= 5 && vtype(args[4]) == kTypeNumber) position = (int64_t)js_getnum(args[4]);
+  fs_io_args_t io = fs_io_args_init();
+  fs_io_args_from_list(args, data_nargs, 2, &io);
+  int64_t position = io.position;
 
-  if (offset > buf_len) return js_mkerr(js, "read() offset out of bounds");
-  if (offset + length > buf_len) return js_mkerr(js, "read() length extends beyond buffer");
+  size_t offset = 0, length = 0;
+  switch (fs_io_window(&io, buf_len, &offset, &length)) {
+    case FS_IO_BAD_OFFSET: return js_mkerr_typed(js, JS_ERR_RANGE, "read() offset out of bounds");
+    case FS_IO_BAD_LENGTH: return js_mkerr_typed(js, JS_ERR_RANGE, "read() length extends beyond buffer");
+    case FS_IO_OK: break;
+  }
 
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return Ant_Error_CreateOutOfMemory(js);
@@ -5178,38 +5221,26 @@ static ant_value_t builtin_fs_readSync(ant_params_t) {
   if (vtype(args[0]) != kTypeNumber) return js_mkerr(js, "readSync() fd must be a number");
   
   int fd = (int)js_getnum(args[0]);
+
+  fs_io_args_t io = fs_io_args_init();
+  if (nargs >= 3 && vtype(args[2]) == kTypeObject) fs_io_args_from_options(js, args[2], &io);
+  else if (nargs >= 3 && vtype(args[2]) == kTypeNumber) fs_io_args_from_list(args, nargs, 2, &io);
   
   TypedArrayData *ta_data = buffer_get_typedarray_data(args[1]);
   uint8_t *buf_data; size_t buf_len;
   if (!Ant_Buffer_GetViewBytes(ta_data, &buf_data, &buf_len))
     return js_mkerr(js, "readSync() second argument must be a Buffer, TypedArray, or DataView");
-  
-  size_t offset = 0;
-  size_t length = buf_len;
-  int64_t position = -1;
-  
-  if (nargs >= 3) {
-  if (vtype(args[2]) == kTypeObject) {
-    ant_value_t off_val = js_get(js, args[2], "offset");
-    ant_value_t len_val = js_get(js, args[2], "length");
-    ant_value_t pos_val = js_get(js, args[2], "position");
-    if (vtype(off_val) == kTypeNumber) offset = (size_t)js_getnum(off_val);
-    if (vtype(len_val) == kTypeNumber) length = (size_t)js_getnum(len_val);
-    else length = buf_len - offset;
-    if (vtype(pos_val) == kTypeNumber) position = (int64_t)js_getnum(pos_val);
-  } else if (vtype(args[2]) == kTypeNumber) {
-    offset = (size_t)js_getnum(args[2]);
-    length = buf_len - offset;
-    if (nargs >= 4 && vtype(args[3]) == kTypeNumber) length = (size_t)js_getnum(args[3]);
-    if (nargs >= 5 && vtype(args[4]) == kTypeNumber) position = (int64_t)js_getnum(args[4]);
-  }}
-  
-  if (offset > buf_len) return js_mkerr(js, "offset is out of bounds");
-  if (offset + length > buf_len) return js_mkerr(js, "length extends beyond buffer");
+
+  size_t offset = 0, length = 0;
+  switch (fs_io_window(&io, buf_len, &offset, &length)) {
+    case FS_IO_BAD_OFFSET: return js_mkerr_typed(js, JS_ERR_RANGE, "offset is out of bounds");
+    case FS_IO_BAD_LENGTH: return js_mkerr_typed(js, JS_ERR_RANGE, "length extends beyond buffer");
+    case FS_IO_OK: break;
+  }
   
   uv_fs_t req;
   uv_buf_t buf = uv_buf_init((char *)(buf_data + offset), (unsigned int)length);
-  int result = uv_fs_read(js->loop, &req, fd, &buf, 1, position, NULL);
+  int result = uv_fs_read(js->loop, &req, fd, &buf, 1, io.position, NULL);
   uv_fs_req_cleanup(&req);
   
   if (result < 0) return js_mkerr(js, "readSync failed: %s", uv_strerror(result));
@@ -5240,37 +5271,24 @@ static ant_value_t builtin_fs_writeSync(ant_params_t) {
     return js_mknum((double)result);
   }
   
+  fs_io_args_t io = fs_io_args_init();
+  if (nargs >= 3 && vtype(args[2]) == kTypeObject) fs_io_args_from_options(js, args[2], &io);
+  else if (nargs >= 3 && vtype(args[2]) == kTypeNumber) fs_io_args_from_list(args, nargs, 2, &io);
+
   uint8_t *buf_data; size_t buf_len;
   if (!fs_view_bytes(args[1], &buf_data, &buf_len))
     return js_mkerr(js, "writeSync() second argument must be a Buffer, TypedArray, DataView, or string");
-  
-  size_t offset = 0;
-  size_t length = buf_len;
-  int64_t position = -1;
-  
-  if (nargs >= 3) {
-    if (vtype(args[2]) == kTypeObject) {
-      ant_value_t off_val = js_get(js, args[2], "offset");
-      ant_value_t len_val = js_get(js, args[2], "length");
-      ant_value_t pos_val = js_get(js, args[2], "position");
-      if (vtype(off_val) == kTypeNumber) offset = (size_t)js_getnum(off_val);
-      if (vtype(len_val) == kTypeNumber) length = (size_t)js_getnum(len_val);
-      else length = buf_len - offset;
-      if (vtype(pos_val) == kTypeNumber) position = (int64_t)js_getnum(pos_val);
-    } else if (vtype(args[2]) == kTypeNumber) {
-      offset = (size_t)js_getnum(args[2]);
-      length = buf_len - offset;
-      if (nargs >= 4 && vtype(args[3]) == kTypeNumber) length = (size_t)js_getnum(args[3]);
-      if (nargs >= 5 && vtype(args[4]) == kTypeNumber) position = (int64_t)js_getnum(args[4]);
-    }
+
+  size_t offset = 0, length = 0;
+  switch (fs_io_window(&io, buf_len, &offset, &length)) {
+    case FS_IO_BAD_OFFSET: return js_mkerr_typed(js, JS_ERR_RANGE, "offset is out of bounds");
+    case FS_IO_BAD_LENGTH: return js_mkerr_typed(js, JS_ERR_RANGE, "length extends beyond buffer");
+    case FS_IO_OK: break;
   }
-  
-  if (offset > buf_len) return js_mkerr(js, "offset is out of bounds");
-  if (offset + length > buf_len) return js_mkerr(js, "length extends beyond buffer");
   
   uv_fs_t req;
   uv_buf_t buf = uv_buf_init((char *)(buf_data + offset), (unsigned int)length);
-  int result = uv_fs_write(js->loop, &req, fd, &buf, 1, position, NULL);
+  int result = uv_fs_write(js->loop, &req, fd, &buf, 1, io.position, NULL);
   uv_fs_req_cleanup(&req);
   
   if (result < 0) return js_mkerr(js, "writeSync failed: %s", uv_strerror(result));
@@ -5297,32 +5315,21 @@ static ant_value_t builtin_fs_write_fd(ant_params_t) {
     write_data = str;
     write_len = str_len;
   } else {
+    fs_io_args_t io = fs_io_args_init();
+    if (nargs >= 3 && vtype(args[2]) == kTypeObject) fs_io_args_from_options(js, args[2], &io);
+    else if (nargs >= 3 && vtype(args[2]) == kTypeNumber) fs_io_args_from_list(args, nargs, 2, &io);
+    position = io.position;
+
     uint8_t *buf_data; size_t buf_len;
     if (!fs_view_bytes(args[1], &buf_data, &buf_len))
       return js_mkerr(js, "write() second argument must be a Buffer, TypedArray, DataView, or string");
-    
-    size_t offset = 0;
-    size_t length = buf_len;
-    
-    if (nargs >= 3) {
-    if (vtype(args[2]) == kTypeObject) {
-      ant_value_t off_val = js_get(js, args[2], "offset");
-      ant_value_t len_val = js_get(js, args[2], "length");
-      ant_value_t pos_val = js_get(js, args[2], "position");
-      if (vtype(off_val) == kTypeNumber) offset = (size_t)js_getnum(off_val);
-      if (vtype(len_val) == kTypeNumber) length = (size_t)js_getnum(len_val);
-      else length = buf_len - offset;
-      if (vtype(pos_val) == kTypeNumber) position = (int64_t)js_getnum(pos_val);
-    } else if (vtype(args[2]) == kTypeNumber) {
-      offset = (size_t)js_getnum(args[2]);
-      length = buf_len - offset;
-      if (nargs >= 4 && vtype(args[3]) == kTypeNumber) length = (size_t)js_getnum(args[3]);
-      if (nargs >= 5 && vtype(args[4]) == kTypeNumber) position = (int64_t)js_getnum(args[4]);
-    }}
-    
-    if (offset > buf_len) return js_mkerr(js, "offset is out of bounds");
-    if (offset + length > buf_len) return js_mkerr(js, "length extends beyond buffer");
-    
+
+    size_t offset = 0, length = 0;
+    switch (fs_io_window(&io, buf_len, &offset, &length)) {
+      case FS_IO_BAD_OFFSET: return js_mkerr_typed(js, JS_ERR_RANGE, "offset is out of bounds");
+      case FS_IO_BAD_LENGTH: return js_mkerr_typed(js, JS_ERR_RANGE, "length extends beyond buffer");
+      case FS_IO_OK: break;
+    }
     write_data = (const char *)(buf_data + offset);
     write_len = length;
   }
@@ -5357,6 +5364,41 @@ static ant_value_t builtin_fs_write_fd(ant_params_t) {
   return req->promise;
 }
 
+static ant_value_t fs_writev_collect(
+  ant_t *js, gc_temp_root_scope_t *roots, ant_value_t list,
+  ant_offset_t count, uv_buf_t *bufs, size_t *total, const char *name
+) {
+  ant_object_t *dense = js_dense_array_obj(list);
+  ant_value_t *items = dense && count <= dense->u.array.len ? dense->u.array.data : NULL;
+  for (ant_offset_t i = 0; items && i < count; i++) if (is_empty_slot(items[i])) items = NULL;
+
+  if (!items) {
+    items = gc_temp_root_slots(roots, (size_t)count);
+    if (!items) return Ant_Error_CreateOutOfMemory(js);
+    
+    for (ant_offset_t i = 0; i < count; i++) {
+      items[i] = js_arr_get(js, list, i);
+      if (is_err(items[i])) return items[i];
+    }
+  }
+
+  *total = 0;
+  for (ant_offset_t i = 0; i < count; i++) {
+    uint8_t *bytes; size_t len;
+    
+    if (!fs_view_bytes(items[i], &bytes, &len))
+      return js_mkerr(js, "%s() buffers must contain ArrayBufferViews", name);
+    
+    if (len > UINT_MAX || len > SIZE_MAX - *total)
+      return js_mkerr_typed(js, JS_ERR_RANGE, "%s() buffers are too large", name);
+    
+    bufs[i] = uv_buf_init((char *)bytes, (unsigned int)len);
+    *total += len;
+  }
+
+  return js_mkundef();
+}
+
 static ant_value_t builtin_fs_writevSync(ant_params_t) {
   if (nargs < 2) return js_mkerr(js, "writevSync() requires fd and buffers arguments");
   if (vtype(args[0]) != kTypeNumber) return js_mkerr(js, "writevSync() fd must be a number");
@@ -5371,20 +5413,24 @@ static ant_value_t builtin_fs_writevSync(ant_params_t) {
   
   uv_buf_t *bufs = calloc((size_t)arr_len, sizeof(uv_buf_t));
   if (!bufs) return Ant_Error_CreateOutOfMemory(js);
+
+  gc_temp_root_scope_t roots;
+  gc_temp_root_scope_begin(js, &roots);
+
+  size_t total_len = 0;
+  ant_value_t err = fs_writev_collect(js, &roots, args[1], arr_len, bufs, &total_len, "writevSync");
   
-  for (ant_offset_t i = 0; i < arr_len; i++) {
-    ant_value_t item = js_arr_get(js, args[1], i);
-    uint8_t *bytes; size_t len;
-    if (!fs_view_bytes(item, &bytes, &len)) {
-      free(bufs);
-      return js_mkerr(js, "writevSync() buffers must contain ArrayBufferViews");
-    }
-    bufs[i] = uv_buf_init((char *)bytes, (unsigned int)len);
+  if (is_err(err)) {
+    gc_temp_root_scope_end(&roots);
+    free(bufs);
+    return err;
   }
   
   uv_fs_t req;
   int result = uv_fs_write(js->loop, &req, fd, bufs, (unsigned int)arr_len, position, NULL);
+  
   uv_fs_req_cleanup(&req);
+  gc_temp_root_scope_end(&roots);
   free(bufs);
   
   if (result < 0) return js_mkerr(js, "writevSync failed: %s", uv_strerror(result));
@@ -5408,31 +5454,36 @@ static ant_value_t builtin_fs_writev_fd(ant_params_t) {
   if (nargs >= 3 && vtype(args[2]) == kTypeNumber)
     position = (int64_t)js_getnum(args[2]);
   
+  uv_buf_t *bufs = calloc((size_t)arr_len, sizeof(uv_buf_t));
+  if (!bufs) return Ant_Error_CreateOutOfMemory(js);
+
+  gc_temp_root_scope_t roots;
+  gc_temp_root_scope_begin(js, &roots);
+
   size_t total_len = 0;
-  for (ant_offset_t i = 0; i < arr_len; i++) {
-    uint8_t *bytes; size_t len;
-    if (!fs_view_bytes(js_arr_get(js, args[1], i), &bytes, &len))
-      return js_mkerr(js, "writev() buffers must contain ArrayBufferViews");
-    total_len += len;
+  ant_value_t err = fs_writev_collect(js, &roots, args[1], arr_len, bufs, &total_len, "writev");
+  fs_request_t *req = is_err(err) ? NULL : calloc(1, sizeof(fs_request_t));
+  char *data = req && total_len <= UINT_MAX ? malloc(total_len ? total_len : 1) : NULL;
+
+  if (data) {
+    size_t off = 0;
+    for (ant_offset_t i = 0; i < arr_len; i++) {
+      if (bufs[i].len) memcpy(data + off, bufs[i].base, bufs[i].len);
+      off += bufs[i].len;
+    }
   }
-  
-  fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return Ant_Error_CreateOutOfMemory(js);
-  
-  req->data = malloc(total_len ? total_len : 1);
-  if (!req->data) {
+
+  gc_temp_root_scope_end(&roots);
+  free(bufs);
+
+  if (is_err(err)) return err;
+  if (!data) {
     free(req);
+    if (total_len > UINT_MAX) return js_mkerr_typed(js, JS_ERR_RANGE, "writev() buffers are too large");
     return Ant_Error_CreateOutOfMemory(js);
   }
   
-  size_t off = 0;
-  for (ant_offset_t i = 0; i < arr_len; i++) {
-    uint8_t *bytes; size_t len;
-    fs_view_bytes(js_arr_get(js, args[1], i), &bytes, &len);
-    if (len) memcpy(req->data + off, bytes, len);
-    off += len;
-  }
-  
+  req->data = data;
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_WRITE_FD;
   req->promise = js_mkpromise(js);
