@@ -46,11 +46,19 @@ ArrayBufferData *buffer_get_arraybuffer_data(ant_value_t value) {
   return (ArrayBufferData *)js_get_native(value, BUFFER_ARRAYBUFFER_NATIVE_TAG);
 }
 
-TypedArrayData *buffer_get_typedarray_data(ant_value_t value) {
+static __attribute__((noinline)) TypedArrayData *buffer_get_typedarray_data_slow(ant_value_t value) {
   if (vtype(value) == kTypeTypedArray)
     return (TypedArrayData *)js_gettypedarray(value);
   if (!is_object_type(value)) return NULL;
   return (TypedArrayData *)js_get_native(value, BUFFER_TYPEDARRAY_NATIVE_TAG);
+}
+
+TypedArrayData *buffer_get_typedarray_data(ant_value_t value) {
+  if (vtype(value) == kTypeObject) {
+    ant_object_t *obj = (ant_object_t *)vptr(value);
+    if (obj->native_tag == BUFFER_TYPEDARRAY_NATIVE_TAG) return obj->native_ptr;
+  }
+  return buffer_get_typedarray_data_slow(value);
 }
 
 static ArrayBufferData buffer_out_of_bounds = { 
@@ -239,21 +247,17 @@ bool buffer_typedarray_data_read_index(ant_t *js, const TypedArrayData *ta_data,
   uint8_t *data; size_t byte_length;
   if (!out || !Ant_Buffer_GetViewBytes(ta_data, &data, &byte_length) || index >= ta_data->length) return false;
 
+  #define BUFFER_TA_READ_INT(ctype, load) *out = js_mknum(load(((ctype *)data)[index])); return true;
+  #define BUFFER_TA_READ_FLOAT BUFFER_TA_READ_INT
+  #define BUFFER_TA_READ_BIGINT(ctype, load) *out = load(js, ((ctype *)data)[index]); return !is_err(*out);
+  #define BUFFER_TYPED_ARRAY(name, ctor, ctype, kind, load, store) case TYPED_ARRAY_##name: BUFFER_TA_READ_##kind(ctype, load)
   switch (ta_data->type) {
-    case TYPED_ARRAY_INT8:          *out = js_mknum((double)((int8_t *)data)[index]); return true;
-    case TYPED_ARRAY_UINT8:
-    case TYPED_ARRAY_UINT8_CLAMPED: *out = js_mknum((double)data[index]); return true;
-    case TYPED_ARRAY_INT16:         *out = js_mknum((double)((int16_t *)data)[index]); return true;
-    case TYPED_ARRAY_UINT16:        *out = js_mknum((double)((uint16_t *)data)[index]); return true;
-    case TYPED_ARRAY_INT32:         *out = js_mknum((double)((int32_t *)data)[index]); return true;
-    case TYPED_ARRAY_UINT32:        *out = js_mknum((double)((uint32_t *)data)[index]); return true;
-    case TYPED_ARRAY_FLOAT16:       *out = js_mknum(half_to_double(((uint16_t *)data)[index])); return true;
-    case TYPED_ARRAY_FLOAT32:       *out = js_mknum((double)((float *)data)[index]); return true;
-    case TYPED_ARRAY_FLOAT64:       *out = js_mknum(((double *)data)[index]); return true;
-    case TYPED_ARRAY_BIGINT64:      *out = bigint_from_int64(js, ((int64_t *)data)[index]); return !is_err(*out);
-    case TYPED_ARRAY_BIGUINT64:     *out = bigint_from_uint64(js, ((uint64_t *)data)[index]); return !is_err(*out);
+    #include "buffer/typed_arrays.h"
     default: return false;
   }
+  #undef BUFFER_TA_READ_INT
+  #undef BUFFER_TA_READ_FLOAT
+  #undef BUFFER_TA_READ_BIGINT
 }
 
 bool buffer_typedarray_read_index(ant_t *js, ant_value_t value, size_t index, ant_value_t *out) {
@@ -490,18 +494,27 @@ void buffer_move_storage(ant_t *js, ArrayBufferData *from, ArrayBufferData *to) 
 }
 
 static size_t get_element_size(TypedArrayType type) {
-  static const void *dispatch[] = {
-    &&L_1, &&L_1, &&L_1, &&L_2, &&L_2,
-    &&L_4, &&L_4, &&L_2, &&L_4, &&L_8, &&L_8, &&L_8
+  static const uint8_t sizes[] = {
+    #define BUFFER_TYPED_ARRAY(name, ctor, ctype, ...) sizeof(ctype),
+    #include "buffer/typed_arrays.h"
   };
-  
-  if (type >= TYPED_ARRAY_COUNT) goto L_1;
-  goto *dispatch[type];
-  
-  L_1: return 1;
-  L_2: return 2;
-  L_4: return 4;
-  L_8: return 8;
+
+  return type < TYPED_ARRAY_COUNT ? sizes[type] : 1;
+}
+
+static inline bool typedarray_type_is_bigint(TypedArrayType type) {
+  static const bool bigint[] = {
+    #define BUFFER_TA_IS_BIGINT_INT    false
+    #define BUFFER_TA_IS_BIGINT_FLOAT  false
+    #define BUFFER_TA_IS_BIGINT_BIGINT true
+    #define BUFFER_TYPED_ARRAY(name, ctor, ctype, kind, ...) BUFFER_TA_IS_BIGINT_##kind,
+    #include "buffer/typed_arrays.h"
+    #undef BUFFER_TA_IS_BIGINT_INT
+    #undef BUFFER_TA_IS_BIGINT_FLOAT
+    #undef BUFFER_TA_IS_BIGINT_BIGINT
+  };
+
+  return type < TYPED_ARRAY_COUNT && bigint[type];
 }
 
 static size_t buffer_byte_length(const ArrayBufferData *data) {
@@ -574,18 +587,8 @@ static inline __attribute__((always_inline)) void dataview_view_attach(
 
 const char *buffer_typedarray_type_name(TypedArrayType type) {
   static const char *const names[] = {
-    "Int8Array",
-    "Uint8Array",
-    "Uint8ClampedArray",
-    "Int16Array",
-    "Uint16Array",
-    "Int32Array",
-    "Uint32Array",
-    "Float16Array",
-    "Float32Array",
-    "Float64Array",
-    "BigInt64Array",
-    "BigUint64Array",
+    #define BUFFER_TYPED_ARRAY(name, ctor, ...) #ctor "Array",
+    #include "buffer/typed_arrays.h"
   };
 
   int i = (int)type;
@@ -929,31 +932,25 @@ static ant_value_t js_dataview_byteOffset_getter(ant_params_t) {
   return is_err(error) ? error : js_mknum((double)dv->byte_offset);
 }
 
-#define BUFFER_SIZE_GETTER(name, fn, tag, detach_mode, ref, flag, field) \
-  static const ant_native_getter_t name = { \
-    .meta = { fn, NULL, 0, CFUNC_NATIVE_GETTER }, .native_tag = tag, .kind = ANT_NATIVE_GETTER_SIZE, \
-    .detach = detach_mode, .ref_offset = ref, .flag_offset = flag, .field_offset = field }
+#define BUFFER_GETTER_REF_REF_SLOW(owner) offsetof(owner, buffer)
+#define BUFFER_GETTER_REF_SELF(owner) 0
 
-#define BUFFER_SLOT_GETTER(name, fn, tag) \
-  static const ant_native_getter_t name = { \
-    .meta = { fn, NULL, 0, CFUNC_NATIVE_GETTER }, .native_tag = tag, .kind = ANT_NATIVE_GETTER_SLOT_DATA }
+#define BUFFER_SIZE_GETTER(name, fn, tag, owner, mode, flag, field)                                \
+  static const ant_native_getter_t name = {                                                        \
+    .meta = { fn, NULL, 0, CFUNC_NATIVE_GETTER }, .native_tag = BUFFER_##tag##_NATIVE_TAG,         \
+    .kind = ANT_NATIVE_GETTER_SIZE, .detach = ANT_NATIVE_DETACH_##mode,                            \
+    .ref_offset = BUFFER_GETTER_REF_##mode(owner), .flag_offset = offsetof(ArrayBufferData, flag), \
+    .field_offset = offsetof(owner, field) };
 
-BUFFER_SIZE_GETTER(typedarray_length_getter, js_typedarray_length_getter, BUFFER_TYPEDARRAY_NATIVE_TAG,
-  ANT_NATIVE_DETACH_REF_SLOW, offsetof(TypedArrayData, buffer), offsetof(ArrayBufferData, views_slow), offsetof(TypedArrayData, length));
-BUFFER_SIZE_GETTER(typedarray_byte_length_getter, js_typedarray_byteLength_getter, BUFFER_TYPEDARRAY_NATIVE_TAG,
-  ANT_NATIVE_DETACH_REF_SLOW, offsetof(TypedArrayData, buffer), offsetof(ArrayBufferData, views_slow), offsetof(TypedArrayData, byte_length));
-BUFFER_SIZE_GETTER(typedarray_byte_offset_getter, js_typedarray_byteOffset_getter, BUFFER_TYPEDARRAY_NATIVE_TAG,
-  ANT_NATIVE_DETACH_REF_SLOW, offsetof(TypedArrayData, buffer), offsetof(ArrayBufferData, views_slow), offsetof(TypedArrayData, byte_offset));
-BUFFER_SIZE_GETTER(dataview_byte_length_getter, js_dataview_byteLength_getter, BUFFER_DATAVIEW_NATIVE_TAG,
-  ANT_NATIVE_DETACH_REF_SLOW, offsetof(DataViewData, buffer), offsetof(ArrayBufferData, is_detached), offsetof(DataViewData, byte_length));
-BUFFER_SIZE_GETTER(dataview_byte_offset_getter, js_dataview_byteOffset_getter, BUFFER_DATAVIEW_NATIVE_TAG,
-  ANT_NATIVE_DETACH_REF_SLOW, offsetof(DataViewData, buffer), offsetof(ArrayBufferData, is_detached), offsetof(DataViewData, byte_offset));
-BUFFER_SIZE_GETTER(arraybuffer_byte_length_getter, js_arraybuffer_byteLength_getter, BUFFER_ARRAYBUFFER_NATIVE_TAG,
-  ANT_NATIVE_DETACH_SELF, 0, offsetof(ArrayBufferData, is_detached), offsetof(ArrayBufferData, length));
-BUFFER_SIZE_GETTER(sharedarraybuffer_byte_length_getter, js_arraybuffer_byteLength_getter, BUFFER_ARRAYBUFFER_NATIVE_TAG,
-  ANT_NATIVE_DETACH_SELF, 0, offsetof(ArrayBufferData, is_detached), offsetof(ArrayBufferData, length));
-BUFFER_SLOT_GETTER(typedarray_buffer_getter, js_typedarray_buffer_getter, BUFFER_TYPEDARRAY_NATIVE_TAG);
-BUFFER_SLOT_GETTER(dataview_buffer_getter, js_dataview_buffer_getter, BUFFER_DATAVIEW_NATIVE_TAG);
+#define BUFFER_SLOT_GETTER(name, fn, tag)                                                  \
+  static const ant_native_getter_t name = {                                                \
+    .meta = { fn, NULL, 0, CFUNC_NATIVE_GETTER }, .native_tag = BUFFER_##tag##_NATIVE_TAG, \
+    .kind = ANT_NATIVE_GETTER_SLOT_DATA };
+
+#include "buffer/native_getters.h"
+
+#undef BUFFER_GETTER_REF_REF_SLOW
+#undef BUFFER_GETTER_REF_SELF
 
 // ArrayBuffer.isView(value)
 static ant_value_t js_arraybuffer_isView(ant_params_t) {
@@ -984,45 +981,38 @@ static uint8_t typedarray_to_uint8_clamped(double value) {
 }
 
 static ant_value_t typedarray_write_value(ant_t *js, TypedArrayData *ta_data, size_t index, ant_value_t value) {
+  double num = 0;
+  uint64_t bits = 0;
+
+  if (typedarray_type_is_bigint(ta_data->type)) {
+    ant_value_t bigint = buffer_require_bigint_value(js, value);
+    if (is_err(bigint)) return bigint;
+    
+    bool ok = ta_data->type == TYPED_ARRAY_BIGINT64
+      ? bigint_to_int64_wrapping(js, bigint, (int64_t *)&bits)
+      : bigint_to_uint64_wrapping(js, bigint, &bits);
+    
+    if (!ok) return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert to BigInt");
+  } else num = vtype(value) == kTypeNumber ? js_getnum(value) : js_to_number(js, value);
+
   uint8_t *data; size_t byte_length;
-  if (!Ant_Buffer_GetViewBytes(ta_data, &data, &byte_length) || index >= ta_data->length) {
-    return js_mkundef();
-  }
+  if (!Ant_Buffer_GetViewBytes(ta_data, &data, &byte_length) || index >= ta_data->length) return js_mkundef();
+
+  #define BUFFER_TA_WRITE_INT(ctype, store) ((ctype *)data)[index] = store(num); break;
+  #define BUFFER_TA_WRITE_FLOAT BUFFER_TA_WRITE_INT
+  #define BUFFER_TA_WRITE_BIGINT(ctype, store) ((ctype *)data)[index] = store(bits); break;
+  #define BUFFER_TYPED_ARRAY(name, ctor, ctype, kind, load, store) case TYPED_ARRAY_##name: BUFFER_TA_WRITE_##kind(ctype, store)
 
   switch (ta_data->type) {
-    case TYPED_ARRAY_INT8:          ((int8_t *)data)[index] = (int8_t)js_to_int32(js_to_number(js, value)); return js_mkundef();
-    case TYPED_ARRAY_UINT8:         data[index] = (uint8_t)js_to_uint32(js_to_number(js, value)); return js_mkundef();
-    case TYPED_ARRAY_UINT8_CLAMPED: data[index] = typedarray_to_uint8_clamped(js_to_number(js, value)); return js_mkundef();
-    case TYPED_ARRAY_INT16:         ((int16_t *)data)[index] = (int16_t)js_to_int32(js_to_number(js, value)); return js_mkundef();
-    case TYPED_ARRAY_UINT16:        ((uint16_t *)data)[index] = (uint16_t)js_to_uint32(js_to_number(js, value)); return js_mkundef();
-    case TYPED_ARRAY_INT32:         ((int32_t *)data)[index] = js_to_int32(js_to_number(js, value)); return js_mkundef();
-    case TYPED_ARRAY_UINT32:        ((uint32_t *)data)[index] = js_to_uint32(js_to_number(js, value)); return js_mkundef();
-    case TYPED_ARRAY_FLOAT16:       ((uint16_t *)data)[index] = double_to_half(js_to_number(js, value)); return js_mkundef();
-    case TYPED_ARRAY_FLOAT32:       ((float *)data)[index] = (float)js_to_number(js, value); return js_mkundef();
-    case TYPED_ARRAY_FLOAT64:       ((double *)data)[index] = js_to_number(js, value); return js_mkundef();
-    case TYPED_ARRAY_BIGINT64: {
-      ant_value_t bigint = buffer_require_bigint_value(js, value);
-      int64_t wrapped = 0;
-      if (is_err(bigint)) return bigint;
-      if (!bigint_to_int64_wrapping(js, bigint, &wrapped)) {
-        return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert to BigInt");
-      }
-      ((int64_t *)data)[index] = wrapped;
-      return js_mkundef();
-    }
-    case TYPED_ARRAY_BIGUINT64: {
-      ant_value_t bigint = buffer_require_bigint_value(js, value);
-      uint64_t wrapped = 0;
-      if (is_err(bigint)) return bigint;
-      if (!bigint_to_uint64_wrapping(js, bigint, &wrapped)) {
-        return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert to BigInt");
-      }
-      ((uint64_t *)data)[index] = wrapped;
-      return js_mkundef();
-    }
-    default:
-      return js_mkundef();
+    #include "buffer/typed_arrays.h"
+    default: break;
   }
+
+  #undef BUFFER_TA_WRITE_INT
+  #undef BUFFER_TA_WRITE_FLOAT
+  #undef BUFFER_TA_WRITE_BIGINT
+
+  return js_mkundef();
 }
 
 static constexpr size_t TYPEDARRAY_EXACT_DIGITS_MAX = 15;
@@ -1062,7 +1052,7 @@ static typedarray_key_kind_t typedarray_key_kind(const TypedArrayData *ta, const
 }
 
 static ant_value_t typedarray_coerce_value(ant_t *js, const TypedArrayData *ta, ant_value_t value) {
-  if (ta->type == TYPED_ARRAY_BIGINT64 || ta->type == TYPED_ARRAY_BIGUINT64) return buffer_require_bigint_value(js, value);
+  if (typedarray_type_is_bigint(ta->type)) return buffer_require_bigint_value(js, value);
   double number = js_to_number(js, value);
   return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : tov(number);
 }
@@ -1114,30 +1104,6 @@ static ant_value_t typedarray_index_definer(
   if (is_err(coerced)) return coerced;
   (void)typedarray_write_value(js, ta_data, index, coerced);
   return js_true;
-}
-
-static bool typedarray_read_number(const TypedArrayData *ta_data, size_t index, double *out) {
-  uint8_t *data; size_t byte_length;
-  if (!Ant_Buffer_GetViewBytes(ta_data, &data, &byte_length) || index >= ta_data->length) return false;
-
-  static const void *dispatch[] = {
-    &&R_INT8, &&R_UINT8, &&R_UINT8, &&R_INT16, &&R_UINT16,
-    &&R_INT32, &&R_UINT32, &&R_FLOAT16, &&R_FLOAT32, &&R_FLOAT64, &&R_FAIL, &&R_FAIL
-  };
-
-  if (ta_data->type >= TYPED_ARRAY_COUNT) goto R_FAIL;
-  goto *dispatch[ta_data->type];
-
-  R_INT8:    *out = (double)((int8_t *)data)[index];   return true;
-  R_UINT8:   *out = (double)data[index];               return true;
-  R_INT16:   *out = (double)((int16_t *)data)[index];  return true;
-  R_UINT16:  *out = (double)((uint16_t *)data)[index]; return true;
-  R_INT32:   *out = (double)((int32_t *)data)[index];  return true;
-  R_UINT32:  *out = (double)((uint32_t *)data)[index]; return true;
-  R_FLOAT16: *out = half_to_double(((uint16_t *)data)[index]); return true;
-  R_FLOAT32: *out = (double)((float *)data)[index];    return true;
-  R_FLOAT64: *out = ((double *)data)[index];           return true;
-  R_FAIL:    return false;
 }
 
 static ant_value_t js_typedarray_every(ant_params_t) {
@@ -1719,8 +1685,7 @@ static ant_value_t js_typedarray_constructor(ant_native_params_t, TypedArrayType
   }
 
   uint8_t arg_type = vtype(args[0]);
-  if (is_boxable_primitive_type(arg_type) ||
-      arg_type == kTypeNull || arg_type == kTypeUndefined) {
+  if (is_boxable_primitive_type(arg_type) || arg_type == kTypeNull || arg_type == kTypeUndefined) {
     size_t length = 0;
     ant_value_t result = js_to_index_fast(js, args[0], &length);
     if (is_err(result)) return result;
@@ -1732,8 +1697,8 @@ static ant_value_t js_typedarray_constructor(ant_native_params_t, TypedArrayType
     if (!Ant_Buffer_ViewIsLive(source))
       return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot copy a detached TypedArray");
     
-    bool source_bigint = source->type == TYPED_ARRAY_BIGINT64 || source->type == TYPED_ARRAY_BIGUINT64;
-    bool target_bigint = type == TYPED_ARRAY_BIGINT64 || type == TYPED_ARRAY_BIGUINT64;
+    bool source_bigint = typedarray_type_is_bigint(source->type);
+    bool target_bigint = typedarray_type_is_bigint(type);
     
     if (source_bigint != target_bigint)
       return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot mix BigInt and Number TypedArrays");
@@ -1891,6 +1856,16 @@ static ant_value_t js_typedarray_fill(ant_params_t) {
   if (!ta_data) return typedarray_this_error(js, this_val);
   
   ant_value_t value = nargs > 0 ? args[0] : js_mknum(0);
+  bool is_bigint = typedarray_type_is_bigint(ta_data->type);
+  double num_value = 0;
+
+  if (is_bigint) {
+    value = buffer_require_bigint_value(js, value);
+    if (is_err(value)) return value;
+  } else num_value = js_to_number(js, value);
+
+  ta_data = typedarray_live(this_val);
+  if (!ta_data) return typedarray_this_error(js, this_val);
   
   ssize_t len = (ssize_t)ta_data->length;
   ssize_t start = 0, end = len;
@@ -1902,7 +1877,7 @@ static ant_value_t js_typedarray_fill(ant_params_t) {
   end = normalize_index(end, len);
   if (end < start) end = start;
 
-  if (ta_data->type == TYPED_ARRAY_BIGINT64 || ta_data->type == TYPED_ARRAY_BIGUINT64) {
+  if (is_bigint) {
     for (ssize_t i = start; i < end; i++) {
       ant_value_t write_result = typedarray_write_value(js, ta_data, (size_t)i, value);
       if (is_err(write_result)) return write_result;
@@ -1911,48 +1886,27 @@ static ant_value_t js_typedarray_fill(ant_params_t) {
   }
   
   uint8_t *data = ta_data->buffer->data + ta_data->byte_offset;
-  double num_value = js_to_number(js, value);
+
+  #define BUFFER_TA_FILL_INT(ctype, store) {                         \
+    ctype fill = store(num_value);                                   \
+    for (ssize_t i = start; i < end; i++) ((ctype *)data)[i] = fill; \
+    break;                                                           \
+  }
   
-  static const void *dispatch[] = {
-    &&L_INT8, &&L_UINT8, &&L_UINT8_CLAMPED, &&L_INT16, &&L_UINT16,
-    &&L_INT32, &&L_UINT32, &&L_FLOAT16, &&L_FLOAT32, &&L_FLOAT64, &&L_DONE, &&L_DONE
-  };
-  
-  if (ta_data->type >= TYPED_ARRAY_COUNT) goto L_DONE;
-  goto *dispatch[ta_data->type];
-  
-  L_INT8:
-    for (ssize_t i = start; i < end; i++) ((int8_t*)data)[i] = (int8_t)js_to_int32(num_value);
-    goto L_DONE;
-  L_UINT8:
-    for (ssize_t i = start; i < end; i++) data[i] = (uint8_t)js_to_uint32(num_value);
-    goto L_DONE;
-  L_UINT8_CLAMPED:
-    for (ssize_t i = start; i < end; i++) data[i] = typedarray_to_uint8_clamped(num_value);
-    goto L_DONE;
-  L_INT16:
-    for (ssize_t i = start; i < end; i++) ((int16_t*)data)[i] = (int16_t)js_to_int32(num_value);
-    goto L_DONE;
-  L_UINT16:
-    for (ssize_t i = start; i < end; i++) ((uint16_t*)data)[i] = (uint16_t)js_to_uint32(num_value);
-    goto L_DONE;
-  L_INT32:
-    for (ssize_t i = start; i < end; i++) ((int32_t*)data)[i] = js_to_int32(num_value);
-    goto L_DONE;
-  L_UINT32:
-    for (ssize_t i = start; i < end; i++) ((uint32_t*)data)[i] = js_to_uint32(num_value);
-    goto L_DONE;
-  L_FLOAT16:
-    for (ssize_t i = start; i < end; i++) ((uint16_t*)data)[i] = double_to_half(num_value);
-    goto L_DONE;
-  L_FLOAT32:
-    for (ssize_t i = start; i < end; i++) ((float*)data)[i] = (float)num_value;
-    goto L_DONE;
-  L_FLOAT64:
-    for (ssize_t i = start; i < end; i++) ((double*)data)[i] = num_value;
-    goto L_DONE;
-  L_DONE:
-    return this_val;
+  #define BUFFER_TA_FILL_FLOAT BUFFER_TA_FILL_INT
+  #define BUFFER_TA_FILL_BIGINT(ctype, store) break;
+  #define BUFFER_TYPED_ARRAY(name, ctor, ctype, kind, load, store) case TYPED_ARRAY_##name: BUFFER_TA_FILL_##kind(ctype, store)
+
+  switch (ta_data->type) {
+    #include "buffer/typed_arrays.h"
+    default: break;
+  }
+
+  #undef BUFFER_TA_FILL_INT
+  #undef BUFFER_TA_FILL_FLOAT
+  #undef BUFFER_TA_FILL_BIGINT
+
+  return this_val;
 }
 
 // TypedArray.prototype.set(source, offset = 0)
@@ -2090,6 +2044,12 @@ static ant_value_t js_typedarray_toReversed(ant_params_t) {
 }
 
 // TypedArray.prototype.toSorted(comparefn)
+static inline int typedarray_sort_compare(ant_t *js, ant_value_t comparefn, double a, double b) {
+  if (vtype(comparefn) != kTypeFunction) return (a > b) - (a < b);
+  ant_value_t cmp_args[2] = { js_mknum(a), js_mknum(b) };
+  return (int)js_getnum(sv_vm_call(js->vm, js, comparefn, js_mkundef(), cmp_args, 2, NULL, js_mkundef()));
+}
+
 static ant_value_t js_typedarray_toSorted(ant_params_t) {
   ant_value_t this_val = js_getthis(js);
   TypedArrayData *ta_data = typedarray_live(this_val);
@@ -2110,65 +2070,29 @@ static ant_value_t js_typedarray_toSorted(ant_params_t) {
   uint8_t *data = result_ta->buffer->data;
   
   ant_value_t comparefn = (nargs > 0 && vtype(args[0]) == kTypeFunction) ? args[0] : js_mkundef();
-  bool has_comparefn = vtype(comparefn) == kTypeFunction;
   
-  for (size_t i = 1; i < length; i++) {
-    for (size_t j = i; j > 0; j--) {
-      double a_val, b_val;
-      int cmp;
-      
-      static const void *read_dispatch[] = {
-        &&R_INT8, &&R_UINT8, &&R_UINT8, &&R_INT16, &&R_UINT16,
-        &&R_INT32, &&R_UINT32, &&R_FLOAT16, &&R_FLOAT32, &&R_FLOAT64, &&R_DONE, &&R_DONE
-      };
-      
-      if (ta_data->type >= TYPED_ARRAY_COUNT) goto R_DONE;
-      goto *read_dispatch[ta_data->type];
-      
-      R_INT8:    a_val = (double)((int8_t*)data)[j-1]; b_val = (double)((int8_t*)data)[j]; goto R_COMPARE;
-      R_UINT8:   a_val = (double)data[j-1]; b_val = (double)data[j]; goto R_COMPARE;
-      R_INT16:   a_val = (double)((int16_t*)data)[j-1]; b_val = (double)((int16_t*)data)[j]; goto R_COMPARE;
-      R_UINT16:  a_val = (double)((uint16_t*)data)[j-1]; b_val = (double)((uint16_t*)data)[j]; goto R_COMPARE;
-      R_INT32:   a_val = (double)((int32_t*)data)[j-1]; b_val = (double)((int32_t*)data)[j]; goto R_COMPARE;
-      R_UINT32:  a_val = (double)((uint32_t*)data)[j-1]; b_val = (double)((uint32_t*)data)[j]; goto R_COMPARE;
-      R_FLOAT16: a_val = half_to_double(((uint16_t*)data)[j-1]); b_val = half_to_double(((uint16_t*)data)[j]); goto R_COMPARE;
-      R_FLOAT32: a_val = (double)((float*)data)[j-1]; b_val = (double)((float*)data)[j]; goto R_COMPARE;
-      R_FLOAT64: a_val = ((double*)data)[j-1]; b_val = ((double*)data)[j]; goto R_COMPARE;
-      R_DONE:    goto SORT_DONE;
-      
-      R_COMPARE:
-      if (has_comparefn) {
-        ant_value_t cmp_args[2] = { js_mknum(a_val), js_mknum(b_val) };
-        ant_value_t cmp_result = sv_vm_call(js->vm, js, comparefn, js_mkundef(), cmp_args, 2, NULL, js_mkundef());
-        cmp = (int)js_getnum(cmp_result);
-      } else {
-        cmp = (a_val > b_val) ? 1 : ((a_val < b_val) ? -1 : 0);
-      }
-      
-      if (cmp <= 0) break;
-      
-      static const void *swap_dispatch[] = {
-        &&S_INT8, &&S_UINT8, &&S_UINT8, &&S_INT16, &&S_UINT16,
-        &&S_INT32, &&S_UINT32, &&S_FLOAT16, &&S_FLOAT32, &&S_FLOAT64, &&S_DONE, &&S_DONE
-      };
-      
-      if (ta_data->type >= TYPED_ARRAY_COUNT) goto S_DONE;
-      goto *swap_dispatch[ta_data->type];
-      
-      S_INT8:    { int8_t tmp = ((int8_t*)data)[j-1]; ((int8_t*)data)[j-1] = ((int8_t*)data)[j]; ((int8_t*)data)[j] = tmp; goto S_DONE; }
-      S_UINT8:   { uint8_t tmp = data[j-1]; data[j-1] = data[j]; data[j] = tmp; goto S_DONE; }
-      S_INT16:   { int16_t tmp = ((int16_t*)data)[j-1]; ((int16_t*)data)[j-1] = ((int16_t*)data)[j]; ((int16_t*)data)[j] = tmp; goto S_DONE; }
-      S_UINT16:  { uint16_t tmp = ((uint16_t*)data)[j-1]; ((uint16_t*)data)[j-1] = ((uint16_t*)data)[j]; ((uint16_t*)data)[j] = tmp; goto S_DONE; }
-      S_INT32:   { int32_t tmp = ((int32_t*)data)[j-1]; ((int32_t*)data)[j-1] = ((int32_t*)data)[j]; ((int32_t*)data)[j] = tmp; goto S_DONE; }
-      S_UINT32:  { uint32_t tmp = ((uint32_t*)data)[j-1]; ((uint32_t*)data)[j-1] = ((uint32_t*)data)[j]; ((uint32_t*)data)[j] = tmp; goto S_DONE; }
-      S_FLOAT16: { uint16_t tmp = ((uint16_t*)data)[j-1]; ((uint16_t*)data)[j-1] = ((uint16_t*)data)[j]; ((uint16_t*)data)[j] = tmp; goto S_DONE; }
-      S_FLOAT32: { float tmp = ((float*)data)[j-1]; ((float*)data)[j-1] = ((float*)data)[j]; ((float*)data)[j] = tmp; goto S_DONE; }
-      S_FLOAT64: { double tmp = ((double*)data)[j-1]; ((double*)data)[j-1] = ((double*)data)[j]; ((double*)data)[j] = tmp; goto S_DONE; }
-      S_DONE:;
-    }
+  #define BUFFER_TA_SORT_INT(ctype, load) {                                                       \
+    ctype *items = (ctype *)data;                                                                 \
+    for (size_t i = 1; i < length; i++) for (size_t j = i; j > 0; j--) {                          \
+      if (typedarray_sort_compare(js, comparefn, load(items[j - 1]), load(items[j])) <= 0) break; \
+      ctype tmp = items[j - 1]; items[j - 1] = items[j]; items[j] = tmp;                          \
+    }                                                                                             \
+    break;                                                                                        \
   }
   
-  SORT_DONE:
+  #define BUFFER_TA_SORT_FLOAT BUFFER_TA_SORT_INT
+  #define BUFFER_TA_SORT_BIGINT(ctype, load) break;
+  #define BUFFER_TYPED_ARRAY(name, ctor, ctype, kind, load, store) case TYPED_ARRAY_##name: BUFFER_TA_SORT_##kind(ctype, load)
+
+  switch (ta_data->type) {
+    #include "buffer/typed_arrays.h"
+    default: break;
+  }
+
+  #undef BUFFER_TA_SORT_INT
+  #undef BUFFER_TA_SORT_FLOAT
+  #undef BUFFER_TA_SORT_BIGINT
+
   return result;
 }
 
@@ -3073,9 +2997,10 @@ static ant_value_t buffer_fill_range(
     return js_mkundef();
   }
 
-  if (buffer_get_typedarray_data(value) || buffer_is_dataview(value)) {
+  if (vtype(value) != kTypeNumber && (buffer_get_typedarray_data(value) || buffer_is_dataview(value))) {
     const uint8_t *source = NULL;
     size_t source_len = 0;
+    
     buffer_source_get_bytes(js, value, &source, &source_len);
     if (source_len == 0) return js_mkerr_code(
       js, JS_ERR_TYPE, "ERR_INVALID_ARG_VALUE",
@@ -3200,6 +3125,18 @@ static ant_value_t js_buffer_copyBytesFrom(ant_params_t) {
   return create_typed_array(js, TYPED_ARRAY_UINT8, buffer, 0, bytes, js->builtins.buffer_proto);
 }
 
+#define BUFFER_TA_JOIN_INT(ctype, load) written = (ctype)-1 < 0   \
+  ? snprintf(buf + pos, cap - pos, "%d", (int)((ctype *)data)[i]) \
+  : snprintf(buf + pos, cap - pos, "%u", (unsigned)((ctype *)data)[i]); break;
+
+#define BUFFER_TA_JOIN_FLOAT(ctype, load) written = snprintf(buf + pos, cap - pos, "%g", load(((ctype *)data)[i])); break;
+
+#define BUFFER_TA_JOIN_BIGINT(ctype, load)                                            \
+  written = (ctype)-1 < 0                                                             \
+    ? snprintf(buf + pos, cap - pos, "%lld", (long long)((ctype *)data)[i])           \
+    : snprintf(buf + pos, cap - pos, "%llu", (unsigned long long)((ctype *)data)[i]); \
+  break;
+
 static ant_value_t typedarray_join_with(ant_t *js, ant_value_t this_val, const char *sep, size_t sep_len) {
   TypedArrayData *ta_data = typedarray_live(this_val);
   if (!ta_data) return typedarray_this_error(js, this_val);
@@ -3233,21 +3170,13 @@ static ant_value_t typedarray_join_with(ant_t *js, ant_value_t this_val, const c
     }
 
     int written = 0;
+    #define BUFFER_TYPED_ARRAY(name, ctor, ctype, kind, load, store) case TYPED_ARRAY_##name: BUFFER_TA_JOIN_##kind(ctype, load)
+
     switch (ta_data->type) {
-      case TYPED_ARRAY_INT8:          written = snprintf(buf + pos, cap - pos, "%d", ((int8_t*)data)[i]); break;
-      case TYPED_ARRAY_UINT8:
-      case TYPED_ARRAY_UINT8_CLAMPED: written = snprintf(buf + pos, cap - pos, "%u", data[i]); break;
-      case TYPED_ARRAY_INT16:         written = snprintf(buf + pos, cap - pos, "%d", ((int16_t*)data)[i]); break;
-      case TYPED_ARRAY_UINT16:        written = snprintf(buf + pos, cap - pos, "%u", ((uint16_t*)data)[i]); break;
-      case TYPED_ARRAY_INT32:         written = snprintf(buf + pos, cap - pos, "%d", ((int32_t*)data)[i]); break;
-      case TYPED_ARRAY_UINT32:        written = snprintf(buf + pos, cap - pos, "%u", ((uint32_t*)data)[i]); break;
-      case TYPED_ARRAY_FLOAT16:       written = snprintf(buf + pos, cap - pos, "%g", half_to_double(((uint16_t*)data)[i])); break;
-      case TYPED_ARRAY_FLOAT32:       written = snprintf(buf + pos, cap - pos, "%g", (double)((float*)data)[i]); break;
-      case TYPED_ARRAY_FLOAT64:       written = snprintf(buf + pos, cap - pos, "%g", ((double*)data)[i]); break;
-      case TYPED_ARRAY_BIGINT64:      written = snprintf(buf + pos, cap - pos, "%lld", ((long long*)data)[i]); break;
-      case TYPED_ARRAY_BIGUINT64:     written = snprintf(buf + pos, cap - pos, "%llu", ((unsigned long long*)data)[i]); break;
+      #include "buffer/typed_arrays.h"
       default: break;
     }
+    
     if (written > 0) pos += (size_t)written;
   }
 
@@ -3255,6 +3184,10 @@ static ant_value_t typedarray_join_with(ant_t *js, ant_value_t this_val, const c
   free(buf);
   return ret;
 }
+
+#undef BUFFER_TA_JOIN_INT
+#undef BUFFER_TA_JOIN_FLOAT
+#undef BUFFER_TA_JOIN_BIGINT
 
 // TypedArray.prototype.toString()
 static ant_value_t js_typedarray_toString(ant_params_t) {
@@ -3270,47 +3203,104 @@ static ant_value_t js_typedarray_join(ant_params_t) {
   return typedarray_join_with(js, js_getthis(js), sep, sep_len);
 }
 
-static ant_value_t js_typedarray_indexOf(ant_params_t) {
-  ant_value_t this_val = js_getthis(js);
-  TypedArrayData *ta_data = typedarray_live(this_val);
-  if (!ta_data) return typedarray_this_error(js, this_val);
+static inline bool typedarray_int_needle(double needle, double lo, double hi) {
+  return needle >= lo && needle <= hi && needle == trunc(needle);
+}
 
-  size_t len = ta_data->length;
-  if (len == 0 || nargs < 1) return js_mknum(-1);
+#define BUFFER_TA_INT_MAX(ctype) ((ctype)-1 < 0 ? (double)((1ULL << (8 * sizeof(ctype) - 1)) - 1) : (double)(ctype)-1)
+#define BUFFER_TA_INT_MIN(ctype) ((ctype)-1 < 0 ? -BUFFER_TA_INT_MAX(ctype) - 1 : 0.0)
 
-  int64_t from_index = 0;
-  if (nargs > 1 && vtype(args[1]) != kTypeUndefined) {
-  from_index = (int64_t)js_to_number(js, args[1]);
-  if (from_index < 0) {
-    from_index += (int64_t)len;
-    if (from_index < 0) from_index = 0;
-  }}
-  
-  if ((size_t)from_index >= len) return js_mknum(-1);
-  uint8_t *data = ta_data->buffer->data + ta_data->byte_offset;
-  double needle_num = js_to_number(js, args[0]);
+#define BUFFER_TA_FIND_INT(ctype, load) {                                                            \
+  if (!typedarray_int_needle(needle, BUFFER_TA_INT_MIN(ctype), BUFFER_TA_INT_MAX(ctype))) return -1; \
+  ctype want = (ctype)needle;                                                                        \
+  if (sizeof(ctype) == 1) {                                                                          \
+    const uint8_t *hit = memchr(data + from, (uint8_t)want, len - from);                             \
+    return hit ? (ssize_t)(hit - data) : -1;                                                         \
+  }                                                                                                  \
+  for (size_t i = from; i < len; i++) if (((const ctype *)data)[i] == want) return (ssize_t)i;       \
+  return -1;                                                                                         \
+}
 
-  for (size_t i = (size_t)from_index; i < len; i++) {
-    bool match = false;
-    switch (ta_data->type) {
-      case TYPED_ARRAY_INT8:          match = ((int8_t *)data)[i] == (int8_t)needle_num; break;
-      case TYPED_ARRAY_UINT8:
-      case TYPED_ARRAY_UINT8_CLAMPED: match = data[i] == (uint8_t)needle_num; break;
-      case TYPED_ARRAY_INT16:         match = ((int16_t *)data)[i] == (int16_t)needle_num; break;
-      case TYPED_ARRAY_UINT16:        match = ((uint16_t *)data)[i] == (uint16_t)needle_num; break;
-      case TYPED_ARRAY_INT32:         match = ((int32_t *)data)[i] == (int32_t)needle_num; break;
-      case TYPED_ARRAY_UINT32:        match = ((uint32_t *)data)[i] == (uint32_t)needle_num; break;
-      case TYPED_ARRAY_FLOAT16:       match = half_to_double(((uint16_t *)data)[i]) == needle_num; break;
-      case TYPED_ARRAY_FLOAT32:       match = ((float *)data)[i] == (float)needle_num; break;
-      case TYPED_ARRAY_FLOAT64:       match = ((double *)data)[i] == needle_num; break;
-      case TYPED_ARRAY_BIGINT64:      match = ((int64_t *)data)[i] == (int64_t)needle_num; break;
-      case TYPED_ARRAY_BIGUINT64:     match = ((uint64_t *)data)[i] == (uint64_t)needle_num; break;
-      default: break;
-    }
-    if (match) return js_mknum((double)i);
+#define BUFFER_TA_FIND_FLOAT(ctype, load) {                          \
+  for (size_t i = from; i < len; i++) {                              \
+    double value = load(((const ctype *)data)[i]);                   \
+    if (value == needle || (nan && isnan(value))) return (ssize_t)i; \
+  }                                                                  \
+  return -1;                                                         \
+}
+
+#define BUFFER_TA_FIND_BIGINT(ctype, load) return -1;
+
+static ssize_t typedarray_find(
+  ant_t *js, const TypedArrayData *ta, ant_value_t search,
+  size_t from, size_t len, bool same_value_zero
+) {
+  const uint8_t *data = ta->buffer->data + ta->byte_offset;
+  if (from >= len) return -1;
+
+  if (typedarray_type_is_bigint(ta->type)) {
+    uint64_t bits = 0;
+    if (vtype(search) != kTypeBigInt) return -1;
+    
+    bool ok = ta->type == TYPED_ARRAY_BIGINT64
+      ? bigint_to_int64_checked(js, search, (int64_t *)&bits)
+      : bigint_to_uint64_checked(js, search, &bits);
+    
+    if (!ok) return -1;
+    for (size_t i = from; i < len; i++) if (((const uint64_t *)data)[i] == bits) return (ssize_t)i;
+    
+    return -1;
   }
 
-  return js_mknum(-1);
+  if (vtype(search) != kTypeNumber) return -1;
+  double needle = js_getnum(search);
+  bool nan = isnan(needle);
+  if (nan && !same_value_zero) return -1;
+
+  #define BUFFER_TYPED_ARRAY(name, ctor, ctype, kind, load, store) case TYPED_ARRAY_##name: BUFFER_TA_FIND_##kind(ctype, load)
+
+  switch (ta->type) {
+    #include "buffer/typed_arrays.h"
+    default: return -1;
+  }
+}
+
+#undef BUFFER_TA_INT_MAX
+#undef BUFFER_TA_INT_MIN
+#undef BUFFER_TA_FIND_INT
+#undef BUFFER_TA_FIND_FLOAT
+#undef BUFFER_TA_FIND_BIGINT
+
+static ssize_t typedarray_search(ant_t *js, ant_value_t *args, int nargs, bool same_value_zero) {
+  ant_value_t this_val = js_getthis(js);
+  TypedArrayData *ta_data = typedarray_live(this_val);
+  if (!ta_data) return -2;
+
+  size_t len = ta_data->length;
+  if (len == 0) return -1;
+
+  double from = 0;
+  if (nargs > 1 && vtype(args[1]) != kTypeUndefined) {
+    from = js_to_number(js, args[1]);
+    if (isnan(from)) from = 0;
+    from = trunc(from);
+    if (from < 0) from += (double)len;
+    if (from < 0) from = 0;
+  }
+  
+  if (from >= (double)len) return -1;
+  ta_data = typedarray_live(this_val);
+  
+  if (!ta_data) return -1;
+  if (ta_data->length < len) len = ta_data->length;
+
+  return typedarray_find(js, ta_data, nargs > 0 ? args[0] : js_mkundef(), (size_t)from, len, same_value_zero);
+}
+
+static ant_value_t js_typedarray_indexOf(ant_params_t) {
+  ssize_t index = typedarray_search(js, args, nargs, false);
+  if (index == -2) return typedarray_this_error(js, js_getthis(js));
+  return js_mknum((double)index);
 }
 
 static ant_value_t js_typedarray_lastIndexOf(ant_params_t) {
@@ -3342,63 +3332,9 @@ static ant_value_t js_typedarray_lastIndexOf(ant_params_t) {
 }
 
 static ant_value_t js_typedarray_includes(ant_params_t) {
-  ant_value_t this_val = js_getthis(js);
-  TypedArrayData *ta_data = typedarray_live(this_val);
-  if (!ta_data) return typedarray_this_error(js, this_val);
-
-  size_t len = ta_data->length;
-  ant_value_t search = (nargs > 0) ? args[0] : js_mkundef();
-  
-  if (len == 0) return js_false;
-  int64_t from_index = 0;
-  
-  if (nargs > 1 && vtype(args[1]) != kTypeUndefined) {
-  double from_index_num = js_to_number(js, args[1]);
-  if (!isnan(from_index_num)) from_index = (int64_t)from_index_num;
-  if (from_index < 0) {
-    from_index += (int64_t)len;
-    if (from_index < 0) from_index = 0;
-  }}
-
-  if ((size_t)from_index >= len) return js_false;
-
-  if (ta_data->type == TYPED_ARRAY_BIGINT64) {
-    int64_t needle = 0;
-    if (vtype(search) == kTypeBigInt) {
-      if (!bigint_to_int64_wrapping(js, search, &needle)) return js_false;
-    } else needle = (int64_t)js_to_number(js, search);
-    
-    int64_t *data = (int64_t *)(ta_data->buffer->data + ta_data->byte_offset);
-    for (size_t i = (size_t)from_index; i < len; i++) {
-      if (data[i] == needle) return js_true;
-    }
-    
-    return js_false;
-  }
-
-  if (ta_data->type == TYPED_ARRAY_BIGUINT64) {
-    uint64_t needle = 0;
-    if (vtype(search) == kTypeBigInt) {
-      if (!bigint_to_uint64_wrapping(js, search, &needle)) return js_false;
-    } else needle = (uint64_t)js_to_number(js, search);
-    
-    uint64_t *data = (uint64_t *)(ta_data->buffer->data + ta_data->byte_offset);
-    for (size_t i = (size_t)from_index; i < len; i++) {
-      if (data[i] == needle) return js_true;
-    }
-    
-    return js_false;
-  }
-
-  double needle = js_to_number(js, search);
-  for (size_t i = (size_t)from_index; i < len; i++) {
-    double value = 0;
-    if (!typedarray_read_number(ta_data, i, &value)) return js_false;
-    if (isnan(value) && isnan(needle)) return js_true;
-    if (value == needle) return js_true;
-  }
-
-  return js_false;
+  ssize_t index = typedarray_search(js, args, nargs, true);
+  if (index == -2) return typedarray_this_error(js, js_getthis(js));
+  return js_bool(index >= 0);
 }
 
 static ant_value_t js_typedarray_reverse(ant_params_t) {
@@ -3707,8 +3643,6 @@ static ant_value_t buffer_index_of(ant_t *js, ant_value_t *args, int nargs, bool
   if (!ta_data) return typedarray_this_error(js, this_val);
   if (nargs < 1) return js_mknum(-1);
 
-  uint8_t *haystack; size_t haystack_len;
-  Ant_Buffer_GetViewBytes(ta_data, &haystack, &haystack_len);
   double offset_num = forward ? 0.0 : (double)NAN;
   BufferEncoding encoding = ENC_UTF8;
   ant_value_t encoding_arg = js_mkundef();
@@ -3719,38 +3653,39 @@ static ant_value_t buffer_index_of(ant_t *js, ant_value_t *args, int nargs, bool
       char *enc_str = js_getstr(js, args[1], &enc_len);
       encoding = parse_encoding(enc_str, enc_len);
       encoding_arg = args[1];
-    } else {
-      offset_num = js_to_number(js, args[1]);
-    }
+    } else offset_num = js_to_number(js, args[1]);
   }
 
-  if (nargs > 2 && vtype(args[2]) != kTypeUndefined) {
-    ant_value_t enc_value = js_tostring_val(js, args[2]);
+  ant_value_t search = args[0];
+  if (vtype(search) != kTypeNumber && nargs > 2 && vtype(args[2]) != kTypeUndefined) {
+    ant_value_t enc_value = js_to_primitive(js, args[2], 0);
+    if (!is_err(enc_value)) enc_value = js_tostring_val(js, enc_value);
     if (is_err(enc_value)) return enc_value;
+    
     size_t enc_len = 0;
     char *enc_str = js_getstr(js, enc_value, &enc_len);
+    
     encoding = parse_encoding(enc_str, enc_len);
     encoding_arg = enc_value;
   }
 
+  uint8_t *haystack; size_t haystack_len;
+  Ant_Buffer_GetViewBytes(ta_data, &haystack, &haystack_len);
   size_t start = forward ? buffer_normalize_indexof_offset(haystack_len, offset_num) : 0;
-  ant_value_t search = args[0];
 
   if (vtype(search) == kTypeNumber) {
     uint8_t needle = (uint8_t)js_to_uint32(js_getnum(search));
+    
     if (!forward) {
       int64_t last = buffer_last_index_offset((int64_t)haystack_len, offset_num, 1);
       if (last < 0 || haystack_len == 0) return js_mknum(-1);
-      for (int64_t i = last; i >= 0; i--) {
-        if (haystack[i] == needle) return js_mknum((double)i);
-      }
+      for (int64_t i = last; i >= 0; i--) if (haystack[i] == needle) return js_mknum((double)i);
       return js_mknum(-1);
     }
     
     if (start >= haystack_len) return js_mknum(-1);
-    for (size_t i = start; i < haystack_len; i++) {
-      if (haystack[i] == needle) return js_mknum((double)i);
-    }
+    for (size_t i = start; i < haystack_len; i++) if (haystack[i] == needle) return js_mknum((double)i);
+    
     return js_mknum(-1);
   }
 
@@ -3758,15 +3693,14 @@ static ant_value_t buffer_index_of(ant_t *js, ant_value_t *args, int nargs, bool
   size_t needle_len = 0;
   uint8_t *owned_needle = NULL;
 
-  if (vtype(search) == kTypeString && encoding == ENC_UTF8) {
+  if (vtype(search) == kTypeString && encoding == ENC_UTF8)
     needle = (const uint8_t *)js_getstr(js, search, &needle_len);
-  } else if (vtype(search) == kTypeString) {
+  else if (vtype(search) == kTypeString) {
     if (encoding == ENC_UNKNOWN) return buffer_unknown_encoding_error(js, encoding_arg);
     ant_value_t encoded = buffer_encode_string(js, search, encoding, &needle, &needle_len, &owned_needle);
     if (is_err(encoded)) return encoded;
-  } else if (!buffer_source_get_bytes(js, search, &needle, &needle_len)) {
+  } else if (!buffer_source_get_bytes(js, search, &needle, &needle_len))
     return js_mkerr_typed(js, JS_ERR_TYPE, "The value argument must be one of type number or string or an instance of Buffer or Uint8Array");
-  }
 
   double found = -1;
   if (!forward) {
@@ -3835,11 +3769,17 @@ static ant_value_t js_buffer_fill(ant_params_t) {
   ant_value_t this_val = js_getthis(js);
   TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
   if (!ta_data) return js_mkerr(js, "Invalid Buffer");
+
+  ant_value_t value = nargs > 0 ? args[0] : js_mkundef();
+  if (
+    vtype(value) != kTypeNumber && vtype(value) != kTypeString &&
+    !buffer_get_typedarray_data(value) && !buffer_is_dataview(value)
+  ) value = js_mknum(js_to_number(js, value));
+
   uint8_t *data; size_t len;
   if (!Ant_Buffer_GetViewBytes(ta_data, &data, &len))
     return js_mkerr(js, "Cannot write to detached buffer");
 
-  ant_value_t value = nargs > 0 ? args[0] : js_mkundef();
   ant_value_t offset_val = nargs > 1 ? args[1] : js_mkundef();
   ant_value_t end_val = nargs > 2 ? args[2] : js_mkundef();
   ant_value_t encoding_val = nargs > 3 ? args[3] : js_mkundef();
@@ -3867,7 +3807,6 @@ static ant_value_t js_buffer_fill(ant_params_t) {
   }
 
   ant_value_t result = buffer_fill_range(js, data, start, end, value, encoding_val);
-  
   return is_err(result) ? result : this_val;
 }
 
@@ -4609,7 +4548,7 @@ void init_buffer_module(ant_t *js) {
   defmethod(js, typedarray_proto, "entries", 7, Ant_Function_Create(ta_entries));
   defalias_sym_of(js, typedarray_proto, js->sym.iterator_sym, "values");
   
-  for (TypedArrayType type = TYPED_ARRAY_INT8; type <= TYPED_ARRAY_BIGUINT64; type++)
+  for (TypedArrayType type = 0; type < TYPED_ARRAY_COUNT; type++)
     setup_typedarray_kind(js, type, typedarray_ctor, typedarray_proto);
 
   ant_value_t uint8array_codec_ctor = js_get(js, glob, "Uint8Array");

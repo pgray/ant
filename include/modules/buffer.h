@@ -35,18 +35,8 @@ static_assert(sizeof(ArrayBufferData) == 28, "ArrayBufferData layout changed");
 #endif
 
 typedef enum {
-  TYPED_ARRAY_INT8,
-  TYPED_ARRAY_UINT8,
-  TYPED_ARRAY_UINT8_CLAMPED,
-  TYPED_ARRAY_INT16,
-  TYPED_ARRAY_UINT16,
-  TYPED_ARRAY_INT32,
-  TYPED_ARRAY_UINT32,
-  TYPED_ARRAY_FLOAT16,
-  TYPED_ARRAY_FLOAT32,
-  TYPED_ARRAY_FLOAT64,
-  TYPED_ARRAY_BIGINT64,
-  TYPED_ARRAY_BIGUINT64,
+#define BUFFER_TYPED_ARRAY(name, ...) TYPED_ARRAY_##name,
+#include "buffer/typed_arrays.h"
   TYPED_ARRAY_COUNT
 } TypedArrayType;
 

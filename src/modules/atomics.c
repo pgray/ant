@@ -273,247 +273,151 @@ static bool get_atomic_array_data(ant_t *js, ant_value_t this_val, TypedArrayDat
   return Ant_Buffer_GetViewBytes(ta_data, out_ptr, &len);
 }
 
-// Atomics.add(typedArray, index, value)
-static ant_value_t js_atomics_add(ant_params_t) {
-  if (nargs < 3) {
-    return js_mkerr(js, "Atomics.add requires 3 arguments");
+typedef enum {
+#define ATOMICS_OP(name, op, arity) ATOMICS_##op,
+#include "atomics/ops.h"
+} atomics_op_t;
+
+#define ATOMICS_APPLY_INT(name, ctype)                                                                       \
+  static inline double atomics_apply_##name(                                                                 \
+    uint8_t *ptr, size_t index, atomics_op_t op, int32_t value, int32_t replacement                          \
+  ) {                                                                                                        \
+    _Atomic ctype *slot = (_Atomic ctype *)ptr + index;                                                      \
+    ctype expected = (ctype)value;                                                                           \
+    switch (op) {                                                                                            \
+      case ATOMICS_ADD:      return (double)atomic_fetch_add(slot, (ctype)value);                            \
+      case ATOMICS_AND:      return (double)atomic_fetch_and(slot, (ctype)value);                            \
+      case ATOMICS_EXCHANGE: return (double)atomic_exchange(slot, (ctype)value);                             \
+      case ATOMICS_LOAD:     return (double)atomic_load(slot);                                               \
+      case ATOMICS_OR:       return (double)atomic_fetch_or(slot, (ctype)value);                             \
+      case ATOMICS_STORE:    atomic_store(slot, (ctype)value); return 0;                                     \
+      case ATOMICS_SUB:      return (double)atomic_fetch_sub(slot, (ctype)value);                            \
+      case ATOMICS_XOR:      return (double)atomic_fetch_xor(slot, (ctype)value);                            \
+      case ATOMICS_COMPARE_EXCHANGE:                                                                         \
+        atomic_compare_exchange_strong(slot, &expected, (ctype)replacement);                                 \
+        return (double)expected;                                                                             \
+    }                                                                                                        \
+    return 0;                                                                                                \
   }
-  
-  TypedArrayData *ta_data;
-  uint8_t *ptr;
-  if (!get_atomic_array_data(js, args[0], &ta_data, &ptr)) {
-    return js_mkerr(js, "First argument must be a TypedArray");
-  }
-  
-  size_t index = (size_t)js_getnum(args[1]);
-  if (index >= ta_data->length) {
-    return js_mkerr(js, "Index out of bounds");
-  }
-  
-  int32_t value = (int32_t)js_getnum(args[2]);
-  int32_t old_value;
-  
-  switch (ta_data->type) {
-    case TYPED_ARRAY_INT8: {
-      _Atomic int8_t *atomic_ptr = (_Atomic int8_t *)(ptr + index);
-      old_value = atomic_fetch_add(atomic_ptr, (int8_t)value);
-      break;
-    }
-    case TYPED_ARRAY_UINT8: {
-      _Atomic uint8_t *atomic_ptr = (_Atomic uint8_t *)(ptr + index);
-      old_value = atomic_fetch_add(atomic_ptr, (uint8_t)value);
-      break;
-    }
-    case TYPED_ARRAY_INT16: {
-      _Atomic int16_t *atomic_ptr = (_Atomic int16_t *)(ptr + index * 2);
-      old_value = atomic_fetch_add(atomic_ptr, (int16_t)value);
-      break;
-    }
-    case TYPED_ARRAY_UINT16: {
-      _Atomic uint16_t *atomic_ptr = (_Atomic uint16_t *)(ptr + index * 2);
-      old_value = atomic_fetch_add(atomic_ptr, (uint16_t)value);
-      break;
-    }
-    case TYPED_ARRAY_INT32: {
-      _Atomic int32_t *atomic_ptr = (_Atomic int32_t *)(ptr + index * 4);
-      old_value = atomic_fetch_add(atomic_ptr, value);
-      break;
-    }
-    case TYPED_ARRAY_UINT32: {
-      _Atomic uint32_t *atomic_ptr = (_Atomic uint32_t *)(ptr + index * 4);
-      old_value = atomic_fetch_add(atomic_ptr, (uint32_t)value);
-      break;
-    }
-    default:
-      return js_mkerr(js, "TypedArray type not supported for atomic operations");
-  }
-  
-  return js_mknum((double)old_value);
+
+#define ATOMICS_APPLY_FLOAT(name, ctype)
+#define ATOMICS_APPLY_BIGINT(name, ctype)
+#define BUFFER_TYPED_ARRAY(name, ctor, ctype, kind, load, store) ATOMICS_APPLY_##kind(name, ctype)
+
+#include "buffer/typed_arrays.h"
+
+#undef ATOMICS_APPLY_INT
+#undef ATOMICS_APPLY_FLOAT
+#undef ATOMICS_APPLY_BIGINT
+
+static inline double atomics_number(ant_t *js, ant_value_t value) {
+  return is_tagged(value) ? js_to_number(js, value) : tod(value);
 }
 
-// Atomics.and(typedArray, index, value)
-static ant_value_t js_atomics_and(ant_params_t) {
-  if (nargs < 3) {
-    return js_mkerr(js, "Atomics.and requires 3 arguments");
-  }
-  
-  TypedArrayData *ta_data;
-  uint8_t *ptr;
-  if (!get_atomic_array_data(js, args[0], &ta_data, &ptr)) {
-    return js_mkerr(js, "First argument must be a TypedArray");
-  }
-  
-  size_t index = (size_t)js_getnum(args[1]);
-  if (index >= ta_data->length) {
-    return js_mkerr(js, "Index out of bounds");
-  }
-  
-  int32_t value = (int32_t)js_getnum(args[2]);
-  int32_t old_value;
-  
-  switch (ta_data->type) {
-    case TYPED_ARRAY_INT8: {
-      _Atomic int8_t *atomic_ptr = (_Atomic int8_t *)(ptr + index);
-      old_value = atomic_fetch_and(atomic_ptr, (int8_t)value);
-      break;
-    }
-    case TYPED_ARRAY_UINT8: {
-      _Atomic uint8_t *atomic_ptr = (_Atomic uint8_t *)(ptr + index);
-      old_value = atomic_fetch_and(atomic_ptr, (uint8_t)value);
-      break;
-    }
-    case TYPED_ARRAY_INT16: {
-      _Atomic int16_t *atomic_ptr = (_Atomic int16_t *)(ptr + index * 2);
-      old_value = atomic_fetch_and(atomic_ptr, (int16_t)value);
-      break;
-    }
-    case TYPED_ARRAY_UINT16: {
-      _Atomic uint16_t *atomic_ptr = (_Atomic uint16_t *)(ptr + index * 2);
-      old_value = atomic_fetch_and(atomic_ptr, (uint16_t)value);
-      break;
-    }
-    case TYPED_ARRAY_INT32: {
-      _Atomic int32_t *atomic_ptr = (_Atomic int32_t *)(ptr + index * 4);
-      old_value = atomic_fetch_and(atomic_ptr, value);
-      break;
-    }
-    case TYPED_ARRAY_UINT32: {
-      _Atomic uint32_t *atomic_ptr = (_Atomic uint32_t *)(ptr + index * 4);
-      old_value = atomic_fetch_and(atomic_ptr, (uint32_t)value);
-      break;
-    }
-    default:
-      return js_mkerr(js, "TypedArray type not supported for atomic bitwise operations");
-  }
-  
-  return js_mknum((double)old_value);
+static inline size_t atomics_index(double value) {
+  if (isnan(value)) return 0;
+  return value > -1 && value < 0x1p53 ? (size_t)value : SIZE_MAX;
 }
 
-// Atomics.compareExchange(typedArray, index, expectedValue, replacementValue)
-static ant_value_t js_atomics_compareExchange(ant_params_t) {
-  if (nargs < 4) {
-    return js_mkerr(js, "Atomics.compareExchange requires 4 arguments");
-  }
-  
-  TypedArrayData *ta_data;
-  uint8_t *ptr;
-  if (!get_atomic_array_data(js, args[0], &ta_data, &ptr)) {
-    return js_mkerr(js, "First argument must be a TypedArray");
-  }
-  
-  size_t index = (size_t)js_getnum(args[1]);
-  if (index >= ta_data->length) {
-    return js_mkerr(js, "Index out of bounds");
-  }
-  
-  int32_t expected = (int32_t)js_getnum(args[2]);
-  int32_t replacement = (int32_t)js_getnum(args[3]);
-  
-  switch (ta_data->type) {
-    case TYPED_ARRAY_INT8: {
-      int8_t exp_i8 = (int8_t)expected;
-      _Atomic int8_t *atomic_ptr = (_Atomic int8_t *)(ptr + index);
-      atomic_compare_exchange_strong(atomic_ptr, &exp_i8, (int8_t)replacement);
-      expected = (int32_t)exp_i8;
-      break;
-    }
-    case TYPED_ARRAY_UINT8: {
-      uint8_t exp_u8 = (uint8_t)expected;
-      _Atomic uint8_t *atomic_ptr = (_Atomic uint8_t *)(ptr + index);
-      atomic_compare_exchange_strong(atomic_ptr, &exp_u8, (uint8_t)replacement);
-      expected = (int32_t)exp_u8;
-      break;
-    }
-    case TYPED_ARRAY_INT16: {
-      int16_t exp_i16 = (int16_t)expected;
-      _Atomic int16_t *atomic_ptr = (_Atomic int16_t *)(ptr + index * 2);
-      atomic_compare_exchange_strong(atomic_ptr, &exp_i16, (int16_t)replacement);
-      expected = (int32_t)exp_i16;
-      break;
-    }
-    case TYPED_ARRAY_UINT16: {
-      uint16_t exp_u16 = (uint16_t)expected;
-      _Atomic uint16_t *atomic_ptr = (_Atomic uint16_t *)(ptr + index * 2);
-      atomic_compare_exchange_strong(atomic_ptr, &exp_u16, (uint16_t)replacement);
-      expected = (int32_t)exp_u16;
-      break;
-    }
-    case TYPED_ARRAY_INT32: {
-      _Atomic int32_t *atomic_ptr = (_Atomic int32_t *)(ptr + index * 4);
-      atomic_compare_exchange_strong(atomic_ptr, &expected, replacement);
-      break;
-    }
-    case TYPED_ARRAY_UINT32: {
-      uint32_t exp_u32 = (uint32_t)expected;
-      _Atomic uint32_t *atomic_ptr = (_Atomic uint32_t *)(ptr + index * 4);
-      atomic_compare_exchange_strong(atomic_ptr, &exp_u32, (uint32_t)replacement);
-      expected = (int32_t)exp_u32;
-      break;
-    }
-    default:
-      return js_mkerr(js, "TypedArray type not supported for atomic operations");
-  }
-  
-  return js_mknum((double)expected);
+static inline int32_t atomics_int32(double value) {
+#ifdef __ARM_FEATURE_JCVT
+  return __builtin_arm_jcvt(value);
+#else
+  return value >= INT32_MIN && value <= INT32_MAX ? (int32_t)value : js_to_int32(value);
+#endif
 }
 
-// Atomics.exchange(typedArray, index, value)
-static ant_value_t js_atomics_exchange(ant_params_t) {
-  if (nargs < 3) {
-    return js_mkerr(js, "Atomics.exchange requires 3 arguments");
+static inline double atomics_integer(double value) {
+  return isnan(value) ? 0 : trunc(value) + 0.0;
+}
+
+static inline bool atomics_type_supported(TypedArrayType type) {
+  static const bool supported[] = {
+    #define ATOMICS_SUPPORTED_INT    true
+    #define ATOMICS_SUPPORTED_FLOAT  false
+    #define ATOMICS_SUPPORTED_BIGINT false
+    #define BUFFER_TYPED_ARRAY(name, ctor, ctype, kind, ...) ATOMICS_SUPPORTED_##kind,
+    #include "buffer/typed_arrays.h"
+    #undef ATOMICS_SUPPORTED_INT
+    #undef ATOMICS_SUPPORTED_FLOAT
+    #undef ATOMICS_SUPPORTED_BIGINT
+  };
+
+  return type < TYPED_ARRAY_COUNT && type != TYPED_ARRAY_UINT8_CLAMPED && supported[type];
+}
+
+static inline __attribute__((always_inline)) bool atomics_dispatch(
+  TypedArrayType type, uint8_t *ptr, size_t index, atomics_op_t op, int32_t operand, int32_t swap, double *result
+) {
+  switch (type) {
+    #define ATOMICS_CASE_INT(name) case TYPED_ARRAY_##name:          \
+      *result = atomics_apply_##name(ptr, index, op, operand, swap); \
+      return true;
+    #define ATOMICS_CASE_FLOAT(name)
+    #define ATOMICS_CASE_BIGINT(name)
+    #define BUFFER_TYPED_ARRAY(name, ctor, ctype, kind, ...) ATOMICS_CASE_##kind(name)
+    #include "buffer/typed_arrays.h"
+    #undef ATOMICS_CASE_INT
+    #undef ATOMICS_CASE_FLOAT
+    #undef ATOMICS_CASE_BIGINT
+    default: return false;
   }
-  
+}
+
+static __attribute__((noinline, cold)) ant_value_t atomics_run_slow(
+  ant_t *js, ant_value_t *args, int nargs, atomics_op_t op, const char *name, int arity
+) {
+  if (nargs < arity) return js_mkerr(js, "Atomics.%s requires %d arguments", name, arity);
+
+  size_t index = atomics_index(atomics_number(js, args[1]));
+  double value = arity > 2 ? atomics_number(js, args[2]) : 0;
+  int32_t swap = arity > 3 ? atomics_int32(atomics_number(js, args[3])) : 0;
+
   TypedArrayData *ta_data;
   uint8_t *ptr;
-  if (!get_atomic_array_data(js, args[0], &ta_data, &ptr)) {
+  if (!get_atomic_array_data(js, args[0], &ta_data, &ptr))
     return js_mkerr(js, "First argument must be a TypedArray");
-  }
-  
-  size_t index = (size_t)js_getnum(args[1]);
-  if (index >= ta_data->length) {
-    return js_mkerr(js, "Index out of bounds");
-  }
-  
-  int32_t value = (int32_t)js_getnum(args[2]);
-  int32_t old_value;
-  
-  switch (ta_data->type) {
-    case TYPED_ARRAY_INT8: {
-      _Atomic int8_t *atomic_ptr = (_Atomic int8_t *)(ptr + index);
-      old_value = atomic_exchange(atomic_ptr, (int8_t)value);
-      break;
-    }
-    case TYPED_ARRAY_UINT8: {
-      _Atomic uint8_t *atomic_ptr = (_Atomic uint8_t *)(ptr + index);
-      old_value = atomic_exchange(atomic_ptr, (uint8_t)value);
-      break;
-    }
-    case TYPED_ARRAY_INT16: {
-      _Atomic int16_t *atomic_ptr = (_Atomic int16_t *)(ptr + index * 2);
-      old_value = atomic_exchange(atomic_ptr, (int16_t)value);
-      break;
-    }
-    case TYPED_ARRAY_UINT16: {
-      _Atomic uint16_t *atomic_ptr = (_Atomic uint16_t *)(ptr + index * 2);
-      old_value = atomic_exchange(atomic_ptr, (uint16_t)value);
-      break;
-    }
-    case TYPED_ARRAY_INT32: {
-      _Atomic int32_t *atomic_ptr = (_Atomic int32_t *)(ptr + index * 4);
-      old_value = atomic_exchange(atomic_ptr, value);
-      break;
-    }
-    case TYPED_ARRAY_UINT32: {
-      _Atomic uint32_t *atomic_ptr = (_Atomic uint32_t *)(ptr + index * 4);
-      old_value = atomic_exchange(atomic_ptr, (uint32_t)value);
-      break;
-    }
-    default:
-      return js_mkerr(js, "TypedArray type not supported for atomic operations");
-  }
-  
-  return js_mknum((double)old_value);
+
+  if (!atomics_type_supported(ta_data->type))
+    return js_mkerr(js, "TypedArray type not supported for atomic operations");
+  if (index >= ta_data->length) return js_mkerr_typed(js, JS_ERR_RANGE, "Index out of bounds");
+
+  double result = 0;
+  atomics_dispatch(ta_data->type, ptr, index, op, atomics_int32(value), swap, &result);
+  return js_mknum(op == ATOMICS_STORE ? atomics_integer(value) : result);
 }
+
+static inline __attribute__((always_inline)) ant_value_t atomics_run(
+  ant_t *js, ant_value_t *args, int nargs, atomics_op_t op, const char *name, int arity
+) {
+  if (__builtin_expect(nargs < arity, 0)) goto slow;
+  for (int i = 1; i < arity; i++) if (__builtin_expect(is_tagged(args[i]), 0)) goto slow;
+
+  TypedArrayData *ta_data;
+  uint8_t *ptr;
+  if (__builtin_expect(!get_atomic_array_data(js, args[0], &ta_data, &ptr), 0)) goto slow;
+
+  double index = tod(args[1]);
+  if (__builtin_expect(!(index > -1 && index < (double)ta_data->length), 0)) goto slow;
+  if (__builtin_expect(ta_data->type == TYPED_ARRAY_UINT8_CLAMPED, 0)) goto slow;
+
+  double value = arity > 2 ? tod(args[2]) : 0;
+  int32_t swap = arity > 3 ? atomics_int32(tod(args[3])) : 0;
+  double result;
+
+  if (__builtin_expect(!atomics_dispatch(ta_data->type, ptr, (size_t)index, op, atomics_int32(value), swap, &result), 0))
+    goto slow;
+  return js_mknum(op == ATOMICS_STORE ? atomics_integer(value) : result);
+
+slow:
+  return atomics_run_slow(js, args, nargs, op, name, arity);
+}
+
+#define ATOMICS_OP(name, op, arity)                                  \
+  static ant_value_t js_atomics_##name(ant_params_t) {               \
+    return atomics_run(js, args, nargs, ATOMICS_##op, #name, arity); \
+  }
+#include "atomics/ops.h"
 
 // Atomics.isLockFree(size)
 static ant_value_t js_atomics_isLockFree(ant_params_t) {
@@ -542,294 +446,6 @@ static ant_value_t js_atomics_isLockFree(ant_params_t) {
   }
   
   return js_bool(is_lock_free);
-}
-
-// Atomics.load(typedArray, index)
-static ant_value_t js_atomics_load(ant_params_t) {
-  if (nargs < 2) {
-    return js_mkerr(js, "Atomics.load requires 2 arguments");
-  }
-  
-  TypedArrayData *ta_data;
-  uint8_t *ptr;
-  if (!get_atomic_array_data(js, args[0], &ta_data, &ptr)) {
-    return js_mkerr(js, "First argument must be a TypedArray");
-  }
-  
-  size_t index = (size_t)js_getnum(args[1]);
-  if (index >= ta_data->length) {
-    return js_mkerr(js, "Index out of bounds");
-  }
-  
-  int32_t value;
-  
-  switch (ta_data->type) {
-    case TYPED_ARRAY_INT8: {
-      _Atomic int8_t *atomic_ptr = (_Atomic int8_t *)(ptr + index);
-      value = atomic_load(atomic_ptr);
-      break;
-    }
-    case TYPED_ARRAY_UINT8: {
-      _Atomic uint8_t *atomic_ptr = (_Atomic uint8_t *)(ptr + index);
-      value = atomic_load(atomic_ptr);
-      break;
-    }
-    case TYPED_ARRAY_INT16: {
-      _Atomic int16_t *atomic_ptr = (_Atomic int16_t *)(ptr + index * 2);
-      value = atomic_load(atomic_ptr);
-      break;
-    }
-    case TYPED_ARRAY_UINT16: {
-      _Atomic uint16_t *atomic_ptr = (_Atomic uint16_t *)(ptr + index * 2);
-      value = atomic_load(atomic_ptr);
-      break;
-    }
-    case TYPED_ARRAY_INT32: {
-      _Atomic int32_t *atomic_ptr = (_Atomic int32_t *)(ptr + index * 4);
-      value = atomic_load(atomic_ptr);
-      break;
-    }
-    case TYPED_ARRAY_UINT32: {
-      _Atomic uint32_t *atomic_ptr = (_Atomic uint32_t *)(ptr + index * 4);
-      value = atomic_load(atomic_ptr);
-      break;
-    }
-    default:
-      return js_mkerr(js, "TypedArray type not supported for atomic operations");
-  }
-  
-  return js_mknum((double)value);
-}
-
-// Atomics.or(typedArray, index, value)
-static ant_value_t js_atomics_or(ant_params_t) {
-  if (nargs < 3) {
-    return js_mkerr(js, "Atomics.or requires 3 arguments");
-  }
-  
-  TypedArrayData *ta_data;
-  uint8_t *ptr;
-  if (!get_atomic_array_data(js, args[0], &ta_data, &ptr)) {
-    return js_mkerr(js, "First argument must be a TypedArray");
-  }
-  
-  size_t index = (size_t)js_getnum(args[1]);
-  if (index >= ta_data->length) {
-    return js_mkerr(js, "Index out of bounds");
-  }
-  
-  int32_t value = (int32_t)js_getnum(args[2]);
-  int32_t old_value;
-  
-  switch (ta_data->type) {
-    case TYPED_ARRAY_INT8: {
-      _Atomic int8_t *atomic_ptr = (_Atomic int8_t *)(ptr + index);
-      old_value = atomic_fetch_or(atomic_ptr, (int8_t)value);
-      break;
-    }
-    case TYPED_ARRAY_UINT8: {
-      _Atomic uint8_t *atomic_ptr = (_Atomic uint8_t *)(ptr + index);
-      old_value = atomic_fetch_or(atomic_ptr, (uint8_t)value);
-      break;
-    }
-    case TYPED_ARRAY_INT16: {
-      _Atomic int16_t *atomic_ptr = (_Atomic int16_t *)(ptr + index * 2);
-      old_value = atomic_fetch_or(atomic_ptr, (int16_t)value);
-      break;
-    }
-    case TYPED_ARRAY_UINT16: {
-      _Atomic uint16_t *atomic_ptr = (_Atomic uint16_t *)(ptr + index * 2);
-      old_value = atomic_fetch_or(atomic_ptr, (uint16_t)value);
-      break;
-    }
-    case TYPED_ARRAY_INT32: {
-      _Atomic int32_t *atomic_ptr = (_Atomic int32_t *)(ptr + index * 4);
-      old_value = atomic_fetch_or(atomic_ptr, value);
-      break;
-    }
-    case TYPED_ARRAY_UINT32: {
-      _Atomic uint32_t *atomic_ptr = (_Atomic uint32_t *)(ptr + index * 4);
-      old_value = atomic_fetch_or(atomic_ptr, (uint32_t)value);
-      break;
-    }
-    default:
-      return js_mkerr(js, "TypedArray type not supported for atomic bitwise operations");
-  }
-  
-  return js_mknum((double)old_value);
-}
-
-// Atomics.store(typedArray, index, value)
-static ant_value_t js_atomics_store(ant_params_t) {
-  if (nargs < 3) {
-    return js_mkerr(js, "Atomics.store requires 3 arguments");
-  }
-  
-  TypedArrayData *ta_data;
-  uint8_t *ptr;
-  if (!get_atomic_array_data(js, args[0], &ta_data, &ptr)) {
-    return js_mkerr(js, "First argument must be a TypedArray");
-  }
-  
-  size_t index = (size_t)js_getnum(args[1]);
-  if (index >= ta_data->length) {
-    return js_mkerr(js, "Index out of bounds");
-  }
-  
-  int32_t value = (int32_t)js_getnum(args[2]);
-  
-  switch (ta_data->type) {
-    case TYPED_ARRAY_INT8: {
-      _Atomic int8_t *atomic_ptr = (_Atomic int8_t *)(ptr + index);
-      atomic_store(atomic_ptr, (int8_t)value);
-      break;
-    }
-    case TYPED_ARRAY_UINT8: {
-      _Atomic uint8_t *atomic_ptr = (_Atomic uint8_t *)(ptr + index);
-      atomic_store(atomic_ptr, (uint8_t)value);
-      break;
-    }
-    case TYPED_ARRAY_INT16: {
-      _Atomic int16_t *atomic_ptr = (_Atomic int16_t *)(ptr + index * 2);
-      atomic_store(atomic_ptr, (int16_t)value);
-      break;
-    }
-    case TYPED_ARRAY_UINT16: {
-      _Atomic uint16_t *atomic_ptr = (_Atomic uint16_t *)(ptr + index * 2);
-      atomic_store(atomic_ptr, (uint16_t)value);
-      break;
-    }
-    case TYPED_ARRAY_INT32: {
-      _Atomic int32_t *atomic_ptr = (_Atomic int32_t *)(ptr + index * 4);
-      atomic_store(atomic_ptr, value);
-      break;
-    }
-    case TYPED_ARRAY_UINT32: {
-      _Atomic uint32_t *atomic_ptr = (_Atomic uint32_t *)(ptr + index * 4);
-      atomic_store(atomic_ptr, (uint32_t)value);
-      break;
-    }
-    default:
-      return js_mkerr(js, "TypedArray type not supported for atomic operations");
-  }
-  
-  return js_mknum((double)value);
-}
-
-// Atomics.sub(typedArray, index, value)
-static ant_value_t js_atomics_sub(ant_params_t) {
-  if (nargs < 3) {
-    return js_mkerr(js, "Atomics.sub requires 3 arguments");
-  }
-  
-  TypedArrayData *ta_data;
-  uint8_t *ptr;
-  if (!get_atomic_array_data(js, args[0], &ta_data, &ptr)) {
-    return js_mkerr(js, "First argument must be a TypedArray");
-  }
-  
-  size_t index = (size_t)js_getnum(args[1]);
-  if (index >= ta_data->length) {
-    return js_mkerr(js, "Index out of bounds");
-  }
-  
-  int32_t value = (int32_t)js_getnum(args[2]);
-  int32_t old_value;
-  
-  switch (ta_data->type) {
-    case TYPED_ARRAY_INT8: {
-      _Atomic int8_t *atomic_ptr = (_Atomic int8_t *)(ptr + index);
-      old_value = atomic_fetch_sub(atomic_ptr, (int8_t)value);
-      break;
-    }
-    case TYPED_ARRAY_UINT8: {
-      _Atomic uint8_t *atomic_ptr = (_Atomic uint8_t *)(ptr + index);
-      old_value = atomic_fetch_sub(atomic_ptr, (uint8_t)value);
-      break;
-    }
-    case TYPED_ARRAY_INT16: {
-      _Atomic int16_t *atomic_ptr = (_Atomic int16_t *)(ptr + index * 2);
-      old_value = atomic_fetch_sub(atomic_ptr, (int16_t)value);
-      break;
-    }
-    case TYPED_ARRAY_UINT16: {
-      _Atomic uint16_t *atomic_ptr = (_Atomic uint16_t *)(ptr + index * 2);
-      old_value = atomic_fetch_sub(atomic_ptr, (uint16_t)value);
-      break;
-    }
-    case TYPED_ARRAY_INT32: {
-      _Atomic int32_t *atomic_ptr = (_Atomic int32_t *)(ptr + index * 4);
-      old_value = atomic_fetch_sub(atomic_ptr, value);
-      break;
-    }
-    case TYPED_ARRAY_UINT32: {
-      _Atomic uint32_t *atomic_ptr = (_Atomic uint32_t *)(ptr + index * 4);
-      old_value = atomic_fetch_sub(atomic_ptr, (uint32_t)value);
-      break;
-    }
-    default:
-      return js_mkerr(js, "TypedArray type not supported for atomic operations");
-  }
-  
-  return js_mknum((double)old_value);
-}
-
-// Atomics.xor(typedArray, index, value)
-static ant_value_t js_atomics_xor(ant_params_t) {
-  if (nargs < 3) {
-    return js_mkerr(js, "Atomics.xor requires 3 arguments");
-  }
-  
-  TypedArrayData *ta_data;
-  uint8_t *ptr;
-  if (!get_atomic_array_data(js, args[0], &ta_data, &ptr)) {
-    return js_mkerr(js, "First argument must be a TypedArray");
-  }
-  
-  size_t index = (size_t)js_getnum(args[1]);
-  if (index >= ta_data->length) {
-    return js_mkerr(js, "Index out of bounds");
-  }
-  
-  int32_t value = (int32_t)js_getnum(args[2]);
-  int32_t old_value;
-  
-  switch (ta_data->type) {
-    case TYPED_ARRAY_INT8: {
-      _Atomic int8_t *atomic_ptr = (_Atomic int8_t *)(ptr + index);
-      old_value = atomic_fetch_xor(atomic_ptr, (int8_t)value);
-      break;
-    }
-    case TYPED_ARRAY_UINT8: {
-      _Atomic uint8_t *atomic_ptr = (_Atomic uint8_t *)(ptr + index);
-      old_value = atomic_fetch_xor(atomic_ptr, (uint8_t)value);
-      break;
-    }
-    case TYPED_ARRAY_INT16: {
-      _Atomic int16_t *atomic_ptr = (_Atomic int16_t *)(ptr + index * 2);
-      old_value = atomic_fetch_xor(atomic_ptr, (int16_t)value);
-      break;
-    }
-    case TYPED_ARRAY_UINT16: {
-      _Atomic uint16_t *atomic_ptr = (_Atomic uint16_t *)(ptr + index * 2);
-      old_value = atomic_fetch_xor(atomic_ptr, (uint16_t)value);
-      break;
-    }
-    case TYPED_ARRAY_INT32: {
-      _Atomic int32_t *atomic_ptr = (_Atomic int32_t *)(ptr + index * 4);
-      old_value = atomic_fetch_xor(atomic_ptr, value);
-      break;
-    }
-    case TYPED_ARRAY_UINT32: {
-      _Atomic uint32_t *atomic_ptr = (_Atomic uint32_t *)(ptr + index * 4);
-      old_value = atomic_fetch_xor(atomic_ptr, (uint32_t)value);
-      break;
-    }
-    default:
-      return js_mkerr(js, "TypedArray type not supported for atomic bitwise operations");
-  }
-  
-  return js_mknum((double)old_value);
 }
 
 // Atomics.wait(typedArray, index, value, timeout)
@@ -1057,20 +673,14 @@ static ant_value_t js_atomics_pause(ant_params_t) {
 void init_atomics_module(ant_t *js) {
   ant_value_t atomics = Ant_Object_Create(js);
   
-  defmethod(js, atomics, "add", 3, Ant_Function_CreateWithArity(js_atomics_add, 3));
-  defmethod(js, atomics, "and", 3, Ant_Function_CreateWithArity(js_atomics_and, 3));
-  defmethod(js, atomics, "compareExchange", 15, Ant_Function_CreateWithArity(js_atomics_compareExchange, 4));
-  defmethod(js, atomics, "exchange", 8, Ant_Function_CreateWithArity(js_atomics_exchange, 3));
+  #define ATOMICS_OP(name, op, arity) defmethod(js, atomics, #name, sizeof(#name) - 1, Ant_Function_CreateWithArity(js_atomics_##name, arity));
+  #include "atomics/ops.h"
+  
   defmethod(js, atomics, "isLockFree", 10, Ant_Function_CreateWithArity(js_atomics_isLockFree, 1));
-  defmethod(js, atomics, "load", 4, Ant_Function_CreateWithArity(js_atomics_load, 2));
   defmethod(js, atomics, "notify", 6, Ant_Function_CreateWithArity(js_atomics_notify, 3));
-  defmethod(js, atomics, "or", 2, Ant_Function_CreateWithArity(js_atomics_or, 3));
   defmethod(js, atomics, "pause", 5, Ant_Function_Create(js_atomics_pause));
-  defmethod(js, atomics, "store", 5, Ant_Function_CreateWithArity(js_atomics_store, 3));
-  defmethod(js, atomics, "sub", 3, Ant_Function_CreateWithArity(js_atomics_sub, 3));
   defmethod(js, atomics, "wait", 4, Ant_Function_CreateWithArity(js_atomics_wait, 4));
   defmethod(js, atomics, "waitAsync", 9, Ant_Function_CreateWithArity(js_atomics_waitAsync, 4));
-  defmethod(js, atomics, "xor", 3, Ant_Function_CreateWithArity(js_atomics_xor, 3));
   
   js_set_tostringtag(js, atomics, js_mkstr(js, "Atomics", 7));
   js_set_global_builtin(js, "Atomics", atomics);
