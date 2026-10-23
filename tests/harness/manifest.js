@@ -379,6 +379,7 @@ export function targets() {
     'test_vm_iterator_close_errors.cjs',
     'test_wasm_error_boundaries.cjs',
     'test_wasm_imported_global_mutability.cjs',
+    'test_wasm_internal_memory_grow.cjs',
     'test_websocket_binary_type.cjs',
     'test_websocket_close_during_connect.cjs',
     'test_web_worker.mjs',

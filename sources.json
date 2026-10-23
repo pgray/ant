@@ -17,7 +17,8 @@
       "src/silver/*.c",
       "src/jit/*.c",
       "src/http/*.c",
-      "src/net/*.c"
+      "src/net/*.c",
+      "src/wasm/*.c"
     ],
     "exclude": [
       "src/main.c",
@@ -46,7 +47,8 @@
       "src/silver/*.c",
       "src/jit/*.c",
       "src/http/*.c",
-      "src/net/*.c"
+      "src/net/*.c",
+      "src/wasm/*.c"
     ],
     "exclude": [
       "src/main.c",
@@ -76,7 +78,8 @@
       "src/silver/*.c",
       "src/jit/*.c",
       "src/http/*.c",
-      "src/net/*.c"
+      "src/net/*.c",
+      "src/wasm/*.c"
     ],
     "exclude": [
       "src/main.c",

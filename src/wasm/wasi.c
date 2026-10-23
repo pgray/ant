@@ -10,7 +10,7 @@
 #include "ptr.h"
 #include "gc/roots.h"
 #include "modules/buffer.h"
-#include "modules/wasi.h"
+#include "wasm/wasi.h"
 #include "wasm_c_api.h"
 #include "wasm_export.h"
 

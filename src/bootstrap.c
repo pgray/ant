@@ -66,7 +66,7 @@
 #include "modules/abort.h"
 #include "modules/globals.h"
 #include "modules/intl.h"
-#include "modules/wasm.h"
+#include "wasm/wasm.h"
 #include "modules/string_decoder.h"
 #include "modules/stream.h"
 #include "modules/structured-clone.h"

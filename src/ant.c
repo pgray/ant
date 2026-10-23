@@ -52,8 +52,8 @@
 #include "silver/ops/async.h"
 #include "silver/ops/eval_env.h"
 
+#include "wasm/wasm.h"
 #include "modules/regex.h"
-#include "modules/wasm.h"
 #include "modules/domexception.h"
 #include "modules/json.h"
 #include "modules/collections.h"
