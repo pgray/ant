@@ -447,6 +447,44 @@ int ant_sandbox_launch_add_forward(
   return 0;
 }
 
+int ant_sandbox_launch_allow_host(
+  ant_sandbox_launch_options_t *opts,
+  const char *ports,
+  char *err,
+  size_t err_len
+) {
+  if (!opts) return -EINVAL;
+  if (!ports) {
+    opts->allow_host_all = true;
+    return 0;
+  }
+
+  const char *p = ports;
+  for (;;) {
+    const char *comma = strchr(p, ',');
+    size_t len = comma ? (size_t)(comma - p) : strlen(p);
+    char port_text[16];
+    if (len == 0 || len >= sizeof(port_text)) {
+      sandbox_host_error(err, err_len, "invalid allow-host port list '%s'", ports);
+      return -EINVAL;
+    }
+    memcpy(port_text, p, len);
+    port_text[len] = '\0';
+
+    uint16_t port = 0;
+    int rc = sandbox_parse_port(port_text, "allow-host", &port, err, err_len);
+    if (rc != 0) return rc;
+    if (opts->allow_host_port_count >= ANT_SANDBOX_MAX_FORWARDS) {
+      sandbox_host_error(err, err_len, "too many allow-host ports");
+      return -E2BIG;
+    }
+    opts->allow_host_ports[opts->allow_host_port_count++] = port;
+
+    if (!comma) return 0;
+    p = comma + 1;
+  }
+}
+
 int ant_sandbox_launch_add_default_mount(
   ant_sandbox_launch_options_t *opts,
   const char *host_path,

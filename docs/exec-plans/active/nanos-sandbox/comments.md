@@ -79,6 +79,24 @@ only needs the guest cwd, entry/source, and argv.
 Writable mounts are implemented. `tmp:/tmp` creates a temporary writable host
 directory, and host-backed writes require explicit `--write host:guest`.
 
+## Network Comments
+
+Guest egress goes through the host NAT in `backends/shared/nat.c`, which checks
+each new TCP connection and UDP flow in `ant_nat_egress_allowed`. The public
+internet is open. The guest's DNS address (`10.0.2.3`) is open on port 53 only,
+because it is rewritten to the host's resolver.
+
+Host loopback (`10.0.2.2`, `127/8`, `0/8`) is closed unless `--allow-host`
+(every port) or `--allow-host=<ports>` opens it; the JS option is `allowHost`.
+Private, carrier-grade NAT, link-local (including cloud metadata at
+`169.254.169.254`), multicast and broadcast addresses are closed unless
+`--allow-lan` (`allowLan`) opens them. A refused SYN gets a RST, a refused UDP
+datagram is dropped, and `--verbose` logs which flag would allow it.
+
+The guest kernel keeps `127/8` on its own loopback, so the `127/8` and `0/8`
+rules only matter for hand-built packets; `10.0.2.2` is the route a normal
+guest uses to reach the host.
+
 ## Native VMM Comments
 
 The VMM should expose the same Nanos-compatible machine model on every backend

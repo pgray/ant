@@ -448,6 +448,47 @@ static int sandbox_add_forward_option(ant_t *js, const char *value, void *udata)
   return ant_sandbox_launch_add_forward(&ctx->state->launch, value, ctx->error, sizeof(ctx->error));
 }
 
+static ant_value_t sandbox_allow_host_value(ant_t *js, sandbox_state_t *state, ant_value_t value) {
+  char error[512] = {0};
+  char text[16];
+  const char *ports = NULL;
+
+  if (vtype(value) == kTypeNumber) {
+    snprintf(text, sizeof(text), "%.0f", js_getnum(value));
+    ports = text;
+  } else if (vtype(value) == kTypeString) {
+    ports = js_getstr(js, value, NULL);
+    if (!ports) return Ant_Error_CreateOutOfMemory(js);
+  } else {
+    return js_mkerr_typed(js, JS_ERR_TYPE, "allowHost must be a boolean, port number, port string or array of ports");
+  }
+
+  if (ant_sandbox_launch_allow_host(&state->launch, ports, error, sizeof(error)) != 0)
+    return js_mkerr_typed(js, JS_ERR_TYPE, "%s", error[0] ? error : "invalid allowHost option");
+  return js_mkundef();
+}
+
+static ant_value_t sandbox_apply_network_options(ant_t *js, sandbox_state_t *state, ant_value_t opts) {
+  ant_value_t allow_host = js_get(js, opts, "allowHost");
+  if (vtype(allow_host) == kTypeBool) {
+    if (js_truthy(js, allow_host)) ant_sandbox_launch_allow_host(&state->launch, NULL, NULL, 0);
+  } else if (js_is_array(allow_host)) {
+    ant_offset_t len = js_arr_len(js, allow_host);
+    for (ant_offset_t i = 0; i < len; i++) {
+      ant_value_t result = sandbox_allow_host_value(js, state, js_arr_get(js, allow_host, i));
+      if (is_err(result)) return result;
+    }
+  } else if (vtype(allow_host) != kTypeUndefined && vtype(allow_host) != kTypeNull) {
+    ant_value_t result = sandbox_allow_host_value(js, state, allow_host);
+    if (is_err(result)) return result;
+  }
+
+  ant_value_t allow_lan = js_get(js, opts, "allowLan");
+  if (vtype(allow_lan) != kTypeUndefined && vtype(allow_lan) != kTypeNull)
+    state->launch.allow_lan = js_truthy(js, allow_lan);
+  return js_mkundef();
+}
+
 static ant_value_t sandbox_apply_string_list_option(
   ant_t *js, ant_value_t opts,
   const char *key, sandbox_string_cb_t cb,
@@ -496,6 +537,9 @@ static ant_value_t sandbox_apply_options(ant_t *js, sandbox_state_t *state, ant_
   if (is_err(result)) return forward_ctx.error[0]
     ? js_mkerr_typed(js, JS_ERR_TYPE, "%s", forward_ctx.error)
     : result;
+
+  result = sandbox_apply_network_options(js, state, opts);
+  if (is_err(result)) return result;
 
   ant_value_t cwd = js_get(js, opts, "cwd");
   if (vtype(cwd) != kTypeUndefined && vtype(cwd) != kTypeNull) {
@@ -823,6 +867,10 @@ static int sandbox_ensure_session(ant_t *js, sandbox_state_t *state, ant_sandbox
     .network_enabled = true,
     .forwards = state->launch.forwards,
     .forward_count = state->launch.forward_count,
+    .allow_host_ports = state->launch.allow_host_ports,
+    .allow_host_port_count = state->launch.allow_host_port_count,
+    .allow_host_all = state->launch.allow_host_all,
+    .allow_lan = state->launch.allow_lan,
     .cpu_count = 1,
     .memory_size = state->memory_size,
     .timeout_ms = state->timeout_ms,

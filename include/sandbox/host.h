@@ -23,10 +23,14 @@ typedef struct {
   char mount_guests[ANT_SANDBOX_MAX_MOUNTS][1024];
   char mount_tags[ANT_SANDBOX_MAX_MOUNTS][1200];
   ant_sandbox_port_forward_t forwards[ANT_SANDBOX_MAX_FORWARDS];
+  uint16_t allow_host_ports[ANT_SANDBOX_MAX_FORWARDS];
   char temp_dirs[ANT_SANDBOX_MAX_MOUNTS][4096];
   size_t mount_count;
   size_t temp_dir_count;
   size_t forward_count;
+  size_t allow_host_port_count;
+  bool allow_host_all;
+  bool allow_lan;
   char guest_cwd[1024];
   bool explicit_mounts;
 } ant_sandbox_launch_options_t;
@@ -43,22 +47,25 @@ int ant_sandbox_launch_add_mount(
   ant_sandbox_launch_options_t *opts,
   const char *value,
   bool readonly,
-  char *err,
-  size_t err_len
+  char *err, size_t err_len
 );
 
 int ant_sandbox_launch_add_forward(
   ant_sandbox_launch_options_t *opts,
   const char *value,
-  char *err,
-  size_t err_len
+  char *err, size_t err_len
+);
+
+int ant_sandbox_launch_allow_host(
+  ant_sandbox_launch_options_t *opts,
+  const char *ports,
+  char *err, size_t err_len
 );
 
 int ant_sandbox_launch_add_default_mount(
   ant_sandbox_launch_options_t *opts,
   const char *host_path,
-  char *err,
-  size_t err_len
+  char *err, size_t err_len
 );
 
 int ant_sandbox_assets_resolve(ant_sandbox_assets_t *assets, char *err, size_t err_len);

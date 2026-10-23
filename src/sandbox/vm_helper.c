@@ -184,6 +184,7 @@ typedef struct {
   ant_sandbox_vm_config_t config;
   ant_sandbox_mount_t *mounts;
   ant_sandbox_port_forward_t *forwards;
+  uint16_t *allow_host_ports;
   char *image_path;
   char *kernel_path;
 } sandbox_helper_owned_config_t;
@@ -235,7 +236,8 @@ static bool sandbox_helper_append_string(sandbox_helper_buffer_t *buf, const cha
 
 static uint8_t *sandbox_helper_encode_config(const ant_sandbox_vm_config_t *config, size_t *len_out) {
   if (!config || !config->image_path || !config->kernel_path || !len_out ||
-      config->mount_count > UINT32_MAX || config->forward_count > UINT32_MAX) return NULL;
+      config->mount_count > UINT32_MAX || config->forward_count > UINT32_MAX ||
+      config->allow_host_port_count > UINT32_MAX) return NULL;
   sandbox_helper_buffer_t buf = {0};
   bool ok =
     sandbox_helper_append_string(&buf, config->image_path) &&
@@ -260,6 +262,12 @@ static uint8_t *sandbox_helper_encode_config(const ant_sandbox_vm_config_t *conf
     ok = sandbox_helper_append_u16(&buf, config->forwards[i].host_port) &&
       sandbox_helper_append_u16(&buf, config->forwards[i].guest_port);
   }
+  ok = ok &&
+    sandbox_helper_append_u8(&buf, config->allow_host_all ? 1 : 0) &&
+    sandbox_helper_append_u8(&buf, config->allow_lan ? 1 : 0) &&
+    sandbox_helper_append_u32(&buf, (uint32_t)config->allow_host_port_count);
+  for (size_t i = 0; ok && i < config->allow_host_port_count; i++)
+    ok = sandbox_helper_append_u16(&buf, config->allow_host_ports[i]);
   if (!ok) { free(buf.data); return NULL; }
   *len_out = buf.len;
   return buf.data;
@@ -319,6 +327,7 @@ static void sandbox_helper_owned_config_free(sandbox_helper_owned_config_t *owne
   }
   free(owned->mounts);
   free(owned->forwards);
+  free(owned->allow_host_ports);
   free(owned->image_path);
   free(owned->kernel_path);
   memset(owned, 0, sizeof(*owned));
@@ -330,8 +339,8 @@ static bool sandbox_helper_decode_config(
 ) {
   if (!data || !owned) return false;
   sandbox_helper_reader_t r = { data, data + len };
-  uint8_t network = 0, verbose = 0;
-  uint32_t mount_count = 0, forward_count = 0;
+  uint8_t network = 0, verbose = 0, allow_host_all = 0, allow_lan = 0;
+  uint32_t mount_count = 0, forward_count = 0, allow_host_port_count = 0;
   uint64_t memory_size = 0;
   owned->image_path = sandbox_helper_read_string(&r);
   owned->kernel_path = sandbox_helper_read_string(&r);
@@ -370,12 +379,27 @@ static bool sandbox_helper_decode_config(
     if (!sandbox_helper_read_u16(&r, &owned->forwards[i].host_port) ||
         !sandbox_helper_read_u16(&r, &owned->forwards[i].guest_port)) goto fail;
   }
+  if (!sandbox_helper_read_u8(&r, &allow_host_all) ||
+      !sandbox_helper_read_u8(&r, &allow_lan) ||
+      !sandbox_helper_read_u32(&r, &allow_host_port_count) ||
+      allow_host_port_count > ANT_SANDBOX_MAX_FORWARDS) goto fail;
+  if (allow_host_port_count > 0) {
+    owned->allow_host_ports = calloc(allow_host_port_count, sizeof(*owned->allow_host_ports));
+    if (!owned->allow_host_ports) goto fail;
+  }
+  for (uint32_t i = 0; i < allow_host_port_count; i++) {
+    if (!sandbox_helper_read_u16(&r, &owned->allow_host_ports[i])) goto fail;
+  }
   if (r.p != r.end) goto fail;
   owned->config.image_path = owned->image_path;
   owned->config.kernel_path = owned->kernel_path;
   owned->config.mounts = owned->mounts;
   owned->config.network_enabled = network != 0;
   owned->config.forwards = owned->forwards;
+  owned->config.allow_host_ports = owned->allow_host_ports;
+  owned->config.allow_host_port_count = allow_host_port_count;
+  owned->config.allow_host_all = allow_host_all != 0;
+  owned->config.allow_lan = allow_lan != 0;
   owned->config.memory_size = memory_size;
   owned->config.verbose = verbose != 0;
   return true;

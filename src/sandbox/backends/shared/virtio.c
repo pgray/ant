@@ -30,6 +30,7 @@ void ant_hvf_virtio_init(
   dev->device_config_len = device_config_len;
   for (uint16_t i = 0; i < queue_count && i < ANT_VIRTIO_VSOCK_QUEUE_COUNT; i++) {
     dev->queues[i].size = queue_size;
+    dev->queues[i].max_size = queue_size;
     dev->queues[i].msix_vector = ANT_VIRTIO_MSI_NO_VECTOR;
     dev->queues[i].notify_off = i;
   }
@@ -71,6 +72,7 @@ void ant_hvf_virtio_reset(ant_hvf_virtio_device_t *dev) {
     dev->queues[i].avail = 0;
     dev->queues[i].used = 0;
     dev->queues[i].last_avail = 0;
+    dev->queues[i].size = dev->queues[i].max_size;
     dev->queues[i].enabled = false;
     dev->queues[i].msix_vector = ANT_VIRTIO_MSI_NO_VECTOR;
   }
@@ -267,6 +269,10 @@ bool ant_hvf_virtio_common_read(ant_hvf_vm_t *vm,
   return true;
 }
 
+static bool ant_hvf_virtio_queue_size_ok(const ant_hvf_virtio_queue_t *q, uint16_t size) {
+  return size != 0 && size <= q->max_size && (size & (size - 1u)) == 0;
+}
+
 bool ant_hvf_virtio_common_write(ant_hvf_vm_t *vm,
                                         ant_hvf_virtio_device_t *dev,
                                         uint64_t off,
@@ -347,13 +353,13 @@ bool ant_hvf_virtio_common_write(ant_hvf_vm_t *vm,
       dev->queue_sel = (uint16_t)value;
       return true;
     case 24:
-      if (q) q->size = (uint16_t)value;
+      if (q && ant_hvf_virtio_queue_size_ok(q, (uint16_t)value)) q->size = (uint16_t)value;
       return true;
     case 26:
       if (q) q->msix_vector = (uint16_t)value;
       return true;
     case 28:
-      if (q) q->enabled = ((uint16_t)value) != 0;
+      if (q) q->enabled = ((uint16_t)value) != 0 && q->size != 0;
       return true;
     default:
       if (q && off >= 32 && off < 40) {
@@ -371,6 +377,7 @@ int ant_hvf_vring_add_used(ant_hvf_vm_t *vm,
                                   unsigned queue_size,
                                   uint16_t head,
                                   uint32_t used_len) {
+  if (queue_size == 0) return -EINVAL;
   unsigned char used_idx_raw[ANT_HVF_BYTES_U16];
   int rc = ant_hvf_guest_read(vm, used_base + 2, used_idx_raw, sizeof(used_idx_raw));
   if (rc != 0) return rc;

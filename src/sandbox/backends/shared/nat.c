@@ -144,6 +144,45 @@ static uint32_t ant_nat_connect_ip(uint32_t dst_ip) {
   return ANT_NET_IP(8, 8, 8, 8);
 }
 
+static bool ant_nat_ip_in(uint32_t ip, uint32_t net, unsigned bits) {
+  uint32_t mask = UINT32_MAX << (32u - bits);
+  return (ip & mask) == (net & mask);
+}
+
+static bool ant_nat_host_port_allowed(const ant_hvf_vm_t *vm, uint16_t port) {
+  if (vm->net_allow_host_all) return true;
+  for (size_t i = 0; i < vm->net_allow_host_port_count; i++) {
+    if (vm->net_allow_host_ports[i] == port) return true;
+  }
+  return false;
+}
+
+bool ant_nat_egress_allowed(const ant_hvf_vm_t *vm, uint32_t dst_ip, uint16_t dst_port) {
+  if (dst_ip == ANT_NET_DNS_IP) return dst_port == 53;
+  if (dst_ip == ANT_NET_HOST_IP ||
+      ant_nat_ip_in(dst_ip, ANT_NET_IP(127, 0, 0, 0), 8) ||
+      ant_nat_ip_in(dst_ip, ANT_NET_IP(0, 0, 0, 0), 8)) {
+    return ant_nat_host_port_allowed(vm, dst_port);
+  }
+  if (ant_nat_ip_in(dst_ip, ANT_NET_IP(10, 0, 0, 0), 8) ||
+      ant_nat_ip_in(dst_ip, ANT_NET_IP(172, 16, 0, 0), 12) ||
+      ant_nat_ip_in(dst_ip, ANT_NET_IP(192, 168, 0, 0), 16) ||
+      ant_nat_ip_in(dst_ip, ANT_NET_IP(100, 64, 0, 0), 10) ||
+      ant_nat_ip_in(dst_ip, ANT_NET_IP(169, 254, 0, 0), 16) ||
+      ant_nat_ip_in(dst_ip, ANT_NET_IP(224, 0, 0, 0), 4) ||
+      ant_nat_ip_in(dst_ip, ANT_NET_IP(240, 0, 0, 0), 4)) {
+    return vm->net_allow_lan;
+  }
+  return true;
+}
+
+static void ant_nat_log_blocked(ant_hvf_vm_t *vm, const char *proto, uint32_t dst_ip, uint16_t dst_port) {
+  bool host = dst_ip == ANT_NET_HOST_IP || (dst_ip >> 24) == 127u || (dst_ip >> 24) == 0u;
+  ant_hvf_verbosef(vm, "nat: blocked %s to %u.%u.%u.%u:%u (%s)", proto,
+                   dst_ip >> 24, (dst_ip >> 16) & 0xffu, (dst_ip >> 8) & 0xffu, dst_ip & 0xffu, dst_port,
+                   host ? "use --allow-host" : "use --allow-lan");
+}
+
 static bool ant_nat_tcp_active(const ant_hvf_nat_tcp_t *c) {
   return c && c->state != ANT_NAT_TCP_UNUSED;
 }
@@ -700,6 +739,10 @@ void ant_nat_handle_udp(ant_hvf_nat_t *nat,
   pthread_mutex_lock(&nat->lock);
   ant_hvf_nat_udp_t *u = ant_nat_find_udp(nat, src_ip, src_port, dst_ip, dst_port);
   if (!u) {
+    if (!ant_nat_egress_allowed(nat->vm, dst_ip, dst_port)) {
+      ant_nat_log_blocked(nat->vm, "udp", dst_ip, dst_port);
+      goto done;
+    }
     int fd = socket(AF_INET, SOCK_DGRAM, 0);
     if (fd < 0) goto done;
     ant_socket_nonblock(fd);
@@ -757,6 +800,11 @@ void ant_nat_handle_tcp(
   if (!c) c = ant_nat_find_tcp(nat, dst_ip, dst_port, src_ip, src_port);
 
   if (!c && (tcp->flags & ANT_TCP_SYN) && !(tcp->flags & ANT_TCP_ACK)) {
+    if (!ant_nat_egress_allowed(vm, dst_ip, dst_port)) {
+      ant_nat_log_blocked(vm, "tcp", dst_ip, dst_port);
+      ant_net_send_rst(vm, eth->src, dst_ip, src_ip, dst_port, src_port, 0, seq + 1u);
+      goto done;
+    }
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) goto done;
     ant_socket_nonblock(fd);

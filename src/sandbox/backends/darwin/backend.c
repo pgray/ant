@@ -370,6 +370,10 @@ static int ant_hvf_session_create(const ant_sandbox_vm_config_t *config, void **
   vm->net_enabled = config->network_enabled;
   vm->net_forwards = config->forwards;
   vm->net_forward_count = config->forward_count;
+  vm->net_allow_host_ports = config->allow_host_ports;
+  vm->net_allow_host_port_count = config->allow_host_port_count;
+  vm->net_allow_host_all = config->allow_host_all;
+  vm->net_allow_lan = config->allow_lan;
   
   if (config->mount_count == 0 || config->mount_count > ANT_HVF_VIRTIO_9P_MAX) {
     free(session);

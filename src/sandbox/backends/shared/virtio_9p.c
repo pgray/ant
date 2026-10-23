@@ -430,7 +430,7 @@ static bool ant_hvf_9p_read_cached_file(ant_hvf_9p_device_t *dev,
   uint8_t *data = malloc(size ? size : 1u);
   if (!data) return false;
 
-  int fd = open(host, O_RDONLY);
+  int fd = open(host, O_RDONLY | O_NOFOLLOW);
   if (fd < 0) {
     free(data);
     return false;
@@ -892,10 +892,11 @@ uint32_t ant_hvf_9p_handle(ant_hvf_9p_device_t *dev,
       struct stat st;
       int rc = ant_hvf_9p_stat_cached(dev, f->path, &st, host, sizeof(host));
       if (rc != 0) return ant_hvf_9p_error(resp, tag, (uint32_t)-rc);
-      if (!S_ISREG(st.st_mode) && !S_ISLNK(st.st_mode)) return ant_hvf_9p_error(resp, tag, EISDIR);
+      if (S_ISLNK(st.st_mode)) return ant_hvf_9p_error(resp, tag, ELOOP);
+      if (!S_ISREG(st.st_mode)) return ant_hvf_9p_error(resp, tag, EISDIR);
       if (!ant_hvf_9p_read_cached_file(dev, f->path, host, &st, offset, count,
                                        resp + 11, payload_cap, &got)) {
-        int fd = open(host, O_RDONLY);
+        int fd = open(host, O_RDONLY | O_NOFOLLOW);
         if (fd < 0) return ant_hvf_9p_error(resp, tag, (uint32_t)errno);
         ssize_t n = pread(fd, resp + 11, count, (off_t)offset);
         if (n < 0) {
@@ -1117,7 +1118,7 @@ uint32_t ant_hvf_9p_handle(ant_hvf_9p_device_t *dev,
       char host[ANT_HVF_9P_HOST_PATH_MAX];
       int rc = ant_hvf_9p_stat_cached(dev, f->path, NULL, host, sizeof(host));
       if (rc != 0) return ant_hvf_9p_error(resp, tag, (uint32_t)-rc);
-      int fd = open(host, O_RDONLY);
+      int fd = open(host, O_RDONLY | O_NOFOLLOW);
       if (fd >= 0) {
         (void)fsync(fd);
         close(fd);

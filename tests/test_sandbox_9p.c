@@ -146,6 +146,60 @@ static void test_tread_count_is_bounded(bool readonly) {
   assert(rmdir(root) == 0);
 }
 
+static void test_tread_refuses_symlink(void) {
+  char root_template[] = "/tmp/ant-9p-link.XXXXXX";
+  char outside_template[] = "/tmp/ant-9p-outside.XXXXXX";
+  char *root_tmp = mkdtemp(root_template);
+  char *outside_tmp = mkdtemp(outside_template);
+  assert(root_tmp);
+  assert(outside_tmp);
+
+  char root[4096];
+  char outside[4096];
+  assert(realpath(root_tmp, root));
+  assert(realpath(outside_tmp, outside));
+
+  char secret[4096];
+  int written = snprintf(secret, sizeof(secret), "%s/secret", outside);
+  assert(written > 0 && (size_t)written < sizeof(secret));
+  FILE *fp = fopen(secret, "w");
+  assert(fp);
+  fputs("host secret", fp);
+  fclose(fp);
+
+  char link_path[4096];
+  written = snprintf(link_path, sizeof(link_path), "%s/leak", root);
+  assert(written > 0 && (size_t)written < sizeof(link_path));
+  assert(symlink(secret, link_path) == 0);
+
+  ant_hvf_9p_device_t dev;
+  init_dev(&dev, root);
+  ant_hvf_9p_fid_t *fid = ant_hvf_9p_fid(&dev, 42, true);
+  assert(fid);
+  fid->active = true;
+  snprintf(fid->path, sizeof(fid->path), "leak");
+
+  unsigned char req[23] = {0};
+  ant_hvf_store32(req, sizeof(req));
+  req[4] = P9_TREAD;
+  ant_hvf_store16(req + 5, 7);
+  ant_hvf_store32(req + 7, fid->fid);
+  ant_hvf_store64(req + 11, 0);
+  ant_hvf_store32(req + 19, 64);
+
+  unsigned char resp[ANT_HVF_9P_MIN_MSIZE] = {0};
+  uint32_t resp_len = ant_hvf_9p_handle(&dev, req, sizeof(req), resp, sizeof(resp));
+  assert(resp_len == 11);
+  assert(resp[4] == P9_RLERROR);
+  assert(ant_hvf_load32(resp + 7) == ELOOP);
+
+  cleanup_dev(&dev);
+  assert(unlink(link_path) == 0);
+  assert(unlink(secret) == 0);
+  assert(rmdir(root) == 0);
+  assert(rmdir(outside) == 0);
+}
+
 static void test_twrite_count_overflow_is_rejected(void) {
   char root_template[] = "/tmp/ant-9p-write.XXXXXX";
   char *root_tmp = mkdtemp(root_template);
@@ -230,6 +284,7 @@ int main(void) {
   test_symlink_escape_policy();
   test_tread_count_is_bounded(true);
   test_tread_count_is_bounded(false);
+  test_tread_refuses_symlink();
   test_twrite_count_overflow_is_rejected();
   test_temp_write_cleanup();
   return 0;

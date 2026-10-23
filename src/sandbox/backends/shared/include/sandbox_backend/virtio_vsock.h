@@ -27,6 +27,7 @@
 #define ANT_HVF_VSOCK_HOST_PORT ANT_SANDBOX_TRANSPORT_VSOCK_PORT
 #define ANT_HVF_VSOCK_BUF_ALLOC 65536u
 #define ANT_HVF_VSOCK_MAX_PAYLOAD 2048u
+#define ANT_HVF_VSOCK_MAX_TX_PACKET (sizeof(ant_virtio_vsock_hdr_t) + ANT_HVF_VSOCK_BUF_ALLOC)
 
 typedef struct {
   uint64_t src_cid;

@@ -231,6 +231,10 @@ struct ant_hvf_vm {
   
   const ant_sandbox_port_forward_t *net_forwards;
   size_t net_forward_count;
+  const uint16_t *net_allow_host_ports;
+  size_t net_allow_host_port_count;
+  bool net_allow_host_all;
+  bool net_allow_lan;
   
   ant_hvf_9p_device_t p9[ANT_HVF_VIRTIO_9P_MAX];
   size_t p9_count;

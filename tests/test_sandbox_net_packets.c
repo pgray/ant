@@ -6,6 +6,7 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include <stdint.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
@@ -281,6 +282,7 @@ static void test_dns_response(void) {
 static void test_tcp_handshake_fin_rst(void) {
   ant_hvf_vm_t vm;
   test_vm_init(&vm);
+  vm.net_allow_host_all = true;
   assert(ant_hvf_net_start(&vm) == 0);
 
   int listener = -1;
@@ -353,6 +355,7 @@ static void test_forward_accept_path(void) {
 static void test_udp_nat_roundtrip(void) {
   ant_hvf_vm_t vm;
   test_vm_init(&vm);
+  vm.net_allow_host_all = true;
   assert(ant_hvf_net_start(&vm) == 0);
 
   int udp_server = -1;
@@ -383,6 +386,77 @@ static void test_udp_nat_roundtrip(void) {
   test_vm_destroy(&vm);
 }
 
+static void test_egress_policy(void) {
+  ant_hvf_vm_t vm;
+  memset(&vm, 0, sizeof(vm));
+
+  assert(ant_nat_egress_allowed(&vm, ANT_NET_DNS_IP, 53));
+  assert(!ant_nat_egress_allowed(&vm, ANT_NET_DNS_IP, 80));
+  assert(!ant_nat_egress_allowed(&vm, ANT_NET_HOST_IP, 5432));
+  assert(!ant_nat_egress_allowed(&vm, ANT_NET_IP(127, 0, 0, 1), 5432));
+  assert(!ant_nat_egress_allowed(&vm, ANT_NET_IP(127, 1, 2, 3), 22));
+  assert(!ant_nat_egress_allowed(&vm, ANT_NET_IP(0, 0, 0, 0), 5432));
+  assert(!ant_nat_egress_allowed(&vm, ANT_NET_IP(169, 254, 169, 254), 80));
+  assert(!ant_nat_egress_allowed(&vm, ANT_NET_IP(10, 1, 2, 3), 80));
+  assert(!ant_nat_egress_allowed(&vm, ANT_NET_IP(172, 16, 0, 1), 80));
+  assert(!ant_nat_egress_allowed(&vm, ANT_NET_IP(172, 31, 255, 255), 80));
+  assert(!ant_nat_egress_allowed(&vm, ANT_NET_IP(192, 168, 1, 1), 80));
+  assert(!ant_nat_egress_allowed(&vm, ANT_NET_IP(100, 100, 100, 100), 80));
+  assert(!ant_nat_egress_allowed(&vm, ANT_NET_IP(224, 0, 0, 251), 5353));
+  assert(!ant_nat_egress_allowed(&vm, ANT_NET_BROADCAST_IP, 9));
+  assert(ant_nat_egress_allowed(&vm, ANT_NET_IP(172, 32, 0, 1), 80));
+  assert(ant_nat_egress_allowed(&vm, ANT_NET_IP(100, 128, 0, 1), 80));
+  assert(ant_nat_egress_allowed(&vm, ANT_NET_IP(1, 1, 1, 1), 443));
+
+  uint16_t ports[] = { 5432, 6379 };
+  vm.net_allow_host_ports = ports;
+  vm.net_allow_host_port_count = 2;
+  assert(ant_nat_egress_allowed(&vm, ANT_NET_HOST_IP, 5432));
+  assert(ant_nat_egress_allowed(&vm, ANT_NET_IP(127, 0, 0, 1), 6379));
+  assert(!ant_nat_egress_allowed(&vm, ANT_NET_HOST_IP, 22));
+  assert(!ant_nat_egress_allowed(&vm, ANT_NET_IP(169, 254, 169, 254), 80));
+
+  vm.net_allow_host_all = true;
+  assert(ant_nat_egress_allowed(&vm, ANT_NET_HOST_IP, 22));
+  assert(!ant_nat_egress_allowed(&vm, ANT_NET_IP(192, 168, 1, 1), 80));
+
+  vm.net_allow_lan = true;
+  assert(ant_nat_egress_allowed(&vm, ANT_NET_IP(192, 168, 1, 1), 80));
+  assert(ant_nat_egress_allowed(&vm, ANT_NET_IP(169, 254, 169, 254), 80));
+  assert(!ant_nat_egress_allowed(&vm, ANT_NET_DNS_IP, 80));
+}
+
+static void test_tcp_host_blocked_by_default(void) {
+  ant_hvf_vm_t vm;
+  test_vm_init(&vm);
+  assert(ant_hvf_net_start(&vm) == 0);
+
+  int listener = -1;
+  uint16_t port = test_tcp_listener(&listener);
+  const uint32_t targets[] = { ANT_NET_HOST_IP, ANT_NET_IP(127, 0, 0, 1) };
+  for (size_t i = 0; i < sizeof(targets) / sizeof(targets[0]); i++) {
+    unsigned char frame[ANT_HVF_NET_MAX_PACKET];
+    size_t frame_len = test_emit_tcp(frame, ANT_NET_GUEST_IP, targets[i],
+                                     41000 + (uint16_t)i, port, 1000, 0, ANT_TCP_SYN, NULL, 0);
+    ant_net_handle_frame(&vm, frame, frame_len);
+
+    ant_hvf_net_packet_t packet;
+    assert(test_wait_packet(&vm, &packet));
+    const ant_tcp_t *rst = test_packet_tcp(&packet);
+    assert(ntohs(rst->src) == port);
+    assert((rst->flags & ANT_TCP_RST) == ANT_TCP_RST);
+  }
+
+  struct timeval tv = { .tv_sec = 0, .tv_usec = 200000 };
+  fd_set readable;
+  FD_ZERO(&readable);
+  FD_SET(listener, &readable);
+  assert(select(listener + 1, &readable, NULL, NULL, &tv) == 0);
+
+  close(listener);
+  test_vm_destroy(&vm);
+}
+
 #endif
 
 int main(void) {
@@ -393,6 +467,8 @@ int main(void) {
   test_tcp_handshake_fin_rst();
   test_forward_accept_path();
   test_udp_nat_roundtrip();
+  test_egress_policy();
+  test_tcp_host_blocked_by_default();
 #endif
   return 0;
 }

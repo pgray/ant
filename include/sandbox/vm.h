@@ -75,6 +75,10 @@ typedef struct {
   bool network_enabled;
   const ant_sandbox_port_forward_t *forwards;
   size_t forward_count;
+  const uint16_t *allow_host_ports;
+  size_t allow_host_port_count;
+  bool allow_host_all;
+  bool allow_lan;
   unsigned int cpu_count;
   unsigned long long memory_size;
   unsigned int timeout_ms;

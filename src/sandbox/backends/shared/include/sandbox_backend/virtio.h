@@ -57,6 +57,7 @@ typedef struct {
   uint64_t avail;
   uint64_t used;
   uint16_t size;
+  uint16_t max_size;
   uint16_t last_avail;
   uint16_t msix_vector;
   uint16_t notify_off;

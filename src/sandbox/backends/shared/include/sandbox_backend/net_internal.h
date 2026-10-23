@@ -96,6 +96,7 @@ typedef struct ant_hvf_nat_tcp ant_hvf_nat_tcp_t;
 uint16_t ant_net_load16(const unsigned char *p);
 uint16_t ant_net_csum(const void *data, size_t len, uint32_t sum);
 uint16_t ant_net_l4_csum(uint32_t src, uint32_t dst, uint8_t proto, const void *data, size_t len);
+bool ant_nat_egress_allowed(const ant_hvf_vm_t *vm, uint32_t dst_ip, uint16_t dst_port);
 
 void ant_nat_wake(ant_hvf_nat_t *nat);
 void ant_nat_note_guest_packet(ant_hvf_nat_t *nat);

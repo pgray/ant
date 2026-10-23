@@ -1,6 +1,7 @@
 #include "../src/sandbox/backends/darwin/backend.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -123,6 +124,34 @@ static void test_msix_control_mask(void) {
   assert(vm.blk.msix_control == (ANT_PCI_MSIX_ENABLE | ANT_PCI_MSIX_MASK_ALL));
 }
 
+static uint16_t test_queue_size(ant_hvf_vm_t *vm, ant_hvf_virtio_device_t *dev, uint16_t queue) {
+  uint64_t value = 0;
+  ant_hvf_virtio_common_write(vm, dev, 22, 2, queue);
+  assert(ant_hvf_virtio_common_read(vm, dev, 24, 2, &value));
+  return (uint16_t)value;
+}
+
+static void test_queue_size_validation(void) {
+  ant_hvf_vm_t vm;
+  test_vm_init(&vm);
+  ant_hvf_virtio_device_t *dev = &vm.vsock.virtio;
+
+  assert(test_queue_size(&vm, dev, 0) == ANT_VIRTIO_VSOCK_QUEUE_SIZE);
+  ant_hvf_virtio_common_write(&vm, dev, 24, 2, 0);
+  assert(test_queue_size(&vm, dev, 0) == ANT_VIRTIO_VSOCK_QUEUE_SIZE);
+  ant_hvf_virtio_common_write(&vm, dev, 24, 2, 24);
+  assert(test_queue_size(&vm, dev, 0) == ANT_VIRTIO_VSOCK_QUEUE_SIZE);
+  ant_hvf_virtio_common_write(&vm, dev, 24, 2, ANT_VIRTIO_VSOCK_QUEUE_SIZE * 2u);
+  assert(test_queue_size(&vm, dev, 0) == ANT_VIRTIO_VSOCK_QUEUE_SIZE);
+  ant_hvf_virtio_common_write(&vm, dev, 24, 2, 16);
+  assert(test_queue_size(&vm, dev, 0) == 16);
+  assert(dev->queues[0].size == 16);
+
+  ant_hvf_virtio_common_write(&vm, dev, 20, 1, 0);
+  assert(dev->queues[0].size == ANT_VIRTIO_VSOCK_QUEUE_SIZE);
+  assert(ant_hvf_vring_add_used(&vm, 0, 0, 0, 0) == -EINVAL);
+}
+
 int main(void) {
   test_ecam_decode();
   test_present_and_absent_reads();
@@ -130,6 +159,7 @@ int main(void) {
   test_command_mask();
   test_bar_sizing_and_assignment();
   test_msix_control_mask();
+  test_queue_size_validation();
   return 0;
 }
 

@@ -35,6 +35,8 @@ typedef enum {
   SANDBOX_OPT_TIMEOUT,
   SANDBOX_OPT_BOOT_TIMEOUT,
   SANDBOX_OPT_FORWARD,
+  SANDBOX_OPT_ALLOW_HOST,
+  SANDBOX_OPT_ALLOW_LAN,
   SANDBOX_OPT_MOUNT,
   SANDBOX_OPT_WRITE,
   SANDBOX_OPT_VERBOSE,
@@ -45,6 +47,7 @@ typedef struct {
   const char *long_name;
   sandbox_option_id_t id;
   bool takes_value;
+  bool optional_value;
 } sandbox_option_spec_t;
 
 typedef struct {
@@ -53,18 +56,20 @@ typedef struct {
 } sandbox_option_match_t;
 
 static const sandbox_option_spec_t sandbox_option_specs[] = {
-  { "-e", "--eval", SANDBOX_OPT_EVAL, true },
-  { "-t", "--timeout", SANDBOX_OPT_TIMEOUT, true },
-  { NULL, "--timeout-ms", SANDBOX_OPT_TIMEOUT, true },
-  { "-b", "--boot-timeout", SANDBOX_OPT_BOOT_TIMEOUT, true },
-  { NULL, "--boot-timeout-ms", SANDBOX_OPT_BOOT_TIMEOUT, true },
-  { "-r", "--request-timeout", SANDBOX_OPT_BOOT_TIMEOUT, true },
-  { NULL, "--request-timeout-ms", SANDBOX_OPT_BOOT_TIMEOUT, true },
-  { "-f", "--forward", SANDBOX_OPT_FORWARD, true },
-  { "-m", "--mount", SANDBOX_OPT_MOUNT, true },
-  { "-w", "--write", SANDBOX_OPT_WRITE, true },
-  { "-V", "--verbose", SANDBOX_OPT_VERBOSE, false },
-  { NULL, NULL, 0, false },
+  { "-e", "--eval", SANDBOX_OPT_EVAL, true, false },
+  { "-t", "--timeout", SANDBOX_OPT_TIMEOUT, true, false },
+  { NULL, "--timeout-ms", SANDBOX_OPT_TIMEOUT, true, false },
+  { "-b", "--boot-timeout", SANDBOX_OPT_BOOT_TIMEOUT, true, false },
+  { NULL, "--boot-timeout-ms", SANDBOX_OPT_BOOT_TIMEOUT, true, false },
+  { "-r", "--request-timeout", SANDBOX_OPT_BOOT_TIMEOUT, true, false },
+  { NULL, "--request-timeout-ms", SANDBOX_OPT_BOOT_TIMEOUT, true, false },
+  { "-f", "--forward", SANDBOX_OPT_FORWARD, true, false },
+  { NULL, "--allow-host", SANDBOX_OPT_ALLOW_HOST, false, true },
+  { NULL, "--allow-lan", SANDBOX_OPT_ALLOW_LAN, false, false },
+  { "-m", "--mount", SANDBOX_OPT_MOUNT, true, false },
+  { "-w", "--write", SANDBOX_OPT_WRITE, true, false },
+  { "-V", "--verbose", SANDBOX_OPT_VERBOSE, false, false },
+  { NULL, NULL, 0, false, false },
 };
 
 static bool sandbox_match_name(const char *arg, const char *name, const char **value_out) {
@@ -125,7 +130,7 @@ static int sandbox_apply_option(
     return -EINVAL;
   }
 
-  if (!match.spec->takes_value && match.value) {
+  if (!match.spec->takes_value && !match.spec->optional_value && match.value) {
     crfprintf(stderr, msg.arg_invalid, arg);
     return -EINVAL;
   }
@@ -164,6 +169,14 @@ static int sandbox_apply_option(
       if (rc != 0) fprintf(stderr, "sandbox: %s\n", err[0] ? err : "invalid forward");
       return rc;
     }
+    case SANDBOX_OPT_ALLOW_HOST: {
+      int rc = ant_sandbox_launch_allow_host(&opts->launch, value, err, sizeof(err));
+      if (rc != 0) fprintf(stderr, "sandbox: %s\n", err[0] ? err : "invalid allow-host");
+      return rc;
+    }
+    case SANDBOX_OPT_ALLOW_LAN:
+      opts->launch.allow_lan = true;
+      return 0;
     case SANDBOX_OPT_MOUNT: {
       int rc = ant_sandbox_launch_add_mount(&opts->launch, value, true, err, sizeof(err));
       if (rc != 0) fprintf(stderr, "sandbox: %s\n", err[0] ? err : "invalid mount");
@@ -224,6 +237,8 @@ static void sandbox_print_usage(FILE *fp) {
   print_flag(fp, (flag_help_t){ .s = "m", .l = "mount", .d = "host:guest", .g = msg.sandbox_flag_mount });
   print_flag(fp, (flag_help_t){ .s = "w", .l = "write", .d = "host:guest", .g = msg.sandbox_flag_write });
   print_flag(fp, (flag_help_t){ .s = "f", .l = "forward", .d = "port|host:guest", .g = msg.sandbox_flag_forward });
+  print_flag(fp, (flag_help_t){ .l = "allow-host", .d = "ports]", .g = msg.sandbox_flag_allow_host, .opt = 1 });
+  print_flag(fp, (flag_help_t){ .l = "allow-lan", .g = msg.sandbox_flag_allow_lan });
   print_flag(fp, (flag_help_t){ .s = "t", .l = "timeout-ms", .d = "ms", .g = msg.sandbox_flag_timeout });
   print_flag(fp, (flag_help_t){ .s = "b", .l = "boot-timeout-ms", .d = "ms", .g = msg.sandbox_flag_boot_timeout });
   print_flag(fp, (flag_help_t){ .s = "r", .l = "request-timeout-ms", .d = "ms", .g = msg.sandbox_flag_request_timeout });
@@ -406,6 +421,10 @@ int ant_sandbox_cmd(int argc, char **argv) {
     .network_enabled = true,
     .forwards = opts.launch.forwards,
     .forward_count = opts.launch.forward_count,
+    .allow_host_ports = opts.launch.allow_host_ports,
+    .allow_host_port_count = opts.launch.allow_host_port_count,
+    .allow_host_all = opts.launch.allow_host_all,
+    .allow_lan = opts.launch.allow_lan,
     .cpu_count = 1,
     .memory_size = ANT_SANDBOX_DEFAULT_MEMORY_SIZE,
     .timeout_ms = opts.timeout_ms,

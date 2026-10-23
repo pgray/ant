@@ -305,6 +305,8 @@ int ant_hvf_vsock_read_tx_packet(ant_hvf_vm_t *vm,
                                         ant_virtio_vsock_hdr_t *hdr,
                                         unsigned char **payload,
                                         uint32_t *used_len) {
+  ant_vring_desc_t readable[ANT_VIRTIO_VSOCK_QUEUE_SIZE];
+  unsigned readable_count = 0;
   unsigned char *raw = NULL;
   uint32_t total = 0;
   uint16_t index = head;
@@ -316,8 +318,9 @@ int ant_hvf_vsock_read_tx_packet(ant_hvf_vm_t *vm,
     if (rc != 0) return rc;
 
     if (!(desc.flags & ANT_VRING_DESC_F_WRITE)) {
-      if (desc.len > UINT32_MAX - total) return -E2BIG;
+      if (desc.len > ANT_HVF_VSOCK_MAX_TX_PACKET - total) return -E2BIG;
       total += desc.len;
+      readable[readable_count++] = desc;
     }
 
     if (!(desc.flags & ANT_VRING_DESC_F_NEXT)) break;
@@ -329,26 +332,13 @@ int ant_hvf_vsock_read_tx_packet(ant_hvf_vm_t *vm,
   if (!raw) return -ENOMEM;
 
   uint32_t done = 0;
-  index = head;
-  for (unsigned chain = 0; chain < ANT_VIRTIO_VSOCK_QUEUE_SIZE; chain++) {
-    ant_vring_desc_t desc;
-    int rc = ant_hvf_vring_read_desc(vm, desc_base, index, &desc);
+  for (unsigned i = 0; i < readable_count; i++) {
+    int rc = ant_hvf_guest_read(vm, readable[i].addr, raw + done, readable[i].len);
     if (rc != 0) {
       free(raw);
       return rc;
     }
-
-    if (!(desc.flags & ANT_VRING_DESC_F_WRITE)) {
-      rc = ant_hvf_guest_read(vm, desc.addr, raw + done, desc.len);
-      if (rc != 0) {
-        free(raw);
-        return rc;
-      }
-      done += desc.len;
-    }
-
-    if (!(desc.flags & ANT_VRING_DESC_F_NEXT)) break;
-    index = desc.next;
+    done += readable[i].len;
   }
 
   *hdr = ant_hvf_vsock_load_hdr(raw);

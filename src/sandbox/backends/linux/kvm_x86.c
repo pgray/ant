@@ -457,14 +457,18 @@ static int ant_kvm_session_create(const ant_sandbox_vm_config_t *config, void **
   off_t kernel_size = 0;
   int rc = ant_hvf_check_file("image", config->image_path, &image_size);
   if (rc != 0) return rc;
+  
   rc = ant_hvf_check_file("kernel", config->kernel_path, &kernel_size);
   if (rc != 0) return rc;
+  
   if (config->mount_count == 0 || config->mount_count > ANT_HVF_VIRTIO_9P_MAX) {
     ant_kvm_set_result(config->result, ANT_SANDBOX_VM_RESULT_CONFIG_ERROR, -EINVAL);
     return -EINVAL;
   }
+  
   if ((config->mount_count > 0 && !config->mounts) ||
-      (config->forward_count > 0 && !config->forwards)) {
+      (config->forward_count > 0 && !config->forwards) ||
+      (config->allow_host_port_count > 0 && !config->allow_host_ports)) {
     ant_kvm_set_result(config->result, ANT_SANDBOX_VM_RESULT_CONFIG_ERROR, -EINVAL);
     return -EINVAL;
   }
@@ -491,6 +495,10 @@ static int ant_kvm_session_create(const ant_sandbox_vm_config_t *config, void **
   vm->net_enabled = config->network_enabled;
   vm->net_forwards = config->forwards;
   vm->net_forward_count = config->forward_count;
+  vm->net_allow_host_ports = config->allow_host_ports;
+  vm->net_allow_host_port_count = config->allow_host_port_count;
+  vm->net_allow_host_all = config->allow_host_all;
+  vm->net_allow_lan = config->allow_lan;
   vm->p9_count = config->mount_count;
   vm->verbose = config->verbose;
   vm->timeout_ms = config->timeout_ms;
