@@ -3137,37 +3137,43 @@ static ant_value_t js_buffer_copyBytesFrom(ant_params_t) {
     : snprintf(buf + pos, cap - pos, "%llu", (unsigned long long)((ctype *)data)[i]); \
   break;
 
+static bool typedarray_join_reserve(char **buf, size_t *cap, size_t needed) {
+  if (needed <= *cap) return true;
+  size_t next = *cap;
+  
+  while (next < needed) next = next > SIZE_MAX / 2 ? needed : next * 2;
+  char *grown = realloc(*buf, next);
+  
+  if (!grown) return false;
+  *buf = grown;
+  *cap = next;
+  
+  return true;
+}
+
 static ant_value_t typedarray_join_with(ant_t *js, ant_value_t this_val, const char *sep, size_t sep_len) {
   TypedArrayData *ta_data = typedarray_live(this_val);
   if (!ta_data) return typedarray_this_error(js, this_val);
+  
   if (ta_data->length == 0) return js_mkstr(js, "", 0);
-
   uint8_t *data = ta_data->buffer->data + ta_data->byte_offset;
+  
   size_t len = ta_data->length;
-
   size_t cap = len * 12;
   char *buf = malloc(cap);
+  
   if (!buf) return Ant_Error_CreateOutOfMemory(js);
   size_t pos = 0;
 
   for (size_t i = 0; i < len; i++) {
-    if (i > 0) {
-      if (pos + sep_len + 32 > cap) {
-        cap *= 2;
-        char *tmp = realloc(buf, cap);
-        if (!tmp) { free(buf); return Ant_Error_CreateOutOfMemory(js); }
-        buf = tmp;
-      }
-      memcpy(buf + pos, sep, sep_len);
-      pos += sep_len;
+    size_t sep_here = i > 0 ? sep_len : 0;
+    if (!typedarray_join_reserve(&buf, &cap, pos + sep_here + 32)) {
+      free(buf);
+      return Ant_Error_CreateOutOfMemory(js);
     }
-
-    if (pos + 32 > cap) {
-      cap *= 2;
-      char *tmp = realloc(buf, cap);
-      if (!tmp) { free(buf); return Ant_Error_CreateOutOfMemory(js); }
-      buf = tmp;
-    }
+    
+    memcpy(buf + pos, sep, sep_here);
+    pos += sep_here;
 
     int written = 0;
     #define BUFFER_TYPED_ARRAY(name, ctor, ctype, kind, load, store) case TYPED_ARRAY_##name: BUFFER_TA_JOIN_##kind(ctype, load)
