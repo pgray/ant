@@ -44,6 +44,7 @@ typedef struct sv_eval_env_state      sv_eval_env_state_t;
 typedef struct sv_map_template_desc   sv_map_template_desc_t;
 typedef struct sv_gf_mega_cache       sv_gf_mega_cache_t;
 typedef struct wasm_import_func_env_s wasm_import_func_env_t;
+typedef struct wasm_extern_handle_s   wasm_extern_handle_t;
 
 typedef struct sv_gf_poly sv_gf_poly_t;
 typedef struct sv_pf_poly sv_pf_poly_t;

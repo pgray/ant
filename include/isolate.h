@@ -164,6 +164,7 @@ struct ant_isolate_t {
   ant_http_pool_t *http_pool;
   navigator_locks_t *navigator_locks;
   wasm_import_func_env_t *wasm_import_envs;
+  wasm_extern_handle_t *wasm_memory_views;
   ant_ptr_pair_map_t wasm_instance_owners;
   bool wasm_pending_import_throw;
   fetch_request_t *fetch_requests;

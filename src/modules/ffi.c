@@ -179,16 +179,15 @@ static ffi_value_type_id_t ffi_type_id_from_name(const char *name) {
 
 static ffi_marshaled_type_t ffi_marshaled_type_from_value(ant_t *js, ant_value_t value) {
   if (vtype(value) != kTypeString) return ffi_marshaled_type_unknown();
-  return ffi_marshaled_type_make(
-    ffi_type_id_from_name(js_getstr(js, value, NULL)), 
-    js_getstr(js, value, NULL)
-  );
+  return ffi_marshaled_type_make(ffi_type_id_from_name(js_getstr(js, value, NULL)), js_getstr(js, value, NULL));
 }
 
 static void ffi_signature_cleanup(ffi_signature_t *signature) {
   if (!signature) return;
+  
   free(signature->args);
   free(signature->ffi_arg_types);
+  
   signature->args = NULL;
   signature->ffi_arg_types = NULL;
   signature->arg_count = 0;
@@ -259,12 +258,15 @@ static bool ffi_parse_signature(
   if (arg_count > 0) {
     out->args = calloc(arg_count, sizeof(*out->args));
     out->ffi_arg_types = calloc(arg_count, sizeof(*out->ffi_arg_types));
+    
     if (!out->args || !out->ffi_arg_types) {
       free(out->args);
       free(out->ffi_arg_types);
+      
       out->args = NULL;
       out->ffi_arg_types = NULL;
       if (error_out) *error_out = Ant_Error_CreateOutOfMemory(js);
+      
       return false;
     }
   }
@@ -307,6 +309,7 @@ static bool ffi_parse_signature(
       out->variadic = true;
       out->fixed_arg_count = i;
       out->arg_count = i;
+      
       break;
     }
     
@@ -401,11 +404,7 @@ static uint8_t *ffi_pointer_address_raw(ffi_pointer_handle_t *handle) {
 }
 
 static bool ffi_pointer_ensure_readable(
-  ant_t *js,
-  ffi_pointer_handle_t *handle,
-  size_t size,
-  const char *op,
-  ant_value_t *error_out
+  ant_t *js, ffi_pointer_handle_t *handle, size_t size, const char *op, ant_value_t *error_out
 ) {
   size_t remaining = 0;
 
@@ -435,8 +434,7 @@ static bool ffi_pointer_ensure_readable(
     if (size > remaining) {
       if (error_out) *error_out = js_mkerr_typed(
         js, JS_ERR_RANGE,
-        "FFIPointer %s would read past the tracked allocation",
-        op
+        "FFIPointer %s would read past the tracked allocation", op
       );
       return false;
     }
@@ -481,10 +479,7 @@ static ant_value_t ffi_make_pointer_or_null(ant_t *js, void *ptr) {
 }
 
 static bool ffi_pointer_from_js(
-  ant_t *js,
-  ant_value_t value,
-  void **out,
-  ant_value_t *error_out
+  ant_t *js, ant_value_t value, void **out, ant_value_t *error_out
 ) {
   ffi_pointer_handle_t *ptr_handle = NULL;
   ffi_callback_handle_t *cb_handle = NULL;
@@ -996,8 +991,6 @@ static ant_value_t ffi_dlopen(ant_params_t) {
 
 ant_value_t ffi_library_close(ant_params_t) {
   ffi_library_handle_t *library = ffi_library_data(js_getthis(js));
-  (void)args;
-  (void)nargs;
   if (!library) return js_mkerr_typed(js, JS_ERR_TYPE, "Expected an FFILibrary");
   ffi_library_close_handle(library);
   return js_getthis(js);
@@ -1017,9 +1010,8 @@ ant_value_t ffi_library_define(ant_params_t) {
   if (!library) return js_mkerr_typed(js, JS_ERR_TYPE, "Expected an FFILibrary");
   if (library->closed) return js_mkerr_typed(js, JS_ERR_TYPE, "FFILibrary is closed");
   
-  if (nargs < 2 || vtype(args[0]) != kTypeString) {
+  if (nargs < 2 || vtype(args[0]) != kTypeString)
     return js_mkerr_typed(js, JS_ERR_TYPE, "define(name, signature) requires a symbol name and signature");
-  }
 
   if (!ffi_parse_signature(js, args[1], true, true, &signature, &error)) return error;
 
@@ -1168,8 +1160,6 @@ cleanup:
 
 ant_value_t ffi_function_address(ant_params_t) {
   ffi_function_handle_t *function = ffi_function_data(js_getthis(js));
-  (void)args;
-  (void)nargs;
   if (!function) return js_mkerr_typed(js, JS_ERR_TYPE, "Expected an FFIFunction");
   return js_mknum((double)(uintptr_t)function->func_ptr);
 }
@@ -1204,8 +1194,10 @@ static ant_value_t ffi_alloc_memory(ant_params_t) {
 static ant_value_t ffi_pointer_value(ant_params_t) {
   ffi_pointer_region_t *region = NULL;
   ant_value_t error = js_mkundef();
+  
   char *str_copy = NULL;
   size_t str_len = 0;
+  
   const uint8_t *buffer_bytes = NULL;
   size_t buffer_len = 0;
 
@@ -1227,7 +1219,11 @@ static ant_value_t ffi_pointer_value(ant_params_t) {
     region->size_known = true;
     region->owned = false;
     region->freed = false;
-    return ffi_make_pointer(js, region, 0);
+    
+    ant_value_t out = ffi_make_pointer(js, region, 0);
+    if (ffi_pointer_data(out)) js_set_slot_wb(js, out, SLOT_DATA, args[0]);
+    
+    return out;
   }
 
   if (!ffi_copy_js_string(js, args[0], &str_copy, &str_len, &error)) {
@@ -1245,16 +1241,12 @@ static ant_value_t ffi_pointer_value(ant_params_t) {
 
 ant_value_t ffi_pointer_address(ant_params_t) {
   ffi_pointer_handle_t *handle = ffi_pointer_data(js_getthis(js));
-  (void)args;
-  (void)nargs;
   if (!handle) return js_mkerr_typed(js, JS_ERR_TYPE, "Expected an FFIPointer");
   return js_mknum((double)(uintptr_t)ffi_pointer_address_raw(handle));
 }
 
 ant_value_t ffi_pointer_is_null(ant_params_t) {
   ffi_pointer_handle_t *handle = ffi_pointer_data(js_getthis(js));
-  (void)args;
-  (void)nargs;
   if (!handle) return js_mkerr_typed(js, JS_ERR_TYPE, "Expected an FFIPointer");
   return js_bool(ffi_pointer_address_raw(handle) == NULL);
 }
@@ -1265,9 +1257,8 @@ ant_value_t ffi_pointer_read(ant_params_t) {
 
   if (!handle) return js_mkerr_typed(js, JS_ERR_TYPE, "Expected an FFIPointer");
   type = nargs > 0 ? ffi_marshaled_type_from_value(js, args[0]) : ffi_marshaled_type_make(FFI_VALUE_POINTER, "pointer");
-  if (type.id == FFI_VALUE_UNKNOWN || type.id == FFI_VALUE_SPREAD || type.id == FFI_VALUE_VOID) {
+  if (type.id == FFI_VALUE_UNKNOWN || type.id == FFI_VALUE_SPREAD || type.id == FFI_VALUE_VOID)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Unsupported FFIPointer.read() type");
-  }
   return ffi_read_from_pointer(js, handle, type);
 }
 
@@ -1276,14 +1267,11 @@ ant_value_t ffi_pointer_write(ant_params_t) {
   ffi_marshaled_type_t type;
 
   if (!handle) return js_mkerr_typed(js, JS_ERR_TYPE, "Expected an FFIPointer");
-  if (nargs < 2) {
-    return js_mkerr_typed(js, JS_ERR_TYPE, "FFIPointer.write(type, value) requires a type and value");
-  }
+  if (nargs < 2) return js_mkerr_typed(js, JS_ERR_TYPE, "FFIPointer.write(type, value) requires a type and value");
 
   type = ffi_marshaled_type_from_value(js, args[0]);
-  if (type.id == FFI_VALUE_UNKNOWN || type.id == FFI_VALUE_SPREAD || type.id == FFI_VALUE_VOID) {
+  if (type.id == FFI_VALUE_UNKNOWN || type.id == FFI_VALUE_SPREAD || type.id == FFI_VALUE_VOID)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Unsupported FFIPointer.write() type");
-  }
 
   return ffi_write_to_pointer(js, handle, type, args[1]);
 }
@@ -1295,34 +1283,33 @@ ant_value_t ffi_pointer_offset(ant_params_t) {
   size_t offset = 0;
 
   if (!handle) return js_mkerr_typed(js, JS_ERR_TYPE, "Expected an FFIPointer");
-  if (nargs < 1 || vtype(args[0]) != kTypeNumber) {
+  if (nargs < 1 || vtype(args[0]) != kTypeNumber)
     return js_mkerr_typed(js, JS_ERR_TYPE, "FFIPointer.offset(bytes) requires a numeric byte offset");
-  }
 
   if (js_getnum(args[0]) < 0) return js_mkerr_typed(js, JS_ERR_RANGE, "FFIPointer.offset() requires a non-negative offset");
   offset = (size_t)js_getnum(args[0]);
 
-  if (handle->region && handle->region->size_known && handle->byte_offset + offset > handle->region->size) {
+  if (handle->region && handle->region->size_known && handle->byte_offset + offset > handle->region->size)
     return js_mkerr_typed(js, JS_ERR_RANGE, "FFIPointer.offset() is out of bounds");
-  }
 
   out = ffi_make_pointer(js, handle->region, handle->byte_offset + offset);
   next = ffi_pointer_data(out);
+  
   if (!next) return out;
+  js_set_slot_wb(js, out, SLOT_DATA, js_get_slot(js_getthis(js), SLOT_DATA));
+  
   return out;
 }
 
 ant_value_t ffi_pointer_free(ant_params_t) {
   ffi_pointer_handle_t *handle = ffi_pointer_data(js_getthis(js));
-  (void)args;
-  (void)nargs;
   if (!handle) return js_mkerr_typed(js, JS_ERR_TYPE, "Expected an FFIPointer");
-  if (!handle->region || !handle->region->owned) {
+  
+  if (!handle->region || !handle->region->owned)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Only owned FFIPointers can be freed");
-  }
-  if (!ffi_pointer_region_free(handle->region)) {
+  if (!ffi_pointer_region_free(handle->region))
     return js_mkerr_typed(js, JS_ERR_TYPE, "FFIPointer has already been freed");
-  }
+
   return js_getthis(js);
 }
 
@@ -1333,9 +1320,7 @@ static ant_value_t ffi_create_callback(ant_params_t) {
   ffi_callback_handle_t *callback = NULL;
   ant_value_t error = js_mkundef();
 
-  if (nargs < 2) {
-    return js_mkerr_typed(js, JS_ERR_TYPE, "callback(signature, fn) requires a signature and function");
-  }
+  if (nargs < 2) return js_mkerr_typed(js, JS_ERR_TYPE, "callback(signature, fn) requires a signature and function");
 
   if (is_callable(args[0]) && is_object_type(args[1])) {
     fn = args[0];
@@ -1346,7 +1331,6 @@ static ant_value_t ffi_create_callback(ant_params_t) {
   } else return js_mkerr_typed(js, JS_ERR_TYPE, "callback(signature, fn) requires a signature object and callable function");
 
   ffi_init_prototypes(js);
-
   callback = calloc(1, sizeof(*callback));
   if (!callback) return Ant_Error_CreateOutOfMemory(js);
 
@@ -1356,12 +1340,12 @@ static ant_value_t ffi_create_callback(ant_params_t) {
   }
 
   if (ffi_prep_cif(
-        &callback->cif,
-        FFI_DEFAULT_ABI,
-        (unsigned int)callback->signature.arg_count,
-        callback->signature.returns.ffi_type,
-        callback->signature.arg_count > 0 ? callback->signature.ffi_arg_types : NULL
-      ) != FFI_OK) {
+    &callback->cif,
+    FFI_DEFAULT_ABI,
+    (unsigned int)callback->signature.arg_count,
+    callback->signature.returns.ffi_type,
+    callback->signature.arg_count > 0 ? callback->signature.ffi_arg_types : NULL
+  ) != FFI_OK) {
     ffi_signature_cleanup(&callback->signature);
     free(callback);
     return js_mkerr_typed(js, JS_ERR_TYPE, "Failed to prepare FFICallback signature");
@@ -1398,16 +1382,12 @@ static ant_value_t ffi_create_callback(ant_params_t) {
 
 ant_value_t ffi_callback_address(ant_params_t) {
   ffi_callback_handle_t *callback = ffi_callback_data(js_getthis(js));
-  (void)args;
-  (void)nargs;
   if (!callback) return js_mkerr_typed(js, JS_ERR_TYPE, "Expected an FFICallback");
   return js_mknum((double)(uintptr_t)callback->code_ptr);
 }
 
 ant_value_t ffi_callback_close(ant_params_t) {
   ffi_callback_handle_t *callback = ffi_callback_data(js_getthis(js));
-  (void)args;
-  (void)nargs;
   if (!callback) return js_mkerr_typed(js, JS_ERR_TYPE, "Expected an FFICallback");
   ffi_callback_close_handle(callback);
   return js_getthis(js);
