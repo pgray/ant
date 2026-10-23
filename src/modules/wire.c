@@ -146,7 +146,7 @@ static ant_value_t wire_clone_error(ant_t *js, const char *message) {
 }
 
 static ant_value_t wire_oom(ant_t *js) {
-  return js_mkerr(js, "out of memory");
+  return Ant_Error_CreateOutOfMemory(js);
 }
 
 static ant_value_t wire_uncloneable(wire_writer_t *w, ant_value_t value) {

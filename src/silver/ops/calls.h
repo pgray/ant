@@ -130,7 +130,7 @@ static inline ant_value_t sv_call_args_place(
   
   if (fixed + len > cap) {
     dst = sv_call_args_root(js, a, fixed + len);
-    if (!dst) return js_mkerr(js, "out of memory");
+    if (!dst) return Ant_Error_CreateOutOfMemory(js);
     if (fixed > 0) memcpy(dst, a->args, (size_t)fixed * sizeof(ant_value_t));
   }
 
@@ -171,7 +171,7 @@ static inline ant_value_t sv_apply_normalize_args(ant_t *js, sv_call_args_t *a, 
     return js_mkerr(js, "too many arguments");
 
   ant_value_t *slots = sv_call_args_root(js, a, (int)len);
-  if (!slots) return js_mkerr(js, "out of memory");
+  if (!slots) return Ant_Error_CreateOutOfMemory(js);
   for (ant_offset_t i = 0; i < len; i++) slots[i] = js_arr_get(js, arg_array, i);
   
   a->args = slots;

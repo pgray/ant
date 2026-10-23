@@ -99,7 +99,7 @@ static ant_value_t isolate_make_handle(ant_t *js, ant_guest_t *g, isolate_handle
     kind == HANDLE_SCRIPT ? js->builtins.isolate_script_proto : js->builtins.isolate_reference_proto;
 
   isolate_handle_t *h = calloc(1, sizeof(*h));
-  if (!h) return js_mkerr(js, "out of memory");
+  if (!h) return Ant_Error_CreateOutOfMemory(js);
   *h = (isolate_handle_t){ .g = guest_retain(g), .kind = kind, .id = id, .type = type };
 
   ant_value_t obj = Ant_Object_CreateBare(js);
@@ -125,7 +125,7 @@ static ant_value_t isolate_callback_id(ant_t *js, ant_guest_t *g, ant_value_t fn
   if (g->callback_count == g->callback_cap) {
     uint32_t cap = g->callback_cap ? g->callback_cap * 2 : 8;
     ant_value_t *callbacks = realloc(g->callbacks, cap * sizeof(*callbacks));
-    if (!callbacks) return js_mkerr(js, "out of memory");
+    if (!callbacks) return Ant_Error_CreateOutOfMemory(js);
     g->callbacks = callbacks;
     g->callback_cap = cap;
   }
@@ -379,7 +379,7 @@ void guest_host_run_callback(ant_t *js, ant_guest_t *g, guest_host_call_t *call)
   GC_ROOT_SAVE(mark, js);
   ant_value_t fn = g->callbacks[call->callback];
   ant_value_t *argv = call->argc ? calloc(call->argc, sizeof(*argv)) : NULL;
-  ant_value_t result = call->argc && !argv ? js_mkerr(js, "out of memory") : js_mkundef();
+  ant_value_t result = call->argc && !argv ? Ant_Error_CreateOutOfMemory(js) : js_mkundef();
 
   for (uint32_t i = 0; i < call->argc && !is_err(result); i++) {
     argv[i] = guest_decode_host(js, g, &call->args[i]);
@@ -479,7 +479,7 @@ static ant_value_t isolate_call_text(ant_t *js, guest_call_t *call, ant_value_t 
   size_t len = 0;
   const char *src = js_getstr(js, text, &len);
   call->text = malloc(len + 1);
-  if (!call->text) return js_mkerr(js, "out of memory");
+  if (!call->text) return Ant_Error_CreateOutOfMemory(js);
   memcpy(call->text, src, len);
   call->text[len] = '\0';
   call->text_len = len;
@@ -488,7 +488,7 @@ static ant_value_t isolate_call_text(ant_t *js, guest_call_t *call, ant_value_t 
 
 static ant_value_t isolate_call_args(ant_t *js, ant_guest_t *g, guest_call_t *call, ant_value_t *values, uint32_t count) {
   call->args = count ? calloc(count, sizeof(*call->args)) : NULL;
-  if (count && !call->args) return js_mkerr(js, "out of memory");
+  if (count && !call->args) return Ant_Error_CreateOutOfMemory(js);
   call->argc = count;
   for (uint32_t i = 0; i < count; i++) {
     ant_value_t r = guest_encode(js, g, values[i], &call->args[i]);
@@ -505,7 +505,7 @@ static ant_value_t isolate_fail(guest_call_t *call, ant_value_t error) {
 static ant_value_t isolate_simple(ant_t *js, ant_guest_t *g, guest_op_t op, bool sync) {
   if (!g) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
   guest_call_t *call = isolate_call_new(js, op, NULL);
-  return call ? isolate_submit(js, g, call, sync) : js_mkerr(js, "out of memory");
+  return call ? isolate_submit(js, g, call, sync) : Ant_Error_CreateOutOfMemory(js);
 }
 
 static ant_value_t isolate_compile(ant_t *js, ant_value_t *args, int nargs, bool sync) {
@@ -517,7 +517,7 @@ static ant_value_t isolate_compile(ant_t *js, ant_value_t *args, int nargs, bool
   if (is_err(r)) return r;
 
   guest_call_t *call = isolate_call_new(js, GUEST_OP_COMPILE, &opts);
-  if (!call) return js_mkerr(js, "out of memory");
+  if (!call) return Ant_Error_CreateOutOfMemory(js);
   r = isolate_call_text(js, call, nargs > 0 ? args[0] : js_mkundef());
 
   return is_err(r) ? isolate_fail(call, r) : isolate_submit(js, g, call, sync);
@@ -535,7 +535,7 @@ static ant_value_t isolate_run(ant_t *js, guest_op_t op, isolate_handle_t *targe
   if (force_ref) opts.want_ref = true;
 
   guest_call_t *call = isolate_call_new(js, op, &opts);
-  if (!call) return js_mkerr(js, "out of memory");
+  if (!call) return Ant_Error_CreateOutOfMemory(js);
   call->context = ctx->id;
   call->target = target->id;
 
@@ -556,7 +556,7 @@ static ant_value_t isolate_property(ant_t *js, guest_op_t op, ant_value_t *args,
   if (is_err(r)) return r;
 
   guest_call_t *call = isolate_call_new(js, op, &opts);
-  if (!call) return js_mkerr(js, "out of memory");
+  if (!call) return Ant_Error_CreateOutOfMemory(js);
   call->target = ref->id;
 
   ant_value_t values[2] = { nargs > 0 ? args[0] : js_mkundef(), nargs > 1 ? args[1] : js_mkundef() };
@@ -579,14 +579,14 @@ static ant_value_t isolate_apply(ant_t *js, ant_value_t *args, int nargs, bool s
   uint32_t count = vtype(list) == kTypeArray ? (uint32_t)js_arr_len(js, list) : 0;
 
   ant_value_t *values = calloc((size_t)count + 1, sizeof(*values));
-  if (!values) return js_mkerr(js, "out of memory");
+  if (!values) return Ant_Error_CreateOutOfMemory(js);
   values[0] = nargs > 0 ? args[0] : js_mkundef();
   for (uint32_t i = 0; i < count; i++) values[i + 1] = js_arr_get(js, list, i);
 
   guest_call_t *call = isolate_call_new(js, GUEST_OP_APPLY, &opts);
   if (!call) {
     free(values);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   call->target = ref->id;
@@ -600,7 +600,7 @@ static ant_value_t isolate_copy_op(ant_t *js, bool sync) {
   isolate_handle_t *ref = isolate_handle(js_getthis(js), HANDLE_REFERENCE);
   if (!ref) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
   guest_call_t *call = isolate_call_new(js, GUEST_OP_COPY, NULL);
-  if (!call) return js_mkerr(js, "out of memory");
+  if (!call) return Ant_Error_CreateOutOfMemory(js);
   call->target = ref->id;
   return isolate_submit(js, ref->g, call, sync);
 }
@@ -736,7 +736,7 @@ static ant_value_t js_isolate_ctor(ant_params_t) {
   if (is_object_type(proto)) js_set_proto_init(self, proto);
 
   ant_guest_t *g = calloc(1, sizeof(*g));
-  if (!g) return js_mkerr(js, "out of memory");
+  if (!g) return Ant_Error_CreateOutOfMemory(js);
   atomic_init(&g->refs, 1);
   uv_mutex_init(&g->lock);
   uv_cond_init(&g->cond);

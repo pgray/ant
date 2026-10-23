@@ -685,7 +685,7 @@ ant_value_t worker_limits_object(ant_t *js, const double limits[WORKER_LIMIT_COU
 static ant_value_t worker_build_argv(ant_t *js, ant_worker_t *w, ant_value_t argv_opt) {
   ant_offset_t extra = vtype(argv_opt) == kTypeArray ? js_arr_len(js, argv_opt) : 0;
   w->argv = calloc((size_t)extra + 3, sizeof(char *));
-  if (!w->argv) return js_mkerr(js, "out of memory");
+  if (!w->argv) return Ant_Error_CreateOutOfMemory(js);
 
   const char *exe = js->runtime.argc > 0 && js->runtime.argv ? js->runtime.argv[0] : "ant";
   w->argv[w->argc++] = strdup(exe);
@@ -742,12 +742,12 @@ ant_value_t worker_transfer_arg(ant_t *js, ant_value_t *args, int nargs) {
 
 static ant_value_t worker_bind_parent(ant_t *js, ant_worker_t *w) {
   ant_port_end_t *parent_end = NULL;
-  if (!ant_port_end_pair(&parent_end, &w->child_end)) return js_mkerr(js, "out of memory");
+  if (!ant_port_end_pair(&parent_end, &w->child_end)) return Ant_Error_CreateOutOfMemory(js);
 
   w->binding = ant_port_end_bind(js, parent_end, w->obj, w->ops->on_message);
   if (!w->binding) {
     ant_port_end_release(parent_end);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   if (uv_async_init(js->loop, &w->parent_async, worker_parent_wake) != 0) {

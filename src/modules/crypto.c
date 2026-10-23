@@ -437,13 +437,13 @@ static ant_value_t crypto_get_input_bytes(
       break;
     case CRYPTO_TEXT_BASE64:
       buf = ant_base64_decode_loose(str, str_len, &len);
-      if (!buf) return js_mkerr(js, "Out of memory");
+      if (!buf) return Ant_Error_CreateOutOfMemory(js);
       bytes = buf;
       break;
     case CRYPTO_TEXT_LATIN1: {
       size_t units = (size_t)str_utf16_len(js, string_val);
       buf = malloc(units == 0 ? 1 : units);
-      if (!buf) return js_mkerr(js, "Out of memory");
+      if (!buf) return Ant_Error_CreateOutOfMemory(js);
       for (size_t i = 0; i < units; i++) buf[i] = (uint8_t)utf16_code_unit_at(str, str_len, i);
       bytes = buf;
       len = units;
@@ -1226,7 +1226,7 @@ static ant_value_t crypto_subtle_import_key_impl(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "keyData must be a BufferSource");
 
   ant_crypto_key_t *key = crypto_key_alloc(len);
-  if (!key) return js_mkerr(js, "Out of memory");
+  if (!key) return Ant_Error_CreateOutOfMemory(js);
   if (len) memcpy(key->key, bytes, len);
   key->extractable = js_truthy(js, args[3]);
   key->usages = usages;
@@ -1320,7 +1320,7 @@ static ant_value_t crypto_subtle_generate_key_impl(ant_params_t) {
   if (is_err(result)) return result;
 
   ant_crypto_key_t *key = crypto_key_alloc(bits / 8u + (bits % 8u != 0));
-  if (!key) return js_mkerr(js, "Out of memory");
+  if (!key) return Ant_Error_CreateOutOfMemory(js);
   key->kind = kind;
   key->md = md;
   key->usages = usages;
@@ -1410,7 +1410,7 @@ static ant_value_t crypto_subtle_derive_bits_impl(ant_params_t) {
   if (!md) return js_mkerr_typed(js, JS_ERR_TYPE, "Unsupported PBKDF2 hash algorithm");
 
   uint8_t *out = malloc((size_t)keylen ? (size_t)keylen : 1);
-  if (!out) return js_mkerr(js, "Out of memory");
+  if (!out) return Ant_Error_CreateOutOfMemory(js);
   if (PKCS5_PBKDF2_HMAC((const char *)key->key, (int)key->key_len, salt, (int)salt_len, iterations, md, keylen, out) != 1) {
     free(out);
     return js_mkerr(js, "PBKDF2 failed");
@@ -1531,7 +1531,7 @@ static ant_value_t crypto_aes_gcm_crypt(
   size_t text_len = encrypt ? input_len : input_len - (size_t)tag_len;
   size_t out_cap = encrypt ? input_len + (size_t)tag_len : text_len;
   uint8_t *out = malloc(out_cap ? out_cap : 1);
-  if (!out) return js_mkerr(js, "Out of memory");
+  if (!out) return Ant_Error_CreateOutOfMemory(js);
 
   EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
   if (!ctx) {
@@ -1681,14 +1681,14 @@ static ant_value_t js_crypto_create_hash(ant_params_t) {
   if (!algo || algo_len == 0) return js_mkerr(js, "Invalid hash algorithm");
 
   char *algo_name = strndup(algo, algo_len);
-  if (!algo_name) return js_mkerr(js, "Out of memory");
+  if (!algo_name) return Ant_Error_CreateOutOfMemory(js);
 
   const EVP_MD *md = EVP_get_digestbyname(algo_name);
   free(algo_name);
   if (!md) return js_mkerr_typed(js, JS_ERR_TYPE, "Unsupported hash algorithm");
 
   ant_hash_state_t *state = calloc(1, sizeof(*state));
-  if (!state) return js_mkerr(js, "Out of memory");
+  if (!state) return Ant_Error_CreateOutOfMemory(js);
 
   state->ctx = EVP_MD_CTX_new();
   state->md = md;
@@ -1786,7 +1786,7 @@ static ant_value_t js_crypto_create_hmac(ant_params_t) {
   ant_hmac_state_t *state = calloc(1, sizeof(*state));
   if (!state) {
     if (owned) free(owned);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   state->ctx = HMAC_CTX_new();
@@ -1835,7 +1835,7 @@ static ant_value_t js_crypto_hash(ant_params_t) {
   if (!algo || algo_len == 0) return js_mkerr(js, "Invalid hash algorithm");
 
   algo_name = strndup(algo, algo_len);
-  if (!algo_name) return js_mkerr(js, "Out of memory");
+  if (!algo_name) return Ant_Error_CreateOutOfMemory(js);
 
   md = EVP_get_digestbyname(algo_name);
   free(algo_name);
@@ -1896,7 +1896,7 @@ static ant_value_t js_cipher_update(ant_params_t) {
   uint8_t *out = malloc(out_cap ? out_cap : 1);
   if (!out) {
     if (owned) free(owned);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   int out_len = 0;
@@ -2032,7 +2032,7 @@ static ant_value_t crypto_create_cipheriv(ant_native_params_t, bool encrypt) {
   if (!state) {
     if (key_owned) free(key_owned);
     if (iv_owned) free(iv_owned);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   state->ctx = EVP_CIPHER_CTX_new();
@@ -2116,7 +2116,7 @@ static ant_value_t crypto_pbkdf2_result(
 
   uint8_t *out = malloc((size_t)keylen ? (size_t)keylen : 1);
   if (!out) {
-    err = js_mkerr(js, "Out of memory");
+    err = Ant_Error_CreateOutOfMemory(js);
     goto cleanup_err;
   }
   if (PKCS5_PBKDF2_HMAC((const char *)password, (int)password_len, salt, (int)salt_len, iterations, md, keylen, out) != 1) {
@@ -2191,7 +2191,7 @@ static ant_value_t crypto_scrypt_result(ant_native_params_t, int options_index) 
 
   uint8_t *out = malloc((size_t)keylen ? (size_t)keylen : 1);
   if (!out) {
-    err = js_mkerr(js, "Out of memory");
+    err = Ant_Error_CreateOutOfMemory(js);
     goto cleanup_err;
   }
 

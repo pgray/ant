@@ -52,7 +52,7 @@ static ant_value_t sc_lookup(sc_entry_t **table, ant_value_t key) {
 
 static ant_value_t sc_transfer_target(ant_t *js, sc_entry_t *entry) {
   ArrayBufferData *placeholder = create_array_buffer_data(js, 0);
-  if (!placeholder) return js_mkerr(js, "out of memory");
+  if (!placeholder) return Ant_Error_CreateOutOfMemory(js);
   
   entry->value = create_arraybuffer_obj(js, placeholder);
   free_array_buffer_data(js, placeholder);
@@ -203,7 +203,7 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
     if (is_special_object(map_proto)) js_set_proto_init(clone, map_proto);
     
     map_entry_t **new_head = collections_map_store_new();
-    if (!new_head) return js_mkerr(js, "out of memory");
+    if (!new_head) return Ant_Error_CreateOutOfMemory(js);
     
     *new_head = NULL;
     js_set_native(clone, new_head, MAP_NATIVE_TAG);
@@ -220,7 +220,7 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
       if (is_err(vc)) return vc;
 
       if (!collections_map_store_cloned_entry(js, new_head, kc, vc))
-        return js_mkerr(js, "out of memory");
+        return Ant_Error_CreateOutOfMemory(js);
     }}
     
     return clone;
@@ -234,7 +234,7 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
     if (is_special_object(set_proto)) js_set_proto_init(clone, set_proto);
     
     set_entry_t **new_head = collections_set_store_new();
-    if (!new_head) return js_mkerr(js, "out of memory");
+    if (!new_head) return Ant_Error_CreateOutOfMemory(js);
     *new_head = NULL;
     
     js_set_native(clone, new_head, SET_NATIVE_TAG);
@@ -246,7 +246,7 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
       HASH_ITER(hh, *src_head, e, tmp) {
         ant_value_t vc = sc_clone_rec(js, e->value, seen, transfer);
         if (is_err(vc)) return vc;
-        if (!collections_set_store_cloned_entry(js, new_head, vc)) return js_mkerr(js, "out of memory");
+        if (!collections_set_store_cloned_entry(js, new_head, vc)) return Ant_Error_CreateOutOfMemory(js);
       }
     }
 

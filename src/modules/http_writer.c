@@ -25,7 +25,7 @@ static ant_value_t http_writer_make_buffer_value(ant_t *js, ant_http1_buffer_t *
   ab = create_array_buffer_data(js, len);
   if (!ab) {
     free(data);
-    return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   if (len > 0 && data) memcpy(ab->data, data, len);
@@ -86,7 +86,7 @@ static bool http_writer_append_raw_headers(
   }
 
   if (buf->failed && error_out && vtype(*error_out) == kTypeUndefined)
-    *error_out = js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+    *error_out = Ant_Error_CreateOutOfMemory(js);
   return !buf->failed;
 }
 
@@ -141,7 +141,7 @@ static ant_value_t js_http_writer_write_chunk(ant_params_t) {
   if (!http_writer_parse_bytes(js, nargs > 0 ? args[0] : js_mkundef(), &bytes, &len, &error)) return error;
   if (!ant_http1_write_chunk(&buf, bytes, len)) {
     ant_http1_buffer_free(&buf);
-    return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   return http_writer_make_buffer_value(js, &buf);
@@ -153,7 +153,7 @@ static ant_value_t js_http_writer_write_final_chunk(ant_params_t) {
   ant_http1_buffer_init(&buf);
   if (!ant_http1_write_final_chunk(&buf)) {
     ant_http1_buffer_free(&buf);
-    return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   return http_writer_make_buffer_value(js, &buf);
@@ -189,7 +189,7 @@ static ant_value_t js_http_writer_write_basic_response(ant_params_t) {
   ant_http1_buffer_init(&buf);
   if (!ant_http1_write_basic_response(&buf, status, status_text, content_type, body, body_len, keep_alive)) {
     ant_http1_buffer_free(&buf);
-    return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   return http_writer_make_buffer_value(js, &buf);
@@ -223,7 +223,7 @@ static ant_value_t js_http_writer_write_head(ant_params_t) {
   ant_http1_buffer_init(&buf);
   if (!ant_http1_buffer_appendf(&buf, "HTTP/1.1 %d %s\r\n", status, status_text ? status_text : ant_http1_default_status_text(status))) {
     ant_http1_buffer_free(&buf);
-    return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   if (!http_writer_append_raw_headers(js, &buf, raw_headers, &error)) {
@@ -237,7 +237,7 @@ static ant_value_t js_http_writer_write_head(ant_params_t) {
 
   if (buf.failed) {
     ant_http1_buffer_free(&buf);
-    return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   return http_writer_make_buffer_value(js, &buf);

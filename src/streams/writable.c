@@ -983,7 +983,7 @@ static ant_value_t setup_ws_default_controller(
   ant_value_t size_fn, double hwm
 ) {
   ws_controller_t *ctrl = calloc(1, sizeof(ws_controller_t));
-  if (!ctrl) return js_mkerr(js, "out of memory");
+  if (!ctrl) return Ant_Error_CreateOutOfMemory(js);
   ctrl->strategy_hwm = hwm;
 
   ant_value_t ctrl_obj = Ant_Object_CreateBare(js);
@@ -1060,7 +1060,7 @@ static ant_value_t js_ws_ctor(ant_params_t) {
   }
 
   ws_stream_t *st = calloc(1, sizeof(ws_stream_t));
-  if (!st) return js_mkerr(js, "out of memory");
+  if (!st) return Ant_Error_CreateOutOfMemory(js);
   st->state = WS_STATE_WRITABLE;
 
   ant_value_t obj = Ant_Object_CreateBare(js);

@@ -384,7 +384,7 @@ ant_value_t readable_stream_pipe_to(
   }
 
   pipe_state_t *pst = calloc(1, sizeof(pipe_state_t));
-  if (!pst) return js_mkerr(js, "out of memory");
+  if (!pst) return Ant_Error_CreateOutOfMemory(js);
   pst->prevent_close = prevent_close;
   pst->prevent_abort = prevent_abort;
   pst->prevent_cancel = prevent_cancel;
@@ -733,7 +733,7 @@ static ant_value_t js_rs_tee(ant_params_t) {
   if (is_err(reader)) return reader;
 
   tee_state_t *st = calloc(1, sizeof(tee_state_t));
-  if (!st) return js_mkerr(js, "out of memory");
+  if (!st) return Ant_Error_CreateOutOfMemory(js);
 
   ant_value_t state = Ant_Object_CreateBare(js);
   js_set_native(state, st, TEE_STATE_NATIVE_TAG);

@@ -69,6 +69,11 @@ uint8_t *utf8_to_latin1(const char *src, size_t len, size_t *out_len, bool *is_l
 uint32_t utf16_code_unit_at(const char *str, size_t byte_len, size_t utf16_idx);
 uint32_t utf16_codepoint_at(const char *str, size_t byte_len, size_t utf16_idx);
 
+static inline uint32_t utf16_units_for_utf8_byte(unsigned char c) {
+  if ((c & 0xC0) == 0x80) return 0;
+  return c >= 0xF0 ? 2 : 1;
+}
+
 static inline int utf8_sequence_length(unsigned char first_byte) {
   if ((first_byte & 0x80) == 0) return 1;
   if ((first_byte & 0xE0) == 0xC0) return 2;

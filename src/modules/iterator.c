@@ -1657,7 +1657,7 @@ static ant_value_t async_iter_terminal(ant_native_params_t, int mode) {
   async_terminal_state_t *st = calloc(1, sizeof(*st));
   
   if (!st) {
-    async_iter_reject(js, promise, js_mkerr(js, "out of memory"));
+    async_iter_reject(js, promise, Ant_Error_CreateOutOfMemory(js));
     return promise;
   }
   

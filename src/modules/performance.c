@@ -421,7 +421,7 @@ static ant_value_t js_monitor_event_loop_delay(ant_params_t) {
   if (is_err(err)) return err;
 
   perf_eld_monitor_t *m = calloc(1, sizeof(*m));
-  if (!m) return js_mkerr(js, "out of memory");
+  if (!m) return Ant_Error_CreateOutOfMemory(js);
   m->resolution_ms = resolution;
   m->obj_alive = true;
   hist_reset(&m->hist);

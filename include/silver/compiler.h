@@ -104,9 +104,14 @@ typedef struct const_dedup_entry {
 } const_dedup_entry_t;
 
 typedef struct sv_line_table {
+  const char *source;
   uint32_t *offsets;
   int count;
   int hint;
+  bool ascii;
+  int col_line;
+  uint32_t col_off;
+  uint32_t col;
 } sv_line_table_t;
 
 typedef struct {

@@ -28,7 +28,7 @@ bool worker_stdio_writer(FILE *stream, const void *data, size_t len, void *user)
 
 static ant_value_t worker_stdio_bytes(ant_t *js, const char *bytes, size_t len) {
   ArrayBufferData *ab = create_array_buffer_data(js, len);
-  if (!ab) return js_mkerr(js, "out of memory");
+  if (!ab) return Ant_Error_CreateOutOfMemory(js);
   if (len) memcpy(ab->data, bytes, len);
   return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, js->builtins.buffer_proto);
 }
@@ -128,7 +128,7 @@ static ant_value_t worker_stdin_write(ant_params_t) {
 
   if (w && !w->exited) {
     worker_event_t *e = malloc(sizeof(*e) + len);
-    if (!e) return js_mkerr(js, "out of memory");
+    if (!e) return Ant_Error_CreateOutOfMemory(js);
     *e = (worker_event_t){ .kind = WORKER_EVENT_STDIN, .len = len };
     if (len) memcpy(e->bytes, bytes, len);
     worker_stdin_enqueue(w, e);

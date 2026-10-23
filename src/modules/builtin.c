@@ -386,7 +386,7 @@ static ant_value_t hl_get_tagged(ant_native_params_t) {
 
   size_t out_size = input_len * 8 + 1;
   char *out = malloc(out_size);
-  if (!out) return js_mkerr(js, "out of memory");
+  if (!out) return Ant_Error_CreateOutOfMemory(js);
 
   int len = ant_highlight(input, input_len, out, out_size);
   ant_value_t result = js_mkstr(js, out, (size_t)len);
@@ -401,7 +401,7 @@ static ant_value_t hl_render_tagged(ant_t *js, ant_value_t tagged) {
 
   size_t ansi_size = tagged_len * 2 + 1;
   char *ansi = malloc(ansi_size);
-  if (!ansi) return js_mkerr(js, "out of memory");
+  if (!ansi) return Ant_Error_CreateOutOfMemory(js);
 
   int len = crsprintf_stateful(ansi, ansi_size, NULL, tagged_str);
   ant_value_t result = js_mkstr(js, ansi, len < 0 ? 0 : (size_t)len);

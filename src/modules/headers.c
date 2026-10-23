@@ -370,7 +370,7 @@ static ant_value_t headers_append_name_value_bytes_n(
     return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid header value");
 
   if (!list_append_parts(l, name, name_len, value_start, value_len, true))
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   return js_mkundef();
 }
 
@@ -398,7 +398,7 @@ static ant_value_t header_value_from_js(
   if (!bytes) {
     if (!is_latin1)
       return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid header value");
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   *out = (const char *)bytes;
@@ -418,7 +418,7 @@ static ant_value_t header_value_to_js(ant_t *js, const char *bytes, size_t len) 
 
   size_t utf8_len = 0;
   char *utf8 = latin1_to_utf8((const uint8_t *)bytes, len, &utf8_len);
-  if (!utf8) return js_mkerr(js, "out of memory");
+  if (!utf8) return Ant_Error_CreateOutOfMemory(js);
   ant_value_t result = js_mkstr(js, utf8, utf8_len);
   free(utf8);
   return result;
@@ -609,7 +609,7 @@ static ant_value_t make_headers_iter(ant_t *js, ant_value_t headers_obj, int kin
   if (!l) return js_mkerr(js, "Invalid Headers object");
 
   hdr_iter_t *st = calloc(1, sizeof(hdr_iter_t));
-  if (!st) return js_mkerr(js, "out of memory");
+  if (!st) return Ant_Error_CreateOutOfMemory(js);
   
   st->list  = l;
   st->kind  = kind;
@@ -681,7 +681,7 @@ static ant_value_t js_headers_set(ant_params_t) {
   const char *lower = lowercase_name_view(name, name_len, &owned_lower);
   if (!lower) {
     free(owned_value);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   list_delete_name(l, lower);
@@ -690,7 +690,7 @@ static ant_value_t js_headers_set(ant_params_t) {
 
   free(owned_lower);
   free(owned_value);
-  if (!appended) return js_mkerr(js, "out of memory");
+  if (!appended) return Ant_Error_CreateOutOfMemory(js);
   
   return js_mkundef();
 }
@@ -709,7 +709,7 @@ static ant_value_t js_headers_get(ant_params_t) {
 
   char *owned_lower = NULL;
   const char *lower = lowercase_name_view(name, name_len, &owned_lower);
-  if (!lower) return js_mkerr(js, "out of memory");
+  if (!lower) return Ant_Error_CreateOutOfMemory(js);
 
   // set-cookie is never combined per Fetch spec
   if (strcmp(lower, "set-cookie") == 0) {
@@ -744,7 +744,7 @@ static ant_value_t js_headers_get(ant_params_t) {
   }
 
   char *combined = malloc(total + 1);
-  if (!combined) { free(owned_lower); return js_mkerr(js, "out of memory"); }
+  if (!combined) { free(owned_lower); return Ant_Error_CreateOutOfMemory(js); }
 
   size_t pos = 0;
   int seen = 0;
@@ -779,7 +779,7 @@ static ant_value_t js_headers_has(ant_params_t) {
 
   char *owned_lower = NULL;
   const char *lower = lowercase_name_view(name, name_len, &owned_lower);
-  if (!lower) return js_mkerr(js, "out of memory");
+  if (!lower) return Ant_Error_CreateOutOfMemory(js);
 
   bool found = false;
   for (hdr_entry_t *e = l->head; e; e = e->next) {
@@ -806,7 +806,7 @@ static ant_value_t js_headers_delete(ant_params_t) {
 
   char *owned_lower = NULL;
   const char *lower = lowercase_name_view(name, name_len, &owned_lower);
-  if (!lower) return js_mkerr(js, "out of memory");
+  if (!lower) return Ant_Error_CreateOutOfMemory(js);
   list_delete_name(l, lower);
   free(owned_lower);
   
@@ -873,7 +873,7 @@ static ant_value_t headers_inspect_finish(ant_t *js, ant_value_t this_obj, ant_v
 
   js_inspect_builder_t builder;
   if (!js_inspect_builder_init_dynamic(&builder, js, 128)) {
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   bool ok = js_inspect_header_for(&builder, body_obj, "%s", tag);
@@ -882,7 +882,7 @@ static ant_value_t headers_inspect_finish(ant_t *js, ant_value_t this_obj, ant_v
 
   if (!ok) {
     js_inspect_builder_dispose(&builder);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   return js_inspect_builder_result(&builder);
@@ -910,7 +910,7 @@ static ant_value_t headers_inspect(ant_params_t) {
     const char *value_str = js_getstr(js, value_js, &value_len);
     size_t combined_len = existing_len + 2 + value_len;
     char *combined = malloc(combined_len + 1);
-    if (!combined) return js_mkerr(js, "out of memory");
+    if (!combined) return Ant_Error_CreateOutOfMemory(js);
     
     memcpy(combined, existing_str, existing_len);
     combined[existing_len] = ',';
@@ -930,7 +930,7 @@ static ant_value_t js_headers_ctor(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Headers constructor requires 'new'");
 
   hdr_list_t *l = headers_data_create();
-  if (!l) return js_mkerr(js, "out of memory");
+  if (!l) return Ant_Error_CreateOutOfMemory(js);
 
   ant_value_t init = (nargs >= 1) ? args[0] : js_mkundef();
 
@@ -966,13 +966,13 @@ static ant_value_t js_headers_ctor(ant_params_t) {
 
 ant_value_t headers_create_empty(ant_t *js) {
   hdr_list_t *l = headers_data_create();
-  if (!l) return js_mkerr(js, "out of memory");
+  if (!l) return Ant_Error_CreateOutOfMemory(js);
 
   return headers_create_from_data(js, l);
 }
 
 ant_value_t headers_create_from_data(ant_t *js, headers_data_t *data) {
-  if (!data) return js_mkerr(js, "out of memory");
+  if (!data) return Ant_Error_CreateOutOfMemory(js);
 
   ant_value_t obj = Ant_Object_CreateBare(js);
   js_reserve_slots(obj, 2);
@@ -1084,7 +1084,7 @@ ant_value_t headers_data_init_from(ant_t *js, headers_data_t *data, ant_value_t 
     hdr_list_t *src = headers_get_data(init);
     if (src) for (hdr_entry_t *e = src->head; e; e = e->next)
       if (!list_append_raw(data, e->name, e->value))
-        return js_mkerr(js, "out of memory");
+        return Ant_Error_CreateOutOfMemory(js);
     return js_mkundef();
   }
 
@@ -1125,7 +1125,7 @@ ant_value_t headers_get_value(ant_t *js, ant_value_t hdrs, const char *name) {
 
   char *owned_lower = NULL;
   const char *lower = lowercase_name_view(name, name_len, &owned_lower);
-  if (!lower) return js_mkerr(js, "out of memory");
+  if (!lower) return Ant_Error_CreateOutOfMemory(js);
 
   if (strcmp(lower, "set-cookie") == 0) {
     for (hdr_entry_t *e = l->head; e; e = e->next) {
@@ -1163,7 +1163,7 @@ ant_value_t headers_get_value(ant_t *js, ant_value_t hdrs, const char *name) {
   char *combined = malloc(total + 1);
   if (!combined) {
     free(owned_lower);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   size_t pos = 0;

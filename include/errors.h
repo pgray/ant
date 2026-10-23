@@ -44,6 +44,7 @@ ant_value_t js_mkerr_code(ant_t *js, js_err_type_t type, const char *code, const
 void js_describe_received(ant_t *js, ant_value_t value, char *out, size_t out_len);
 
 ant_value_t Ant_Error_CreateStackOverflow(ant_t *js);
+ant_value_t Ant_Error_CreateOutOfMemory(ant_t *js);
 ant_value_t Ant_Error_CreateInvalidArgType(ant_t *js, const char *name, const char *expected, ant_value_t received);
 ant_value_t Ant_Error_CreateInvalidArgValue(ant_t *js, const char *name, const char *expected, ant_value_t received);
 ant_value_t Ant_Error_CheckNoNullBytes(ant_t *js, const char *name, ant_value_t value);

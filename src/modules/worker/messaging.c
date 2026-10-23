@@ -307,7 +307,7 @@ ant_value_t worker_post_message_to_thread(ant_t *js, ant_value_t *args, int narg
   ));
 
   ant_thread_mailbox_t *own = worker_mailbox(js);
-  if (!own) return mailbox_rejected(js, js_mkerr(js, "out of memory"));
+  if (!own) return mailbox_rejected(js, Ant_Error_CreateOutOfMemory(js));
 
   ant_wire_t *wire = NULL;
   ant_value_t ser = ant_wire_serialize(js, value, transfer, js_mkundef(), &wire);
@@ -329,7 +329,7 @@ ant_value_t worker_post_message_to_thread(ant_t *js, ant_value_t *args, int narg
     free(msg);
     ant_wire_release(wire);
     mailbox_release(dest);
-    return mailbox_rejected(js, js_mkerr(js, "out of memory"));
+    return mailbox_rejected(js, Ant_Error_CreateOutOfMemory(js));
   }
 
   ant_value_t promise = js_mkpromise(js);

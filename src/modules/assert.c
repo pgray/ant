@@ -395,7 +395,7 @@ static ant_value_t assert_message(ant_t *js, ant_value_t custom, assertion_info_
 
   errbuf_t eb;
   assert_inspected_t ia, ie;
-  if (!errbuf_init(&eb, 256)) return js_mkerr(js, "out of memory");
+  if (!errbuf_init(&eb, 256)) return Ant_Error_CreateOutOfMemory(js);
   
   bool ok = assert_inspect(js, info.actual, true, &ia) && assert_inspect(js, info.expected, true, &ie);
   size_t n = 0;
@@ -1016,7 +1016,7 @@ static ant_value_t assert_regexp(ant_native_params_t, bool expect_match, const c
   if (!assert_inspect(js, input, false, &ii) || (is_string && !assert_inspect(js, regexp, false, &ir))) {
     assert_inspected_free(&ii);
     assert_inspected_free(&ir);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   errbuf_t eb;
@@ -1037,7 +1037,7 @@ static ant_value_t assert_regexp(ant_native_params_t, bool expect_match, const c
   assert_inspected_free(&ii);
   assert_inspected_free(&ir);
   
-  return assertion_throw(js, eb.buf ? errbuf_take_string(js, &eb, n) : js_mkerr(js, "out of memory"), true, info);
+  return assertion_throw(js, eb.buf ? errbuf_take_string(js, &eb, n) : Ant_Error_CreateOutOfMemory(js), true, info);
 }
 
 static ant_value_t assert_exception_matches(

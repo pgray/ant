@@ -883,7 +883,7 @@ static ant_value_t console_emit_to_output(
   if (!ant_output_stream_putc(out, '\n')) goto oom;
 
   return js_mkundef();
-  oom: return js_mkerr(js, "Out of memory");
+  oom: return Ant_Error_CreateOutOfMemory(js);
 }
 
 static inline ant_value_t console_emit_with_this(
@@ -1061,7 +1061,7 @@ static ant_value_t js_console_timeLog(ant_params_t) {
   int len = snprintf(buf, sizeof(buf), "%s: %.3fms", label, elapsed);
   
   ant_value_t *out_args = malloc((size_t)(nargs - extra_start + 1) * sizeof(ant_value_t));
-  if (!out_args) return js_mkerr(js, "Out of memory");
+  if (!out_args) return Ant_Error_CreateOutOfMemory(js);
   GC_ROOT_SAVE(root_mark, js);
   
   out_args[0] = js_mkstr(js, buf, (size_t)(len > 0 ? len : 0));

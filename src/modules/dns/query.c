@@ -214,7 +214,7 @@ static ant_value_t dns_query_issue(
   if (!channel || !channel->ares) return js_mkerr(js, "DNS channel is not available");
 
   dns_request_t *req = dns_request_new(js, kind, callback, hostname);
-  if (!req) return js_mkerr(js, "out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
 
   req->rr = rr;
   req->ttl = ttl;
@@ -304,7 +304,7 @@ ant_value_t dns_reverse_impl(ant_t *js, ant_value_t *args, int nargs, bool promi
   }
 
   char *qname = ares_dns_addr_to_ptr(&addr);
-  if (!qname) return js_mkerr(js, "out of memory");
+  if (!qname) return Ant_Error_CreateOutOfMemory(js);
 
   ant_value_t result = dns_query_issue(js, dns_this_channel(js), DNS_REQ_REVERSE, DNS_RR_PTR, ip, qname, callback, false);
   ares_free_string(qname);

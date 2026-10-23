@@ -439,7 +439,7 @@ static bool cron_resolve_zone(
     const char *name = js_getstr(js, zone_value, &len);
     *name_out = strndup(name, len);
     if (!*name_out) {
-      *error = js_mkerr(js, "out of memory");
+      *error = Ant_Error_CreateOutOfMemory(js);
       return false;
     }
   }
@@ -1073,13 +1073,13 @@ static ant_value_t cron_create_job(
   cron_job_t *job = calloc(1, sizeof(*job));
   if (!job) {
     free(zone_name);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   job->source = strndup(source, source_len);
   if (!job->source) {
     free(zone_name);
     free(job);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   job->time_zone = zone_name;
   job->js = js;
@@ -1100,7 +1100,7 @@ static ant_value_t cron_create_job(
   js_set_native(object, job, CRON_JOB_NATIVE_TAG);
   if (js_get_native(object, CRON_JOB_NATIVE_TAG) != job) {
     cron_close_job(job);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   js_set_finalizer(object, cron_object_finalize);
   job->object = object;
@@ -2420,7 +2420,7 @@ static ant_value_t cron_register_os(ant_native_params_t) {
   char *title = strndup(title_value, title_len);
   if (!path_input || !schedule || !title) {
     free(path_input); free(schedule); free(title);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   if (!cron_valid_title(title, title_len)) {
     free(path_input); free(schedule); free(title);
@@ -2449,7 +2449,7 @@ static ant_value_t cron_register_os(ant_native_params_t) {
   cron_os_request_t *request = calloc(1, sizeof(*request));
   if (!request) {
     free(path); free(schedule); free(title);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   request->path = path;
   request->schedule = schedule;
@@ -2457,7 +2457,7 @@ static ant_value_t cron_register_os(ant_native_params_t) {
   request->executable = strdup(executable);
   if (!request->executable) {
     cron_request_free(request);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   return cron_queue_request(js, request);
 }
@@ -2468,7 +2468,7 @@ static ant_value_t cron_remove_os(ant_params_t) {
   size_t title_len = 0;
   const char *title_value = js_getstr(js, args[0], &title_len);
   char *title = strndup(title_value, title_len);
-  if (!title) return js_mkerr(js, "out of memory");
+  if (!title) return Ant_Error_CreateOutOfMemory(js);
   if (!cron_valid_title(title, title_len)) {
     free(title);
     return js_mkerr_typed(
@@ -2479,7 +2479,7 @@ static ant_value_t cron_remove_os(ant_params_t) {
   cron_os_request_t *request = calloc(1, sizeof(*request));
   if (!request) {
     free(title);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   request->title = title;
   request->remove = true;

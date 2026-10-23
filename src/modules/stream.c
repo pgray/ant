@@ -2081,7 +2081,7 @@ static ant_value_t js_stream_promises_pipeline(ant_params_t) {
 
   call_args = malloc((size_t)(nargs + 1) * sizeof(*call_args));
   if (!call_args) {
-    js_reject_promise(js, promise, Ant_Error_Create(js, JS_ERR_GENERIC, "out of memory"));
+    js_reject_promise(js, promise, Ant_Error_ConsumeMarker(js, Ant_Error_CreateOutOfMemory(js)));
     return promise;
   }
 

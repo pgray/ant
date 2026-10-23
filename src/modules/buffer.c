@@ -1386,7 +1386,7 @@ ant_value_t create_shared_arraybuffer_obj(ant_t *js, ArrayBufferData *buffer) {
 
 ant_value_t create_arraybuffer_copy(ant_t *js, const void *bytes, size_t length) {
   ArrayBufferData *buffer = create_array_buffer_data(js, length);
-  if (!buffer) return js_mkerr(js, "out of memory");
+  if (!buffer) return Ant_Error_CreateOutOfMemory(js);
   if (bytes && length) memcpy(buffer->data, bytes, length);
 
   ant_value_t ab_obj = create_arraybuffer_obj(js, buffer);
@@ -3210,7 +3210,7 @@ static ant_value_t typedarray_join_with(ant_t *js, ant_value_t this_val, const c
 
   size_t cap = len * 12;
   char *buf = malloc(cap);
-  if (!buf) return js_mkerr(js, "Out of memory");
+  if (!buf) return Ant_Error_CreateOutOfMemory(js);
   size_t pos = 0;
 
   for (size_t i = 0; i < len; i++) {
@@ -3218,7 +3218,7 @@ static ant_value_t typedarray_join_with(ant_t *js, ant_value_t this_val, const c
       if (pos + sep_len + 32 > cap) {
         cap *= 2;
         char *tmp = realloc(buf, cap);
-        if (!tmp) { free(buf); return js_mkerr(js, "Out of memory"); }
+        if (!tmp) { free(buf); return Ant_Error_CreateOutOfMemory(js); }
         buf = tmp;
       }
       memcpy(buf + pos, sep, sep_len);
@@ -3228,7 +3228,7 @@ static ant_value_t typedarray_join_with(ant_t *js, ant_value_t this_val, const c
     if (pos + 32 > cap) {
       cap *= 2;
       char *tmp = realloc(buf, cap);
-      if (!tmp) { free(buf); return js_mkerr(js, "Out of memory"); }
+      if (!tmp) { free(buf); return Ant_Error_CreateOutOfMemory(js); }
       buf = tmp;
     }
 

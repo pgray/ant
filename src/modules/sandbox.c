@@ -470,7 +470,7 @@ static ant_value_t sandbox_apply_options(ant_t *js, sandbox_state_t *state, ant_
     sandbox_mount_parse_t mount_ctx = { .state = state, .readonly = true };
     const char *opts_str = js_getstr(js, opts, NULL);
     
-    if (!opts_str) return js_mkerr(js, "out of memory");
+    if (!opts_str) return Ant_Error_CreateOutOfMemory(js);
     int rc = sandbox_add_mount_option(js, opts_str, &mount_ctx);
     if (rc != 0) return js_mkerr_typed(js, JS_ERR_TYPE, "%s", mount_ctx.error[0] ? mount_ctx.error : "invalid mount option");
     
@@ -622,7 +622,7 @@ static ant_value_t sandbox_ctor(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Nested Sandbox creation is not supported inside ant sandbox");
 
   sandbox_state_t *state = calloc(1, sizeof(*state));
-  if (!state) return js_mkerr(js, "out of memory");
+  if (!state) return Ant_Error_CreateOutOfMemory(js);
   state->js = js;
   state->self = js_mkundef();
   state->run_promise = js_mkundef();
@@ -1088,7 +1088,7 @@ static ant_value_t sandbox_run(ant_params_t) {
     return sandbox_rejected(js, js_mkerr_typed(js, JS_ERR_TYPE, "Sandbox.run(entry, argv?) requires an entry string"));
 
   char *entry = js_getstr(js, args[0], NULL);
-  if (!entry) return sandbox_rejected(js, js_mkerr(js, "out of memory"));
+  if (!entry) return sandbox_rejected(js, Ant_Error_CreateOutOfMemory(js));
   char **argv = NULL; int argc = 0;
 
   // TODO: reduce nesting split into helpers
@@ -1097,7 +1097,7 @@ static ant_value_t sandbox_run(ant_params_t) {
       ant_offset_t len = js_arr_len(js, args[1]);
       if (len > INT32_MAX) return sandbox_rejected(js, js_mkerr_typed(js, JS_ERR_RANGE, "argv is too large"));
       argv = calloc((size_t)len + 1, sizeof(*argv));
-      if (!argv) return sandbox_rejected(js, js_mkerr(js, "out of memory"));
+      if (!argv) return sandbox_rejected(js, Ant_Error_CreateOutOfMemory(js));
       argc = (int)len;
       for (ant_offset_t i = 0; i < len; i++) {
         ant_value_t item = js_arr_get(js, args[1], i);
@@ -1108,13 +1108,13 @@ static ant_value_t sandbox_run(ant_params_t) {
         argv[i] = js_getstr(js, item, NULL);
         if (!argv[i]) {
           free(argv);
-          return sandbox_rejected(js, js_mkerr(js, "out of memory"));
+          return sandbox_rejected(js, Ant_Error_CreateOutOfMemory(js));
         }
       }
     } else {
       argc = nargs - 1;
       argv = calloc((size_t)argc + 1, sizeof(*argv));
-      if (!argv) return sandbox_rejected(js, js_mkerr(js, "out of memory"));
+      if (!argv) return sandbox_rejected(js, Ant_Error_CreateOutOfMemory(js));
       for (int i = 0; i < argc; i++) {
         if (vtype(args[i + 1]) != kTypeString) {
           free(argv);
@@ -1123,7 +1123,7 @@ static ant_value_t sandbox_run(ant_params_t) {
         argv[i] = js_getstr(js, args[i + 1], NULL);
         if (!argv[i]) {
           free(argv);
-          return sandbox_rejected(js, js_mkerr(js, "out of memory"));
+          return sandbox_rejected(js, Ant_Error_CreateOutOfMemory(js));
         }
       }
     }
@@ -1316,14 +1316,14 @@ static ant_value_t sandbox_wait_for_message(
 
   sandbox_message_waiter_t *waiter = calloc(1, sizeof(*waiter));
   if (!waiter) {
-    js_reject_promise(js, promise, js_mkerr(js, "out of memory"));
+    js_reject_promise(js, promise, Ant_Error_CreateOutOfMemory(js));
     return promise;
   }
   if (type) {
     waiter->type = strdup(type);
     if (!waiter->type) {
       free(waiter);
-      js_reject_promise(js, promise, js_mkerr(js, "out of memory"));
+      js_reject_promise(js, promise, Ant_Error_CreateOutOfMemory(js));
       return promise;
     }
   }
@@ -1347,7 +1347,7 @@ static ant_value_t sandbox_once(ant_params_t) {
     return sandbox_rejected(js, js_mkerr_typed(js, JS_ERR_TYPE,
       "Sandbox.once(type) requires a message type string"));
   const char *type = js_getstr(js, args[0], NULL);
-  if (!type) return sandbox_rejected(js, js_mkerr(js, "out of memory"));
+  if (!type) return sandbox_rejected(js, Ant_Error_CreateOutOfMemory(js));
   return sandbox_wait_for_message(js, state, type, false);
 }
 

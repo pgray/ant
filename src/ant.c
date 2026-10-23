@@ -6718,7 +6718,7 @@ ant_value_t js_symbol_to_string(ant_t *js, ant_value_t sym) {
   
   char stack_buf[128];
   char *buf = (total + 1 <= sizeof(stack_buf)) ? stack_buf : malloc(total + 1);
-  if (!buf) return js_mkerr(js, "out of memory");
+  if (!buf) return Ant_Error_CreateOutOfMemory(js);
   
   memcpy(buf, "Symbol(", 7);
   memcpy(buf + 7, desc, desc_len);
@@ -7092,7 +7092,7 @@ ant_value_t Ant_ArgList_FromArrayLike(ant_t *js, ant_value_t array_like, ant_arg
 
   if (dense) {
     ant_value_t *slots = gc_temp_root_slots(&list->roots, (size_t)dense_len);
-    if (!slots) { Ant_ArgList_Release(list); return js_mkerr(js, "out of memory"); }
+    if (!slots) { Ant_ArgList_Release(list); return Ant_Error_CreateOutOfMemory(js); }
     memcpy(slots, dense, (size_t)dense_len * sizeof(ant_value_t));
     list->args = slots;
     list->argc = dense_len;
@@ -7112,7 +7112,7 @@ ant_value_t Ant_ArgList_FromArrayLike(ant_t *js, ant_value_t array_like, ant_arg
   }
 
   ant_value_t *args = gc_temp_root_slots(&list->roots, (size_t)len);
-  if (!args) { result = js_mkerr(js, "out of memory"); goto fail; }
+  if (!args) { result = Ant_Error_CreateOutOfMemory(js); goto fail; }
 
   for (ant_offset_t i = 0; i < len; i++) {
     if (array_method_dense_element(array_like, i, &args[i])) continue;
@@ -7778,7 +7778,7 @@ static ant_value_t builtin_Error_toString(ant_params_t) {
 
   size_t total = (size_t)(name_len + 2 + msg_len);
   char *buf = malloc(total + 1);
-  if (!buf) return js_mkerr(js, "out of memory");
+  if (!buf) return Ant_Error_CreateOutOfMemory(js);
 
   memcpy(buf, name_str, (size_t)name_len);
   buf[name_len] = ':';
@@ -8297,7 +8297,7 @@ static ant_value_t array_delete_shape_indices(ant_t *js, ant_value_t obj, ant_ob
     
     if (!own_index_list_push(&indices, i, index)) {
       own_index_list_free(&indices);
-      return js_mkerr(js, "out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
     }
   }
   
@@ -8311,7 +8311,7 @@ static ant_value_t array_delete_shape_indices(ant_t *js, ant_value_t obj, ant_ob
   
   if (!keys) {
     own_index_list_free(&indices);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   
   for (uint32_t k = 0; k < indices.count; k++) 
@@ -11273,7 +11273,7 @@ static ant_value_t copy_host_pairs(ant_t *js, ant_value_t dst, ant_proxy_state_t
   ant_offset_t len = get_array_length(js, pairs);
   for (ant_offset_t i = 0; i + 1 < len && !is_err(result); i += 2) {
     copy_key_t ck;
-    if (!copy_key_of(js, arr_get(js, pairs, i), &ck)) result = js_mkerr(js, "out of memory");
+    if (!copy_key_of(js, arr_get(js, pairs, i), &ck)) result = Ant_Error_CreateOutOfMemory(js);
     else if (!copy_key_excluded(cx, ck)) result = copy_store(js, cx, dst, ck, arr_get(js, pairs, i + 1));
   }
   
@@ -11302,7 +11302,7 @@ static ant_value_t copy_proxy_data_props(
     GC_ROOT_PIN(js, key);
     
     copy_key_t ck;
-    if (!copy_key_of(js, key, &ck)) result = js_mkerr(js, "out of memory");
+    if (!copy_key_of(js, key, &ck)) result = Ant_Error_CreateOutOfMemory(js);
     else if (!copy_key_excluded(cx, ck)) {
       ant_value_t enumerable = proxy_key_enumerable(js, proxy, key);
       if (is_err(enumerable)) result = enumerable;
@@ -11325,7 +11325,7 @@ static ant_value_t copy_string_props(ant_t *js, ant_value_t dst, ant_value_t str
   
   for (ant_offset_t i = 0; i < len; i++) {
     copy_key_t ck = { .sym = js_mkundef(), .interned = index_key_get_or_intern(js, (uint32_t)i) };
-    if (!ck.interned) return js_mkerr(js, "out of memory");
+    if (!ck.interned) return Ant_Error_CreateOutOfMemory(js);
     if (copy_key_excluded(cx, ck)) continue;
     
     ant_offset_t byte_len = 0;
@@ -11345,7 +11345,7 @@ static ant_value_t copy_dense_props_assign(ant_t *js, ant_value_t dst, ant_value
   
   uint32_t stack_present[64];
   uint32_t *present = len <= 64 ? stack_present : malloc((size_t)len * sizeof(*present));
-  if (!present) return js_mkerr(js, "out of memory");
+  if (!present) return Ant_Error_CreateOutOfMemory(js);
 
   uint32_t count = 0;
   for (ant_offset_t i = 0; i < len; i++) if (!is_empty_slot(dense_get(doff, i))) present[count++] = (uint32_t)i;
@@ -11354,7 +11354,7 @@ static ant_value_t copy_dense_props_assign(ant_t *js, ant_value_t dst, ant_value
   for (uint32_t k = 0; k < count && !is_err(result); k++) {
     uint32_t i = present[k];
     copy_key_t ck = { .sym = js_mkundef(), .interned = index_key_get_or_intern(js, i) };
-    if (!ck.interned) { result = js_mkerr(js, "out of memory"); break; }
+    if (!ck.interned) { result = Ant_Error_CreateOutOfMemory(js); break; }
     if (copy_key_excluded(cx, ck)) continue;
 
     ant_value_t val = js_mkundef();
@@ -11419,7 +11419,7 @@ static ant_value_t copy_dense_props(ant_t *js, ant_value_t dst, ant_value_t arr,
     if (is_empty_slot(val)) continue;
     
     copy_key_t ck = { .sym = js_mkundef(), .interned = index_key_get_or_intern(js, (uint32_t)i) };
-    if (!ck.interned) return js_mkerr(js, "out of memory");
+    if (!ck.interned) return Ant_Error_CreateOutOfMemory(js);
     if (copy_key_excluded(cx, ck)) continue;
     
     ant_value_t result = copy_store(js, cx, dst, ck, val);
@@ -11634,7 +11634,7 @@ static bool copy_ordinary_data_props(
   bool snapshot = has_accessor || cx->assign || cx->collect;
   
   if (snapshot && !copy_key_snapshot_take(ptr, &snap, cx->assign || cx->collect || accessor_order_visible)) {
-    *result = js_mkerr(js, "out of memory");
+    *result = Ant_Error_CreateOutOfMemory(js);
     return true;
   }
   
@@ -11652,7 +11652,7 @@ static bool copy_ordinary_data_props(
   
   ant_object_t *dst_ptr = js_obj_ptr(dst);
   if (dst_ptr && dst_ptr->shape && !js_obj_ensure_prop_capacity(js, dst_ptr, ant_shape_count(dst_ptr->shape) + count)) {
-    *result = js_mkerr(js, "out of memory");
+    *result = Ant_Error_CreateOutOfMemory(js);
     return true;
   }
   
@@ -11686,7 +11686,7 @@ static ant_value_t copy_object_data_props(ant_t *js, ant_value_t dst, ant_value_
     GC_ROOT_PIN(js, key);
     
     copy_key_t ck;
-    if (!copy_key_of(js, key, &ck)) result = js_mkerr(js, "out of memory");
+    if (!copy_key_of(js, key, &ck)) result = Ant_Error_CreateOutOfMemory(js);
     else if (!copy_key_excluded(cx, ck)) {
       ant_value_t own = Ant_Object_HasOwn(js, view, key);
       if (is_err(own)) result = own;
@@ -11773,7 +11773,7 @@ static ant_value_t object_enum_props_from(ant_t *js, ant_value_t obj, ant_object
   
   if (!snap.keys || !snap.slots) {
     copy_key_snapshot_free(&snap);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   
   for (uint32_t i = start; i < limit; i++) {
@@ -11803,7 +11803,7 @@ static ant_value_t object_enum_props_ordered(ant_t *js, ant_value_t obj, ant_obj
     if (prop->has_getter || prop->has_setter) {
       own_index_list_free(&indices);
       copy_key_snapshot_t snap;
-      if (!copy_key_snapshot_take(ptr, &snap, true)) return js_mkerr(js, "out of memory");
+      if (!copy_key_snapshot_take(ptr, &snap, true)) return Ant_Error_CreateOutOfMemory(js);
       ant_value_t result = object_enum_visit(js, obj, ptr, mode, sink, &snap);
       copy_key_snapshot_free(&snap);
       return result;
@@ -11813,7 +11813,7 @@ static ant_value_t object_enum_props_ordered(ant_t *js, ant_value_t obj, ant_obj
     if (!own_key_is_array_index(prop->key.interned, intern_length(prop->key.interned), &index)) continue;
     if (!own_index_list_push(&indices, i, index)) {
       own_index_list_free(&indices);
-      return js_mkerr(js, "out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
     }
   }
   
@@ -11874,7 +11874,7 @@ ant_value_t js_copy_data_props(
   
   copy_key_t stack_keys[16];
   copy_key_t *keys = excluded_count <= 16 ? stack_keys : malloc((size_t)excluded_count * sizeof(*keys));
-  if (!keys) return js_mkerr(js, "out of memory");
+  if (!keys) return Ant_Error_CreateOutOfMemory(js);
   
   int count = 0;
   for (int i = 0; i < excluded_count; i++)
@@ -15012,7 +15012,7 @@ writeback:;
   goto done;
   
 oom:
-  result = js_mkerr(js, "out of memory");
+  result = Ant_Error_CreateOutOfMemory(js);
 
 done:
   if (temp_scope_active) gc_temp_root_scope_end(&temp_scope);
@@ -15236,7 +15236,7 @@ static ant_value_t builtin_array_copyWithin(ant_params_t) {
     ant_value_t *values = gc_temp_root_slots(&proxy_roots, (size_t)count);
     ant_value_t proxy_result = arr;
     if (!temp_exists || !values) {
-      proxy_result = js_mkerr(js, "out of memory");
+      proxy_result = Ant_Error_CreateOutOfMemory(js);
       goto proxy_done;
     }
 
@@ -15265,7 +15265,7 @@ static ant_value_t builtin_array_copyWithin(ant_params_t) {
   }
 
   ant_value_t *temp = (ant_value_t *)malloc(count * sizeof(ant_value_t));
-  if (!temp) return js_mkerr(js, "out of memory");
+  if (!temp) return Ant_Error_CreateOutOfMemory(js);
   gc_temp_root_scope_begin(js, &temp_roots);
   temp_roots_active = true;
   
@@ -15302,7 +15302,7 @@ done:
   return result;
 
 oom:
-  result = js_mkerr(js, "out of memory");
+  result = Ant_Error_CreateOutOfMemory(js);
   goto done;
 }
 
@@ -18336,13 +18336,13 @@ static ant_value_t builtin_btoa(ant_params_t) {
   uint8_t *bytes = utf8_to_latin1(str, (size_t)str_len, &bytes_len, &is_latin1);
   
   if (!bytes) return is_latin1
-    ? js_mkerr(js, "out of memory")
+    ? Ant_Error_CreateOutOfMemory(js)
     : js_mkerr(js, "btoa: string contains characters outside Latin1 range");
 
   size_t out_len;
   char *out = ant_base64_encode(bytes, bytes_len, &out_len);
   free(bytes);
-  if (!out) return js_mkerr(js, "out of memory");
+  if (!out) return Ant_Error_CreateOutOfMemory(js);
   
   ant_value_t result = js_mkstr(js, out, out_len);
   free(out);
@@ -18365,7 +18365,7 @@ static ant_value_t builtin_atob(ant_params_t) {
   
   size_t cap = ((size_t)str_len / 4) * 3 + 3, read = 0, out_len = 0;
   uint8_t *out = malloc(cap);
-  if (!out) return js_mkerr(js, "out of memory");
+  if (!out) return Ant_Error_CreateOutOfMemory(js);
 
   const char *error = NULL;
   if (!ant_base64_decode_into(str, (size_t)str_len, false, ANT_BASE64_LOOSE, out, cap, &read, &out_len, &error)) {
@@ -18376,7 +18376,7 @@ static ant_value_t builtin_atob(ant_params_t) {
   size_t result_len = 0;
   char *result_str = latin1_to_utf8(out, out_len, &result_len);
   free(out);
-  if (!result_str) return js_mkerr(js, "out of memory");
+  if (!result_str) return Ant_Error_CreateOutOfMemory(js);
 
   ant_value_t result = js_mkstr(js, result_str, result_len);
   free(result_str);
@@ -19795,7 +19795,7 @@ static ant_value_t proxy_get_val(ant_t *js, ant_value_t proxy, ant_value_t key_v
   if (data->host && vtype(prop_key) == kTypeString) {
     size_t key_len = 0;
     const char *key = js_getstr(js, prop_key, &key_len);
-    return key ? proxy_host_get(js, data, key, key_len) : js_mkerr(js, "out of memory");
+    return key ? proxy_host_get(js, data, key, key_len) : Ant_Error_CreateOutOfMemory(js);
   }
 
   ant_value_t get_trap = proxy_get_method(js, handler, "get");
@@ -20471,10 +20471,10 @@ ant_value_t js_proxy_construct(ant_t *js, ant_value_t proxy, ant_value_t *args, 
 static ant_value_t mkproxy(ant_t *js, ant_value_t target, ant_value_t handler) {
   ant_value_t proxy_obj = mkobj(js, 0);
   ant_object_t *proxy_ptr = js_obj_ptr(proxy_obj);
-  if (!proxy_ptr) return js_mkerr(js, "out of memory");
+  if (!proxy_ptr) return Ant_Error_CreateOutOfMemory(js);
 
   ant_proxy_state_t *data = (ant_proxy_state_t *)calloc(1, sizeof(ant_proxy_state_t));
-  if (!data) return js_mkerr(js, "out of memory");
+  if (!data) return Ant_Error_CreateOutOfMemory(js);
 
   data->target = target;
   data->handler = handler;
@@ -20487,7 +20487,7 @@ static ant_value_t mkproxy(ant_t *js, ant_value_t target, ant_value_t handler) {
   ant_object_sidecar_t *sidecar = ant_object_ensure_sidecar(proxy_ptr);
   if (!sidecar) {
     free(data);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   
   sidecar->proxy_state = data;

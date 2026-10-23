@@ -223,7 +223,7 @@ ant_value_t dns_lookup_impl(ant_t *js, ant_value_t *args, int nargs, bool promis
   }
 
   dns_request_t *req = dns_request_new(js, DNS_REQ_LOOKUP, callback, hostname);
-  if (!req) return js_mkerr(js, "out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
   req->family = opts.family;
   req->all = opts.all;
   req->order = opts.order;
@@ -338,7 +338,7 @@ ant_value_t dns_lookup_service_impl(ant_t *js, ant_value_t *args, int nargs, boo
   if (rc < 0) return Ant_Error_CreateInvalidArgValue(js, "address", NULL, address);
 
   dns_request_t *req = dns_request_new(js, DNS_REQ_LOOKUP_SERVICE, callback, address);
-  if (!req) return js_mkerr(js, "out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
 
   ant_value_t result = vtype(req->promise) == kTypePromise ? req->promise : js_mkundef();
   GC_ROOT_SAVE(mark, js);

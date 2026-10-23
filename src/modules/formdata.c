@@ -130,7 +130,7 @@ static void fd_delete_name(fd_data_t *d, const char *name) {
 
 ant_value_t formdata_create_empty(ant_t *js) {
   fd_data_t *d = fd_data_new();
-  if (!d) return js_mkerr(js, "out of memory");
+  if (!d) return Ant_Error_CreateOutOfMemory(js);
 
   ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_proto_init(obj, js->builtins.formdata_proto);
@@ -211,7 +211,7 @@ static ant_value_t extract_file_entry(
   size_t idx = (size_t)js_arr_len(js, values_arr);
   js_arr_push(js, values_arr, stored_val);
 
-  return fd_append_file(d, name, idx) ? js_mkundef() : js_mkerr(js, "out of memory");
+  return fd_append_file(d, name, idx) ? js_mkundef() : Ant_Error_CreateOutOfMemory(js);
 }
 
 ant_value_t formdata_append_string(ant_t *js, ant_value_t fd, ant_value_t name_v, ant_value_t value_v) {
@@ -228,8 +228,7 @@ ant_value_t formdata_append_string(ant_t *js, ant_value_t fd, ant_value_t name_v
   
   return fd_append_str(d, name, js_getstr(js, value_v, NULL)) 
     ? js_mkundef() 
-    : js_mkerr(js, "out of memory"
-  );
+    : Ant_Error_CreateOutOfMemory(js);
 }
 
 ant_value_t formdata_append_file(ant_t *js, ant_value_t fd, ant_value_t name_v, ant_value_t blob_v, ant_value_t filename_v) {
@@ -258,7 +257,7 @@ static ant_value_t js_formdata_append(ant_params_t) {
   }
 
   if (vtype(val) != kTypeString) { val = js_tostring_val(js, val); if (is_err(val)) return val; }
-  return fd_append_str(d, name, js_getstr(js, val, NULL)) ? js_mkundef() : js_mkerr(js, "out of memory");
+  return fd_append_str(d, name, js_getstr(js, val, NULL)) ? js_mkundef() : Ant_Error_CreateOutOfMemory(js);
 }
 
 static ant_value_t js_formdata_set(ant_params_t) {
@@ -279,7 +278,7 @@ static ant_value_t js_formdata_set(ant_params_t) {
 
   if (vtype(val) != kTypeString) { val = js_tostring_val(js, val); if (is_err(val)) return val; }
   fd_delete_name(d, name);
-  return fd_append_str(d, name, js_getstr(js, val, NULL)) ? js_mkundef() : js_mkerr(js, "out of memory");
+  return fd_append_str(d, name, js_getstr(js, val, NULL)) ? js_mkundef() : Ant_Error_CreateOutOfMemory(js);
 }
 
 static ant_value_t js_formdata_get(ant_params_t) {
@@ -413,7 +412,7 @@ static void formdata_iter_finalize(ant_t *js, ant_object_t *obj) {
 
 static ant_value_t make_formdata_iter(ant_t *js, ant_value_t fd_obj, int kind) {
   fd_iter_t *st = calloc(1, sizeof(fd_iter_t));
-  if (!st) return js_mkerr(js, "out of memory");
+  if (!st) return Ant_Error_CreateOutOfMemory(js);
   st->kind = kind;
 
   ant_value_t iter = Ant_Object_CreateBare(js);
@@ -443,7 +442,7 @@ static ant_value_t js_formdata_ctor(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "FormData does not support a form element argument");
 
   fd_data_t *d = fd_data_new();
-  if (!d) return js_mkerr(js, "out of memory");
+  if (!d) return Ant_Error_CreateOutOfMemory(js);
 
   ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.formdata_proto, call_new_target);

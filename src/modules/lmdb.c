@@ -460,7 +460,7 @@ static ant_value_t lmdb_open(ant_params_t) {
   lmdb_env_handle_t *handle = calloc(1, sizeof(lmdb_env_handle_t));
   if (!handle) {
     mdb_env_close(env);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   handle->env = env;
@@ -527,7 +527,7 @@ static ant_value_t lmdb_env_open_db(ant_params_t) {
   lmdb_db_handle_t *db = calloc(1, sizeof(lmdb_db_handle_t));
   if (!db) {
     mdb_dbi_close(env->env, dbi);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   db->dbi = dbi;
@@ -561,7 +561,7 @@ static ant_value_t lmdb_env_begin_txn(ant_params_t) {
   lmdb_txn_handle_t *handle = calloc(1, sizeof(lmdb_txn_handle_t));
   if (!handle) {
     mdb_txn_abort(txn);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   handle->txn = txn;
@@ -1090,7 +1090,7 @@ static ant_value_t make_txn_obj(ant_t *js, lmdb_txn_handle_t *txn, ant_value_t e
 }
 
 ant_value_t lmdb_library(ant_t *js) {
-  if (!js->lmdb && !(js->lmdb = calloc(1, sizeof(*js->lmdb)))) return js_mkerr(js, "out of memory");
+  if (!js->lmdb && !(js->lmdb = calloc(1, sizeof(*js->lmdb)))) return Ant_Error_CreateOutOfMemory(js);
   ensure_lmdb_prototypes(js);
   ant_value_t lib = Ant_Object_CreateBare(js);
   js_set(js, lib, "open", Ant_Function_Create(lmdb_open));

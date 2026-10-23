@@ -80,7 +80,7 @@ static ant_value_t sd_latin1_to_str(ant_t *js, const uint8_t *src, size_t len) {
   size_t out_len = 0;
   
   char *out = latin1_to_utf8(src, len, &out_len);
-  if (!out) return js_mkerr(js, "out of memory");
+  if (!out) return Ant_Error_CreateOutOfMemory(js);
 
   ant_value_t result = js_mkstr(js, out, out_len);
   free(out);
@@ -92,7 +92,7 @@ static ant_value_t sd_hex_decode(ant_t *js, const uint8_t *src, size_t len) {
   if (len == 0) return js_mkstr(js, "", 0);
   
   char *out = malloc(len * 2 + 1);
-  if (!out) return js_mkerr(js, "out of memory");
+  if (!out) return Ant_Error_CreateOutOfMemory(js);
   hex_encode(src, len, out);
   
   ant_value_t result = js_mkstr(js, out, len * 2);
@@ -106,7 +106,7 @@ static ant_value_t sd_base64_write(ant_t *js, sd_state_t *st, const uint8_t *src
   if (total == 0) return js_mkstr(js, "", 0);
 
   uint8_t *work = malloc(total);
-  if (!work) return js_mkerr(js, "out of memory");
+  if (!work) return Ant_Error_CreateOutOfMemory(js);
 
   if (st->pending_len > 0)
     memcpy(work, st->pending, (size_t)st->pending_len);
@@ -120,7 +120,7 @@ static ant_value_t sd_base64_write(ant_t *js, sd_state_t *st, const uint8_t *src
   if (encode_len == 0) result = js_mkstr(js, "", 0); else {
     size_t out_len;
     char *out = ant_base64_encode(work, encode_len, &out_len);
-    if (!out) { free(work); return js_mkerr(js, "out of memory"); }
+    if (!out) { free(work); return Ant_Error_CreateOutOfMemory(js); }
     result = js_mkstr(js, out, out_len);
     free(out);
   }
@@ -225,7 +225,7 @@ static inline __attribute__((always_inline)) void sd_attach(ant_value_t obj, ant
 
 ant_value_t string_decoder_create(ant_t *js, ant_value_t encoding, ant_value_t new_target) {
   sd_state_t *st = sd_state_new(sd_encoding_from_value(js, encoding));
-  if (!st) return js_mkerr(js, "out of memory");
+  if (!st) return Ant_Error_CreateOutOfMemory(js);
 
   ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.string_decoder_proto, new_target);
@@ -260,7 +260,7 @@ static __attribute__((noinline)) ant_value_t sd_init_this(ant_t *js, ant_value_t
   if (sd_get_state(self)) return self;
 
   sd_state_t *st = sd_state_new(sd_encoding_from_value(js, encoding));
-  if (!st) return js_mkerr(js, "out of memory");
+  if (!st) return Ant_Error_CreateOutOfMemory(js);
 
   sd_attach(self, js->builtins.string_decoder_proto, st);
   return self;

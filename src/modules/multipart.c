@@ -173,7 +173,7 @@ static ant_value_t parse_formdata_urlencoded(ant_t *js, const uint8_t *data, siz
   if (!data || size == 0) return fd;
 
   body = strndup((const char *)data, size);
-  if (!body) return js_mkerr(js, "out of memory");
+  if (!body) return Ant_Error_CreateOutOfMemory(js);
 
   cursor = body;
   while (cursor) {
@@ -198,7 +198,7 @@ static ant_value_t parse_formdata_urlencoded(ant_t *js, const uint8_t *data, siz
       free(name);
       free(value);
       free(body);
-      return js_mkerr(js, "out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
     }
 
     r = formdata_append_string(
@@ -286,7 +286,7 @@ static bool multipart_parse_headers(
     free(info->content_type);
     info->content_type = strdup(value);
     if (!info->content_type) {
-      *err_out = js_mkerr(js, "out of memory");
+      *err_out = Ant_Error_CreateOutOfMemory(js);
       return false;
     }}
   }
@@ -360,7 +360,7 @@ static ant_value_t parse_formdata_multipart(
   delim_len = strlen(boundary) + 2;
   delim = malloc(delim_len + 1);
   if (!delim) {
-    fd = js_mkerr(js, "out of memory");
+    fd = Ant_Error_CreateOutOfMemory(js);
     goto done;
   }
   snprintf(delim, delim_len + 1, "--%s", boundary);
@@ -389,7 +389,7 @@ next_part:
 
     headers = strndup((const char *)p, (size_t)(hdr_end - p));
     if (!headers) {
-      fd = js_mkerr(js, "out of memory");
+      fd = Ant_Error_CreateOutOfMemory(js);
       goto done;
     }
     p = hdr_end + 4;

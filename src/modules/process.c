@@ -1102,7 +1102,7 @@ static ant_value_t js_stdin_set_raw_mode(ant_params_t) {
 
 static ant_value_t js_stdin__read(ant_params_t) {
   ant_process_state_t *ps = process_state(js);
-  if (!ps) return js_mkerr(js, "out of memory");
+  if (!ps) return Ant_Error_CreateOutOfMemory(js);
   ps->stdin_state.started = true;
   ps->stdin_state.read_requested = true;
   ps->stdin_state.paused = false;
@@ -1128,7 +1128,7 @@ static ant_value_t js_stdin__destroy(ant_params_t) {
 
 static ant_value_t stdin_set_paused(ant_t *js, bool paused) {
   ant_process_state_t *ps = process_state(js);
-  if (!ps) return js_mkerr(js, "out of memory");
+  if (!ps) return Ant_Error_CreateOutOfMemory(js);
 
   if (paused) stream_readable_pause(js, ps->stdin_obj);
   else stream_readable_resume(js, ps->stdin_obj);
@@ -1149,7 +1149,7 @@ static ant_value_t js_stdin_pause(ant_params_t) {
 
 static ant_value_t js_stdin_ref(ant_params_t) {
   ant_process_state_t *ps = process_state(js);
-  if (!ps) return js_mkerr(js, "out of memory");
+  if (!ps) return Ant_Error_CreateOutOfMemory(js);
   ps->stdin_state.refed = true;
   if (stdin_handle_live(&ps->stdin_state)) uv_ref(&ps->stdin_state.h.handle);
   return js_getthis(js);
@@ -1157,7 +1157,7 @@ static ant_value_t js_stdin_ref(ant_params_t) {
 
 static ant_value_t js_stdin_unref(ant_params_t) {
   ant_process_state_t *ps = process_state(js);
-  if (!ps) return js_mkerr(js, "out of memory");
+  if (!ps) return Ant_Error_CreateOutOfMemory(js);
   ps->stdin_state.refed = false;
   if (stdin_handle_live(&ps->stdin_state)) uv_unref(&ps->stdin_state.h.handle);
   return js_getthis(js);
@@ -1219,7 +1219,7 @@ static ant_value_t js_stderr_write(ant_params_t) {
 static ant_value_t process_uptime(ant_params_t) {
   (void)args; (void)nargs;
   ant_process_state_t *ps = process_state(js);
-  if (!ps) return js_mkerr(js, "out of memory");
+  if (!ps) return Ant_Error_CreateOutOfMemory(js);
   uint64_t now = uv_hrtime();
   double seconds = (double)(now - ps->process_start_time) / 1e9;
   return js_mknum(seconds);
@@ -1735,15 +1735,15 @@ static ant_value_t env_set(ant_t *js, ant_value_t target, const char *key, size_
   size_t val_len = 0;
   const char *val_str = js_getstr(js, str_val, &val_len);
   
-  if (!val_str) return js_mkerr(js, "out of memory");
+  if (!val_str) return Ant_Error_CreateOutOfMemory(js);
   if (!env_name_ok(key, key_len)) return js_true;
 
   env_entry_t **table = private_env(js);
-  if (table) return private_env_put(table, key, key_len, val_str, val_len) ? js_true : js_mkerr(js, "out of memory");
+  if (table) return private_env_put(table, key, key_len, val_str, val_len) ? js_true : Ant_Error_CreateOutOfMemory(js);
   
   CSTR_BUF(buf, 256);
   char *key_str = CSTR_INIT(buf, key, key_len);
-  if (!key_str) return js_mkerr(js, "out of memory");
+  if (!key_str) return Ant_Error_CreateOutOfMemory(js);
   
   ant_mutex_lock(&env_lock);
   const char *current = getenv(key_str);
@@ -1752,7 +1752,7 @@ static ant_value_t env_set(ant_t *js, ant_value_t target, const char *key, size_
   ant_mutex_unlock(&env_lock);
   
   cstr_free(&buf);
-  return stored ? js_true : js_mkerr(js, "out of memory");
+  return stored ? js_true : Ant_Error_CreateOutOfMemory(js);
 }
 
 static ant_value_t env_del(ant_t *js, ant_value_t target, const char *key, size_t key_len) {
@@ -1773,7 +1773,7 @@ static ant_value_t env_del(ant_t *js, ant_value_t target, const char *key, size_
   
   CSTR_BUF(buf, 256);
   char *key_str = CSTR_INIT(buf, key, key_len);
-  if (!key_str) return js_mkerr(js, "out of memory");
+  if (!key_str) return Ant_Error_CreateOutOfMemory(js);
   
   ant_mutex_lock(&env_lock);
   unsetenv(key_str);
@@ -2060,7 +2060,7 @@ static const ant_host_proxy_ops_t env_host_ops = {
 
 static ant_value_t process_cwd(ant_params_t) {
   ant_process_state_t *ps = process_state(js);
-  if (!ps) return js_mkerr(js, "Out of memory");
+  if (!ps) return Ant_Error_CreateOutOfMemory(js);
   
   uint64_t epoch = atomic_load_explicit(&process_cwd_epoch, memory_order_acquire);
   if (ps->cwd_epoch == epoch && vtype(ps->cached_cwd) == kTypeString) return ps->cached_cwd;
@@ -2073,7 +2073,7 @@ static ant_value_t process_cwd(ant_params_t) {
   
   if (status == UV_ENOBUFS) {
     cwd = malloc(size);
-    if (!cwd) return js_mkerr(js, "Out of memory");
+    if (!cwd) return Ant_Error_CreateOutOfMemory(js);
     status = uv_cwd(cwd, &size);
   }
   

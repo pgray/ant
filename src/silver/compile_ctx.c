@@ -1,5 +1,6 @@
 #include "silver/compiler.h"
 #include "silver/compile_ctx.h"
+#include "utf8.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -125,19 +126,25 @@ sv_line_table_t *sv_compile_ctx_build_line_table(const char *source, ant_offset_
 
   int cap = (int)(source_len / 32) + 64;
   lt->offsets = malloc((size_t)cap * sizeof(uint32_t));
+  lt->source = source;
   lt->count = 0;
   lt->hint = 0;
+  lt->col_line = -1;
   lt->offsets[lt->count++] = 0;
 
+  unsigned char high = 0;
   for (ant_offset_t i = 0; i < source_len; i++) {
-  if (source[i] == '\n') {
-    if (lt->count >= cap) {
-      cap *= 2;
-      lt->offsets = realloc(lt->offsets, (size_t)cap * sizeof(uint32_t));
+    high |= (unsigned char)source[i];
+    if (source[i] == '\n') {
+      if (lt->count >= cap) {
+        cap *= 2;
+        lt->offsets = realloc(lt->offsets, (size_t)cap * sizeof(uint32_t));
+      }
+      lt->offsets[lt->count++] = (uint32_t)(i + 1);
     }
-    lt->offsets[lt->count++] = (uint32_t)(i + 1);
-  }}
+  }
 
+  lt->ascii = high < 0x80;
   return lt;
 }
 
@@ -172,7 +179,23 @@ void sv_compile_ctx_line_table_lookup(
 found:
   lt->hint = line;
   *out_line = (uint32_t)(line + 1);
-  *out_col = off - lt->offsets[line] + 1;
+  uint32_t start = lt->offsets[line];
+  if (lt->ascii) {
+    *out_col = off - start + 1;
+    return;
+  }
+
+  uint32_t pos = start, col = 1;
+  if (lt->col_line == line && lt->col_off <= off) {
+    pos = lt->col_off;
+    col = lt->col;
+  }
+  for (; pos < off; pos++) col += utf16_units_for_utf8_byte((unsigned char)lt->source[pos]);
+
+  lt->col_line = line;
+  lt->col_off = off;
+  lt->col = col;
+  *out_col = col;
 }
 
 uint32_t sv_compile_ctx_hash_local_name(const char *name, uint32_t len) {

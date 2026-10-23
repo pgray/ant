@@ -337,7 +337,7 @@ static bool copy_body_bytes(
 
   buf = malloc(src_len);
   if (!buf) {
-    *err_out = js_mkerr(js, "out of memory");
+    *err_out = Ant_Error_CreateOutOfMemory(js);
     return false;
   }
 
@@ -419,7 +419,7 @@ static bool extract_formdata_body(
   mp = formdata_serialize_multipart(js, body_val, &mp_size, &boundary);
   
   if (!mp) {
-    *err_out = js_mkerr(js, "out of memory");
+    *err_out = Ant_Error_CreateOutOfMemory(js);
     return false;
   }
 
@@ -435,7 +435,7 @@ static bool extract_formdata_body(
       if (mp_size > 0) free(mp);
       *out_data = NULL;
       *out_size = 0;
-      *err_out = js_mkerr(js, "out of memory");
+      *err_out = Ant_Error_CreateOutOfMemory(js);
       return false;
     }
     snprintf(content_type, ct_len + 1, "multipart/form-data; boundary=%s", boundary);
@@ -534,7 +534,7 @@ static void resolve_body_promise(
   }
   case BODY_BYTES: {
     ArrayBufferData *ab = create_array_buffer_data(js, size);
-    if (!ab) { js_reject_promise(js, promise, js_mkerr(js, "out of memory")); break; }
+    if (!ab) { js_reject_promise(js, promise, Ant_Error_CreateOutOfMemory(js)); break; }
     if (data && size > 0) memcpy(ab->data, data, size);
     ant_value_t bytes = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, size, js->builtins.typedarray_protos[TYPED_ARRAY_UINT8]);
     if (is_err(bytes)) js_reject_promise(js, promise, bytes);
@@ -715,7 +715,7 @@ static ant_value_t request_set_extracted_body(
   if (!req->body_is_stream) {
     if (body_type && body_type[0] &&
         !headers_data_append_if_missing(headers_get_data(headers), "content-type", body_type))
-      return js_mkerr(js, "out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
     return js_mkundef();
   }
 
@@ -731,7 +731,7 @@ static ant_value_t request_set_extracted_body(
   js_set_slot_wb(js, req_obj, SLOT_REQUEST_BODY_STREAM, body_stream);
   if (body_type && body_type[0] &&
       !headers_data_append_if_missing(headers_get_data(headers), "content-type", body_type))
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   return js_mkundef();
 }
 
@@ -759,7 +759,7 @@ static ant_value_t request_copy_source_body(ant_t *js, ant_value_t req_obj, ant_
 
   if (!src->body_is_stream) {
     req->body_data = malloc(src->body_size);
-    if (src->body_size > 0 && !req->body_data) return js_mkerr(js, "out of memory");
+    if (src->body_size > 0 && !req->body_data) return Ant_Error_CreateOutOfMemory(js);
     if (src->body_size > 0) memcpy(req->body_data, src->body_data, src->body_size);
     req->body_size = src->body_size;
     req->body_type = src->body_type ? strdup(src->body_type) : NULL;
@@ -885,7 +885,7 @@ static ant_value_t req_body_pull(ant_params_t) {
 
   if (d && d->body_data && d->body_size > 0) {
     ArrayBufferData *ab = create_array_buffer_data(js, d->body_size);
-    if (!ab) return js_mkerr(js, "out of memory");
+    if (!ab) return Ant_Error_CreateOutOfMemory(js);
     memcpy(ab->data, d->body_data, d->body_size);
 
     ant_value_t chunk = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, d->body_size, js->builtins.typedarray_protos[TYPED_ARRAY_UINT8]);
@@ -923,7 +923,7 @@ static ant_value_t request_inspect_finish(ant_t *js, ant_value_t this_obj, ant_v
 
   js_inspect_builder_t builder;
   if (!js_inspect_builder_init_dynamic(&builder, js, 128)) {
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   bool ok = js_inspect_header_for(&builder, body_obj, "%s", tag);
@@ -932,7 +932,7 @@ static ant_value_t request_inspect_finish(ant_t *js, ant_value_t this_obj, ant_v
 
   if (!ok) {
     js_inspect_builder_dispose(&builder);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   return js_inspect_builder_result(&builder);
@@ -985,7 +985,7 @@ static ant_value_t js_request_clone(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot clone a Request whose body is unusable");
 
   request_data_t *nd = data_dup(d);
-  if (!nd) return js_mkerr(js, "out of memory");
+  if (!nd) return Ant_Error_CreateOutOfMemory(js);
 
   ant_value_t src_headers = js_get_slot(this, SLOT_REQUEST_HEADERS);
   ant_value_t src_signal  = request_get_signal(js, this);
@@ -995,7 +995,7 @@ static ant_value_t js_request_clone(ant_params_t) {
   
   if (!headers_copy_from(new_headers, src_headers)) {
     data_free(nd);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   
   ant_value_t new_signal = abort_signal_create_dependent(js, src_signal);
@@ -1076,13 +1076,13 @@ static ant_value_t request_new_from_input(
     req = data_new();
     if (!req) {
       url_state_clear(&parsed);
-      return js_mkerr(js, "out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
     }
     
     req->url = parsed;
   } else {
     req = data_dup(src);
-    if (!req) return js_mkerr(js, "out of memory");
+    if (!req) return Ant_Error_CreateOutOfMemory(js);
     req->body_used = false;
     *out_input_signal = request_get_signal(js, input);
   }
@@ -1236,7 +1236,7 @@ static ant_value_t request_create_ctor_headers(ant_t *js, ant_value_t input) {
   if (vtype(input) != kTypeObject) return headers;
 
   ant_value_t src_hdrs = js_get_slot(input, SLOT_REQUEST_HEADERS);
-  if (!headers_copy_from(headers, src_hdrs)) return js_mkerr(js, "out of memory");
+  if (!headers_copy_from(headers, src_hdrs)) return Ant_Error_CreateOutOfMemory(js);
   return headers;
 }
 
@@ -1300,7 +1300,7 @@ static ant_value_t request_apply_ctor_body(
     
     if (init_req && !init_req->body_used && !init_req->body_is_stream && init_req->has_body) {
       bd = malloc(init_req->body_size);
-      if (init_req->body_size > 0 && !bd) return js_mkerr(js, "out of memory");
+      if (init_req->body_size > 0 && !bd) return Ant_Error_CreateOutOfMemory(js);
       if (init_req->body_size > 0) memcpy(bd, init_req->body_data, init_req->body_size);
       bs = init_req->body_size;
       bt = init_req->body_type ? strdup(init_req->body_type) : NULL;
@@ -1489,7 +1489,7 @@ ant_value_t request_create_server(
   const char *body_type
 ) {
   request_data_t *req = data_new_server(method);
-  if (!req) return js_mkerr(js, "out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
 
   if (!target || request_parse_server_url(
         target, absolute_target, host, canonical_host,
@@ -1502,7 +1502,7 @@ ant_value_t request_create_server(
 
   if (body && body_len > 0) {
     req->body_data = malloc(body_len);
-    if (!req->body_data) { data_free(req); return js_mkerr(js, "out of memory"); }
+    if (!req->body_data) { data_free(req); return Ant_Error_CreateOutOfMemory(js); }
     memcpy(req->body_data, body, body_len);
     req->body_size = body_len;
     req->body_type = body_type ? strdup(body_type) : NULL;

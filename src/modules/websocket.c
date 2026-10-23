@@ -519,7 +519,7 @@ static ant_value_t js_websocket_ctor(ant_params_t) {
 
   ant_value_t obj = websocket_create_object(js);
   websocket_state_t *ws = websocket_state_new(js, obj);
-  if (!ws) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+  if (!ws) return Ant_Error_CreateOutOfMemory(js);
   
   ws->is_client = true;
   js_set_native(obj, ws, WS_NATIVE_TAG);
@@ -617,7 +617,7 @@ static ant_value_t js_websocket_send(ant_params_t) {
     bool compressed_frame = false;
     if (ws->per_message_deflate) {
       if (!websocket_deflate_message(ws, bytes, len, &compressed, &compressed_len))
-        return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+        return Ant_Error_CreateOutOfMemory(js);
       bytes = compressed;
       len = compressed_len;
       compressed_frame = true;
@@ -627,7 +627,7 @@ static ant_value_t js_websocket_send(ant_params_t) {
       bytes, len, false, compressed_frame, &frame_len
     );
     free(compressed);
-    if (!frame) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+    if (!frame) return Ant_Error_CreateOutOfMemory(js);
     int rc = ant_conn_write(ws->server_conn, (char *)frame, frame_len, NULL, NULL);
     if (rc != 0) {
       free(frame);
@@ -738,7 +738,7 @@ ant_value_t ant_websocket_accept_server(
 ) {
   ant_value_t obj = websocket_create_object(js);
   websocket_state_t *ws = websocket_state_new(js, obj);
-  if (!ws) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+  if (!ws) return Ant_Error_CreateOutOfMemory(js);
   
   ws->server_conn = conn;
   ws->request_obj = request_obj;

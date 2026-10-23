@@ -85,7 +85,7 @@ static void brotli_state_finalize(ant_t *js, ant_object_t *obj) {
 
 static ant_value_t enqueue_buffer(ant_t *js, ant_value_t ctrl_obj, const uint8_t *data, size_t len) {
   ArrayBufferData *ab = create_array_buffer_data(js, len);
-  if (!ab) return js_mkerr(js, "out of memory");
+  if (!ab) return Ant_Error_CreateOutOfMemory(js);
   memcpy(ab->data, data, len);
   ant_value_t arr = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, js->builtins.typedarray_protos[TYPED_ARRAY_UINT8]);
   if (!ts_is_controller(ctrl_obj))
@@ -193,7 +193,7 @@ static ant_value_t js_cs_ctor(ant_params_t) {
     brotli = brotli_stream_state_new(false);
     if (!brotli) return js_mkerr(js, "Failed to initialize compression");
   } else {
-    if (!st) return js_mkerr(js, "out of memory");
+    if (!st) return Ant_Error_CreateOutOfMemory(js);
     st->format = fmt;
     int ret = deflateInit2(&st->strm, Z_DEFAULT_COMPRESSION, Z_DEFLATED,
       zfmt_window_bits(fmt, false), 8, Z_DEFAULT_STRATEGY);
@@ -315,7 +315,7 @@ static ant_value_t js_ds_ctor(ant_params_t) {
     brotli = brotli_stream_state_new(true);
     if (!brotli) return js_mkerr(js, "Failed to initialize decompression");
   } else {
-    if (!st) return js_mkerr(js, "out of memory");
+    if (!st) return Ant_Error_CreateOutOfMemory(js);
     st->format = fmt;
     int ret = inflateInit2(&st->strm, zfmt_window_bits(fmt, true));
     if (ret != Z_OK) { free(st); return js_mkerr(js, "Failed to initialize decompression"); }

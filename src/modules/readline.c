@@ -1258,7 +1258,7 @@ static ant_value_t rl_create_interface(ant_params_t) {
   if (!is_special_object(options)) return js_mkerr(js, "options must be an object");
   
   rl_interface_t *iface = calloc(1, sizeof(rl_interface_t));
-  if (!iface) return js_mkerr(js, "out of memory");
+  if (!iface) return Ant_Error_CreateOutOfMemory(js);
 
   iface->js = js;
   iface->id = ++js->rl_next_interface_id;
@@ -1270,7 +1270,7 @@ static ant_value_t rl_create_interface(ant_params_t) {
     free(iface->prompt);
     free(iface->line_buffer);
     free(iface);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   
   iface->line_pos = 0;

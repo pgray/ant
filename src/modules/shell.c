@@ -72,7 +72,7 @@ static ant_value_t sh_make_byte_array(
   ant_t *js, const char *data, size_t len
 ) {
   ArrayBufferData *buffer = create_array_buffer_data(js, len);
-  if (!buffer) return js_mkerr(js, "Out of memory");
+  if (!buffer) return Ant_Error_CreateOutOfMemory(js);
   if (len) memcpy(buffer->data, data, len);
   return create_typed_array(js, TYPED_ARRAY_UINT8, buffer, 0, len, js->builtins.buffer_proto);
 }
@@ -239,7 +239,7 @@ echo_oom:
           if (!sh_bytes_append(&windows_home, drive, strlen(drive)) ||
               !sh_bytes_append(&windows_home, path, strlen(path))) {
             free(windows_home.data);
-            return js_mkerr(js, "Out of memory");
+            return Ant_Error_CreateOutOfMemory(js);
           }
           home = windows_home.data;
         }
@@ -422,13 +422,13 @@ static ant_value_t sh_runtime_begin(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid shell cwd");
 
   sh_process_builder_t *builder = calloc(1, sizeof(*builder));
-  if (!builder) return js_mkerr(js, "Out of memory");
+  if (!builder) return Ant_Error_CreateOutOfMemory(js);
   ant_process_plan_init(&builder->plan);
   builder->plan.result_mode = ANT_PROCESS_RESULT_BYTES;
   builder->plan.cwd = malloc(cwd_len + 1);
   if (!builder->plan.cwd) {
     sh_process_builder_dispose(builder);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   memcpy(builder->plan.cwd, cwd, cwd_len);
   builder->plan.cwd[cwd_len] = '\0';
@@ -441,7 +441,7 @@ static ant_value_t sh_runtime_begin(ant_params_t) {
   js_set_native(holder, builder, SH_PROCESS_BUILDER_TAG);
   if (js_get_native(holder, SH_PROCESS_BUILDER_TAG) != builder) {
     sh_process_builder_dispose(builder);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   js_set_finalizer(holder, sh_process_builder_finalize);
   return holder;
@@ -458,7 +458,7 @@ static ant_value_t sh_runtime_arg(ant_params_t) {
     js, JS_ERR_TYPE, "ant:shell: command arguments cannot contain NUL bytes"
   );
   if (!text || !sh_process_builder_append(builder, text, len))
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   return js_mkundef();
 }
 
@@ -530,7 +530,7 @@ static ant_value_t sh_process_builder_add_builtin(
     (const char *)stderr_bytes, stderr_len, (int)js_getnum(exit_value)
   )) {
     GC_ROOT_RESTORE(js, root_mark);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   if (command_count == 1 && js_truthy(js, js_get(js, result, "exited")))
     builder->plan.exited = true;
@@ -556,13 +556,13 @@ static ant_value_t sh_runtime_command(ant_params_t) {
       js, JS_ERR_TYPE, "ant:shell: command arguments cannot contain NUL bytes"
     );
     if (!text || !sh_process_builder_append(builder, text, len))
-      return js_mkerr(js, "Out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
   }
 
   if (builder->argc == 0) {
     if (!ant_process_plan_add_native_stage(
       &builder->plan, "", 0, "", 0, 0
-    )) return js_mkerr(js, "Out of memory");
+    )) return Ant_Error_CreateOutOfMemory(js);
     return js_mkundef();
   }
   if (builder->argv[0][0] == '\0') return js_mkerr_typed(
@@ -574,7 +574,7 @@ static ant_value_t sh_runtime_command(ant_params_t) {
     );
   if (!ant_process_plan_take_command(
     &builder->plan, builder->argv, builder->argc
-  )) return js_mkerr(js, "Out of memory");
+  )) return Ant_Error_CreateOutOfMemory(js);
   builder->argv = NULL;
   builder->argc = 0;
   builder->argv_capacity = 0;
@@ -598,16 +598,16 @@ static ant_value_t sh_process_builder_add_redirect(
   ant_process_redirect_kind_t process_kind = (ant_process_redirect_kind_t)kind;
   if (kind == SH_REDIR_STDERR_TO_STDOUT) {
     if (!ant_process_plan_add_redirect(&builder->plan, process_kind, NULL))
-      return js_mkerr(js, "Out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
     return js_mkundef();
   }
 
   char *path = sh_resolve_path_text(js, context, target, target_len);
-  if (!path) return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : js_mkerr(js, "Out of memory");
+  if (!path) return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : Ant_Error_CreateOutOfMemory(js);
   bool added = ant_process_plan_add_redirect(&builder->plan, process_kind, path);
 
   free(path);
-  return added ? js_mkundef() : js_mkerr(js, "Out of memory");
+  return added ? js_mkundef() : Ant_Error_CreateOutOfMemory(js);
 }
 
 static ant_value_t sh_runtime_redirect(ant_params_t) {
@@ -683,7 +683,7 @@ static ant_value_t sh_accumulate_fulfilled(ant_params_t) {
       &accumulator->stdout_bytes, (const char *)stdout_bytes, stdout_len
     ) || !sh_bytes_append(
       &accumulator->stderr_bytes, (const char *)stderr_bytes, stderr_len
-    )) return js_mkerr(js, "Out of memory");
+    )) return Ant_Error_CreateOutOfMemory(js);
   return result;
 }
 
@@ -724,7 +724,7 @@ static ant_value_t sh_runtime_context(ant_params_t) {
     char *grown = realloc(cwd, capacity);
     if (!grown) {
       free(cwd);
-      return js_mkerr(js, "Out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
     }
     cwd = grown;
     size_t size = capacity;
@@ -750,14 +750,14 @@ static ant_value_t sh_runtime_context(ant_params_t) {
     if (!accumulator) {
       free(cwd);
       GC_ROOT_RESTORE(js, root_mark);
-      return js_mkerr(js, "Out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
     }
     js_set_native(context, accumulator, SH_OUTPUT_ACCUMULATOR_TAG);
     if (js_get_native(context, SH_OUTPUT_ACCUMULATOR_TAG) != accumulator) {
       free(accumulator);
       free(cwd);
       GC_ROOT_RESTORE(js, root_mark);
-      return js_mkerr(js, "Out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
     }
     js_set_finalizer(context, sh_output_accumulator_finalize);
   }

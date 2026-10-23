@@ -99,7 +99,7 @@ static ant_value_t js_textencoder_get_encoding(ant_params_t) {
 
 ant_value_t te_encode(ant_t *js, const char *str, size_t str_len) {
   ArrayBufferData *ab = create_array_buffer_data(js, str_len);
-  if (!ab) return js_mkerr(js, "out of memory");
+  if (!ab) return Ant_Error_CreateOutOfMemory(js);
   size_t written = utf8_export_into(str, str_len, ab->data, str_len, NULL);
   return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, written, js->builtins.typedarray_protos[TYPED_ARRAY_UINT8]);
 }
@@ -309,7 +309,7 @@ ant_value_t td_decode(ant_t *js, td_state_t *st, const uint8_t *input, size_t in
   const uint8_t *src;
   if (st->pending_len > 0) {
     work = malloc(total);
-    if (!work) return js_mkerr(js, "out of memory");
+    if (!work) return Ant_Error_CreateOutOfMemory(js);
     memcpy(work, st->pending, (size_t)st->pending_len);
     if (input && input_len > 0) memcpy(work + st->pending_len, input, input_len);
     src = work;
@@ -317,7 +317,7 @@ ant_value_t td_decode(ant_t *js, td_state_t *st, const uint8_t *input, size_t in
   st->pending_len = 0;
 
   char *out = malloc(total * 3 + 1);
-  if (!out) { free(work); return js_mkerr(js, "out of memory"); }
+  if (!out) { free(work); return Ant_Error_CreateOutOfMemory(js); }
 
   utf8proc_ssize_t n;
   if (st->encoding == TD_ENC_UTF16LE || st->encoding == TD_ENC_UTF16BE) {
@@ -405,7 +405,7 @@ static ant_value_t js_textdecoder_ctor(ant_params_t) {
   }
 
   td_state_t *st = td_state_new(enc, fatal, ignore_bom);
-  if (!st) return js_mkerr(js, "out of memory");
+  if (!st) return Ant_Error_CreateOutOfMemory(js);
 
   ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.textdecoder_proto, call_new_target);

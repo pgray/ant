@@ -675,7 +675,7 @@ static ant_value_t event_construct(
 
   ant_value_t this_obj = js_getthis(js);
   if (!is_object_type(this_obj) || !event_init(js, this_obj, kind, type, bubbles, cancelable))
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   
   *init_out = init;
   return this_obj;
@@ -838,7 +838,7 @@ static ant_value_t js_event_inspect(ant_params_t) {
   const char *tag = vtype(tag_val) == kTypeString ? js_getstr(js, tag_val, NULL) : "Event";
   
   js_inspect_builder_t builder;
-  if (!js_inspect_builder_init_dynamic(&builder, js, 128)) return js_mkerr(js, "out of memory");
+  if (!js_inspect_builder_init_dynamic(&builder, js, 128)) return Ant_Error_CreateOutOfMemory(js);
   
   bool ok = js_inspect_header(&builder, "%s", tag);
   if (ok) ok = js_inspect_field(&builder, "type", data->type);
@@ -849,7 +849,7 @@ static ant_value_t js_event_inspect(ant_params_t) {
   
   if (!ok) {
     js_inspect_builder_dispose(&builder);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   
   return js_inspect_builder_result(&builder);
@@ -881,7 +881,7 @@ ant_value_t Ant_Event_Create(
   if (is_err(event)) return event;
   if (is_object_type(proto)) js_set_proto_init(event, proto);
   event_data_t *data = event_init(js, event, kind, type, flags & ANT_EVENT_BUBBLES, flags & ANT_EVENT_CANCELABLE);
-  if (!data) return js_mkerr(js, "out of memory");
+  if (!data) return Ant_Error_CreateOutOfMemory(js);
   data->trusted = (flags & ANT_EVENT_TRUSTED) != 0;
   return event;
 }
@@ -1058,7 +1058,7 @@ static ant_value_t eventtarget_add_entry_flags(
   };
   if (once || capture || vtype(signal) != kTypeUndefined) {
     EventListenerCold *cold = entry_ensure_cold(evt, &entry);
-    if (!cold) return js_mkerr(js, "out of memory");
+    if (!cold) return Ant_Error_CreateOutOfMemory(js);
     cold->signal = signal;
     cold->capture = capture;
     emitter_write_barrier(js, evt->owner->target, signal);

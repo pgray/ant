@@ -74,7 +74,7 @@ static ant_value_t tes_transform(ant_params_t) {
   if (total == 0) return js_mkundef();
 
   uint8_t *buf = malloc(total);
-  if (!buf) return js_mkerr(js, "out of memory");
+  if (!buf) return Ant_Error_CreateOutOfMemory(js);
 
   size_t off = 0;
   if (st->pending_len > 0) {
@@ -101,7 +101,7 @@ static ant_value_t tes_transform(ant_params_t) {
   }
 
   uint8_t *out = malloc(out_len * 4 / 3 + 4);
-  if (!out) { free(buf); return js_mkerr(js, "out of memory"); }
+  if (!out) { free(buf); return Ant_Error_CreateOutOfMemory(js); }
 
   size_t i = 0, o = 0;
   while (i < out_len) {
@@ -124,7 +124,7 @@ static ant_value_t tes_transform(ant_params_t) {
   free(buf);
 
   ArrayBufferData *ab = create_array_buffer_data(js, o);
-  if (!ab) { free(out); return js_mkerr(js, "out of memory"); }
+  if (!ab) { free(out); return Ant_Error_CreateOutOfMemory(js); }
   memcpy(ab->data, out, o);
   free(out);
 
@@ -143,7 +143,7 @@ static ant_value_t tes_flush(ant_params_t) {
   if (st->pending_len > 0) {
     uint8_t fffd[3] = { 0xEF, 0xBF, 0xBD };
     ArrayBufferData *ab = create_array_buffer_data(js, 3);
-    if (!ab) return js_mkerr(js, "out of memory");
+    if (!ab) return Ant_Error_CreateOutOfMemory(js);
     memcpy(ab->data, fffd, 3);
     st->pending_len = 0;
     
@@ -177,7 +177,7 @@ static ant_value_t js_tes_ctor(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "TextEncoderStream constructor requires 'new'");
 
   tes_state_t *st = calloc(1, sizeof(tes_state_t));
-  if (!st) return js_mkerr(js, "out of memory");
+  if (!st) return Ant_Error_CreateOutOfMemory(js);
 
   ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.tes_proto, call_new_target);
@@ -345,7 +345,7 @@ static ant_value_t js_tds_ctor(ant_params_t) {
   }
 
   td_state_t *st = td_state_new(enc, fatal, ignore_bom);
-  if (!st) return js_mkerr(js, "out of memory");
+  if (!st) return Ant_Error_CreateOutOfMemory(js);
 
   ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.tds_proto, call_new_target);

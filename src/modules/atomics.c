@@ -996,7 +996,7 @@ static ant_value_t js_atomics_waitAsync(ant_params_t) {
 
   ant_value_t promise = js_mkpromise(js);
   AsyncWaitEntry *entry = calloc(1, sizeof(*entry));
-  if (!entry) return js_mkerr(js, "Out of memory");
+  if (!entry) return Ant_Error_CreateOutOfMemory(js);
 
   entry->js = js;
   entry->promise = promise;

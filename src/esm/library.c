@@ -79,7 +79,7 @@ ant_value_t ant_library_namespace(ant_t *js, ant_library_entry_t *lib) {
   ant_library_entry_t *canon = lib->canonical;
   ant_library_ns_t *cache = library_ns(js, canon);
   
-  if (!cache) return js_mkerr(js, "out of memory");
+  if (!cache) return Ant_Error_CreateOutOfMemory(js);
   if (is_object_type(cache->esm_ns)) return cache->esm_ns;
 
   ant_value_t exports = ant_library_load(js, lib);
@@ -133,7 +133,7 @@ ant_value_t ant_library_load(ant_t *js, ant_library_entry_t *lib) {
   ant_library_entry_t *canon = lib->canonical;
   ant_library_ns_t *cache = library_ns(js, canon);
   
-  if (!cache) return js_mkerr(js, "out of memory");
+  if (!cache) return Ant_Error_CreateOutOfMemory(js);
   if (cache->loaded) return cache->ns;
 
   ant_value_t ns = canon->init_fn(js);

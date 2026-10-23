@@ -20,7 +20,7 @@ static constexpr uint32_t HTTP_REQUEST_PARSER_NATIVE_TAG = Ant_NativeTag("HRQP")
 
 static ant_value_t http_parser_make_buffer(ant_t *js, const uint8_t *data, size_t len) {
   ArrayBufferData *ab = create_array_buffer_data(js, len);
-  if (!ab) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+  if (!ab) return Ant_Error_CreateOutOfMemory(js);
   if (len > 0 && data) memcpy(ab->data, data, len);
   return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, js->builtins.buffer_proto);
 }
@@ -140,7 +140,7 @@ static void http_request_parser_finalize(ant_t *js, ant_object_t *obj) {
 
 static ant_value_t js_http_parser_create_request_parser(ant_params_t) {
   ant_http1_conn_parser_t *cp = malloc(sizeof(*cp));
-  if (!cp) return js_mkerr(js, "out of memory");
+  if (!cp) return Ant_Error_CreateOutOfMemory(js);
 
   ant_http1_conn_parser_init(cp);
   if (nargs > 0 && vtype(args[0]) == kTypeNumber && js_getnum(args[0]) >= 1)

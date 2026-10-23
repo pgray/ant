@@ -346,7 +346,7 @@ static bool net_parse_connect_args(ant_native_params_t, net_connect_args_t *out)
 
 static ant_value_t net_make_buffer_chunk(ant_t *js, const char *data, size_t len) {
   ArrayBufferData *ab = create_array_buffer_data(js, len);
-  if (!ab) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+  if (!ab) return Ant_Error_CreateOutOfMemory(js);
   if (len > 0 && data) memcpy(ab->data, data, len);
   return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, js->builtins.buffer_proto);
 }
@@ -739,7 +739,7 @@ static ant_value_t js_net_socket_ctor(ant_params_t) {
   }
 
   socket = net_socket_create(js, allow_half_open, call_new_target);
-  if (!socket) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+  if (!socket) return Ant_Error_CreateOutOfMemory(js);
   return socket->obj;
 }
 
@@ -835,7 +835,7 @@ static ant_value_t js_net_socket_write(ant_params_t) {
   if (parsed.len == 0) return js_true;
 
   copy = malloc(parsed.len);
-  if (!copy) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+  if (!copy) return Ant_Error_CreateOutOfMemory(js);
   
   memcpy(copy, parsed.bytes, parsed.len);
   if (ant_conn_write(socket->conn, copy, parsed.len, NULL, NULL) != 0) return js_false;
@@ -917,7 +917,7 @@ static ant_value_t net_socket_connect_parsed(ant_t *js, net_socket_t *socket, co
   conn = parsed->path
     ? ant_conn_create_pipe(&socket->client_listener, parsed->timeout_ms)
     : ant_conn_create_tcp(&socket->client_listener, parsed->timeout_ms);
-  if (!conn) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+  if (!conn) return Ant_Error_CreateOutOfMemory(js);
 
   socket->conn = conn;
   socket->connecting = true;
@@ -961,7 +961,7 @@ static ant_value_t js_net_socket_connect(ant_params_t) {
 static ant_value_t js_net_server_ctor(ant_params_t) {
   net_server_t *server = net_server_create(js, call_new_target);
 
-  if (!server) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+  if (!server) return Ant_Error_CreateOutOfMemory(js);
   if (nargs > 0 && vtype(args[0]) == kTypeObject) net_server_apply_options(js, server, args[0]);
   if (nargs > 0 && is_callable(args[0])) net_add_listener(js, server->obj, "connection", args[0], false);
   else if (nargs > 1 && is_callable(args[1])) net_add_listener(js, server->obj, "connection", args[1], false);
@@ -980,7 +980,7 @@ static ant_value_t net_server_bind_listener(
 
   if (parsed->path) {
     server->path = strdup(parsed->path);
-    if (!server->path) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+    if (!server->path) return Ant_Error_CreateOutOfMemory(js);
     
     rc = ant_listener_listen_pipe(
       &server->listener, loop, server->path, 
@@ -992,7 +992,7 @@ static ant_value_t net_server_bind_listener(
     
     free(server->host);
     server->host = strdup(host ? host : "0.0.0.0");
-    if (!server->host) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+    if (!server->host) return Ant_Error_CreateOutOfMemory(js);
     
     rc = ant_listener_listen_tcp(
       &server->listener, loop, server->host, parsed->port, 
@@ -1193,7 +1193,7 @@ static ant_value_t js_net_createConnection(ant_params_t) {
 
   if (!net_parse_connect_args(js, args, nargs, &parsed)) return parsed.error;
   socket = net_socket_create(js, parsed.allow_half_open, js_mkundef());
-  if (!socket) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+  if (!socket) return Ant_Error_CreateOutOfMemory(js);
 
   return net_socket_connect_parsed(js, socket, &parsed);
 }

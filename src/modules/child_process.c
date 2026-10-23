@@ -181,7 +181,7 @@ switch (kind) {
 
 static ant_value_t make_buffer_chunk(ant_t *js, const char *data, size_t len) {
   ArrayBufferData *ab = create_array_buffer_data(js, len);
-  if (!ab) return js_mkerr(js, "Out of memory");
+  if (!ab) return Ant_Error_CreateOutOfMemory(js);
   if (len > 0 && data) memcpy(ab->data, data, len);
   return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, js->builtins.buffer_proto);
 }
@@ -633,7 +633,7 @@ static ant_value_t child_write_impl(
 
   if (!write || (data_len && !buf_data)) {
     free(write); free(buf_data);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   if (data_len) memcpy(buf_data, data, data_len);
@@ -880,7 +880,7 @@ static ant_value_t create_child_stream_object(ant_t *js, child_process_t *cp, ch
   bool writable = kind == CHILD_STREAM_STDIN;
   ant_value_t obj = Ant_Object_CreateBare(js);
   child_stream_ctx_t *ctx = calloc(1, sizeof(child_stream_ctx_t));
-  if (!ctx) return js_mkerr(js, "Out of memory");
+  if (!ctx) return Ant_Error_CreateOutOfMemory(js);
   
   ctx->cp = cp;
   ctx->kind = kind;
@@ -1208,7 +1208,7 @@ static ant_value_t builtin_spawn(ant_params_t) {
     free_args_array(spawn_args, spawn_argc);
     free_env_array(env);
     if (cwd) free(cwd);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   
   cp->js = js;
@@ -1369,7 +1369,7 @@ static ant_value_t builtin_exec(ant_params_t) {
   if (!cp) {
     free(cmd_str);
     if (cwd) free(cwd);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   
   cp->js = js;
@@ -1635,7 +1635,7 @@ static ant_value_t exec_callback_promisified_call(ant_params_t) {
   ant_value_t *call_args = malloc((size_t)(nargs + 1) * sizeof(ant_value_t));
   
   if (!call_args) {
-    js_reject_promise(js, promise, js_mkerr(js, "Out of memory"));
+    js_reject_promise(js, promise, Ant_Error_CreateOutOfMemory(js));
     return promise;
   }
 
@@ -1752,7 +1752,7 @@ static ant_value_t sync_make_output(ant_t *js, const char *bytes, size_t len, bo
   if (as_string) return js_mkstr(js, bytes ? bytes : "", len);
 
   ArrayBufferData *buffer = create_array_buffer_data(js, len);
-  if (!buffer) return js_mkerr(js, "Out of memory");
+  if (!buffer) return Ant_Error_CreateOutOfMemory(js);
   if (bytes && len > 0) memcpy(buffer->data, bytes, len);
 
   return create_typed_array(js, TYPED_ARRAY_UINT8, buffer, 0, len, js->builtins.buffer_proto);
@@ -1893,7 +1893,7 @@ static ant_value_t spawn_sync_impl(ant_native_params_t, bool force_shell) {
   if (!raw_cmdline) {
     free(cmd_str);
     free_args_array(spawn_args, spawn_argc);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   
   char *p = raw_cmdline;
@@ -1912,7 +1912,7 @@ static ant_value_t spawn_sync_impl(ant_native_params_t, bool force_shell) {
       free(raw_cmdline);
       free(cmd_str);
       free_args_array(spawn_args, spawn_argc);
-      return js_mkerr(js, "Out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
     }
     snprintf(cmdline, shell_len, "%s /d /s /c \"%s\"", shell, raw_cmdline);
   }
@@ -2515,7 +2515,7 @@ static ant_value_t spawn_sync_impl(ant_native_params_t, bool force_shell) {
 
   sync_res_t res = {0};
   res.command = strndup(command, command_len);
-  if (!res.command) return js_mkerr(js, "Out of memory");
+  if (!res.command) return Ant_Error_CreateOutOfMemory(js);
 
   if (nargs >= 2 && js_is_array(args[1]))
     res.args = parse_args_array(js, args[1], &res.arg_count);
@@ -2532,7 +2532,7 @@ static ant_value_t spawn_sync_impl(ant_native_params_t, bool force_shell) {
 
   if (!sync_build_argv(&res, opts.use_shell, command_len)) {
     sync_res_free(&res);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   sync_pipes_t pipes;

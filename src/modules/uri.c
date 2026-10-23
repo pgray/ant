@@ -87,7 +87,7 @@ ant_value_t js_encodeURIComponent(ant_params_t) {
   size_t len = strlen(str);
   size_t out_cap = len * 12 + 1;
   out = malloc(out_cap);
-  if (!out) return js_mkerr(js, "out of memory");
+  if (!out) return Ant_Error_CreateOutOfMemory(js);
   
   size_t out_len = 0;
   size_t i = 0;
@@ -140,7 +140,7 @@ ant_value_t js_encodeURI(ant_params_t) {
   size_t len = strlen(str);
   size_t out_cap = len * 12 + 1;
   out = malloc(out_cap);
-  if (!out) return js_mkerr(js, "out of memory");
+  if (!out) return Ant_Error_CreateOutOfMemory(js);
   
   size_t out_len = 0;
   size_t i = 0;
@@ -192,7 +192,7 @@ ant_value_t js_decodeURIComponent(ant_params_t) {
   
   size_t len = strlen(str);
   out = malloc(len + 1);
-  if (!out) return js_mkerr(js, "out of memory");
+  if (!out) return Ant_Error_CreateOutOfMemory(js);
   
   size_t out_len = 0;
   size_t i = 0;
@@ -241,7 +241,7 @@ ant_value_t js_decodeURI(ant_params_t) {
   
   size_t len = strlen(str);
   out = malloc(len + 1);
-  if (!out) return js_mkerr(js, "out of memory");
+  if (!out) return Ant_Error_CreateOutOfMemory(js);
   
   size_t out_len = 0;
   size_t i = 0;
@@ -309,7 +309,7 @@ static ant_value_t js_escape(ant_params_t) {
   size_t len = strlen(str);
   size_t out_cap = len * 6 + 1;
   char *out = malloc(out_cap);
-  if (!out) return js_mkerr(js, "out of memory");
+  if (!out) return Ant_Error_CreateOutOfMemory(js);
   
   size_t out_len = 0;
   
@@ -335,7 +335,7 @@ static ant_value_t js_unescape(ant_params_t) {
   
   size_t len = strlen(str);
   char *out = malloc(len + 1);
-  if (!out) return js_mkerr(js, "out of memory");
+  if (!out) return Ant_Error_CreateOutOfMemory(js);
   
   size_t out_len = 0;
   size_t i = 0;

@@ -257,7 +257,7 @@ static inline ant_value_t sv_call_resolve_bound(
       closure, ctx->args, ctx->argc,
       &total, inline_args
     );
-    if (!combined) return js_mkerr(js, "out of memory");
+    if (!combined) return Ant_Error_CreateOutOfMemory(js);
     ctx->args  = combined;
     ctx->argc  = total;
     if (combined != inline_args) ctx->alloc = combined;

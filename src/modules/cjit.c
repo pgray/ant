@@ -186,7 +186,7 @@ static ant_value_t ant_c_template_source(ant_native_params_t) {
     const char *part = js_getstr(js, literal, &part_length);
     if (!ant_c_append(&buffer, &length, &capacity, part, part_length)) {
       free(buffer);
-      return js_mkerr(js, "Out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
     }
 
     if (i + 1 >= literal_count) continue;
@@ -198,7 +198,7 @@ static ant_value_t ant_c_template_source(ant_native_params_t) {
     part = js_getstr(js, value, &part_length);
     if (!ant_c_append(&buffer, &length, &capacity, part, part_length)) {
       free(buffer);
-      return js_mkerr(js, "Out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
     }
   }
 
@@ -649,7 +649,7 @@ static ant_value_t ant_c_make_function(
     MIR_gen_finish(ctx);
     c2mir_finish(ctx);
     MIR_finish(ctx);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   function->ctx = ctx;
@@ -666,7 +666,7 @@ static ant_value_t ant_c_make_function(
   
   if (!function->entry_name || (arg_count > 0 && (!function->arg_types || !function->ffi_arg_types))) {
     ant_c_function_destroy(function);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   
   if (arg_count > 0) {
@@ -782,7 +782,7 @@ static ant_value_t ant_c_compile(ant_t *js, ant_value_t source_value, ant_value_
       source_data, source_len, &signature, &source_len
     );
     if (!checked_source) {
-      ant_value_t error = js_mkerr(js, "Out of memory");
+      ant_value_t error = Ant_Error_CreateOutOfMemory(js);
       GC_ROOT_RESTORE(js, root_mark);
       return error;
     }

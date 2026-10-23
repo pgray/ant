@@ -204,7 +204,7 @@ static ant_value_t timer_inspect(ant_params_t) {
 
   js_inspect_builder_t builder;
   if (!js_inspect_builder_init_dynamic(&builder, js, 128))
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
 
   bool ok = entry
     ? js_inspect_header(&builder, "%s (%d)", tag, entry->timer_id)
@@ -217,7 +217,7 @@ static ant_value_t timer_inspect(ant_params_t) {
   
   if (!ok) {
     js_inspect_builder_dispose(&builder);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   return js_inspect_builder_result(&builder);

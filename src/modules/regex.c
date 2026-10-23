@@ -1587,7 +1587,7 @@ static ant_value_t regexp_escape_source(ant_t *js, ant_value_t pattern) {
   if (!needs_escape) return pattern;
 
   char *out = malloc(len * 2);
-  if (!out) return js_mkerr(js, "out of memory");
+  if (!out) return Ant_Error_CreateOutOfMemory(js);
   size_t n = 0;
   bool in_class = false;
 

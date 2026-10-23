@@ -192,7 +192,7 @@ ant_value_t wasi_instantiate(
   char error_buf[128] = {0};
   uint8_t *bin_copy = malloc(wasm_len);
 
-  if (!bin_copy) return js_mkerr(js, "out of memory");
+  if (!bin_copy) return Ant_Error_CreateOutOfMemory(js);
   memcpy(bin_copy, wasm_bytes, wasm_len);
 
   wasm_module_t rt_module = wasm_runtime_load(bin_copy, (uint32_t)wasm_len, error_buf, sizeof(error_buf));
@@ -259,7 +259,7 @@ ant_value_t wasi_instantiate(
     wasm_runtime_deinstantiate(inst);
     wasm_runtime_unload(rt_module);
     free(bin_copy);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   handle->binary = bin_copy;

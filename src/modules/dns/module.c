@@ -141,7 +141,7 @@ static ant_value_t dns_resolver_construct(ant_t *js, ant_value_t *args, int narg
   if (is_err(r = dns_resolver_option(js, options, "tries", 1, 4, &tries))) return r;
 
   dns_channel_t **cell = malloc(sizeof(dns_channel_t *));
-  if (!cell) return js_mkerr(js, "out of memory");
+  if (!cell) return Ant_Error_CreateOutOfMemory(js);
 
   *cell = dns_channel_create(js, timeout, tries);
   if (!*cell) {

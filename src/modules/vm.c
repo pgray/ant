@@ -453,7 +453,7 @@ static ant_value_t vm_script_compiled(ant_t *js, ant_value_t script, ant_realm_t
   vm_set_import(js, (sv_func_t *)vptr(compiled), handler, referrer);
   
   if (!vm_script_note_realm(st, realm) || !ant_ptr_pair_put(&realm->vm_scripts, (uintptr_t)st->id, 0, compiled))
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   realm->gc_dirty = true;
 
   return compiled;
@@ -552,7 +552,7 @@ static ant_value_t vm_script_init(ant_t *js, ant_value_t script, ant_value_t cod
     return Ant_Error_CreateInvalidArgType(js, "options", "of type object", options);
 
   vm_script_t *st = calloc(1, sizeof(*st));
-  if (!st) return js_mkerr(js, "out of memory");
+  if (!st) return Ant_Error_CreateOutOfMemory(js);
   
   st->filename = vm_default_filename;
   st->id = atomic_fetch_add(&vm_next_script_id, 1);
@@ -569,7 +569,7 @@ static ant_value_t vm_script_init(ant_t *js, ant_value_t script, ant_value_t cod
       size_t len = 0;
       const char *text = js_getstr(js, filename, &len);
       st->filename = intern_string(js, text, len);
-      if (!st->filename) return js_mkerr(js, "out of memory");
+      if (!st->filename) return Ant_Error_CreateOutOfMemory(js);
     } else if (vtype(filename) != kTypeUndefined) return Ant_Error_CreateInvalidArgType(js, "options.filename", "of type string", filename);
 
     ant_value_t import_handler;
@@ -716,7 +716,7 @@ static ant_value_t vm_function_with_extensions(
   }
   
   char *text = malloc(total);
-  if (!text) return js_mkerr(js, "out of memory");
+  if (!text) return Ant_Error_CreateOutOfMemory(js);
   size_t pos = 0;
 
   for (ant_offset_t i = 0; i < count; i++)
@@ -807,7 +807,7 @@ static ant_value_t vm_compile_function(ant_params_t) {
       size_t len = 0;
       const char *text = js_getstr(js, name, &len);
       filename = intern_string(js, text, len);
-      if (!filename) return js_mkerr(js, "out of memory");
+      if (!filename) return Ant_Error_CreateOutOfMemory(js);
     } else if (vtype(name) != kTypeUndefined) return Ant_Error_CreateInvalidArgType(js, "options.filename", "of type string", name);
   }
 
@@ -815,7 +815,7 @@ static ant_value_t vm_compile_function(ant_params_t) {
   if (param_count > 65535) return js_mkerr_typed(js, JS_ERR_RANGE, "too many parameters");
 
   ant_value_t *parts = malloc(((size_t)param_count + 1) * sizeof(*parts));
-  if (!parts) return js_mkerr(js, "out of memory");
+  if (!parts) return Ant_Error_CreateOutOfMemory(js);
 
   GC_ROOT_SAVE(mark, js);
   for (ant_offset_t i = 0; i < param_count; i++) {

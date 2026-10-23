@@ -96,7 +96,7 @@ void error_line_col(const char *code, ant_offset_t code_len, ant_offset_t pos, i
     if (ch == '\n') {
       *out_line += 1;
       *out_col = 1;
-    } else *out_col += 1;
+    } else *out_col += (int)utf16_units_for_utf8_byte((unsigned char)ch);
   }
 }
 

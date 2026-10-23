@@ -624,7 +624,7 @@ ant_value_t collections_map_create(ant_t *js, map_entry_t ***out_map) {
   if (is_special_object(map_proto)) js_set_proto_init(map_obj, map_proto);
 
   map_entry_t **map_head = collections_map_store_new();
-  if (!map_head) return js_mkerr(js, "out of memory");
+  if (!map_head) return Ant_Error_CreateOutOfMemory(js);
 
   js_set_native(map_obj, map_head, MAP_NATIVE_TAG);
   if (out_map) *out_map = map_head;
@@ -837,7 +837,7 @@ static ant_value_t map_set(ant_params_t) {
   
   ant_value_t key_val = normalize_map_key(args[0]);
   if (!map_store_entry(js, map_ptr, args[0], key_val, args[1]))
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
 
   ant_object_t *map_obj = js_obj_ptr(this_val);
   if (map_obj) {
@@ -888,7 +888,7 @@ __attribute__((aligned(64))) ant_value_t collections_map_get_numeric_pair(
   char right_buf[32];
   
   size_t left_len = collection_number_to_string(tod(left), (char *)inline_key + 1, sizeof(right_buf));  
-  if (left_len > sizeof(right_buf)) return js_mkerr(js, "out of memory");
+  if (left_len > sizeof(right_buf)) return Ant_Error_CreateOutOfMemory(js);
 
   bool right_inline = separator_len <= sizeof(inline_key) - 1 - left_len - sizeof(right_buf);
   char *right_out = right_inline ? (char *)inline_key + 1 + left_len + separator_len : right_buf;
@@ -896,14 +896,14 @@ __attribute__((aligned(64))) ant_value_t collections_map_get_numeric_pair(
 
   if (right_len > sizeof(right_buf) ||
     separator_len > SIZE_MAX - 1 - left_len - right_len)
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
 
   size_t key_len = 1 + left_len + separator_len + right_len;
   unsigned char *key = inline_key;
   
   if (key_len > sizeof(inline_key)) {
     key = malloc(key_len);
-    if (!key) return js_mkerr(js, "out of memory");
+    if (!key) return Ant_Error_CreateOutOfMemory(js);
     memcpy(key + 1, inline_key + 1, left_len);
   }
 
@@ -952,12 +952,12 @@ static ant_value_t map_numeric_template_general(
     if (number_lens[i] > sizeof(number_bufs[i]) ||
         desc->segments[i].len > SIZE_MAX - key_len ||
         number_lens[i] > SIZE_MAX - key_len - desc->segments[i].len)
-      return js_mkerr(js, "out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
     key_len += desc->segments[i].len + number_lens[i];
   }
   
   if (desc->segments[substitution_count].len > SIZE_MAX - key_len)
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   key_len += desc->segments[substitution_count].len;
 
   unsigned char inline_key[64];
@@ -965,7 +965,7 @@ static ant_value_t map_numeric_template_general(
   
   if (key_len > sizeof(inline_key)) {
     key = malloc(key_len);
-    if (!key) return js_mkerr(js, "out of memory");
+    if (!key) return Ant_Error_CreateOutOfMemory(js);
   }
 
   unsigned char *out = key;
@@ -1051,7 +1051,7 @@ static ant_value_t map_upsert(ant_params_t) {
 
   ant_value_t key_val = normalize_map_key(args[0]);
   if (!map_store_entry(js, map_ptr, args[0], key_val, value))
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
 
   ant_object_t *map_obj = js_obj_ptr(this_val);
   if (map_obj) {
@@ -1143,7 +1143,7 @@ static ant_value_t create_map_iterator(ant_t *js, ant_value_t map_obj, iter_type
   map_entry_t **map_ptr = get_map_from_obj(map_obj);
   
   map_iterator_state_t *state = collection_alloc(sizeof(map_iterator_state_t));
-  if (!state) return js_mkerr(js, "out of memory");
+  if (!state) return Ant_Error_CreateOutOfMemory(js);
   iter_state_open(state, map_ptr ? &map_store_of(map_ptr)->cursors : NULL, map_ptr ? *map_ptr : NULL, type, true);
 
   ant_value_t iter = Ant_Object_CreateBare(js);
@@ -1186,7 +1186,7 @@ static ant_value_t create_set_iterator(ant_t *js, ant_value_t set_obj, iter_type
   set_entry_t **set_ptr = get_set_from_obj(set_obj);
   
   set_iterator_state_t *state = collection_alloc(sizeof(set_iterator_state_t));
-  if (!state) return js_mkerr(js, "out of memory");
+  if (!state) return Ant_Error_CreateOutOfMemory(js);
   iter_state_open(state, set_ptr ? &set_store_of(set_ptr)->cursors : NULL, set_ptr ? *set_ptr : NULL, type, true);
 
   ant_value_t iter = Ant_Object_CreateBare(js);
@@ -1206,7 +1206,7 @@ static ant_value_t set_add(ant_params_t) {
   if (!set_ptr) return js_mkerr(js, "Invalid Set object");
   
   if (!set_store_entry(js, set_ptr, args[0]))
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
 
   ant_object_t *set_obj = js_obj_ptr(this_val);
   if (set_obj) gc_write_barrier(js, set_obj, args[0]);
@@ -1299,7 +1299,7 @@ ant_value_t collections_set_create(ant_t *js, set_entry_t ***out_set) {
   if (is_special_object(set_proto)) js_set_proto_init(set_obj, set_proto);
 
   set_entry_t **set_head = collections_set_store_new();
-  if (!set_head) return js_mkerr(js, "out of memory");
+  if (!set_head) return Ant_Error_CreateOutOfMemory(js);
   *set_head = NULL;
   
   js_set_native(set_obj, set_head, SET_NATIVE_TAG);
@@ -1466,7 +1466,7 @@ typedef struct {
 static set_key_status_t set_add_key_cb(ant_t *js, ant_value_t value, ant_value_t *result, void *ctx) {
   set_build_ctx_t *build = (set_build_ctx_t *)ctx;
   if (!set_result_add(js, build->out, build->out_set, value))
-    *result = js_mkerr(js, "out of memory");
+    *result = Ant_Error_CreateOutOfMemory(js);
   return SET_KEY_CONTINUE;
 }
 
@@ -1484,7 +1484,7 @@ static ant_value_t set_union(ant_params_t) {
   if (is_err(out)) return out;
   set_build_ctx_t build = { out, out_set };
 
-  if (!set_result_copy(js, out, out_set, this_set)) return js_mkerr(js, "out of memory");
+  if (!set_result_copy(js, out, out_set, this_set)) return Ant_Error_CreateOutOfMemory(js);
   ant_value_t result = set_record_for_each_key(js, &other, set_add_key_cb, &build);
   
   return is_err(result) ? result : out;
@@ -1501,7 +1501,7 @@ static set_key_status_t set_intersection_key_cb(ant_t *js, ant_value_t value, an
   if (
     Ant_Set_Find(js, build->this_set, value) && 
     !set_result_add(js, build->out, build->out_set, value)
-  ) *result = js_mkerr(js, "out of memory");
+  ) *result = Ant_Error_CreateOutOfMemory(js);
   return SET_KEY_CONTINUE;
 }
 
@@ -1529,7 +1529,7 @@ static ant_value_t set_intersection(ant_params_t) {
       result = set_record_has_entry(js, &other, entry, &has);
       if (is_err(result)) break;
       if (has && !set_result_add(js, out, out_set, value)) {
-        result = js_mkerr(js, "out of memory");
+        result = Ant_Error_CreateOutOfMemory(js);
         break;
       }
       result = out;
@@ -1568,12 +1568,12 @@ static ant_value_t set_difference(ant_params_t) {
     for (set_entry_t *each = *this_set; each; each = (set_entry_t *)each->hh.next) {
       bool has = false;
       set_record_has_entry(js, &other, each, &has);
-      if (!has && !set_result_clone(js, out, out_set, each)) return js_mkerr(js, "out of memory");
+      if (!has && !set_result_clone(js, out, out_set, each)) return Ant_Error_CreateOutOfMemory(js);
     }
     return out;
   }
 
-  if (!set_result_copy(js, out, out_set, this_set)) return js_mkerr(js, "out of memory");
+  if (!set_result_copy(js, out, out_set, this_set)) return Ant_Error_CreateOutOfMemory(js);
 
   if (scan) {
     set_iterator_state_t it;
@@ -1609,7 +1609,7 @@ static set_key_status_t set_symmetric_difference_key_cb(ant_t *js, ant_value_t v
   if (Ant_Set_Find(js, build->this_set, value)) {
     set_result_delete(js, build->out_set, value);
   } else if (!Ant_Set_Find(js, build->out_set, value))
-    if (!set_result_add(js, build->out, build->out_set, value)) *result = js_mkerr(js, "out of memory");
+    if (!set_result_add(js, build->out, build->out_set, value)) *result = Ant_Error_CreateOutOfMemory(js);
   return SET_KEY_CONTINUE;
 }
 
@@ -1626,7 +1626,7 @@ static ant_value_t set_symmetricDifference(ant_params_t) {
   ant_value_t out = collections_set_create(js, &out_set);
   if (is_err(out)) return out;
 
-  if (!set_result_copy(js, out, out_set, this_set)) return js_mkerr(js, "out of memory");
+  if (!set_result_copy(js, out, out_set, this_set)) return Ant_Error_CreateOutOfMemory(js);
   set_symdiff_ctx_t build = { out, out_set, this_set };
   ant_value_t result = set_record_for_each_key(js, &other, set_symmetric_difference_key_cb, &build);
   return is_err(result) ? result : out;
@@ -1739,7 +1739,7 @@ static ant_value_t weakmap_set(ant_params_t) {
     return js_mkerr(js, "WeakMap key must be an object");
 
   if (!weakmap_store_entry(js, object, table, args[0], args[1]))
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   
   return this_val;
 }
@@ -1800,7 +1800,7 @@ static ant_value_t weakmap_upsert(ant_params_t) {
   if (is_err(value)) return value;
 
   if (!weakmap_store_entry(js, object, table, key_obj, value))
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
 
   return value;
 }
@@ -1833,7 +1833,7 @@ static ant_value_t weakset_add(ant_params_t) {
   
   if (!entry) {
     entry = calloc(1, sizeof(weakset_entry_t));
-    if (!entry) return js_mkerr(js, "out of memory");
+    if (!entry) return Ant_Error_CreateOutOfMemory(js);
     entry->value_obj = value_obj;
     HASH_ADD(hh, *ws_ptr, value_obj, sizeof(ant_value_t), entry);
   }
@@ -1890,7 +1890,7 @@ static void weakref_finalize(ant_t *js, ant_object_t *obj) {
 
 static ant_value_t weakref_attach(ant_t *js, ant_value_t wr_obj, ant_value_t target) {
   weakref_state_t *state = calloc(1, sizeof(*state));
-  if (!state) return js_mkerr(js, "out of memory");
+  if (!state) return Ant_Error_CreateOutOfMemory(js);
   
   state->target = target;
   js_set_native(wr_obj, state, WEAKREF_NATIVE_TAG);
@@ -2043,7 +2043,7 @@ static ant_value_t map_group_add(ant_t *js, void *ctx, ant_value_t key, ant_valu
 
   if (entry) group = entry->value; else {
     group = js_mkarr(js);
-    if (!map_store_entry(js, map_head, key, key, group)) return js_mkerr(js, "out of memory");
+    if (!map_store_entry(js, map_head, key, key, group)) return Ant_Error_CreateOutOfMemory(js);
   }
   
   js_arr_push(js, group, value);
@@ -2060,7 +2060,7 @@ static ant_value_t map_groupBy(ant_params_t) {
   if (is_special_object(map_proto)) js_set_proto_init(map_obj, map_proto);
   
   map_entry_t **map_head = collections_map_store_new();
-  if (!map_head) return js_mkerr(js, "out of memory");
+  if (!map_head) return Ant_Error_CreateOutOfMemory(js);
   *map_head = NULL;
   js_set_native(map_obj, map_head, MAP_NATIVE_TAG);
   
@@ -2107,7 +2107,7 @@ static ant_value_t map_init_from_iterable(ant_t *js, ant_value_t map_obj, map_en
       ant_value_t key = normalize_map_key(js_arr_get(js, entry, 0));
       ant_value_t value = js_arr_get(js, entry, 1);
       if (!map_store_entry(js, map_head, key, key, value)) {
-        result = js_mkerr(js, "out of memory");
+        result = Ant_Error_CreateOutOfMemory(js);
         goto close_iter;
       }
       continue;
@@ -2146,7 +2146,7 @@ static ant_value_t set_init_from_iterable(ant_t *js, ant_value_t set_obj, set_en
   while (js_iter_next(js, &it, &value)) {
     if (use_fast_path) {
       if (!set_store_entry(js, set_head, value)) {
-        result = js_mkerr(js, "out of memory");
+        result = Ant_Error_CreateOutOfMemory(js);
         goto close_iter;
       }
       continue;
@@ -2212,7 +2212,7 @@ static ant_value_t weakmap_init_from_iterable(
     }
 
     if (!weakmap_store_entry(js, wm_object, table, key, value)) {
-      result = js_mkerr(js, "out of memory");
+      result = Ant_Error_CreateOutOfMemory(js);
       goto close_iter;
     }
   }
@@ -2259,7 +2259,7 @@ static ant_value_t weakset_init_from_iterable(ant_t *js, ant_value_t ws_obj, wea
     
     entry = calloc(1, sizeof(weakset_entry_t));
     if (!entry) {
-      result = js_mkerr(js, "out of memory");
+      result = Ant_Error_CreateOutOfMemory(js);
       goto close_iter;
     }
     
@@ -2290,7 +2290,7 @@ static ant_value_t builtin_Map(ant_params_t) {
   if (is_special_object(instance_proto)) js_set_proto_init(map_obj, instance_proto);
   
   map_entry_t **map_head = collections_map_store_new();
-  if (!map_head) return js_mkerr(js, "out of memory");
+  if (!map_head) return Ant_Error_CreateOutOfMemory(js);
   *map_head = NULL;
   
   if (vtype(call_new_target) == kTypeFunction || vtype(call_new_target) == kTypeBuiltin)
@@ -2320,7 +2320,7 @@ static ant_value_t builtin_Set(ant_params_t) {
   if (is_special_object(instance_proto)) js_set_proto_init(set_obj, instance_proto);
   
   set_entry_t **set_head = collections_set_store_new();
-  if (!set_head) return js_mkerr(js, "out of memory");
+  if (!set_head) return Ant_Error_CreateOutOfMemory(js);
   *set_head = NULL;
   
   if (vtype(call_new_target) == kTypeFunction || vtype(call_new_target) == kTypeBuiltin)
@@ -2350,7 +2350,7 @@ static ant_value_t builtin_WeakMap(ant_params_t) {
   if (is_special_object(instance_proto)) js_set_proto_init(wm_obj, instance_proto);
   
   weakmap_table_t *table = calloc(1, sizeof(*table));
-  if (!table) return js_mkerr(js, "out of memory");
+  if (!table) return Ant_Error_CreateOutOfMemory(js);
   
   if (vtype(call_new_target) == kTypeFunction || vtype(call_new_target) == kTypeBuiltin)
     js_set_slot(wm_obj, SLOT_CTOR, call_new_target);
@@ -2382,7 +2382,7 @@ static ant_value_t builtin_WeakSet(ant_params_t) {
   if (is_special_object(instance_proto)) js_set_proto_init(ws_obj, instance_proto);
   
   weakset_entry_t **ws_head = calloc(1, sizeof(weakset_entry_t *));
-  if (!ws_head) return js_mkerr(js, "out of memory");
+  if (!ws_head) return Ant_Error_CreateOutOfMemory(js);
   *ws_head = NULL;
   
   if (vtype(call_new_target) == kTypeFunction || vtype(call_new_target) == kTypeBuiltin)

@@ -222,7 +222,7 @@ ant_value_t ant_port_end_post(ant_t *js, ant_port_end_t *end, ant_value_t value,
   if (is_err(r)) return r;
   if (!end_push(end, wire)) {
     ant_wire_release(wire);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   return js_mkundef();
 }
@@ -472,7 +472,7 @@ static ant_value_t message_port_create(ant_t *js, ant_port_end_t *end) {
   js_set_proto_init(obj, js->builtins.message_port_proto);
 
   ant_port_binding_t *binding = ant_port_end_bind(js, end, obj, NULL);
-  if (!binding) return js_mkerr(js, "out of memory");
+  if (!binding) return Ant_Error_CreateOutOfMemory(js);
 
   js_set_native(obj, binding, MESSAGE_PORT_NATIVE_TAG);
   js_set_finalizer(obj, message_port_finalize);
@@ -520,7 +520,7 @@ ant_value_t ant_message_port_post(ant_t *js, ant_value_t port, ant_value_t value
   if (is_err(r)) return r;
   if (!binding->end || !end_push(binding->end, wire)) {
     ant_wire_release(wire);
-    return binding->end ? js_mkerr(js, "out of memory") : js_mkundef();
+    return binding->end ? Ant_Error_CreateOutOfMemory(js) : js_mkundef();
   }
   return js_mkundef();
 }
@@ -709,7 +709,7 @@ static ant_value_t js_message_channel_ctor(ant_params_t) {
   if (is_object_type(proto)) js_set_proto_init(this_obj, proto);
 
   ant_port_end_t *a = NULL, *b = NULL;
-  if (!ant_port_end_pair(&a, &b)) return js_mkerr(js, "out of memory");
+  if (!ant_port_end_pair(&a, &b)) return Ant_Error_CreateOutOfMemory(js);
 
   GC_ROOT_SAVE(mark, js);
   ant_value_t port1 = ant_message_port_adopt(js, a);
@@ -832,7 +832,7 @@ static ant_value_t js_broadcast_channel_ctor(ant_params_t) {
   if (is_object_type(proto)) js_set_proto_init(this_obj, proto);
 
   broadcast_member_t *m = calloc(1, sizeof(*m));
-  if (!m) return js_mkerr(js, "out of memory");
+  if (!m) return Ant_Error_CreateOutOfMemory(js);
   if (uv_async_init(js->loop, &m->async, broadcast_async_cb) != 0) {
     free(m);
     return js_mkerr(js, "failed to create BroadcastChannel");

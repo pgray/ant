@@ -714,7 +714,7 @@ static ant_value_t callsite_toString(ant_params_t) {
   int c = vtype(col)  == kTypeNumber ? (int)js_getnum(col)  : 0;
 
   errbuf_t eb;
-  if (!errbuf_init(&eb, 256)) return js_mkerr(js, "out of memory");
+  if (!errbuf_init(&eb, 256)) return Ant_Error_CreateOutOfMemory(js);
   size_t len = errbuf_appendf(&eb, 0, "%s%.*s (%.*s:%d:%d)", construct ? "new " : "", (int)n_len, n, (int)f_len, f, l, c);
   
   return errbuf_take_string(js, &eb, len);

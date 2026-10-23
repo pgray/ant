@@ -264,7 +264,7 @@ static bool ffi_parse_signature(
       free(out->ffi_arg_types);
       out->args = NULL;
       out->ffi_arg_types = NULL;
-      if (error_out) *error_out = js_mkerr(js, "Out of memory");
+      if (error_out) *error_out = Ant_Error_CreateOutOfMemory(js);
       return false;
     }
   }
@@ -451,7 +451,7 @@ static ant_value_t ffi_make_pointer(ant_t *js, ffi_pointer_region_t *region, siz
 
   if (!handle) {
     ffi_pointer_region_release(region);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   handle->region = region;
@@ -467,7 +467,7 @@ static ant_value_t ffi_make_pointer(ant_t *js, ffi_pointer_region_t *region, siz
 
 static ant_value_t ffi_make_pointer_from_raw(ant_t *js, void *ptr) {
   ffi_pointer_region_t *region = calloc(1, sizeof(*region));
-  if (!region) return js_mkerr(js, "Out of memory");
+  if (!region) return Ant_Error_CreateOutOfMemory(js);
   region->ptr = (uint8_t *)ptr;
   region->owned = false;
   region->freed = false;
@@ -551,7 +551,7 @@ static bool ffi_copy_js_string(
 
   copy = malloc(len + 1);
   if (!copy) {
-    if (error_out) *error_out = js_mkerr(js, "Out of memory");
+    if (error_out) *error_out = Ant_Error_CreateOutOfMemory(js);
     return false;
   }
 
@@ -732,7 +732,7 @@ static ant_value_t ffi_make_function(ant_t *js, ffi_library_handle_t *library, c
 
   if (!handle) {
     ffi_signature_cleanup(signature);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   handle->library = library;
@@ -742,7 +742,7 @@ static ant_value_t ffi_make_function(ant_t *js, ffi_library_handle_t *library, c
   if (!handle->symbol_name) {
     free(handle);
     ffi_signature_cleanup(signature);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   if (!handle->signature.variadic) if (
@@ -971,14 +971,14 @@ static ant_value_t ffi_dlopen(ant_params_t) {
   library = calloc(1, sizeof(*library));
   if (!library) {
     dlclose(dl);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   library->path = malloc(path_len + 1);
   if (!library->path) {
     dlclose(dl);
     free(library);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   memcpy(library->path, path, path_len);
@@ -1106,7 +1106,7 @@ ant_value_t ffi_function_call(ant_params_t) {
     scratch = calloc(actual_argc, sizeof(*scratch));
     dynamic_types = calloc(actual_argc, sizeof(*dynamic_types));
     if (!call_types || !values || !call_args || !scratch || !dynamic_types) {
-      error = js_mkerr(js, "Out of memory");
+      error = Ant_Error_CreateOutOfMemory(js);
       goto cleanup;
     }
   }
@@ -1186,12 +1186,12 @@ static ant_value_t ffi_alloc_memory(ant_params_t) {
   if (size == 0) return js_mkerr_typed(js, JS_ERR_RANGE, "alloc(size) requires a positive size");
 
   region = calloc(1, sizeof(*region));
-  if (!region) return js_mkerr(js, "Out of memory");
+  if (!region) return Ant_Error_CreateOutOfMemory(js);
 
   region->ptr = malloc(size);
   if (!region->ptr) {
     free(region);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   region->size = size;
@@ -1219,7 +1219,7 @@ static ant_value_t ffi_pointer_value(ant_params_t) {
   }
 
   region = calloc(1, sizeof(*region));
-  if (!region) return js_mkerr(js, "Out of memory");
+  if (!region) return Ant_Error_CreateOutOfMemory(js);
 
   if (buffer_source_get_bytes(js, args[0], &buffer_bytes, &buffer_len)) {
     region->ptr = (uint8_t *)buffer_bytes;
@@ -1348,7 +1348,7 @@ static ant_value_t ffi_create_callback(ant_params_t) {
   ffi_init_prototypes(js);
 
   callback = calloc(1, sizeof(*callback));
-  if (!callback) return js_mkerr(js, "Out of memory");
+  if (!callback) return Ant_Error_CreateOutOfMemory(js);
 
   if (!ffi_parse_signature(js, signature_val, false, false, &callback->signature, &error)) {
     free(callback);

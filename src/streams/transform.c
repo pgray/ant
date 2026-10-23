@@ -930,7 +930,7 @@ ant_value_t js_ts_ctor(ant_params_t) {
   ant_value_t source_cancel = js_heavy_mkfun(js, ts_source_cancel, ts_obj);
 
   rs_stream_t *rst = calloc(1, sizeof(rs_stream_t));
-  if (!rst) return js_mkerr(js, "out of memory");
+  if (!rst) return Ant_Error_CreateOutOfMemory(js);
   rst->state = RS_STATE_READABLE;
 
   ant_value_t rs_obj = Ant_Object_CreateBare(js);
@@ -940,7 +940,7 @@ ant_value_t js_ts_ctor(ant_params_t) {
   js_set_finalizer(rs_obj, ts_rs_finalize);
 
   rs_controller_t *rcc = calloc(1, sizeof(rs_controller_t));
-  if (!rcc) { free(rst); return js_mkerr(js, "out of memory"); }
+  if (!rcc) { free(rst); return Ant_Error_CreateOutOfMemory(js); }
   rcc->strategy_hwm = readable_hwm;
 
   ant_value_t rs_ctrl_obj = Ant_Object_CreateBare(js);
@@ -958,7 +958,7 @@ ant_value_t js_ts_ctor(ant_params_t) {
   js_set_slot(ts_obj, SLOT_ENTRIES, rs_obj);
 
   ws_stream_t *wst = calloc(1, sizeof(ws_stream_t));
-  if (!wst) return js_mkerr(js, "out of memory");
+  if (!wst) return Ant_Error_CreateOutOfMemory(js);
   wst->state = WS_STATE_WRITABLE;
 
   ant_value_t ws_obj = Ant_Object_CreateBare(js);
@@ -976,7 +976,7 @@ ant_value_t js_ts_ctor(ant_params_t) {
   ts_set_backpressure(js, ts_obj, true);
 
   ws_controller_t *wc = calloc(1, sizeof(ws_controller_t));
-  if (!wc) { free(wst); return js_mkerr(js, "out of memory"); }
+  if (!wc) { free(wst); return Ant_Error_CreateOutOfMemory(js); }
   wc->strategy_hwm = writable_hwm;
 
   ant_value_t ws_ctrl_obj = Ant_Object_CreateBare(js);

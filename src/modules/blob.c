@@ -134,13 +134,13 @@ static ant_value_t process_blob_part(ant_t *js, byte_buf_t *buf, ant_value_t par
 
   if (blob_part_buffer_source(part, &bytes, &size, &live)) {
     if (!live) return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot use a detached ArrayBuffer in a Blob");
-    if (!byte_buf_append(buf, bytes, size)) return js_mkerr(js, "out of memory");
+    if (!byte_buf_append(buf, bytes, size)) return Ant_Error_CreateOutOfMemory(js);
     return js_mkundef();
   }
 
   blob_data_t *bd = t == kTypeObject ? blob_get_data(part) : NULL;
   if (bd) {
-    if (!byte_buf_append(buf, bd->data, bd->size)) return js_mkerr(js, "out of memory");
+    if (!byte_buf_append(buf, bd->data, bd->size)) return Ant_Error_CreateOutOfMemory(js);
     return js_mkundef();
   }
 
@@ -151,7 +151,7 @@ static ant_value_t process_blob_part(ant_t *js, byte_buf_t *buf, ant_value_t par
   char *s = js_getstr(js, str, &len);
   if (s && len > 0) {
     if (!byte_buf_append(buf, (const uint8_t *)s, len))
-      return js_mkerr(js, "out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
   }
   return js_mkundef();
 }
@@ -187,7 +187,7 @@ static void blob_finalize(ant_t *js, ant_object_t *obj) {
 }
 
 static ant_value_t blob_wrap(ant_t *js, blob_data_t *bd) {
-  if (!bd) return js_mkerr(js, "out of memory");
+  if (!bd) return Ant_Error_CreateOutOfMemory(js);
   ant_value_t obj = Ant_Object_CreateBare(js);
 
   js_set_proto_init(obj, js->builtins.blob_proto);
@@ -266,7 +266,7 @@ static ant_value_t js_blob_bytes(ant_params_t) {
   size_t sz = (bd && bd->data) ? bd->size : 0;
   ArrayBufferData *abd = create_array_buffer_data(js, sz);
 
-  if (!abd) { js_reject_promise(js, promise, js_mkerr(js, "out of memory")); return promise; }
+  if (!abd) { js_reject_promise(js, promise, Ant_Error_CreateOutOfMemory(js)); return promise; }
   if (sz > 0 && bd) memcpy(abd->data, bd->data, sz);
 
   ant_value_t bytes = create_typed_array(js, TYPED_ARRAY_UINT8, abd, 0, sz, js->builtins.typedarray_protos[TYPED_ARRAY_UINT8]);
@@ -379,7 +379,7 @@ static ant_value_t js_blob_ctor(ant_params_t) {
 
   blob_data_t *bd = blob_data_new(buf.buf, buf.size, type_str);
   free(buf.buf); free(type_owned);
-  if (!bd) return js_mkerr(js, "out of memory");
+  if (!bd) return Ant_Error_CreateOutOfMemory(js);
 
   ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.blob_proto, call_new_target);
@@ -447,7 +447,7 @@ static ant_value_t js_file_ctor(ant_params_t) {
 
   blob_data_t *bd = blob_data_new(buf.buf, buf.size, type_str);
   free(buf.buf); free(type_owned);
-  if (!bd) return js_mkerr(js, "out of memory");
+  if (!bd) return Ant_Error_CreateOutOfMemory(js);
 
   bd->name          = strdup(name_str ? name_str : "");
   bd->last_modified = last_modified;

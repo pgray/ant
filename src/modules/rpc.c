@@ -159,7 +159,7 @@ static char *rpc_value_to_cstring(ant_t *js, ant_value_t value, const char *what
   const char *str = js_getstr(js, value, &len);
 
   char *copy = rpc_strdup_len(str ? str : "", len);
-  if (!copy) js_mkerr(js, "out of memory");
+  if (!copy) Ant_Error_CreateOutOfMemory(js);
 
   return copy;
 }
@@ -334,7 +334,7 @@ static ant_value_t rpc_values_to_js_array(ant_t *js, const wirecall_value *value
         ArrayBufferData *ab = create_array_buffer_data(js, len);
         if (!ab) {
           GC_ROOT_RESTORE(js, root_mark);
-          return js_mkerr(js, "out of memory");
+          return Ant_Error_CreateOutOfMemory(js);
         }
         if (len) memcpy(ab->data, values[i].as.bytes.data, len);
         value = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, js->builtins.typedarray_protos[TYPED_ARRAY_UINT8]);
@@ -694,7 +694,7 @@ static ant_value_t rpc_server_register_impl(ant_t *js, rpc_server_t *server, ant
   rpc_route_t *route = rpc_route_new(server, name, handler);
   if (!route) {
     free(name);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   if (wirecall_server_add_deferred_route_name_ex(server->server, name, rpc_deferred_handler, route, rpc_route_finalizer) != 0) {
     rpc_route_unlink(route);
@@ -768,7 +768,7 @@ static ant_value_t rpc_server_listen(ant_params_t) {
   if (!host) {
     ant_value_t error = Ant_Exception_Pending(js)
       ? js_take_thrown(js, js_mkundef())
-      : Ant_Error_Create(js, JS_ERR_TYPE, "out of memory");
+      : Ant_Error_ConsumeMarker(js, Ant_Error_CreateOutOfMemory(js));
     js_reject_promise(js, promise, error);
     return promise;
   }
@@ -862,7 +862,7 @@ static ant_value_t rpc_server_ctor(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "RpcServer constructor requires new");
 
   rpc_server_t *server = calloc(1, sizeof(*server));
-  if (!server) return js_mkerr(js, "out of memory");
+  if (!server) return Ant_Error_CreateOutOfMemory(js);
   server->js = js;
   server->obj = js_getthis(js);
   server->listen_promise = js_mkundef();
@@ -1025,7 +1025,7 @@ static void rpc_client_async_cb(uv_async_t *handle) {
 }
 
 static ant_value_t rpc_client_enqueue(rpc_client_t *client, rpc_client_op_t *op) {
-  if (!op) return js_mkerr(client->js, "out of memory");
+  if (!op) return Ant_Error_CreateOutOfMemory(client->js);
   ant_value_t promise = js_mkpromise(client->js);
   op->promise = promise;
 
@@ -1064,7 +1064,7 @@ static ant_value_t rpc_client_connect(ant_params_t) {
   }
 
   rpc_client_op_t *op = calloc(1, sizeof(*op));
-  if (!op) return js_mkerr(js, "out of memory");
+  if (!op) return Ant_Error_CreateOutOfMemory(js);
   op->type = RPC_CLIENT_OP_CONNECT;
 
   return rpc_client_enqueue(client, op);
@@ -1083,7 +1083,7 @@ static ant_value_t rpc_client_call(ant_params_t) {
   rpc_client_op_t *op = calloc(1, sizeof(*op));
   if (!op) {
     free(name);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   op->type = RPC_CLIENT_OP_CALL;
@@ -1110,7 +1110,7 @@ static ant_value_t rpc_client_ping(ant_params_t) {
     return promise;
   }
   rpc_client_op_t *op = calloc(1, sizeof(*op));
-  if (!op) return js_mkerr(js, "out of memory");
+  if (!op) return Ant_Error_CreateOutOfMemory(js);
   op->type = RPC_CLIENT_OP_PING;
   return rpc_client_enqueue(client, op);
 }
@@ -1126,7 +1126,7 @@ static ant_value_t rpc_client_close(ant_params_t) {
   }
   rpc_client_op_t *op = calloc(1, sizeof(*op));
   if (!op) {
-    js_reject_promise(js, promise, js_mkerr(js, "out of memory"));
+    js_reject_promise(js, promise, Ant_Error_CreateOutOfMemory(js));
     return promise;
   }
   op->type = RPC_CLIENT_OP_CLOSE;
@@ -1197,7 +1197,7 @@ static ant_value_t rpc_client_ctor(ant_params_t) {
   ant_value_t host_val = js_get(js, opts, "host");
   ant_value_t port_val = js_get(js, opts, "port");
   char *host = vtype(host_val) == kTypeString ? rpc_value_to_cstring(js, host_val, "host") : strdup("127.0.0.1");
-  if (!host) return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : js_mkerr(js, "out of memory");
+  if (!host) return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : Ant_Error_CreateOutOfMemory(js);
   char port_buf[32];
   if (vtype(port_val) != kTypeNumber) {
     free(host);
@@ -1208,7 +1208,7 @@ static ant_value_t rpc_client_ctor(ant_params_t) {
   rpc_client_t *client = calloc(1, sizeof(*client));
   if (!client) {
     free(host);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   client->js = js;
   client->obj = js_getthis(js);
@@ -1218,7 +1218,7 @@ static ant_value_t rpc_client_ctor(ant_params_t) {
   if (!client->port) {
     free(client->host);
     free(client);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   ant_value_t perr = rpc_parse_integrity_options(js, opts, &client->integrity, client->mac_key, &client->has_mac_key);

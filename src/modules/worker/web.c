@@ -160,13 +160,13 @@ static ant_value_t js_web_worker_ctor(ant_params_t) {
 
   ant_value_t options = nargs > 1 && is_object_type(args[1]) ? args[1] : js_mkundef();
   ant_worker_t *w = worker_new(js, this_obj, &web_worker_ops);
-  if (!w) return js_mkerr(js, "out of memory");
+  if (!w) return Ant_Error_CreateOutOfMemory(js);
 
   ant_value_t error = js_mkundef();
   w->entry = worker_resolve_entry(js, args[0], WORKER_ENTRY_WEB, &error);
   if (!w->entry) {
     worker_release(w);
-    return is_err(error) ? error : js_mkerr(js, "out of memory");
+    return is_err(error) ? error : Ant_Error_CreateOutOfMemory(js);
   }
 
   ant_value_t r = worker_read_options(js, w, options);

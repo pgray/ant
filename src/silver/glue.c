@@ -900,14 +900,14 @@ ant_value_t sv_map_template_build_key(
     if (segment->len > SIZE_MAX - key_len ||
         string_lens[i] > SIZE_MAX - key_len - segment->len) {
       GC_ROOT_RESTORE(js, root_mark);
-      return js_mkerr(js, "out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
     }
     key_len += segment->len + string_lens[i];
   }
   
   if (desc->segments[desc->substitution_count].len > SIZE_MAX - key_len) {
     GC_ROOT_RESTORE(js, root_mark);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   
   key_len += desc->segments[desc->substitution_count].len;
@@ -918,7 +918,7 @@ ant_value_t sv_map_template_build_key(
     key_bytes = malloc(key_len);
     if (!key_bytes) {
       GC_ROOT_RESTORE(js, root_mark);
-      return js_mkerr(js, "out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
     }
   }
 
@@ -1358,7 +1358,7 @@ static ant_value_t jit_resume_in_interpreter(
   int64_t bc_offset, bool async_direct, sv_jit_finally_t *finally
 ) {
   int entry_fp = async_direct ? sv_async_entry_begin(vm, 0) : -1;
-  if (async_direct && entry_fp < 0) return js_mkerr(vm->js, "out of memory");
+  if (async_direct && entry_fp < 0) return Ant_Error_CreateOutOfMemory(vm->js);
 
   vm->jit.resume.active     = true;
   vm->jit.resume.ip_offset  = (int)bc_offset;

@@ -152,7 +152,7 @@ ant_value_t js_mkpromise(ant_t *js) {
 
   if (is_err(obj)) return obj;
   if (!js_promise_data(js, mkval(kTypePromise, vdata(obj)), true))
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
 
   ant_value_t promise_proto = js->sym.promise_proto;
   if (is_object_type(promise_proto)) js_set_proto_init(obj, promise_proto);
@@ -359,7 +359,7 @@ js_await_result_t js_promise_await_coroutine(ant_t *js, ant_value_t promise, cor
   
   if (!queued) {
     result.state = JS_AWAIT_ERROR;
-    result.value = js_mkerr(js, "out of memory");
+    result.value = Ant_Error_CreateOutOfMemory(js);
     return result;
   }
 
@@ -1027,7 +1027,7 @@ static ant_value_t builtin_promise_then(ant_params_t) {
     promise_handler_t h = { onFulfilled, onRejected, nextP, NULL };
     if (!promise_handler_append(pd, &h)) {
       GC_ROOT_RESTORE(js, root_mark);
-      return js_mkerr(js, "out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
     }
     
     gc_write_barrier(js, js_obj_ptr(js_as_obj(p)), nextP);
@@ -1630,7 +1630,7 @@ static ant_value_t promise_all_fast(ant_t *js, ant_value_t iterable) {
     promise_handler_t handler = { tracker, tov((double)i), PROMISE_ALL_ELEMENT, NULL };
     if (!pd || !promise_handler_append(pd, &handler)) {
       GC_ROOT_RESTORE(js, root_mark);
-      return js_mkerr(js, "out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
     }
 
     gc_write_barrier(js, js_obj_ptr(js_as_obj(item)), tracker);

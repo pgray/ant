@@ -549,6 +549,10 @@ __attribute__((noinline, cold)) ant_value_t Ant_Error_CreateStackOverflow(ant_t 
   return js_mkerr_typed(js, JS_ERR_RANGE | JS_ERR_NO_STACK, "Maximum call stack size exceeded");
 }
 
+__attribute__((noinline, cold)) ant_value_t Ant_Error_CreateOutOfMemory(ant_t *js) {
+  return js_mkerr_typed(js, JS_ERR_INTERNAL | JS_ERR_NO_STACK, "Memory allocation failed");
+}
+
 __attribute__((noinline, cold)) ant_value_t Ant_Error_CreateOutOfRange(
   ant_t *js, const char *name, const char *range, ant_value_t received
 ) {

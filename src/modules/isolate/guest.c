@@ -172,7 +172,7 @@ static ant_value_t guest_child_encode(ant_t *js, ant_guest_t *g, ant_value_t val
   if (!want_ref) return guest_wire_out(js, value, out);
   uint32_t id = guest_handle_put(g, value);
   
-  if (!id) return js_mkerr(js, "out of memory");
+  if (!id) return Ant_Error_CreateOutOfMemory(js);
   *out = (guest_value_t){ .kind = GUEST_VALUE_REF, .id = id, .type = guest_type_of(value) };
   
   return js_mkundef();
@@ -237,7 +237,7 @@ static ant_value_t guest_child_callback_fn(ant_params_t) {
   if (!call || (nargs && !encoded)) {
     free(call);
     free(encoded);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   call->callback = (uint32_t)js_getnum(js_get_slot(js_getcurrentfunc(js), SLOT_DATA));
@@ -347,7 +347,7 @@ static void guest_op_compile(ant_t *js, ant_guest_t *g, guest_call_t *call) {
     uint32_t cap = g->script_cap ? g->script_cap * 2 : 8;
     guest_script_t *scripts = realloc(g->scripts, cap * sizeof(*scripts));
     if (!scripts) {
-      guest_call_throw(js, call, js_mkerr(js, "out of memory"));
+      guest_call_throw(js, call, Ant_Error_CreateOutOfMemory(js));
       return;
     }
     g->scripts = scripts;
@@ -480,7 +480,7 @@ static bool guest_op_apply(ant_t *js, ant_guest_t *g, guest_call_t *call) {
 
   uint32_t argc = call->argc ? call->argc - 1 : 0;
   ant_value_t *argv = argc ? calloc(argc, sizeof(*argv)) : NULL;
-  if (argc && !argv) return guest_finish_value(js, g, call, js_mkerr(js, "out of memory"));
+  if (argc && !argv) return guest_finish_value(js, g, call, Ant_Error_CreateOutOfMemory(js));
 
   GC_ROOT_SAVE(mark, js);
   ant_value_t self = call->argc ? guest_child_decode(js, g, &call->args[0]) : js_mkundef();

@@ -359,7 +359,7 @@ static ant_value_t url_apply_setter(
   size_t value_len = 0;
   const char *value_str = js_getstr(js, value, &value_len);
   char *href = build_href(state);
-  if (!value_str || !href) { free(href); return js_mkerr(js, "out of memory"); }
+  if (!value_str || !href) { free(href); return Ant_Error_CreateOutOfMemory(js); }
 
   ada_url url = ada_parse(href, strlen(href));
   free(href);
@@ -699,7 +699,7 @@ static ant_value_t js_URL(ant_params_t) {
   }
 
   url_state_t *s = calloc(1, sizeof(url_state_t));
-  if (!s) return js_mkerr(js, "out of memory");
+  if (!s) return Ant_Error_CreateOutOfMemory(js);
 
   if (parse_url_to_state_n(url_str, url_len, base_str, base_len, s) != 0) {
     free(s);

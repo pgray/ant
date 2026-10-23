@@ -1304,7 +1304,7 @@ fail:
 static ant_value_t fs_watcher_make_object(ant_t *js, fs_watcher_t *watcher) {
   ant_value_t obj = 0;
 
-  if (!watcher) return js_mkerr(js, "Out of memory");
+  if (!watcher) return Ant_Error_CreateOutOfMemory(js);
   fs_init_watch_constructors(js);
 
   obj = Ant_Object_CreateBare(js);
@@ -1570,7 +1570,7 @@ static ant_value_t encode_data(ant_t *js, const char *data, size_t len, fs_encod
 
     case FS_ENC_HEX: {
       char *out = malloc(len * 2);
-      if (!out) return js_mkerr(js, "Out of memory");
+      if (!out) return Ant_Error_CreateOutOfMemory(js);
       for (size_t i = 0; i < len; i++) {
         out[i * 2] = hex_char((unsigned char)data[i] >> 4);
         out[i * 2 + 1] = hex_char(data[i]);
@@ -1582,7 +1582,7 @@ static ant_value_t encode_data(ant_t *js, const char *data, size_t len, fs_encod
     case FS_ENC_BASE64: {
       size_t out_len;
       char *out = ant_base64_encode((const uint8_t *)data, len, &out_len);
-      if (!out) return js_mkerr(js, "Out of memory");
+      if (!out) return Ant_Error_CreateOutOfMemory(js);
       ant_value_t result = js_mkstr(js, out, out_len);
       free(out); return result;
     }
@@ -1590,7 +1590,7 @@ static ant_value_t encode_data(ant_t *js, const char *data, size_t len, fs_encod
     case FS_ENC_BASE64URL: {
       size_t out_len;
       char *out = ant_base64_encode((const uint8_t *)data, len, &out_len);
-      if (!out) return js_mkerr(js, "Out of memory");
+      if (!out) return Ant_Error_CreateOutOfMemory(js);
       for (size_t i = 0; i < out_len; i++) {
         if (out[i] == '+') out[i] = '-';
         else if (out[i] == '/') out[i] = '_';
@@ -1603,7 +1603,7 @@ static ant_value_t encode_data(ant_t *js, const char *data, size_t len, fs_encod
     case FS_ENC_UTF16LE: {
       const unsigned char *s = (const unsigned char *)data;
       char *out = malloc((len / 2) * 4);
-      if (!out) return js_mkerr(js, "Out of memory");
+      if (!out) return Ant_Error_CreateOutOfMemory(js);
       size_t j = 0;
       for (size_t i = 0; i + 1 < len; i += 2) {
         uint32_t cp = s[i] | (s[i + 1] << 8);
@@ -1891,7 +1891,7 @@ static bool fs_buffer_encoding(ant_t *js, ant_value_t options) {
 
 static ant_value_t fs_read_to_uint8array(ant_t *js, const char *data, size_t len) {
   ArrayBufferData *ab = create_array_buffer_data(js, len);
-  if (!ab) return js_mkerr(js, "Out of memory");
+  if (!ab) return Ant_Error_CreateOutOfMemory(js);
   memcpy(ab->data, data, len);
   return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, js->builtins.buffer_proto);
 }
@@ -2527,7 +2527,7 @@ static ant_value_t builtin_fs_readFileSync(ant_params_t) {
     if (!path) return js_mkerr(js, "Failed to get path string");
 
     path_cstr = strndup(path, path_len);
-    if (!path_cstr) return js_mkerr(js, "Out of memory");
+    if (!path_cstr) return Ant_Error_CreateOutOfMemory(js);
 
     fd = uv_fs_open(NULL, &req, path_cstr, O_RDONLY, 0, NULL);
     uv_fs_req_cleanup(&req);
@@ -2546,7 +2546,7 @@ static ant_value_t builtin_fs_readFileSync(ant_params_t) {
 
   if (rc < 0) {
     ant_value_t err = rc == UV_ENOMEM
-      ? js_mkerr(js, "Out of memory")
+      ? Ant_Error_CreateOutOfMemory(js)
       : fs_mk_uv_error(js, rc, "read", path_cstr, NULL);
     free(path_cstr);
     return err;
@@ -2578,7 +2578,7 @@ static ant_value_t builtin_fs_readFile(ant_params_t) {
   if (abort_signal_is_aborted(signal)) return fs_rejected_promise(js, abort_signal_make_error(js, signal));
   
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
   
   req->uv_req.loop = js->loop;
   req->signal = signal;
@@ -2611,7 +2611,7 @@ static ant_value_t builtin_fs_stream(ant_params_t) {
   if (!path) return js_mkerr(js, "Failed to get path string");
   
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
   
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_READ_BYTES;
@@ -2674,7 +2674,7 @@ static ant_value_t fs_write_file_sync_impl(
   if (is_err(data_result)) return data_result;
 
   char *path_cstr = strndup(path, path_len);
-  if (!path_cstr) return js_mkerr(js, "Out of memory");
+  if (!path_cstr) return Ant_Error_CreateOutOfMemory(js);
 
   uv_fs_t req;
   int fd = uv_fs_open(NULL, &req, path_cstr, opts.flags, opts.mode, NULL);
@@ -2845,7 +2845,7 @@ static ant_value_t builtin_fs_copyFile(ant_params_t) {
   if (!src_cstr || !dest_cstr) {
     free(src_cstr);
     free(dest_cstr);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   fs_cp_options_t opts = {
@@ -2890,7 +2890,7 @@ static ant_value_t builtin_fs_copyFileSync(ant_params_t) {
   if (!src_cstr || !dest_cstr) {
     free(src_cstr);
     free(dest_cstr);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   int mode = nargs > 2 && vtype(args[2]) == kTypeNumber ? (int)js_getnum(args[2]) : 0;
@@ -3040,7 +3040,7 @@ static ant_value_t fs_copy_path_sync_impl(
       if (!child_src || !child_dest) {
         free(child_src);
         free(child_dest);
-        result = js_mkerr(js, "Out of memory");
+        result = Ant_Error_CreateOutOfMemory(js);
         break;
       }
       
@@ -3082,7 +3082,7 @@ static ant_value_t fs_cp_sync_common(
   if (!src_cstr || !dest_cstr) {
     free(src_cstr);
     free(dest_cstr);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   ant_value_t result = fs_copy_path_sync_impl(js, src_cstr, dest_cstr, &opts, fn_name);
@@ -3124,7 +3124,7 @@ static ant_value_t builtin_fs_renameSync(ant_params_t) {
   if (!old_cstr || !new_cstr) {
     free(old_cstr);
     free(new_cstr);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   
   int result = rename(old_cstr, new_cstr);
@@ -3157,7 +3157,7 @@ static ant_value_t builtin_fs_rename(ant_params_t) {
   if (!old_path || !new_path) return js_mkerr(js, "Failed to get arguments");
 
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
 
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_RENAME;
@@ -3168,7 +3168,7 @@ static ant_value_t builtin_fs_rename(ant_params_t) {
 
   if (!req->path || !req->path2) {
     free_fs_request(req);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   Ant_List_Insert(&js->fs_requests, req);
@@ -3202,7 +3202,7 @@ static ant_value_t builtin_fs_utimesSync(ant_params_t) {
   if (!path) return js_mkerr(js, "Failed to get path string");
 
   char *path_cstr = strndup(path, path_len);
-  if (!path_cstr) return js_mkerr(js, "Out of memory");
+  if (!path_cstr) return Ant_Error_CreateOutOfMemory(js);
 
   double atime = fs_time_arg_to_seconds(js, args[1]);
   double mtime = fs_time_arg_to_seconds(js, args[2]);
@@ -3254,7 +3254,7 @@ static ant_value_t builtin_fs_truncateSync(ant_params_t) {
   if (!path) return js_mkerr(js, "Failed to get path string");
 
   char *path_cstr = strndup(path, path_len);
-  if (!path_cstr) return js_mkerr(js, "Out of memory");
+  if (!path_cstr) return Ant_Error_CreateOutOfMemory(js);
 
   int64_t len = 0;
   if (nargs >= 2 && vtype(args[1]) != kTypeUndefined)
@@ -3350,7 +3350,7 @@ static ant_value_t builtin_fs_writeFile(ant_params_t) {
   if (is_err(data_result)) return data_result;
 
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
   
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_WRITE;
@@ -3360,7 +3360,7 @@ static ant_value_t builtin_fs_writeFile(ant_params_t) {
   if (!req->data) {
     free(req->path);
     free(req);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   
   if (write_data.len > 0) memcpy(req->data, write_data.data, write_data.len);
@@ -3391,7 +3391,7 @@ static ant_value_t builtin_fs_unlinkSync(ant_params_t) {
   if (!path) return js_mkerr(js, "Failed to get path string");
   
   char *path_cstr = strndup(path, path_len);
-  if (!path_cstr) return js_mkerr(js, "Out of memory");
+  if (!path_cstr) return Ant_Error_CreateOutOfMemory(js);
   int result = unlink(path_cstr);
   
   if (result != 0) {
@@ -3417,7 +3417,7 @@ static ant_value_t builtin_fs_unlink(ant_params_t) {
   
   
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
   
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_UNLINK;
@@ -3471,7 +3471,7 @@ static ant_value_t builtin_fs_mkdirSync(ant_params_t) {
 do_mkdir:
   
   char *path_cstr = strndup(path, path_len);
-  if (!path_cstr) return js_mkerr(js, "Out of memory");
+  if (!path_cstr) return Ant_Error_CreateOutOfMemory(js);
   
   int result;
   if (recursive) {
@@ -3529,7 +3529,7 @@ static ant_value_t builtin_fs_mkdir(ant_params_t) {
     ant_value_t promise = js_mkpromise(js);
     char *path_cstr = strndup(path, path_len);
     
-    if (!path_cstr) return js_mkerr(js, "Out of memory");
+    if (!path_cstr) return Ant_Error_CreateOutOfMemory(js);
     int result = mkdirp(path_cstr, (mode_t)mode);
     
     free(path_cstr);
@@ -3542,7 +3542,7 @@ static ant_value_t builtin_fs_mkdir(ant_params_t) {
   }
 
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
 
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_MKDIR;
@@ -3577,7 +3577,7 @@ static ant_value_t builtin_fs_mkdtempSync(ant_params_t) {
 
   size_t tpl_len = prefix_len + 6;
   char *tpl = malloc(tpl_len + 1);
-  if (!tpl) return js_mkerr(js, "Out of memory");
+  if (!tpl) return Ant_Error_CreateOutOfMemory(js);
 
   memcpy(tpl, prefix, prefix_len);
   memcpy(tpl + prefix_len, "XXXXXX", 6);
@@ -3608,14 +3608,14 @@ static ant_value_t builtin_fs_mkdtemp(ant_params_t) {
 
   size_t tpl_len = prefix_len + 6;
   char *tpl = malloc(tpl_len + 1);
-  if (!tpl) return js_mkerr(js, "Out of memory");
+  if (!tpl) return Ant_Error_CreateOutOfMemory(js);
 
   memcpy(tpl, prefix, prefix_len);
   memcpy(tpl + prefix_len, "XXXXXX", 6);
   tpl[tpl_len] = '\0';
 
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) { free(tpl); return js_mkerr(js, "Out of memory"); }
+  if (!req) { free(tpl); return Ant_Error_CreateOutOfMemory(js); }
 
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_MKDTEMP;
@@ -3648,7 +3648,7 @@ static ant_value_t builtin_fs_rmdirSync(ant_params_t) {
   if (!path) return js_mkerr(js, "Failed to get path string");
   
   char *path_cstr = strndup(path, path_len);
-  if (!path_cstr) return js_mkerr(js, "Out of memory");
+  if (!path_cstr) return Ant_Error_CreateOutOfMemory(js);
   
 #ifdef _WIN32
   int result = _rmdir(path_cstr);
@@ -3678,7 +3678,7 @@ static ant_value_t builtin_fs_rmdir(ant_params_t) {
   
   
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
   
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_RMDIR;
@@ -3853,7 +3853,7 @@ static ant_value_t builtin_fs_statSync(ant_params_t) {
   if (!path) return js_mkerr(js, "Failed to get path string");
   
   char *path_cstr = strndup(path, path_len);
-  if (!path_cstr) return js_mkerr(js, "Out of memory");
+  if (!path_cstr) return Ant_Error_CreateOutOfMemory(js);
   
   struct stat st;
   int result = stat(path_cstr, &st);
@@ -3883,7 +3883,7 @@ static ant_value_t builtin_fs_stat(ant_params_t) {
   
   
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
   
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_STAT;
@@ -3919,7 +3919,7 @@ static ant_value_t builtin_fs_lstatSync(ant_params_t) {
   if (!path) return js_mkerr(js, "Failed to get path string");
   
   char *path_cstr = strndup(path, path_len);
-  if (!path_cstr) return js_mkerr(js, "Out of memory");
+  if (!path_cstr) return Ant_Error_CreateOutOfMemory(js);
   
   uv_fs_t req;
   int result = uv_fs_lstat(NULL, &req, path_cstr, NULL);
@@ -3955,7 +3955,7 @@ static ant_value_t builtin_fs_lstat(ant_params_t) {
   
   
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
   
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_STAT;
@@ -3999,7 +3999,7 @@ static ant_value_t builtin_fs_fstat(ant_params_t) {
   if (vtype(args[0]) != kTypeNumber) return js_mkerr(js, "fstat() fd must be a number");
 
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
 
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_STAT;
@@ -4030,7 +4030,7 @@ static ant_value_t builtin_fs_existsSync(ant_params_t) {
   if (!path) return js_mkerr(js, "Failed to get path string");
   
   char *path_cstr = strndup(path, path_len);
-  if (!path_cstr) return js_mkerr(js, "Out of memory");
+  if (!path_cstr) return Ant_Error_CreateOutOfMemory(js);
   
   struct stat st;
   int result = stat(path_cstr, &st);
@@ -4051,7 +4051,7 @@ static ant_value_t builtin_fs_exists(ant_params_t) {
   
   
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
   
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_EXISTS;
@@ -4088,7 +4088,7 @@ static ant_value_t builtin_fs_accessSync(ant_params_t) {
   }
   
   char *path_cstr = strndup(path, path_len);
-  if (!path_cstr) return js_mkerr(js, "Out of memory");
+  if (!path_cstr) return Ant_Error_CreateOutOfMemory(js);
   int result = access(path_cstr, mode);
   
   if (result != 0) {
@@ -4118,7 +4118,7 @@ static ant_value_t builtin_fs_chmodSync(ant_params_t) {
   if (!path) return js_mkerr(js, "Failed to get path string");
 
   char *path_cstr = strndup(path, path_len);
-  if (!path_cstr) return js_mkerr(js, "Out of memory");
+  if (!path_cstr) return Ant_Error_CreateOutOfMemory(js);
 
   uv_fs_t req;
   int result = uv_fs_chmod(js->loop, &req, path_cstr, mode, NULL);
@@ -4153,7 +4153,7 @@ static ant_value_t builtin_fs_chmod(ant_params_t) {
   if (!path) return js_mkerr(js, "Failed to get path string");
 
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
 
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_CHMOD;
@@ -4163,7 +4163,7 @@ static ant_value_t builtin_fs_chmod(ant_params_t) {
 
   if (!req->path) {
     free_fs_request(req);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   Ant_List_Insert(&js->fs_requests, req);
@@ -4195,7 +4195,7 @@ static ant_value_t builtin_fs_access(ant_params_t) {
   
   
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
   
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_ACCESS;
@@ -4246,7 +4246,7 @@ static ant_value_t builtin_fs_realpath(ant_params_t) {
   if (!path) return js_mkerr(js, "Failed to get path string");
 
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
 
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_REALPATH;
@@ -4257,7 +4257,7 @@ static ant_value_t builtin_fs_realpath(ant_params_t) {
 
   if (!req->path) {
     free_fs_request(req);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   Ant_List_Insert(&js->fs_requests, req);
@@ -4284,7 +4284,7 @@ static ant_value_t builtin_fs_readlinkSync(ant_params_t) {
   if (!path) return js_mkerr(js, "Failed to get path string");
 
   char *path_cstr = strndup(path, path_len);
-  if (!path_cstr) return js_mkerr(js, "Out of memory");
+  if (!path_cstr) return Ant_Error_CreateOutOfMemory(js);
 
   uv_fs_t req;
   int result = uv_fs_readlink(NULL, &req, path_cstr, NULL);
@@ -4359,7 +4359,7 @@ static ant_value_t builtin_fs_symlinkSync(ant_params_t) {
   if (!target_cstr || !path_cstr) {
     free(target_cstr);
     free(path_cstr);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   int flags = 0;
@@ -4417,7 +4417,7 @@ static ant_value_t builtin_fs_symlink(ant_params_t) {
   if (!target || !path) return js_mkerr(js, "Failed to get symlink path strings");
 
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
 
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_SYMLINK;
@@ -4430,7 +4430,7 @@ static ant_value_t builtin_fs_symlink(ant_params_t) {
 
   if (!req->path || !req->path2) {
     free_fs_request(req);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   Ant_List_Insert(&js->fs_requests, req);
@@ -4474,7 +4474,7 @@ static ant_value_t builtin_fs_linkSync(ant_params_t) {
   if (!existing_cstr || !new_cstr) {
     free(existing_cstr);
     free(new_cstr);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   uv_fs_t req;
@@ -4511,7 +4511,7 @@ static ant_value_t builtin_fs_link(ant_params_t) {
   if (!existing || !new_path) return js_mkerr(js, "Failed to get link path strings");
 
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
 
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_LINK;
@@ -4524,7 +4524,7 @@ static ant_value_t builtin_fs_link(ant_params_t) {
 
   if (!req->path || !req->path2) {
     free_fs_request(req);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   Ant_List_Insert(&js->fs_requests, req);
@@ -4551,7 +4551,7 @@ static ant_value_t builtin_fs_readlink(ant_params_t) {
   if (!path) return js_mkerr(js, "Failed to get path string");
 
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
 
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_REALPATH;
@@ -4562,7 +4562,7 @@ static ant_value_t builtin_fs_readlink(ant_params_t) {
 
   if (!req->path) {
     free_fs_request(req);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   Ant_List_Insert(&js->fs_requests, req);
@@ -4764,7 +4764,7 @@ static ant_value_t fs_walk_result(
   ant_t *js, const fs_walk_t *w, ant_value_t root_value,
   bool with_file_types, bool as_buffer
 ) {
-  if (w->error == UV_ENOMEM) return js_mkerr(js, "Out of memory");
+  if (w->error == UV_ENOMEM) return Ant_Error_CreateOutOfMemory(js);
   if (w->error) {
     ant_value_t dir_path = fs_walk_dir_path(js, w, w->error_dir);
     if (is_err(dir_path)) return dir_path;
@@ -4798,7 +4798,7 @@ static ant_value_t fs_walk_result(
         js, entry->name, strlen(entry->name), entry->type, as_buffer, parent
       ); else {
         char *rel = fs_walk_rel(dir->rel, entry->name);
-        value = rel ? fs_path_result(js, rel, strlen(rel), as_buffer) : js_mkerr(js, "Out of memory");
+        value = rel ? fs_path_result(js, rel, strlen(rel), as_buffer) : Ant_Error_CreateOutOfMemory(js);
         free(rel);
       }
 
@@ -4876,7 +4876,7 @@ static ant_value_t builtin_fs_readdirSync(ant_params_t) {
   if (!path) return js_mkerr(js, "Failed to get path string");
   
   char *path_cstr = strndup(path, path_len);
-  if (!path_cstr) return js_mkerr(js, "Out of memory");
+  if (!path_cstr) return Ant_Error_CreateOutOfMemory(js);
 
   if (nargs > 1 && fs_readdir_recursive_option(js, args[1])) {
     fs_walk_t walk = {0};
@@ -4949,7 +4949,7 @@ static ant_value_t builtin_fs_readdir(ant_params_t) {
   
   
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
   
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_READDIR;
@@ -4962,7 +4962,7 @@ static ant_value_t builtin_fs_readdir(ant_params_t) {
 
   if (!req->path) {
     free_fs_request(req);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   if (nargs > 1 && fs_readdir_recursive_option(js, args[1])) {
@@ -4971,7 +4971,7 @@ static ant_value_t builtin_fs_readdir(ant_params_t) {
     if (!job || !req->path2) {
       free(job);
       free_fs_request(req);
-      return js_mkerr(js, "Out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
     }
     
     job->req = req;
@@ -5025,7 +5025,7 @@ static ant_value_t builtin_fs_fsync(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "The \"cb\" argument must be a function");
 
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
 
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_FSYNC;
@@ -5142,7 +5142,7 @@ static ant_value_t builtin_fs_read_fd(ant_params_t) {
   if (offset + length > buf_len) return js_mkerr(js, "read() length extends beyond buffer");
 
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
 
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_READ_FD;
@@ -5155,7 +5155,7 @@ static ant_value_t builtin_fs_read_fd(ant_params_t) {
   req->data = malloc(length > 0 ? length : 1);
   if (!req->data) {
     free(req);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   req->uv_req.data = req;
 
@@ -5328,7 +5328,7 @@ static ant_value_t builtin_fs_write_fd(ant_params_t) {
   }
   
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
   
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_WRITE_FD;
@@ -5337,7 +5337,7 @@ static ant_value_t builtin_fs_write_fd(ant_params_t) {
   req->data = malloc(write_len);
   if (!req->data) {
     free(req);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   memcpy(req->data, write_data, write_len);
   req->data_len = write_len;
@@ -5370,7 +5370,7 @@ static ant_value_t builtin_fs_writevSync(ant_params_t) {
     position = (int64_t)js_getnum(args[2]);
   
   uv_buf_t *bufs = calloc((size_t)arr_len, sizeof(uv_buf_t));
-  if (!bufs) return js_mkerr(js, "Out of memory");
+  if (!bufs) return Ant_Error_CreateOutOfMemory(js);
   
   for (ant_offset_t i = 0; i < arr_len; i++) {
     ant_value_t item = js_arr_get(js, args[1], i);
@@ -5417,12 +5417,12 @@ static ant_value_t builtin_fs_writev_fd(ant_params_t) {
   }
   
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
   
   req->data = malloc(total_len ? total_len : 1);
   if (!req->data) {
     free(req);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   
   size_t off = 0;
@@ -5529,7 +5529,7 @@ static ant_value_t builtin_fs_openSync(ant_params_t) {
   int mode = (nargs >= 3 && vtype(args[2]) == kTypeNumber) ? (int)js_getnum(args[2]) : 0666;
   
   char *path_cstr = strndup(path, path_len);
-  if (!path_cstr) return js_mkerr(js, "Out of memory");
+  if (!path_cstr) return Ant_Error_CreateOutOfMemory(js);
   
   uv_fs_t req;
   int result = uv_fs_open(js->loop, &req, path_cstr, flags, mode, NULL);
@@ -5613,7 +5613,7 @@ static ant_value_t builtin_fs_open_fd(ant_params_t) {
   int mode = (nargs >= 3 && vtype(args[2]) == kTypeNumber) ? (int)js_getnum(args[2]) : 0666;
   
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
   
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_OPEN;
@@ -5647,7 +5647,7 @@ static ant_value_t builtin_fs_open_filehandle(ant_params_t) {
   int mode = (nargs >= 3 && vtype(args[2]) == kTypeNumber) ? (int)js_getnum(args[2]) : 0666;
 
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
 
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_OPEN;
@@ -5694,7 +5694,7 @@ static ant_value_t builtin_fs_close_fd(ant_params_t) {
   int fd = (int)js_getnum(args[0]);
   
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
   
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_CLOSE;
@@ -5737,7 +5737,7 @@ static ant_value_t builtin_fs_watch(ant_params_t) {
   if (!path || path_len == 0) return js_mkerr(js, "watch() path must not be empty");
 
   watcher = fs_watcher_new(js, FS_WATCH_MODE_EVENT);
-  if (!watcher) return js_mkerr(js, "Out of memory");
+  if (!watcher) return Ant_Error_CreateOutOfMemory(js);
 
   watcher_obj = fs_watcher_make_object(js, watcher);
   if (is_err(watcher_obj)) {
@@ -5787,7 +5787,7 @@ static ant_value_t builtin_fs_watchFile(ant_params_t) {
   if (!path || path_len == 0) return js_mkerr(js, "watchFile() path must not be empty");
 
   watcher = fs_watcher_new(js, FS_WATCH_MODE_STAT);
-  if (!watcher) return js_mkerr(js, "Out of memory");
+  if (!watcher) return Ant_Error_CreateOutOfMemory(js);
 
   watcher->callback = opts.listener;
   watcher->last_stat_valid = fs_stat_path_sync(path, &watcher->last_stat);
@@ -6195,7 +6195,7 @@ static ant_value_t fs_dir_queue_subdir(ant_t *js, fs_dir_t *d, const char *name)
   char *copy = str ? strndup(str, len) : NULL;
   if (!copy || !fs_dir_push_pending(d, copy)) {
     free(copy);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   return js_mkundef();
@@ -6454,7 +6454,7 @@ static ant_value_t fs_dir_enqueue(
   fs_op_type_t op_type, ant_value_t stash
 ) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
-  if (!req) return js_mkerr(js, "Out of memory");
+  if (!req) return Ant_Error_CreateOutOfMemory(js);
 
   req->uv_req.loop = js->loop;
   req->op_type = op_type;
@@ -6625,7 +6625,7 @@ static ant_value_t fs_parse_opendir_args(
   if (!path) return js_mkerr(js, "Failed to get path string");
 
   out->path = strndup(path, path_len);
-  if (!out->path) return js_mkerr(js, "Out of memory");
+  if (!out->path) return Ant_Error_CreateOutOfMemory(js);
 
   out->buffer_encoding = fs_buffer_encoding(js, options);
   out->path_value = fs_parent_path_value(original_path, args[0]);
@@ -6647,7 +6647,7 @@ static ant_value_t fs_make_dir(ant_t *js, uv_dir_t *handle, fs_opendir_options_t
     uv_fs_closedir(NULL, &req, handle, NULL);
     uv_fs_req_cleanup(&req);
     free(opts->path);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   d->dir = handle;
@@ -6754,7 +6754,7 @@ static ant_value_t builtin_fs_opendir(ant_params_t) {
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) {
     free(opts.path);
-    return js_mkerr(js, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   req->uv_req.loop = js->loop;

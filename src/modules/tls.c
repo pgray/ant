@@ -199,7 +199,7 @@ static ant_tls_socket_t *tls_require_socket(ant_t *js, ant_value_t this_val) {
 
 static ant_value_t tls_make_buffer_chunk(ant_t *js, const char *data, size_t len) {
   ArrayBufferData *ab = create_array_buffer_data(js, len);
-  if (!ab) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+  if (!ab) return Ant_Error_CreateOutOfMemory(js);
   if (len > 0 && data) memcpy(ab->data, data, len);
   return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, js->builtins.buffer_proto);
 }
@@ -611,7 +611,7 @@ static void tls_socket_on_read(uv_stream_t *stream, ssize_t nread, const uv_buf_
       tls_emit(js, socket->obj, "data", &chunk, 1);
     } else {
       if (!tls_socket_push_read(socket, buf->base, (size_t)nread, false)) {
-        ant_value_t err = Ant_Error_Create(js, JS_ERR_TYPE, "Out of memory");
+        ant_value_t err = Ant_Error_ConsumeMarker(js, Ant_Error_CreateOutOfMemory(js));
         socket->had_error = true;
         tls_emit(js, socket->obj, "error", &err, 1);
         tls_socket_close(socket);
@@ -676,7 +676,7 @@ static ant_value_t js_tls_socket_read(ant_params_t) {
   if (wanted == 0 || wanted > socket->read_len) wanted = socket->read_len;
 
   data = malloc(wanted);
-  if (!data) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+  if (!data) return Ant_Error_CreateOutOfMemory(js);
 
   while (copied < wanted && socket->read_head) {
     tls_read_chunk_t *chunk = socket->read_head;
@@ -716,7 +716,7 @@ static ant_value_t js_tls_socket_unshift(ant_params_t) {
   if (!tls_parse_write_args(js, args, nargs, &bytes, &len, NULL, &err)) return err;
   if (len > 0) {
     if (!tls_socket_push_read(socket, (const char *)bytes, len, true))
-      return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
     tls_socket_schedule_read_drain(socket);
   }
   
@@ -745,12 +745,12 @@ static ant_value_t js_tls_socket_write(ant_params_t) {
   }
 
   write = calloc(1, sizeof(*write));
-  if (!write) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+  if (!write) return Ant_Error_CreateOutOfMemory(js);
   write->data = malloc(len);
   
   if (!write->data) {
     free(write);
-    return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
   
   memcpy(write->data, bytes, len);
@@ -1065,7 +1065,7 @@ static ant_value_t js_tls_create_context(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "TLS private key requires a certificate");
 
   wrap = calloc(1, sizeof(*wrap));
-  if (!wrap) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+  if (!wrap) return Ant_Error_CreateOutOfMemory(js);
 
   wrap->ctx = default_tls_context();
   if (!wrap->ctx) {
@@ -1284,7 +1284,7 @@ static ant_value_t js_tls_connect_options(ant_t *js, ant_value_t options, ant_va
   tls_init_socket_proto(js);
 
   socket = calloc(1, sizeof(*socket));
-  if (!socket) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+  if (!socket) return Ant_Error_CreateOutOfMemory(js);
 
   socket->js = js;
   socket->encoding = js_mkundef();
@@ -1298,7 +1298,7 @@ static ant_value_t js_tls_connect_options(ant_t *js, ant_value_t options, ant_va
   
   if (!socket->host || !socket->servername) {
     tls_socket_free(socket);
-    return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   value = js_get(js, options, "secureContext");
@@ -1527,7 +1527,7 @@ static ant_value_t tls_server_create(ant_t *js, ant_value_t options, ant_value_t
   if (!wrap || wrap->closed || !wrap->ctx) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid TLS secure context");
 
   server = calloc(1, sizeof(*server));
-  if (!server) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+  if (!server) return Ant_Error_CreateOutOfMemory(js);
 
   if (vtype(options) == kTypeObject &&
       !tls_parse_alpn(js, js_get(js, options, "ALPNProtocols"), &server->alpn_protocols, &server->alpn_count)) {
@@ -1987,7 +1987,7 @@ static ant_value_t js_tls_check_server_identity(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "The \"cert\" argument must be of type object");
 
   hostname = tls_value_cstr(js, nargs > 0 ? args[0] : js_mkundef());
-  if (!hostname) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+  if (!hostname) return Ant_Error_CreateOutOfMemory(js);
   if (*hostname && hostname[strlen(hostname) - 1] == '.') hostname[strlen(hostname) - 1] = '\0';
 
   subject = js_get(js, cert, "subject");

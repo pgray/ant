@@ -565,7 +565,7 @@ static ant_value_t locks_request(ant_params_t) {
 
   if (!name_copy) {
     free(req);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   ant_value_t promise = js_mkpromise(js);
@@ -589,7 +589,7 @@ static ant_value_t locks_request(ant_params_t) {
     free(req);
     if (registered == LOCK_REGISTER_OOM) {
       GC_ROOT_RESTORE(js, root_mark);
-      return js_mkerr(js, "out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
     }
     lock_run_callback(js, NULL, callback, js_mknull(), promise);
     GC_ROOT_RESTORE(js, root_mark);

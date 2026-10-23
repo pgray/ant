@@ -440,7 +440,7 @@ static ant_value_t server_headers_from_parsed(
   ant_t *js, ant_http1_parsed_request_t *parsed
 ) {
   headers_data_t *data = headers_data_take_http_headers(&parsed->headers);
-  if (!data) return js_mkerr(js, "out of memory");
+  if (!data) return Ant_Error_CreateOutOfMemory(js);
   return headers_create_from_data(js, data);
 }
 
@@ -552,7 +552,7 @@ static void server_sse_finalize(ant_t *js, ant_object_t *obj) {
 
 static ant_value_t server_make_chunk(ant_t *js, const char *data, size_t len) {
   ArrayBufferData *ab = create_array_buffer_data(js, len);
-  if (!ab) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+  if (!ab) return Ant_Error_CreateOutOfMemory(js);
   if (len > 0 && data) memcpy(ab->data, data, len);
   return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, js->builtins.typedarray_protos[TYPED_ARRAY_UINT8]);
 }
@@ -621,7 +621,7 @@ static ant_value_t server_sse_send(ant_params_t) {
   }
 
   out = ant_sse_format_event(data, event, id, retry, &out_len);
-  if (!out) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+  if (!out) return Ant_Error_CreateOutOfMemory(js);
   return server_sse_enqueue(js, state, out, out_len);
 }
 
@@ -636,7 +636,7 @@ static ant_value_t server_sse_comment(ant_params_t) {
   if (is_err(text_v)) return text_v;
   text = js_getstr(js, text_v, NULL);
   out = ant_sse_format_comment(text, &out_len);
-  if (!out) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+  if (!out) return Ant_Error_CreateOutOfMemory(js);
   return server_sse_enqueue(js, state, out, out_len);
 }
 
@@ -656,7 +656,7 @@ static ant_value_t server_event_source(ant_params_t) {
   ant_value_t response = 0;
   ant_value_t obj = 0;
 
-  if (!state) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+  if (!state) return Ant_Error_CreateOutOfMemory(js);
 
   stream = rs_create_stream(js, js_mkundef(), js_mkundef(), 1);
   if (is_err(stream)) { free(state); return stream; }
@@ -715,7 +715,7 @@ static ant_value_t server_upgrade_websocket_protocol(
     return js_mkerr_typed(js, JS_ERR_TYPE, "WebSocket subprotocol was not offered by the client");
 
   *out = strdup(protocol);
-  if (!*out) return js_mkerr(js, "out of memory");
+  if (!*out) return Ant_Error_CreateOutOfMemory(js);
   return js_mkundef();
 }
 
@@ -1464,7 +1464,7 @@ static ant_value_t server_stop(ant_params_t) {
 
   waiter = calloc(1, sizeof(*waiter));
   if (!waiter) {
-    js_reject_promise(js, promise, js_mkerr(js, "out of memory"));
+    js_reject_promise(js, promise, Ant_Error_CreateOutOfMemory(js));
     return promise;
   }
 
@@ -1831,7 +1831,7 @@ ant_value_t server_start_from_export(ant_t *js, ant_value_t default_export) {
   if (!is_object_type(default_export)) return js_mkerr_typed(js, JS_ERR_TYPE, "Module does not export a fetch handler");
 
   server = malloc(sizeof(*server));
-  if (!server) return js_mkerr(js, "out of memory");
+  if (!server) return Ant_Error_CreateOutOfMemory(js);
 
   *server = (server_runtime_t){
     .js = js,
@@ -1850,7 +1850,7 @@ ant_value_t server_start_from_export(ant_t *js, ant_value_t default_export) {
 
   if (!server->hostname) {
     free(server);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   unix_v = js_get(js, default_export, "unix");
@@ -1867,7 +1867,7 @@ ant_value_t server_start_from_export(ant_t *js, ant_value_t default_export) {
     if (!server->unix_path) {
       free(server->hostname);
       free(server);
-      return js_mkerr(js, "out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
     }
   }
   
@@ -1913,7 +1913,7 @@ ant_value_t server_start_from_export(ant_t *js, ant_value_t default_export) {
       free(server->unix_path);
       free(server->hostname);
       free(server);
-      return js_mkerr(js, "out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
     }
     free(server->hostname);
     server->hostname = next_hostname;

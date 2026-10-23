@@ -10,6 +10,7 @@
 
 #include "internal.h"
 #include "debug.h"
+#include "utf8.h"
 #include "hash.h"
 #include "numbers.h"
 #include "tokens.h"
@@ -98,13 +99,13 @@ static void emit_srcpos(sv_compiler_t *c, sv_ast_t *node) {
     col = c->srcpos[c->srcpos_count - 1].col;
     for (uint32_t i = c->last_srcpos_off; i < off; i++) {
       if (code[i] == '\n') { line++; col = 1; }
-      else col++;
+      else col += utf16_units_for_utf8_byte((unsigned char)code[i]);
     }
   } else {
     line = 1; col = 1;
     for (uint32_t i = 0; i < off; i++) {
       if (code[i] == '\n') { line++; col = 1; }
-      else col++;
+      else col += utf16_units_for_utf8_byte((unsigned char)code[i]);
     }
   }
 
@@ -4626,7 +4627,7 @@ static bool check_function_param_names(ant_t *js, sv_ast_t *fn, bool strict, boo
 
   for (int i = 0; i < fn->args.count; i++) {
     if (collect_param_bindings(js, fn->args.items[i], &names)) continue;
-    if (emit_error) js_mkerr(js, "out of memory");
+    if (emit_error) Ant_Error_CreateOutOfMemory(js);
     return false;
   }
 

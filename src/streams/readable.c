@@ -780,7 +780,7 @@ static ant_value_t setup_default_controller(
   double hwm
 ) {
   rs_controller_t *ctrl = calloc(1, sizeof(rs_controller_t));
-  if (!ctrl) return js_mkerr(js, "out of memory");
+  if (!ctrl) return Ant_Error_CreateOutOfMemory(js);
   ctrl->strategy_hwm = hwm;
 
   ant_value_t ctrl_obj = Ant_Object_CreateBare(js);
@@ -852,7 +852,7 @@ static ant_value_t js_rs_ctor(ant_params_t) {
   }
 
   rs_stream_t *st = calloc(1, sizeof(rs_stream_t));
-  if (!st) return js_mkerr(js, "out of memory");
+  if (!st) return Ant_Error_CreateOutOfMemory(js);
   st->state = RS_STATE_READABLE;
 
   ant_value_t obj = Ant_Object_CreateBare(js);
@@ -925,7 +925,7 @@ static ant_value_t js_rs_ctor(ant_params_t) {
 
 ant_value_t rs_create_stream(ant_t *js, ant_value_t pull_fn, ant_value_t cancel_fn, double hwm) {
   rs_stream_t *st = calloc(1, sizeof(rs_stream_t));
-  if (!st) return js_mkerr(js, "out of memory");
+  if (!st) return Ant_Error_CreateOutOfMemory(js);
   st->state = RS_STATE_READABLE;
 
   ant_value_t obj = Ant_Object_CreateBare(js);

@@ -231,7 +231,7 @@ static ant_value_t util_parse_args(ant_params_t) {
   util_parse_arg_option_t *options = NULL;
   if (option_count > 0) {
     options = calloc(option_count, sizeof(*options));
-    if (!options) return js_mkerr(js, "Out of memory");
+    if (!options) return Ant_Error_CreateOutOfMemory(js);
     
     ant_iter_t iter = js_prop_iter_begin(js, options_obj);
     const char *key = NULL;
@@ -258,7 +258,7 @@ static ant_value_t util_parse_args(ant_params_t) {
       if (!options[idx].name) {
         js_prop_iter_end(&iter);
         util_free_parse_options(options, option_count);
-        return js_mkerr(js, "Out of memory");
+        return Ant_Error_CreateOutOfMemory(js);
       }
       
       options[idx].type = UTIL_PARSE_ARG_TYPE_BOOLEAN;
@@ -331,7 +331,7 @@ option_error:
       char *name_buf = strndup(name, name_len);
       if (!name_buf) {
         util_free_parse_options(options, option_count);
-        return js_mkerr(js, "Out of memory");
+        return Ant_Error_CreateOutOfMemory(js);
       }
       
       util_parse_arg_option_t *opt = util_find_option_by_name(options, option_count, name_buf);
@@ -1245,7 +1245,7 @@ static ant_value_t util_promisified_call(ant_params_t) {
 
   ant_value_t *call_args = (ant_value_t *)malloc((size_t)(nargs + 1) * sizeof(ant_value_t));
   if (!call_args) {
-    js_reject_promise(js, promise, js_mkerr(js, "Out of memory"));
+    js_reject_promise(js, promise, Ant_Error_CreateOutOfMemory(js));
     return promise;
   }
   for (int i = 0; i < nargs; i++) call_args[i] = args[i];
@@ -1320,7 +1320,7 @@ static ant_value_t util_callbackified_call(ant_params_t) {
 
   if (call_nargs > 0) {
     call_args = (ant_value_t *)malloc((size_t)call_nargs * sizeof(ant_value_t));
-    if (!call_args) return js_mkerr(js, "Out of memory");
+    if (!call_args) return Ant_Error_CreateOutOfMemory(js);
     for (int i = 0; i < call_nargs; i++) call_args[i] = args[i];
   }
 

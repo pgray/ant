@@ -290,7 +290,7 @@ static void zlib_stream_finalizer(ant_t *js, ant_value_t value, void *state) {
 
 static ant_value_t zlib_make_buffer(ant_t *js, const uint8_t *data, size_t len) {
   ArrayBufferData *ab = create_array_buffer_data(js, len);
-  if (!ab) return js_mkerr(js, "out of memory");
+  if (!ab) return Ant_Error_CreateOutOfMemory(js);
   if (data && len > 0) memcpy(ab->data, data, len);
   return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, js->builtins.buffer_proto);
 }
@@ -391,7 +391,7 @@ static ant_value_t zlib_do_process(
   bool compress = zlib_kind_is_compress(st->kind);
   size_t chunk_size = (st->opts.chunk_size > 0) ? (size_t)st->opts.chunk_size : ZLIB_CHUNK;
   uint8_t *out = malloc(chunk_size);
-  if (!out) return js_mkerr(js, "out of memory");
+  if (!out) return Ant_Error_CreateOutOfMemory(js);
 
   st->strm.next_in = input ? (Bytef *)input : NULL;
   st->strm.avail_in = input ? (uInt)input_len : 0;
@@ -452,7 +452,7 @@ static ant_value_t zlib_process_chunk_sync(
   bool compress = zlib_kind_is_compress(st->kind);
   size_t chunk_size = (st->opts.chunk_size > 0) ? (size_t)st->opts.chunk_size : ZLIB_CHUNK;
   uint8_t *out = malloc(chunk_size);
-  if (!out) return js_mkerr(js, "out of memory");
+  if (!out) return Ant_Error_CreateOutOfMemory(js);
 
   st->strm.next_in  = input ? (Bytef *)input : NULL;
   st->strm.avail_in = input ? (uInt)input_len : 0;
@@ -699,7 +699,7 @@ static ant_value_t zlib_create_stream(ant_t *js, zlib_kind_t kind, ant_value_t o
   if (is_err(opt_err)) return opt_err;
 
   zlib_stream_t *st = calloc(1, sizeof(zlib_stream_t));
-  if (!st) return js_mkerr(js, "out of memory");
+  if (!st) return Ant_Error_CreateOutOfMemory(js);
 
   st->kind = kind;
   st->js = js;
@@ -707,7 +707,7 @@ static ant_value_t zlib_create_stream(ant_t *js, zlib_kind_t kind, ant_value_t o
 
   if (opts.dictionary && opts.dictionary_len > 0) {
     st->owned_dict = malloc(opts.dictionary_len);
-    if (!st->owned_dict) { free(st); return js_mkerr(js, "out of memory"); }
+    if (!st->owned_dict) { free(st); return Ant_Error_CreateOutOfMemory(js); }
     memcpy(st->owned_dict, opts.dictionary, opts.dictionary_len);
     st->opts.dictionary = st->owned_dict;
   } else {
@@ -846,7 +846,7 @@ static ant_value_t zlib_sync_op(
   if (is_err(opt_err)) return opt_err;
   out.limit = opts.max_output_length;
   uint8_t *tmp = malloc((size_t)opts.chunk_size);
-  if (!tmp) return js_mkerr(js, "out of memory");
+  if (!tmp) return Ant_Error_CreateOutOfMemory(js);
 
   if (kind == ZLIB_KIND_BROTLI_COMPRESS || kind == ZLIB_KIND_BROTLI_DECOMPRESS) {
     int bad_id = -1;
@@ -917,7 +917,7 @@ static ant_value_t zlib_sync_op(
           int over = out.overflow;
           inflateEnd(&strm); free(tmp); free(out.data);
           if (over) return zlib_too_large(js, opts.max_output_length);
-          return js_mkerr(js, "out of memory");
+          return Ant_Error_CreateOutOfMemory(js);
         }
         continue;
       }
@@ -938,7 +938,7 @@ static ant_value_t zlib_sync_op(
       free(tmp);
       free(out.data);
       if (over) return zlib_too_large(js, opts.max_output_length);
-      return js_mkerr(js, "out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
     }
     if (ret == Z_STREAM_END) break;
   } while (strm.avail_out == 0 || strm.avail_in > 0);

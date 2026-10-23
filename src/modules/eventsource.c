@@ -383,7 +383,7 @@ static ant_value_t js_eventsource_ctor(ant_params_t) {
 
   ant_value_t obj = eventsource_create_object(js);
   eventsource_state_t *es = calloc(1, sizeof(*es));
-  if (!es) return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+  if (!es) return Ant_Error_CreateOutOfMemory(js);
   es->obj = obj;
   es->url = strdup(url);
   es->last_event_id = strdup("");
@@ -399,7 +399,7 @@ static ant_value_t js_eventsource_ctor(ant_params_t) {
     free(es->url);
     free(es->last_event_id);
     free(es);
-    return js_mkerr_typed(js, JS_ERR_TYPE, "Out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   ant_sse_parser_init(&es->parser);

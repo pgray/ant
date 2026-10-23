@@ -188,7 +188,7 @@ static ant_value_t fetch_replace_request_headers(fetch_request_t *req, bool drop
   if (is_err(headers)) return headers;
   headers_data_for_each(headers_get_data(current), fetch_copy_redirect_header, &ctx);
   
-  if (ctx.failed) return js_mkerr(js, "out of memory");
+  if (ctx.failed) return Ant_Error_CreateOutOfMemory(js);
   js_set_slot_wb(js, req->request_obj, SLOT_REQUEST_HEADERS, headers);
   
   return js_mkundef();
@@ -223,7 +223,7 @@ static ant_value_t fetch_set_redirect_method(fetch_request_t *req, const char *m
 
   if (!request) return fetch_type_error(req->js, "Invalid Request object");
   dup = strdup(method);
-  if (!dup) return js_mkerr(req->js, "out of memory");
+  if (!dup) return Ant_Error_CreateOutOfMemory(req->js);
   
   free(request->method);
   request->method = dup;
@@ -420,7 +420,7 @@ static ant_value_t fetch_headers_from_http(ant_t *js, const ant_http_header_t *h
 
 static ant_value_t fetch_create_chunk(ant_t *js, const uint8_t *data, size_t len) {
   ArrayBufferData *ab = create_array_buffer_data(js, len);
-  if (!ab) return js_mkerr(js, "out of memory");
+  if (!ab) return Ant_Error_CreateOutOfMemory(js);
   if (len > 0) memcpy(ab->data, data, len);
   return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, js->builtins.typedarray_protos[TYPED_ARRAY_UINT8]);
 }

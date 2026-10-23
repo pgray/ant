@@ -777,7 +777,7 @@ static ant_value_t tty_read_stream_constructor(ant_params_t) {
   if (is_err(obj)) return obj;
 
   state = calloc(1, sizeof(*state));
-  if (!state) return js_mkerr(js, "Out of memory");
+  if (!state) return Ant_Error_CreateOutOfMemory(js);
   state->js = js;
   state->stream_obj = obj;
   state->fd = fd;

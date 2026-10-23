@@ -157,7 +157,7 @@ static void current_destroy(ant_guest_t *g) {
 
 ant_value_t guest_current_start(ant_t *js, ant_guest_t *g) {
   current_state_t *st = calloc(1, sizeof(*st));
-  if (!st) return js_mkerr(js, "out of memory");
+  if (!st) return Ant_Error_CreateOutOfMemory(js);
   st->g = guest_retain(g);
   g->transport = st;
   g->complete = current_complete;

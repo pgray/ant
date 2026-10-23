@@ -43,7 +43,25 @@ for (const source of ['console.log("ran"); /* unterminated', 'console.log("ran")
   assert.match(result.stderr, /SyntaxError/, source);
 }
 
+for (const [source, locs] of [
+  ['let 日本 = 1; null.x', ['1:18']],
+  ['let s = "😀😀"; null.x', ['1:22']],
+  ['const a = "é";\nfunction f() { const b = "😀"; throw new Error("x"); }\nf();', ['2:38', '3:1']],
+  ['x = "é" + `😀`; [1].map(() => { "日"; null.y; })', ['1:43', '1:21']],
+]) {
+  try {
+    vm.runInThisContext(source, { filename: 'cols.js' });
+    assert.fail(source);
+  } catch (e) {
+    const found = [...String(e.stack).matchAll(/cols\.js:(\d+):(\d+)/g)].map(m => `${m[1]}:${m[2]}`);
+    assert.deepStrictEqual(found, locs, source);
+  }
+}
+
 if (typeof Ant !== 'undefined') {
+  const located = spawnSync(process.execPath, ['--no-color', '-e', 'let ééé = 1 +* 2'], { encoding: 'utf8' });
+  assert.match(located.stderr, /\[eval\]:1:14\n/, located.stderr);
+
   for (const [source, caret] of [
     ['let × = {', '    ^'],
     ['let ééé = 1 +* 2', '             ^'],

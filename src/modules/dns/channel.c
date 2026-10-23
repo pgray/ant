@@ -266,7 +266,7 @@ ant_value_t dns_channel_set_servers(ant_t *js, dns_channel_t *channel, ant_value
   ant_offset_t count = js_arr_len(js, servers);
   size_t cap = (size_t)count * (INET6_ADDRSTRLEN + 16) + 1, used = 0;
   char *csv = malloc(cap);
-  if (!csv) return js_mkerr(js, "out of memory");
+  if (!csv) return Ant_Error_CreateOutOfMemory(js);
   csv[0] = '\0';
 
   for (ant_offset_t i = 0; i < count; i++) {

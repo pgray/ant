@@ -18,7 +18,7 @@ static ant_value_t async_hooks_call_with_tail_args(
   if (call_nargs <= 0) return sv_vm_call(js->vm, js, fn, this_arg, NULL, 0, NULL, js_mkundef());
 
   ant_value_t *call_args = (ant_value_t *)malloc((size_t)call_nargs * sizeof(ant_value_t));
-  if (!call_args) return js_mkerr(js, "Out of memory");
+  if (!call_args) return Ant_Error_CreateOutOfMemory(js);
 
   for (int i = 0; i < call_nargs; i++) call_args[i] = args[start_idx + i];
   ant_value_t result = sv_vm_call(js->vm, js, fn, this_arg, call_args, call_nargs, NULL, js_mkundef());

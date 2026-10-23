@@ -383,7 +383,7 @@ static ant_value_t wasm_wrap_module(ant_t *js, wasm_store_t *store, wasm_module_
   if (!handle) {
     if (module) wasm_module_delete(module);
     if (store) wasm_store_delete(store);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   handle->store = store;
@@ -439,7 +439,7 @@ static void wasm_instance_finalize(ant_t *js, ant_object_t *obj) {
 
 static ant_value_t wasm_wrap_extern_object(ant_t *js, wasm_extern_wrap_kind_t kind, ant_value_t proto, int brand, wasm_store_t *store, bool own_handle, void *ptr, ant_value_t owner) {
   wasm_extern_handle_t *handle = calloc(1, sizeof(*handle));
-  if (!handle) return js_mkerr(js, "out of memory");
+  if (!handle) return Ant_Error_CreateOutOfMemory(js);
 
   handle->kind = kind;
   handle->store = store;
@@ -576,7 +576,7 @@ static ant_value_t wasm_wrap_func(ant_t *js, wasm_func_t *func, ant_value_t owne
   handle = calloc(1, sizeof(*handle));
   if (!handle) {
     if (own_func) wasm_func_delete(func);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   handle->func = func;
@@ -953,7 +953,7 @@ static ant_value_t wasm_instantiate_module(ant_t *js, ant_value_t module_obj, an
     owned_host_funcs = calloc(import_types.size, sizeof(*owned_host_funcs));
     owned_host_globals = calloc(import_types.size, sizeof(*owned_host_globals));
     if (!imports || !owned_host_funcs || !owned_host_globals) {
-      import_error = js_mkerr(js, "out of memory");
+      import_error = Ant_Error_CreateOutOfMemory(js);
       goto import_setup_failed;
     }
   }
@@ -989,7 +989,7 @@ static ant_value_t wasm_instantiate_module(ant_t *js, ant_value_t module_obj, an
 
       env = calloc(1, sizeof(*env));
       if (!env) {
-        import_error = js_mkerr(js, "out of memory");
+        import_error = Ant_Error_CreateOutOfMemory(js);
         goto import_setup_failed;
       }
 
@@ -1002,7 +1002,7 @@ static ant_value_t wasm_instantiate_module(ant_t *js, ant_value_t module_obj, an
         env->result_kinds = calloc(env->result_count, sizeof(*env->result_kinds));
         if (!env->result_kinds) {
           free(env);
-          import_error = js_mkerr(js, "out of memory");
+          import_error = Ant_Error_CreateOutOfMemory(js);
           goto import_setup_failed;
         }
         for (size_t j = 0; j < env->result_count; j++)
@@ -1123,7 +1123,7 @@ static ant_value_t wasm_instantiate_module(ant_t *js, ant_value_t module_obj, an
       wasm_exporttype_vec_delete(&export_types);
       wasm_delete_owned_globals(owned_host_globals, owned_host_global_count);
       free(owned_host_globals);
-      return js_mkerr(js, "out of memory");
+      return Ant_Error_CreateOutOfMemory(js);
     }
     inst_handle->instance = instance;
     inst_handle->exports = exports;
@@ -1143,7 +1143,7 @@ static ant_value_t wasm_instantiate_module(ant_t *js, ant_value_t module_obj, an
   js_set_finalizer(instance_obj, wasm_instance_finalize);
   if (!wasm_register_instance_owner(js, instance, instance_obj)) {
     wasm_exporttype_vec_delete(&export_types);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   for (size_t i = 0; i < export_types.size && i < exports.size; i++) {
@@ -1352,7 +1352,7 @@ static void wasm_detach_external_arraybuffer(ant_t *js, ant_value_t buffer) {
 
 static ant_value_t wasm_make_external_arraybuffer(ant_t *js, uint8_t *data, size_t len, ant_value_t owner) {
   ArrayBufferData *buffer = create_external_array_buffer_data(data, len);
-  if (!buffer) return js_mkerr(js, "out of memory");
+  if (!buffer) return Ant_Error_CreateOutOfMemory(js);
   ant_value_t result = create_arraybuffer_obj(js, buffer);
   if (is_object_type(owner) && is_object_type(result)) js_set_slot_wb(js, result, SLOT_ENTRIES, owner);
   return result;
@@ -1522,7 +1522,7 @@ static ant_value_t js_wasm_memory_ctor(ant_params_t) {
   if (!handle) {
     wasm_memory_delete(memory);
     wasm_store_delete(store);
-    return js_mkerr(js, "out of memory");
+    return Ant_Error_CreateOutOfMemory(js);
   }
 
   js_set_finalizer(result, wasm_extern_finalize);
@@ -1744,7 +1744,7 @@ static ant_value_t js_wasm_table_ctor(ant_params_t) {
       wasm_table_delete(table);
       wasm_store_delete(store);
       free(handle);
-      return is_err(entries) ? entries : js_mkerr(js, "out of memory");
+      return is_err(entries) ? entries : Ant_Error_CreateOutOfMemory(js);
     }
 
     handle->standalone_table = true;

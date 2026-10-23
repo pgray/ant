@@ -1754,7 +1754,7 @@ ant_value_t sv_async_call_lazy(
   }
 
   int entry_fp = sv_async_entry_begin(vm, next_op);
-  if (entry_fp < 0) return js_mkerr(js, "out of memory");
+  if (entry_fp < 0) return Ant_Error_CreateOutOfMemory(js);
   
   ant_value_t result = sv_execute_closure_entry(
     vm, closure, callee_func, super_val, 
@@ -1778,7 +1778,7 @@ static __attribute__((noinline)) ant_value_t sv_async_inline_call(
   if (vm->fp + 1 >= vm->max_frames && !sv_vm_grow_frames(vm))
     return Ant_Error_CreateStackOverflow(js);
 
-  if (!sv_async_inline_reserve(vm)) return js_mkerr(js, "out of memory");
+  if (!sv_async_inline_reserve(vm)) return Ant_Error_CreateOutOfMemory(js);
   if (sv_closure_has_lexical_this(closure)) call_this = closure->bound_this;
 
   sv_func_t *func = closure->func;
