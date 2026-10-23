@@ -4,6 +4,7 @@
 #include "modules/process.h"
 #include "gc/roots.h"
 #include "highlight.h"
+#include "utf8.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -99,6 +100,19 @@ void error_line_col(const char *code, ant_offset_t code_len, ant_offset_t pos, i
   }
 }
 
+static int error_display_cols(const char *s, ant_offset_t len) {
+  int cols = 0;
+  for (ant_offset_t i = 0; i < len && cols < INT_MAX - 2;) {
+    unsigned char c = (unsigned char)s[i];
+    if (c < 0x80) { cols++; i++; continue; }
+    utf8proc_int32_t cp = 0;
+    i += utf8_next((const utf8proc_uint8_t *)(s + i), (utf8proc_ssize_t)(len - i), &cp);
+    int w = cp < 0 ? 1 : utf8proc_charwidth(cp);
+    cols += w < 0 ? 1 : w;
+  }
+  return cols;
+}
+
 static void get_error_line(
   const char *code, ant_offset_t clen, ant_offset_t pos, char *buf, size_t bufsize,
   int *line_start_col, ant_offset_t *out_line_start, ant_offset_t *out_line_end
@@ -137,7 +151,7 @@ static void get_error_line(
   memcpy(buf, &code[line_start], line_len);
   buf[line_len] = '\0';
   
-  if (line_start_col) *line_start_col = (int)(pos - line_start) + 1;
+  if (line_start_col) *line_start_col = error_display_cols(code + line_start, pos - line_start) + 1;
   if (out_line_start) *out_line_start = line_start;
   if (out_line_end) *out_line_end = line_end;
 }
@@ -208,7 +222,7 @@ static void append_error_caret(errbuf_t *eb, size_t *n, int error_col, int span_
   *n = errbuf_appendf(eb, *n, "%s", reset);
 }
 
-static int error_span_cols_for_line(ant_offset_t src_pos, ant_offset_t span_len, ant_offset_t line_start, ant_offset_t line_end) {
+static int error_span_cols_for_line(const char *src, ant_offset_t src_pos, ant_offset_t span_len, ant_offset_t line_start, ant_offset_t line_end) {
   if (line_end < line_start) return 1;
   if (src_pos < line_start) src_pos = line_start;
   if (src_pos > line_end) src_pos = line_end;
@@ -218,10 +232,8 @@ static int error_span_cols_for_line(ant_offset_t src_pos, ant_offset_t span_len,
   if (span_end < src_pos) span_end = src_pos;
   if (span_end > line_end) span_end = line_end;
 
-  ant_offset_t width = span_end - src_pos;
-  if (width <= 0) width = 1;
-  if (width > INT_MAX) width = INT_MAX;
-  return (int)width;
+  int width = error_display_cols(src + src_pos, span_end - src_pos);
+  return width > 0 ? width : 1;
 }
 
 static int error_terminal_columns(void) {
@@ -519,7 +531,11 @@ void error_render_site_finish(js_error_render_site_t *site) {
     site->error_line, sizeof(site->error_line),
     &site->error_col, &line_start, &line_end
   );
-  site->error_span_cols = error_span_cols_for_line(site->src_pos, site->src_span_len, line_start, line_end);
+  
+  site->error_span_cols = error_span_cols_for_line(
+    site->src, site->src_pos, site->src_span_len, 
+    line_start, line_end
+  );
 }
 
 const char *error_site_file(ant_t *js, const js_error_site_t *es) {

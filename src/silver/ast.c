@@ -90,6 +90,14 @@ typedef struct {
 #define NEXT()       sv_lexer_next(&p->lx)
 #define LA()         sv_lexer_lookahead(&p->lx)
 
+static inline bool regex_line_terminator_at(const char *code, ant_offset_t len, ant_offset_t pos) {
+  unsigned char c = (unsigned char)code[pos];
+  if (c == '\n' || c == '\r') return true;
+  return c == 0xE2 && pos + 2 < len &&
+    (unsigned char)code[pos + 1] == 0x80 &&
+    ((unsigned char)code[pos + 2] == 0xA8 || (unsigned char)code[pos + 2] == 0xA9);
+}
+
 static bool lookahead_crosses_line_terminator(P) {
   sv_lexer_state_t saved;
   sv_lexer_save_state(&p->lx, &saved);
@@ -1055,22 +1063,28 @@ static sv_ast_t *parse_primary(P) {
     if (TOK == TOK_DIV_ASSIGN) POS = pattern_start;
     bool in_class = false;
 
-    while (POS < CLEN) {
+    while (POS < CLEN && !regex_line_terminator_at(CODE, CLEN, POS)) {
       char c = CODE[POS];
-      if (c == '\\' && POS + 1 < CLEN) {
+      if (c == '\\' && POS + 1 < CLEN && !regex_line_terminator_at(CODE, CLEN, POS + 1)) {
         POS += 2;
         continue;
       }
+      
       if (c == '[') in_class = true;
       else if (c == ']') in_class = false;
       else if (c == '/' && !in_class) break;
+      
       POS++;
     }
 
-    ant_offset_t pattern_end = POS;
-    if (POS < CLEN) POS++;
+    if (POS >= CLEN || CODE[POS] != '/') {
+      SV_MKERR_TYPED(JS, JS_ERR_SYNTAX, "Invalid regular expression: missing /");
+      return mk(N_EMPTY);
+    }
 
+    ant_offset_t pattern_end = POS++;
     ant_offset_t flags_start = POS;
+    
     while (POS < CLEN) {
       char c = CODE[POS];
       if (

@@ -206,13 +206,20 @@ LSL:
     c = (unsigned char)*p;
     goto *D[c & 0x80 ? C_HI : cc[c]];
   }
+  
   if (p[1] == '*') {
-    for (p += 2; p + 1 < end; p++) {
-      if (*p == '*' && p[1] == '/') { p += 2; break; }
-      if (*p == '\n') saw_nl = true;
+    const char *q = p + 2;
+    for (; q + 1 < end; q++) {
+      if (*q == '*' && q[1] == '/') break;
+      if (*q == '\n') saw_nl = true;
     }
+    
+    if (__builtin_expect(q + 1 >= end, 0)) goto L_done;
+    p = q + 2;
+    
     if (__builtin_expect(p >= end, 0)) goto L0;
     c = (unsigned char)*p;
+    
     goto *D[c & 0x80 ? C_HI : cc[c]];
   }
   goto L0;
@@ -1214,6 +1221,12 @@ static uint8_t sv_next_raw(sv_lexer_t *lx) {
     return lx->st.tok;
   }
 
+  if (unlikely(c == '/' && rem > 1 && buf[1] == '*')) {
+    lx->st.tlen = 2;
+    lx->st.pos = lx->st.toff + 2;
+    return TOK_ERR;
+  }
+
   if (parse_operator(lx, buf, rem)) {
     if (lx->st.tlen == 0) lx->st.tlen = 1;
     lx->st.pos = lx->st.toff + lx->st.tlen;
@@ -1221,9 +1234,12 @@ static uint8_t sv_next_raw(sv_lexer_t *lx) {
   }
 
   lx->st.tok = parseident(buf, rem, &lx->st.tlen);
-  if (lx->st.tlen == 0) lx->st.tlen = 1;
-  lx->st.pos = lx->st.toff + lx->st.tlen;
+  if (lx->st.tlen == 0) {
+    utf8proc_int32_t cp;
+    lx->st.tlen = (ant_offset_t)utf8_next((const utf8proc_uint8_t *)buf, (utf8proc_ssize_t)rem, &cp);
+  }
   
+  lx->st.pos = lx->st.toff + lx->st.tlen;
   return lx->st.tok;
 }
 
