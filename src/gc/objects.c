@@ -1709,7 +1709,7 @@ uint64_t gc_objects_run(ant_t *js, gc_extra_roots_fn extra_roots) {
     gc_weak_key_alive, gc_weak_collection_live
   );
   
-  gc_clear_napi_weak_refs(js, false);
+  gc_clear_napi_weak_refs(js, gc_weak_key_alive);
   gc_age_regex_cache(js, false);
   ant_realm_collect(js);
   
@@ -1829,7 +1829,7 @@ void gc_objects_run_minor(ant_t *js) {
     gc_weak_key_alive, gc_weak_collection_live
   );
   
-  gc_clear_napi_weak_refs(js, true);
+  gc_clear_napi_weak_refs(js, gc_weak_key_alive);
   js->gc.minor = false;
 
   gc_age_regex_cache(js, true);

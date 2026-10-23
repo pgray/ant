@@ -46,6 +46,11 @@ static const TypedArrayType napi_typedarray_kinds[] = {
 
 static constexpr unsigned NAPI_TYPEDARRAY_KIND_COUNT = sizeof(napi_typedarray_kinds) / sizeof(napi_typedarray_kinds[0]);
 
+static const uint8_t napi_typedarray_element_sizes[] = {
+  #define BUFFER_TYPED_ARRAY(name, ctor, ctype, ...) sizeof(ctype),
+  #include "buffer/typed_arrays.h"
+};
+
 static bool napi_to_ant_typedarray_type(napi_typedarray_type in, TypedArrayType *out) {
   if ((unsigned)in >= NAPI_TYPEDARRAY_KIND_COUNT) return false;
   *out = napi_typedarray_kinds[in];
@@ -643,27 +648,15 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_create_typedarray(
   if (!ab || ab->is_detached) return napi_set_last(env, napi_arraybuffer_expected, "invalid arraybuffer");
 
   TypedArrayType ta_type;
-  if (!napi_to_ant_typedarray_type(type, &ta_type)) {
+  if (!napi_to_ant_typedarray_type(type, &ta_type))
     return napi_set_last(env, napi_invalid_arg, "invalid typedarray type");
-  }
 
-  size_t element_size = 1;
-  switch (ta_type) {
-    case TYPED_ARRAY_INT16:
-    case TYPED_ARRAY_UINT16: element_size = 2; break;
-    case TYPED_ARRAY_INT32:
-    case TYPED_ARRAY_UINT32:
-    case TYPED_ARRAY_FLOAT32: element_size = 4; break;
-    case TYPED_ARRAY_FLOAT64:
-    case TYPED_ARRAY_BIGINT64:
-    case TYPED_ARRAY_BIGUINT64: element_size = 8; break;
-    default: break;
-  }
-
-  size_t byte_len = length * element_size;
-  if (byte_offset + byte_len > ab->length) {
+  size_t element_size = napi_typedarray_element_sizes[ta_type];
+  if (byte_offset % element_size != 0)
+    return napi_set_last(env, napi_invalid_arg, "typedarray offset must be a multiple of the element size");
+  
+  if (byte_offset > ab->length || length > (ab->length - byte_offset) / element_size)
     return napi_set_last(env, napi_invalid_arg, "typedarray out of bounds");
-  }
 
   ant_value_t out = create_typed_array_with_buffer(
     nenv->js, ta_type,

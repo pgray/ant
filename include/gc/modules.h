@@ -2,6 +2,7 @@
 #define ANT_GC_MODULES_H
 
 #include "types.h"
+#include "gc/weak.h"
 
 struct ant_iterator_registry;
 typedef void (*gc_mark_fn)(ant_t *js, ant_value_t v);
@@ -36,7 +37,7 @@ void gc_mark_wasm(ant_t *js, gc_mark_fn mark);
 void gc_mark_napi(ant_t *js, gc_mark_fn mark);
 void gc_mark_rpc(ant_t *js, gc_mark_fn mark);
 void gc_mark_sandbox(ant_t *js, gc_mark_fn mark);
-void gc_clear_napi_weak_refs(ant_t *js, bool minor);
+void gc_clear_napi_weak_refs(ant_t *js, gc_weak_key_alive_fn alive);
 void gc_mark_abort_signal_object(ant_t *js, ant_value_t signal, gc_mark_fn mark);
 void gc_mark_error_record(ant_t *js, ant_value_t value, gc_mark_fn mark);
 void gc_mark_stream_object(ant_t *js, ant_value_t value, gc_mark_fn mark);

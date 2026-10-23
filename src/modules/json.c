@@ -351,6 +351,7 @@ static ant_value_t yyjson_to_jsval(
   ant_t *js, yyjson_val *val, gc_temp_root_scope_t *roots, ant_shape_t *expected
 ) {
   if (!val) return js_mkundef();
+  if (__builtin_expect(sv_check_c_stack_overflow(js), 0)) return Ant_Error_CreateStackOverflow(js);
   
   switch (yyjson_get_type(val)) {
   case YYJSON_TYPE_NULL: return js_mknull();
@@ -1109,14 +1110,12 @@ static json_write_t json_write_with_key(
 }
 
 static ant_value_t apply_reviver_call(
-  ant_t *js,
-  ant_value_t holder,
-  const char *key,
-  ant_value_t reviver,
-  gc_temp_root_scope_t *roots
+  ant_t *js, ant_value_t holder, const char *key, 
+  ant_value_t reviver, gc_temp_root_scope_t *roots
 ) {
   ant_value_t key_str = js_mkstr(js, key, strlen(key));
   if (is_err(key_str)) return key_str;
+  
   if (!json_temp_pin(roots, key_str)) return json_parse_oom(js);
   ant_value_t current_value = js_get(js, holder, key);
   ant_value_t call_args[2] = { key_str, current_value };
@@ -1125,65 +1124,77 @@ static ant_value_t apply_reviver_call(
     js->vm, js, reviver, holder,
     call_args, 2, NULL, js_mkundef()
   );
+  
   if (!is_err(result) && !json_temp_pin(roots, result)) return json_parse_oom(js);
   
   return result;
 }
 
-static void apply_reviver_to_array(
-  ant_t *js,
-  ant_value_t value,
-  ant_value_t reviver,
-  gc_temp_root_scope_t *roots
+static ant_value_t apply_reviver_to_array(
+  ant_t *js, ant_value_t value, ant_value_t reviver, gc_temp_root_scope_t *roots
 ) {
   ant_offset_t length = js_arr_len(js, value);
 
   for (ant_offset_t i = 0; i < length; i++) {
-  char idxstr[32];
-  size_t idx_len = uint_to_str(idxstr, sizeof(idxstr), (uint64_t)i);
-  ant_value_t new_elem = apply_reviver(js, value, idxstr, reviver, roots);
-  if (vtype(new_elem) == kTypeUndefined) js_delete_prop(js, value, idxstr, idx_len);
-  else {
+    char idxstr[32];
+    size_t idx_len = uint_to_str(idxstr, sizeof(idxstr), (uint64_t)i);
+    
+    ant_value_t new_elem = apply_reviver(js, value, idxstr, reviver, roots);
+    if (is_err(new_elem)) return new_elem;
+    
+    if (vtype(new_elem) == kTypeUndefined) {
+      js_delete_prop(js, value, idxstr, idx_len);
+      continue;
+    }
+    
     ant_value_t key_val = js_mkstr(js, idxstr, idx_len);
-    if (is_err(key_val)) return;
-    if (!json_temp_pin(roots, key_val)) return;
+    if (is_err(key_val)) return key_val;
+    
+    if (!json_temp_pin(roots, key_val)) return json_parse_oom(js);
     js_setprop(js, value, key_val, new_elem);
-  }}
+  }
+  
+  return js_mkundef();
 }
 
-static void apply_reviver_to_object(
-  ant_t *js,
-  ant_value_t value,
-  ant_value_t reviver,
-  gc_temp_root_scope_t *roots
+static ant_value_t apply_reviver_to_object(
+  ant_t *js, ant_value_t value, ant_value_t reviver, gc_temp_root_scope_t *roots
 ) {
   ant_value_t keys = json_snapshot_keys(js, value);
-  if (is_err(keys) || vtype(keys) != kTypeArray) return;
-  if (!json_temp_pin(roots, keys)) return;
+  if (is_err(keys)) return keys;
+  
+  if (vtype(keys) != kTypeArray) return js_mkundef();
+  if (!json_temp_pin(roots, keys)) return json_parse_oom(js);
 
   ant_offset_t key_count = js_arr_len(js, keys);
   for (ant_offset_t i = 0; i < key_count; i++) {
     ant_value_t key_val = js_arr_get(js, keys, i);
     size_t key_len = 0;
+    
     char *key = js_getstr(js, key_val, &key_len);
     if (!key) continue;
+    
     ant_value_t new_val = apply_reviver(js, value, key, reviver, roots);
+    if (is_err(new_val)) return new_val;
+    
     if (vtype(new_val) == kTypeUndefined) js_delete_prop(js, value, key, key_len);
     else js_set(js, value, key, new_val);
   }
+  
+  return js_mkundef();
 }
 
 static ant_value_t apply_reviver(
-  ant_t *js,
-  ant_value_t holder,
-  const char *key,
-  ant_value_t reviver,
-  gc_temp_root_scope_t *roots
+  ant_t *js, ant_value_t holder, const char *key, ant_value_t reviver, gc_temp_root_scope_t *roots
 ) {
+  if (__builtin_expect(sv_check_c_stack_overflow(js), 0)) return Ant_Error_CreateStackOverflow(js);
   ant_value_t val = js_get(js, holder, key);
-  
-  if (is_array_value(val)) apply_reviver_to_array(js, val, reviver, roots);
-  else if (vtype(val) == kTypeObject) apply_reviver_to_object(js, val, reviver, roots);
+  if (is_err(val)) return val;
+
+  ant_value_t walked = js_mkundef();
+  if (is_array_value(val)) walked = apply_reviver_to_array(js, val, reviver, roots);
+  else if (vtype(val) == kTypeObject) walked = apply_reviver_to_object(js, val, reviver, roots);
+  if (is_err(walked)) return walked;
 
   return apply_reviver_call(js, holder, key, reviver, roots);
 }
@@ -1217,15 +1228,18 @@ ant_value_t js_json_parse(ant_params_t) {
       gc_temp_root_scope_end(&temp_roots);
       return json_parse_oom(js);
     }
+    
     ant_value_t root = Ant_Object_CreateBare(js);
     if (is_err(root)) {
       gc_temp_root_scope_end(&temp_roots);
       return root;
     }
+    
     if (!json_temp_pin(&temp_roots, root)) {
       gc_temp_root_scope_end(&temp_roots);
       return json_parse_oom(js);
     }
+    
     js_set(js, root, "", result);
     result = apply_reviver(js, root, "", reviver, &temp_roots);
   }

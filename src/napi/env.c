@@ -1,4 +1,5 @@
 #include "ant.h"
+#include "gc.h"
 #include "errors.h"
 #include "internal.h"
 #include "gc/modules.h"
@@ -129,6 +130,11 @@ void free_napi_module(ant_t *js) {
   js->napi_env = NULL;
 }
 
+static bool napi_ref_weakly_held(ant_value_t value) {
+  uint8_t type = vtype(value);
+  return type == kTypeFunction || type == kTypeSymbol || ((1u << type) & GC_OBJ_TYPE_MASK) != 0;
+}
+
 void gc_mark_napi(ant_t *js, gc_mark_fn mark) {
   ant_napi_env_t *nenv = js->napi_env;
   if (!nenv) return;
@@ -136,8 +142,11 @@ void gc_mark_napi(ant_t *js, gc_mark_fn mark) {
   if (is_err(nenv->exception))
     mark(js, nenv->exception);
 
-  for (struct napi_ref__ *r = nenv->refs; r; r = r->next)
+  for (struct napi_ref__ *r = nenv->refs; r; r = r->next) {
+    ant_value_t weak = (ant_value_t)r->value;
     if (r->refcount > 0) mark(js, r->ref_val);
+    else if (r->value && !napi_ref_weakly_held(weak) && gc_value_is_heap_ref(weak)) mark(js, weak);
+  }
 
   for (struct napi_deferred__ *d = nenv->deferreds; d; d = d->next)
     if (!d->settled) mark(js, d->promise_val);
@@ -148,16 +157,14 @@ void gc_mark_napi(ant_t *js, gc_mark_fn mark) {
     mark(js, nenv->handle_slots[i]);
 }
 
-void gc_clear_napi_weak_refs(ant_t *js, bool minor) {
+void gc_clear_napi_weak_refs(ant_t *js, gc_weak_key_alive_fn alive) {
   ant_napi_env_t *nenv = js->napi_env;
   if (!nenv) return;
 
   for (struct napi_ref__ *r = nenv->refs; r; r = r->next) {
     if (r->refcount > 0 || !r->value) continue;
     ant_value_t value = (ant_value_t)r->value;
-    ant_object_t *obj = is_object_type(value) ? js_obj_ptr(value) : NULL;
-    if (obj && (!minor || obj->flags.generation == 0) && !gc_obj_is_marked(js, obj))
-      r->value = 0;
+    if (napi_ref_weakly_held(value) && !alive(js, value)) r->value = 0;
   }
 }
 

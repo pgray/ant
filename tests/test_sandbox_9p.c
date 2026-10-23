@@ -200,6 +200,51 @@ static void test_tread_refuses_symlink(void) {
   assert(rmdir(outside) == 0);
 }
 
+static void test_twalk_survives_fid_table_growth(void) {
+  char root_template[] = "/tmp/ant-9p-walk.XXXXXX";
+  char *root_tmp = mkdtemp(root_template);
+  assert(root_tmp);
+
+  char root[4096];
+  assert(realpath(root_tmp, root));
+  char dir[4096];
+  int written = snprintf(dir, sizeof(dir), "%s/sub", root);
+  assert(written > 0 && (size_t)written < sizeof(dir));
+  assert(mkdir(dir, 0700) == 0);
+
+  ant_hvf_9p_device_t dev;
+  init_dev(&dev, root);
+  for (uint32_t i = 0; i < ANT_HVF_9P_INITIAL_FID_COUNT; i++) {
+    ant_hvf_9p_fid_t *fid = ant_hvf_9p_fid(&dev, i, true);
+    assert(fid);
+    fid->active = true;
+    snprintf(fid->path, sizeof(fid->path), "%s", i == 0 ? "sub" : "");
+  }
+  assert(dev.fid_count == ANT_HVF_9P_INITIAL_FID_COUNT);
+
+  unsigned char req[17] = {0};
+  ant_hvf_store32(req, sizeof(req));
+  req[4] = P9_TWALK;
+  ant_hvf_store16(req + 5, 9);
+  ant_hvf_store32(req + 7, 0);
+  ant_hvf_store32(req + 11, 4096);
+  ant_hvf_store16(req + 15, 0);
+
+  unsigned char resp[ANT_HVF_9P_MIN_MSIZE] = {0};
+  uint32_t resp_len = ant_hvf_9p_handle(&dev, req, sizeof(req), resp, sizeof(resp));
+  assert(resp_len == 9);
+  assert(resp[4] == P9_RWALK);
+  assert(dev.fid_count > ANT_HVF_9P_INITIAL_FID_COUNT);
+
+  ant_hvf_9p_fid_t *walked = ant_hvf_9p_fid(&dev, 4096, false);
+  assert(walked && walked->active);
+  assert(strcmp(walked->path, "sub") == 0);
+
+  cleanup_dev(&dev);
+  assert(rmdir(dir) == 0);
+  assert(rmdir(root) == 0);
+}
+
 static void test_twrite_count_overflow_is_rejected(void) {
   char root_template[] = "/tmp/ant-9p-write.XXXXXX";
   char *root_tmp = mkdtemp(root_template);
@@ -285,6 +330,7 @@ int main(void) {
   test_tread_count_is_bounded(true);
   test_tread_count_is_bounded(false);
   test_tread_refuses_symlink();
+  test_twalk_survives_fid_table_growth();
   test_twrite_count_overflow_is_rejected();
   test_temp_write_cleanup();
   return 0;

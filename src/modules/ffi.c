@@ -74,6 +74,7 @@ static const ffi_type_info_t ffi_type_table[] = {
 typedef enum {
   FFI_REGION_SIZED = 1u << 0,
   FFI_REGION_OWNED = 1u << 1,
+  FFI_REGION_SOURCED = 1u << 2,
 } ffi_region_flags_t;
 
 typedef struct {
@@ -104,6 +105,7 @@ typedef struct {
   size_t ref_count;
   bool size_known;
   bool owned;
+  bool sourced;
   bool freed;
 } ffi_pointer_region_t;
 
@@ -136,6 +138,7 @@ typedef struct {
   void **owned;
   ffi_type **atypes;
   size_t owned_count;
+  size_t pending;
   void *heap;
   ffi_value_box_t inline_values[FFI_INLINE_ARGS];
   void *inline_avalues[FFI_INLINE_ARGS];
@@ -155,6 +158,10 @@ typedef struct {
 #define FFI_RECEIVER(kind, var)                                   \
   ffi_##kind##_handle_t *var = ffi_##kind##_data(js_getthis(js)); \
   if (!var) return ffi_receiver_error(js, ffi_##kind##_label)
+
+#define FFI_POINTER_RECEIVER(var) \
+  FFI_RECEIVER(pointer, var);     \
+  ffi_pointer_sync(js, js_getthis(js), var)
 
 #define FFI_WRAP(kind, handle) \
   ffi_wrap(js, js->builtins.ffi_##kind##_proto, (handle), ffi_##kind##_tag, ffi_##kind##_finalize)
@@ -372,6 +379,15 @@ static inline uint8_t *ffi_pointer_address_raw(const ffi_pointer_handle_t *handl
   return base ? base + handle->byte_offset : NULL;
 }
 
+static inline void ffi_pointer_sync(ant_t *js, ant_value_t obj, const ffi_pointer_handle_t *handle) {
+  ffi_pointer_region_t *region = handle->region;
+  if (!region->sourced) return;
+
+  const uint8_t *bytes = NULL;
+  buffer_source_get_bytes(js, js_get_slot(obj, SLOT_DATA), &bytes, &region->size);
+  region->ptr = (uint8_t *)bytes;
+}
+
 static ant_value_t ffi_make_pointer(ant_t *js, ffi_pointer_region_t *region, size_t byte_offset) {
   ffi_pointer_handle_t *handle = malloc(sizeof(*handle));
   if (!handle) {
@@ -396,6 +412,7 @@ static ant_value_t ffi_pointer_new(ant_t *js, void *ptr, size_t size, unsigned f
     .size = size,
     .size_known = flags & FFI_REGION_SIZED,
     .owned = flags & FFI_REGION_OWNED,
+    .sourced = flags & FFI_REGION_SOURCED,
   };
 
   return ffi_make_pointer(js, region, 0);
@@ -411,7 +428,13 @@ static ant_value_t ffi_pointer_from_js(ant_t *js, ant_value_t value, void **out)
 
   ffi_pointer_handle_t *pointer = ffi_pointer_data(value);
   if (pointer) {
-    if (pointer->region->freed) return FFI_ERR_TYPE("FFIPointer has been freed");
+    ffi_pointer_sync(js, value, pointer);
+    const ffi_pointer_region_t *region = pointer->region;
+
+    if (region->freed) return FFI_ERR_TYPE("FFIPointer has been freed");
+    if (region->sourced && !region->ptr) return FFI_ERR_TYPE("FFIPointer source buffer is detached");
+    if (region->sourced && pointer->byte_offset > region->size) return FFI_ERR_RANGE("Pointer offset is out of bounds");
+
     *out = ffi_pointer_address_raw(pointer);
     return js_mkundef();
   }
@@ -496,6 +519,7 @@ static ant_value_t ffi_pointer_check(ant_t *js, const ffi_pointer_handle_t *hand
   const ffi_pointer_region_t *region = handle->region;
 
   if (region->freed) return FFI_ERR_TYPE("FFIPointer has been freed");
+  if (!region->ptr && region->sourced) return FFI_ERR_TYPE("FFIPointer source buffer is detached");
   if (!region->ptr) return FFI_ERR_TYPE("Cannot %s through a null pointer", op);
   if (!region->size_known) return js_mkundef();
 
@@ -522,13 +546,17 @@ static ant_value_t ffi_pointer_load(ant_t *js, const ffi_pointer_handle_t *handl
   return js_mkstr(js, addr, (size_t)(nul - addr));
 }
 
-static ant_value_t ffi_pointer_store(ant_t *js, const ffi_pointer_handle_t *handle, ffi_value_type_id_t type, ant_value_t value) {
+static ant_value_t ffi_pointer_store(
+  ant_t *js, ant_value_t obj, const ffi_pointer_handle_t *handle,
+  ffi_value_type_id_t type, ant_value_t value
+) {
   ffi_value_box_t box;
   size_t size = ffi_type_table[type].size;
 
   ant_value_t error = ffi_value_to_c(js, value, type, &box);
   if (is_err(error)) return error;
 
+  ffi_pointer_sync(js, obj, handle);
   error = ffi_pointer_check(js, handle, size, "write");
   if (is_err(error)) return error;
 
@@ -536,7 +564,9 @@ static ant_value_t ffi_pointer_store(ant_t *js, const ffi_pointer_handle_t *hand
   return error;
 }
 
-static ant_value_t ffi_pointer_store_string(ant_t *js, const ffi_pointer_handle_t *handle, ant_value_t value) {
+static ant_value_t ffi_pointer_store_string(
+  ant_t *js, ant_value_t obj, const ffi_pointer_handle_t *handle, ant_value_t value
+) {
   ant_value_t str = js_tostring_val(js, value);
   if (is_err(str)) return str;
 
@@ -544,6 +574,7 @@ static ant_value_t ffi_pointer_store_string(ant_t *js, const ffi_pointer_handle_
   const char *src = js_getstr(js, str, &len);
   if (!src) return FFI_ERR_TYPE("Invalid string value");
 
+  ffi_pointer_sync(js, obj, handle);
   ant_value_t error = ffi_pointer_check(js, handle, len + 1, "write");
   if (is_err(error)) return error;
 
@@ -589,6 +620,7 @@ static ant_value_t ffi_make_function(
 
 static bool ffi_frame_init(ffi_frame_t *frame, size_t argc) {
   frame->owned_count = 0;
+  frame->pending = 0;
   frame->heap = NULL;
 
   if (argc <= FFI_INLINE_ARGS) {
@@ -620,8 +652,13 @@ static ant_value_t ffi_frame_arg(ant_t *js, ffi_frame_t *frame, size_t i, ant_va
   frame->avalues[i] = dst;
   frame->atypes[i] = ffi_type_table[type].ffi;
 
+  if (type == FFI_VALUE_POINTER || (type == FFI_VALUE_STRING && (ffi_pointer_data(value) || ffi_callback_data(value)))) {
+    frame->avalues[i] = NULL;
+    frame->pending++;
+    return js_mkundef();
+  }
+
   if (type != FFI_VALUE_STRING) return ffi_value_to_c(js, value, type, dst);
-  if (ffi_pointer_data(value) || ffi_callback_data(value)) return ffi_pointer_to_c(js, value, dst);
 
   char *copy = NULL;
   ant_value_t error = ffi_copy_js_string(js, value, &copy, NULL);
@@ -675,6 +712,13 @@ ant_value_t ffi_function_call(ant_params_t) {
   for (size_t i = 0; i < argc && !is_err(out); i++) {
     ffi_value_type_id_t type = i < signature->arg_count ? signature->args[i] : ffi_infer_variadic_type(args[i]);
     out = ffi_frame_arg(js, &frame, i, args[i], type);
+  }
+
+  for (size_t i = 0; i < argc && frame.pending && !is_err(out); i++) {
+    if (frame.avalues[i]) continue;
+    frame.avalues[i] = &frame.values[i];
+    frame.pending--;
+    out = ffi_pointer_to_c(js, args[i], &frame.values[i]);
   }
 
   if (!is_err(out)) out = ffi_function_invoke(js, function, &frame, argc);
@@ -862,7 +906,7 @@ static ant_value_t ffi_pointer_value(ant_params_t) {
   size_t len = 0;
 
   if (buffer_source_get_bytes(js, value, &bytes, &len)) {
-    ant_value_t out = ffi_pointer_new(js, (void *)bytes, len, FFI_REGION_SIZED);
+    ant_value_t out = ffi_pointer_new(js, (void *)bytes, len, FFI_REGION_SIZED | FFI_REGION_SOURCED);
     if (!is_err(out)) js_set_slot_wb(js, out, SLOT_DATA, value);
     return out;
   }
@@ -875,17 +919,17 @@ static ant_value_t ffi_pointer_value(ant_params_t) {
 }
 
 ant_value_t ffi_pointer_address(ant_params_t) {
-  FFI_RECEIVER(pointer, handle);
+  FFI_POINTER_RECEIVER(handle);
   return js_mknum((double)(uintptr_t)ffi_pointer_address_raw(handle));
 }
 
 ant_value_t ffi_pointer_is_null(ant_params_t) {
-  FFI_RECEIVER(pointer, handle);
+  FFI_POINTER_RECEIVER(handle);
   return js_bool(ffi_pointer_address_raw(handle) == NULL);
 }
 
 ant_value_t ffi_pointer_read(ant_params_t) {
-  FFI_RECEIVER(pointer, handle);
+  FFI_POINTER_RECEIVER(handle);
 
   ffi_value_type_id_t type = nargs > 0 ? ffi_type_from_value(js, args[0]) : FFI_VALUE_POINTER;
   if (!ffi_type_is_data(type)) return FFI_ERR_TYPE("Unsupported FFIPointer.read() type");
@@ -900,15 +944,16 @@ ant_value_t ffi_pointer_write(ant_params_t) {
   ffi_value_type_id_t type = ffi_type_from_value(js, args[0]);
   if (!ffi_type_is_data(type)) return FFI_ERR_TYPE("Unsupported FFIPointer.write() type");
 
+  ant_value_t self = js_getthis(js);
   ant_value_t error = type == FFI_VALUE_STRING
-    ? ffi_pointer_store_string(js, handle, args[1])
-    : ffi_pointer_store(js, handle, type, args[1]);
+    ? ffi_pointer_store_string(js, self, handle, args[1])
+    : ffi_pointer_store(js, self, handle, type, args[1]);
 
-  return is_err(error) ? error : js_getthis(js);
+  return is_err(error) ? error : self;
 }
 
 ant_value_t ffi_pointer_offset(ant_params_t) {
-  FFI_RECEIVER(pointer, handle);
+  FFI_POINTER_RECEIVER(handle);
   if (nargs < 1 || vtype(args[0]) != kTypeNumber)
     return FFI_ERR_TYPE("FFIPointer.offset(bytes) requires a numeric byte offset");
 

@@ -801,8 +801,8 @@ uint32_t ant_hvf_9p_handle(ant_hvf_9p_device_t *dev,
       fid = ant_hvf_load32(req + 7);
       uint32_t newfid = ant_hvf_load32(req + 11);
       uint16_t nwname = ant_hvf_load16(req + 15);
-      f = ant_hvf_9p_fid(dev, fid, false);
       ant_hvf_9p_fid_t *nf = ant_hvf_9p_fid(dev, newfid, true);
+      f = ant_hvf_9p_fid(dev, fid, false);
       if (!f || !f->active || !nf) return ant_hvf_9p_error(resp, tag, ENOENT);
       char path[ANT_HVF_9P_PATH_MAX];
       snprintf(path, sizeof(path), "%s", f->path);
