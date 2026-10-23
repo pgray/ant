@@ -153,9 +153,9 @@ scheduled.
   - Status: backlog (targeted `RGI_Emoji` false-positive fix exists; complete property-of-strings and Unicode-version conformance remain open)
 
 - Area: `src/modules/regex.c` / remaining RegExp divergences from node
-  - Issue: Remaining node-differential divergences, all pre-existing on the installed release: (1) exec-result `groups` is an accessor property where node has a plain writable/enumerable/configurable data property (affects `Object.getOwnPropertyDescriptor` shape on `exec`/`d`-flag results); (2) legacy statics `RegExp.leftContext`/`rightContext` are undefined after matches (`$1..$9`/`lastMatch` work); (3) `/(?:)/g`-style empty-match iteration over non-BMP text without `u` advances by code point instead of code unit (`'😀'.replace(/(?:)/g, '-')`); (4) `lastIndex` is stored and consumed as a UTF-8 byte offset, so after `/x/g.exec('éx')` it is 3 where node has 2, and a user-assigned `lastIndex` on non-ASCII input starts the search at the wrong position. Fixed 2026-10-22: `$<name>` substitution, the replacer's trailing `groups` argument, and `lastIndex` ToLength coercion (`tests/test_regexp_replace_named_groups.cjs`, `tests/test_regexp_lastindex_coercion.cjs`); `source` normalization, own/subclass `flags`/`exec` dispatch and `lastIndex` accessor redefinition already matched node by then.
-  - Impact: Silent wrong values for code relying on legacy statics, `groups` descriptor shape, empty matches over astral text, or `lastIndex` arithmetic on non-ASCII strings.
-  - Proposed fix: `groups`-as-data-property is a result-shape change (canonical shape already exists — add the slot); leftContext/rightContext extend `update_regexp_statics`; the `lastIndex` unit fix converts between UTF-16 units and byte offsets at the `regexp_exec_internal` read and every `regexp_set_lastindex` write (the result `index` already converts with `byte_offset_to_utf16`), and the empty-match advance must use code units when `u`/`v` is absent.
+  - Issue: Remaining node-differential divergences, all pre-existing on the installed release: (1) exec-result `groups` is an accessor property where node has a plain writable/enumerable/configurable data property (affects `Object.getOwnPropertyDescriptor` shape on `exec`/`d`-flag results); (2) legacy statics `RegExp.leftContext`/`rightContext` are undefined after matches (`$1..$9`/`lastMatch` work); (3) no match can start between the two halves of a surrogate pair, because PCRE2 matches the UTF-8 (WTF-8) bytes and that position has no byte offset: a non-`u` empty-match advance over an astral character, or a user-assigned `lastIndex` pointing at a low surrogate, rounds up to the next code point (`'😀'.matchAll(/(?:)/g)` gives indices `[0,2]`, node `[0,1,2]`; `'😀'.replace(/(?:)/g, '-')` gives `-😀-`). Fixed 2026-10-22 in 929a7f82: `lastIndex`, `index` and `d`-flag `indices` are UTF-16 code units (`tests/test_regexp_utf16_offsets.cjs`). Also fixed 2026-10-22: `$<name>` substitution, the replacer's trailing `groups` argument, and `lastIndex` ToLength coercion (`tests/test_regexp_replace_named_groups.cjs`, `tests/test_regexp_lastindex_coercion.cjs`); `source` normalization, own/subclass `flags`/`exec` dispatch and `lastIndex` accessor redefinition already matched node by then.
+  - Impact: Silent wrong values for code relying on legacy statics, `groups` descriptor shape, or non-`u` empty matches and `lastIndex` positions inside astral characters.
+  - Proposed fix: `groups`-as-data-property is a result-shape change (canonical shape already exists — add the slot); leftContext/rightContext extend `update_regexp_statics`. (3) needs matching that can start inside a surrogate pair: either a UTF-16 subject for non-`u` patterns that can match a lone surrogate or the empty string, or a PCRE2 16-bit code path; decide only if a real workload hits it.
   - Owner: theMackabu
   - Status: backlog
 
@@ -200,3 +200,35 @@ scheduled.
   - Validation: Node differential for matching and mismatching keys, nested objects, RegExp values, Error instances as `expected`, non-object thrown values, the empty object, and the custom-message argument, for both `throws` and `rejects`. Run every test that passes an object as `expected` and fix any expectation that turns out to be wrong instead of loosening the check.
   - Owner: theMackabu
   - Status: backlog (2026-10-21; RegExp and `rejects` matching landed first)
+
+- Area: ESM loader linking and evaluation (`src/esm/`, compiler and VM module ops, `esm/hooks.c`)
+  - Issue: Linking and evaluation do not follow ECMA-262 §16.2.1.5-6. Re-exports (`export { v } from`, `export *`, diamonds) copy values instead of forwarding live bindings; `export default <expr>` is not a binding (reading it before the body runs gives TypeError instead of ReferenceError, anonymous defaults get `.name === ""`); a hoisted function exported from a module in a cycle is not callable before its body runs; importing a missing or ambiguous (two `export *` origins) name is accepted and module bodies run anyway; `export *` re-exports `default`; namespace properties report `configurable: true`; namespace keys are not sorted. Link failures are not cached, and top-level-await ordering, cycle promises and `import()` of a module on the evaluation stack are not spec-ordered.
+  - Impact: Code depending on live bindings through barrels or re-exports sees stale values; cyclic module graphs crash with "undefined is not a function"; typos in import names surface as `undefined` at use sites instead of a SyntaxError before anything runs.
+  - Proposed fix: Implement Link (instantiate every module's environment, install hoisted functions, resolve and validate every import, all before any body runs) and Evaluate (DFS post-order, strongly connected components as one unit, async-dependency counting for TLA) per the spec, with resolved bindings forwarding to the origin module's slot. Keep link cost linear in modules plus exports. May land as a series of commits, but as one fix. Do not port code from `solsahar:ant` `@solsahar/runtime-fixes`.
+  - Validation: Repro graphs for live re-exports, default TDZ, cycles with hoisted functions, missing/ambiguous imports with a side effect in every body, failed-module caching and concurrent dynamic imports, namespace descriptors and key order; full `examples/spec` and every `.mjs` test. Benchmark a synthetic 5,000-module, 20-export graph before and after.
+  - Owner: theMackabu
+  - Status: backlog (2026-10-22; handoff doc `09-module-linking.md` in the 2026-09-15 runtime-fixes handoff, repros verified on 929a7f82)
+
+- Area: `for...in` enumeration of keys deleted during the loop (`src/silver/compiler.c` `compile_for_in`, `OP_FOR_IN`, JIT)
+  - Issue: `for...in` compiles to a snapshot of keys plus an index loop, so a key deleted before the loop reaches it is still visited. Affects own properties (`delete o.b` while visiting `a` still yields `b`), array indices past a shrunk `length`, typed-array indices after the buffer is detached, and inherited keys deleted from the prototype. ECMA-262 §14.7.5.9 requires deleted, not-yet-visited properties to be skipped.
+  - Impact: Loops that prune an object while iterating it process stale keys, and reads of those keys return `undefined`.
+  - Proposed fix: A for-in step operation that skips keys no longer present, with a cheap "object unchanged since the snapshot" check so unmodified plain objects and arrays don't pay a lookup per key; supported in the interpreter and the JIT. Proxies keep their current trap order.
+  - Validation: Node differential for own, array, typed-array (detach mid-loop) and inherited cases in interpreter and JIT-compiled code; benchmark `tests/bench_forin_object_keys.js`, a 100-element array and a 20-property object loop before and after. When it lands, add the detach-during-`for...in` case back to `tests/test_typedarray_index_properties.cjs`.
+  - Owner: theMackabu
+  - Status: backlog (2026-10-22; found while closing handoff item 12, deferred by user)
+
+- Area: `src/modules/regex.c` / `d`-flag `indices` cost on non-ASCII subjects
+  - Issue: Every capture's start and end is converted from a byte offset to UTF-16 units when building `indices`. Captures before the match start (lookbehind) fall back to `byte_offset_to_utf16`, which goes through the thread-local scan cursor.
+  - Impact: `/.../dg` exec loops on non-ASCII text cost +3.3% instructions vs 16f2cca5 (which reported wrong byte offsets). ASCII subjects are unaffected (-1.1%).
+  - Proposed fix: Convert all capture offsets in one pass: sort the 2×ovcount offsets, walk forward once from the match-start anchor counting UTF-16 units, and scatter the results back; or count lazily only for captures that participated.
+  - Validation: Instructions-retired A/B against 16f2cca5 built in the same build dir, for a `/w(or)d/dg` exec loop over 1 MB ASCII and non-ASCII strings, plus `tests/test_regexp_utf16_offsets.cjs` and a node differential with lookbehind captures over mixed-width text.
+  - Owner: theMackabu
+  - Status: backlog (2026-10-22)
+
+- Area: startup instruction count after the 2026-10-22 runtime-fix and perf commits
+  - Issue: `console.log(1)` retires about 0.15M more instructions (+0.3%) than 16f2cca5, consistently across same-build-dir runs. Not yet attributed to a change.
+  - Impact: Small fixed cost per process start; matters only for short-lived CLI invocations.
+  - Proposed fix: Bisect the four edited files in the baseline worktree (apply each file's diff alone, rebuild, compare `instructions retired` for a hello-world, min of 5 runs), then look at what that file runs at init.
+  - Validation: hello-world instruction count back within noise (±0.1M) of 16f2cca5.
+  - Owner: theMackabu
+  - Status: backlog (2026-10-22)
