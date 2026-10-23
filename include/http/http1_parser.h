@@ -38,7 +38,10 @@ typedef struct {
   size_t body_span_len;
   size_t header_bytes;
   size_t header_limit;
+  size_t body_bytes;
+  size_t body_limit;
   bool header_overflow;
+  bool body_overflow;
   bool headers_complete;
   bool message_complete;
   bool stream_body;

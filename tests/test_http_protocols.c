@@ -3,7 +3,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "esm/remote.h"
 #include "http/eventsource.h"
+#include "http/http1_parser.h"
 #include "http/websocket.h"
 
 static int failures = 0;
@@ -50,7 +52,7 @@ static void test_websocket_frames(void) {
   size_t frame_len = 0;
   uint8_t *encoded = ant_ws_encode_frame(ANT_WS_OPCODE_TEXT, hello, 5, true, false, &frame_len);
   check_bool("websocket masked encode", encoded != NULL, true);
-  check_bool("websocket masked parse", ant_ws_parse_frame(encoded, frame_len, true, false, false, &frame) == ANT_WS_FRAME_OK, true);
+  check_bool("websocket masked parse", ant_ws_parse_frame(encoded, frame_len, true, false, false, SIZE_MAX, &frame) == ANT_WS_FRAME_OK, true);
   check_bool("websocket parsed masked flag", frame.masked, true);
   check_bool("websocket parsed text opcode", frame.opcode == ANT_WS_OPCODE_TEXT, true);
   check_str("websocket parsed text payload", (const char *)frame.payload, "hello");
@@ -59,7 +61,7 @@ static void test_websocket_frames(void) {
 
   encoded = ant_ws_encode_close_frame(1001, "bye", false, &frame_len);
   check_bool("websocket close encode", encoded != NULL, true);
-  check_bool("websocket close parse", ant_ws_parse_frame(encoded, frame_len, false, false, false, &frame) == ANT_WS_FRAME_OK, true);
+  check_bool("websocket close parse", ant_ws_parse_frame(encoded, frame_len, false, false, false, SIZE_MAX, &frame) == ANT_WS_FRAME_OK, true);
   check_bool("websocket close opcode", frame.opcode == ANT_WS_OPCODE_CLOSE, true);
   check_size("websocket close payload length", frame.payload_len, 5);
   check_bool("websocket close code", frame.payload[0] == 0x03 && frame.payload[1] == 0xe9, true);
@@ -68,15 +70,15 @@ static void test_websocket_frames(void) {
   free(encoded);
 
   uint8_t unmasked[] = { 0x89, 0x01, 'x' };
-  check_bool("websocket unmasked client frame rejected", ant_ws_parse_frame(unmasked, sizeof(unmasked), true, false, false, &frame) == ANT_WS_FRAME_PROTOCOL_ERROR, true);
+  check_bool("websocket unmasked client frame rejected", ant_ws_parse_frame(unmasked, sizeof(unmasked), true, false, false, SIZE_MAX, &frame) == ANT_WS_FRAME_PROTOCOL_ERROR, true);
 
   uint8_t first[] = { 0x01, 0x02, 'h', 'i' };
   uint8_t continuation[] = { 0x80, 0x01, '!' };
-  check_bool("websocket fragmented first frame", ant_ws_parse_frame(first, sizeof(first), false, false, false, &frame) == ANT_WS_FRAME_OK, true);
+  check_bool("websocket fragmented first frame", ant_ws_parse_frame(first, sizeof(first), false, false, false, SIZE_MAX, &frame) == ANT_WS_FRAME_OK, true);
   check_bool("websocket fragmented first fin", frame.fin, false);
   check_bool("websocket fragmented first opcode", frame.opcode == ANT_WS_OPCODE_TEXT, true);
   ant_ws_frame_clear(&frame);
-  check_bool("websocket continuation frame", ant_ws_parse_frame(continuation, sizeof(continuation), false, false, false, &frame) == ANT_WS_FRAME_OK, true);
+  check_bool("websocket continuation frame", ant_ws_parse_frame(continuation, sizeof(continuation), false, false, false, SIZE_MAX, &frame) == ANT_WS_FRAME_OK, true);
   check_bool("websocket continuation opcode", frame.opcode == ANT_WS_OPCODE_CONTINUATION, true);
   ant_ws_frame_clear(&frame);
 }
@@ -122,9 +124,62 @@ static void test_eventsource_format_and_parse(void) {
   ant_sse_parser_free(&parser);
 }
 
+static void test_websocket_frame_limit(void) {
+  uint8_t header[] = { 0x82, 0xff, 0, 0, 0, 0, 0, 0x10, 0, 0, 0x01, 0x02, 0x03, 0x04 };
+  ant_ws_frame_t frame = {0};
+  check_bool("websocket oversize frame rejected from its header",
+             ant_ws_parse_frame(header, 10, true, false, true, 1024, &frame) == ANT_WS_FRAME_TOO_BIG, true);
+  check_bool("websocket frame within limit waits for payload",
+             ant_ws_parse_frame(header, sizeof(header), true, false, true, 2u * 1024u * 1024u, &frame) == ANT_WS_FRAME_INCOMPLETE, true);
+}
+
+static ant_http1_parse_result_t parse_with_body_limit(const char *raw, size_t limit, bool *overflow) {
+  ant_http1_conn_parser_t cp;
+  ant_http1_parsed_request_t req = {0};
+  size_t consumed = 0;
+  ant_http1_conn_parser_init(&cp);
+  cp.ctx.body_limit = limit;
+  ant_http1_parse_result_t result = ant_http1_conn_parser_execute(&cp, raw, strlen(raw), &req, &consumed);
+  *overflow = cp.ctx.body_overflow;
+  ant_http1_free_parsed_request(&req);
+  ant_http1_conn_parser_free(&cp);
+  return result;
+}
+
+static void test_http1_body_limit(void) {
+  bool overflow = false;
+  const char *declared = "POST / HTTP/1.1\r\nHost: x\r\nContent-Length: 100000000000\r\n\r\n";
+  check_bool("http1 oversize content-length rejected before body",
+             parse_with_body_limit(declared, 1024, &overflow) == ANT_HTTP1_PARSE_ERROR && overflow, true);
+
+  const char *chunked = "POST / HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n8\r\n12345678\r\n8\r\n12345678\r\n";
+  check_bool("http1 oversize chunked body rejected",
+             parse_with_body_limit(chunked, 12, &overflow) == ANT_HTTP1_PARSE_ERROR && overflow, true);
+
+  const char *small = "POST / HTTP/1.1\r\nHost: x\r\nContent-Length: 4\r\n\r\nabcd";
+  check_bool("http1 body within limit parses",
+             parse_with_body_limit(small, 4, &overflow) == ANT_HTTP1_PARSE_OK && !overflow, true);
+  check_bool("http1 zero body limit is unlimited",
+             parse_with_body_limit(declared, 0, &overflow) == ANT_HTTP1_PARSE_INCOMPLETE && !overflow, true);
+}
+
+static void test_remote_esm_downgrade(void) {
+  char *same = esm_resolve(NULL, "./dep.js", "https://example.com/mod.js", NULL);
+  check_str("https module resolves https dependency", same, "https://example.com/dep.js");
+  free(same);
+  check_bool("https module cannot import http",
+             esm_resolve(NULL, "http://example.com/dep.js", "https://example.com/mod.js", NULL) == NULL, true);
+  char *plain = esm_resolve(NULL, "http://example.com/dep.js", "http://example.com/mod.js", NULL);
+  check_str("http module may import http", plain, "http://example.com/dep.js");
+  free(plain);
+}
+
 int main(void) {
   test_websocket_handshake();
   test_websocket_frames();
+  test_websocket_frame_limit();
+  test_http1_body_limit();
+  test_remote_esm_downgrade();
   test_eventsource_format_and_parse();
 
   if (failures) {

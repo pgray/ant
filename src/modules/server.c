@@ -100,6 +100,8 @@ struct server_conn_state_s {
   server_request_t *active_req;
   ant_value_t websocket_obj;
   
+  uint64_t request_start_ms;
+  bool request_started;
   bool drain_timer_closed;
   bool drain_scheduled;
 };
@@ -126,6 +128,7 @@ struct server_runtime_s {
   uint64_t idle_timeout_ms;
   uint64_t websocket_idle_timeout_ms;
   size_t websocket_max_payload_len;
+  size_t max_request_body_size;
   
   int port;
   uint32_t generation;
@@ -1480,14 +1483,12 @@ static ant_value_t server_reload(ant_params_t) {
   ant_value_t fetch = 0;
 
   if (!server || server->stopping) return js_mkerr(js, "server is not running");
-  if (nargs < 1 || !is_object_type(args[0])) {
+  if (nargs < 1 || !is_object_type(args[0]))
     return js_mkerr_typed(js, JS_ERR_TYPE, "server reload options must be an object");
-  }
 
   fetch = js_get(js, args[0], "fetch");
-  if (!is_callable(fetch)) {
+  if (!is_callable(fetch))
     return js_mkerr_typed(js, JS_ERR_TYPE, "server reload fetch must be a function");
-  }
 
   server->export_obj = args[0];
   server->fetch_fn = fetch;
@@ -1496,9 +1497,7 @@ static ant_value_t server_reload(ant_params_t) {
 }
 
 static void server_process_client_request(
-  ant_conn_t *conn,
-  ant_http1_parsed_request_t *parsed,
-  size_t consumed_len
+  ant_conn_t *conn, ant_http1_parsed_request_t *parsed, size_t consumed_len
 ) {
   server_conn_state_t *cs = (server_conn_state_t *)ant_conn_get_user_data(conn);
   server_runtime_t *server = cs ? cs->server : NULL;
@@ -1508,6 +1507,7 @@ static void server_process_client_request(
   ant_value_t headers = 0;
   ant_value_t request_obj = 0;
   ant_value_t result = 0;
+  
   ant_http_header_t *raw_headers = NULL;
   bool keep_alive = false;
   bool capture_network = false;
@@ -1522,9 +1522,11 @@ static void server_process_client_request(
   req = &cs->request;
   keep_alive = parsed->keep_alive;
   capture_network = ant_inspector_network_active();
+  
   raw_headers = capture_network
     ? server_copy_raw_headers(parsed->headers)
     : NULL;
+  
   if (capture_network && parsed->headers && !raw_headers) {
     ant_http1_free_parsed_request(parsed);
     server_send_internal_error(conn, NULL);
@@ -1555,6 +1557,7 @@ static void server_process_client_request(
     parsed->body_len,
     parsed->content_type
   );
+  
   ant_http1_free_parsed_request(parsed);
 
   if (is_err(request_obj)) {
@@ -1587,6 +1590,7 @@ static void server_process_client_request(
 static void server_on_read(ant_conn_t *conn, ssize_t nread, void *user_data) {
   server_conn_state_t *cs = (server_conn_state_t *)ant_conn_get_user_data(conn);
   ant_http1_parsed_request_t parsed = {0};
+  
   ant_http1_parse_result_t parse_result = ANT_HTTP1_PARSE_INCOMPLETE;
   size_t consumed = 0;
 
@@ -1595,27 +1599,39 @@ static void server_on_read(ant_conn_t *conn, ssize_t nread, void *user_data) {
     ant_websocket_server_on_read(cs->server->js, cs->websocket_obj, conn);
     return;
   }
+  
   if (cs->active_req) return;
   if (ant_conn_buffer_len(conn) == 0) return;
 
-  ant_conn_set_timeout_ms(conn, cs->server->request_timeout_ms);
+  uint64_t now = uv_now(cs->server->loop);
+  if (!cs->request_started) {
+    cs->request_started = true;
+    cs->request_start_ms = now;
+  }
+  
+  uint64_t limit = cs->server->request_timeout_ms;
+  uint64_t elapsed = now - cs->request_start_ms;
+  
+  ant_conn_set_timeout_ms(conn, limit == 0 ? 0 : elapsed >= limit ? 1 : limit - elapsed);
   parse_result = ant_http1_conn_parser_execute(
     &cs->parser,
     ant_conn_buffer(conn),
     ant_conn_buffer_len(conn),
-    &parsed,
-    &consumed
+    &parsed, &consumed
   );
   
   if (parse_result == ANT_HTTP1_PARSE_ERROR) {
     ant_http1_free_parsed_request(&parsed);
     if (cs->parser.ctx.header_overflow)
       server_send_text_response(conn, 431, "Request Header Fields Too Large", "Request Header Fields Too Large");
+    else if (cs->parser.ctx.body_overflow)
+      server_send_text_response(conn, 413, "Content Too Large", "Content Too Large");
     else server_send_text_response(conn, 400, "Bad Request", "Bad Request");
     return;
   }
 
   if (parse_result != ANT_HTTP1_PARSE_OK) return;
+  cs->request_started = false;
   server_process_client_request(conn, &parsed, consumed);
 }
 
@@ -1634,17 +1650,22 @@ static void server_on_conn_close(ant_conn_t *conn, void *user_data) {
       ant_websocket_server_on_close(server ? server->js : NULL, cs->websocket_obj);
       cs->websocket_obj = js_mkundef();
     } else ant_http1_conn_parser_free(&cs->parser);
+    
     if (!uv_is_closing((uv_handle_t *)&cs->drain_timer))
       uv_close((uv_handle_t *)&cs->drain_timer, server_on_drain_timer_close);
+    
     if (cs->active_req) {
       server_abort_request(cs->active_req, "Client disconnected");
       server_cancel_response_body(cs->active_req, "Client disconnected");
+      
       cs->active_req->conn = NULL;
       cs->active_req = NULL;
+      
       if (server && server->js->destroying) cs->request.refs = 1;
       server_request_release(&cs->request);
       cs = NULL;
     }
+    
     if (cs) server_conn_state_maybe_free(cs);
   }
 
@@ -1715,6 +1736,7 @@ static void server_on_accept(ant_listener_t *listener, ant_conn_t *conn, void *u
   cs->drain_timer.data = cs;
   cs->drain_timer_closed = false;
   ant_http1_conn_parser_init(&cs->parser);
+  cs->parser.ctx.body_limit = server->max_request_body_size;
   ant_conn_set_user_data(conn, cs);
   ant_conn_set_no_delay(conn, true);
 }
@@ -1776,6 +1798,7 @@ static ant_value_t server_reload_in_place(server_runtime_t *server, server_runti
   server->websocket_idle_timeout_ms = next->websocket_idle_timeout_ms;
   server->websocket_max_payload_len = next->websocket_max_payload_len;
   server->websocket_per_message_deflate = next->websocket_per_message_deflate;
+  server->max_request_body_size = next->max_request_body_size;
 
   free(next->unix_path);
   free(next->hostname);
@@ -1821,6 +1844,7 @@ ant_value_t server_start_from_export(ant_t *js, ant_value_t default_export) {
   ant_value_t hostname_v = 0;
   ant_value_t idle_timeout_v = 0;
   ant_value_t request_timeout_v = 0;
+  ant_value_t max_body_v = 0;
   ant_value_t websocket_v = 0;
   ant_value_t unix_v = 0;
   ant_value_t tls_v = 0;
@@ -1844,6 +1868,7 @@ ant_value_t server_start_from_export(ant_t *js, ant_value_t default_export) {
     .idle_timeout_ms = 30000,
     .websocket_idle_timeout_ms = 120000,
     .websocket_max_payload_len = 16u * 1024u * 1024u,
+    .max_request_body_size = 128u * 1024u * 1024u,
     .loop = js->loop,
     .generation = ant_watch_generation(js),
   };
@@ -1882,6 +1907,7 @@ ant_value_t server_start_from_export(ant_t *js, ant_value_t default_export) {
   hostname_v = js_get(js, default_export, "hostname");
   idle_timeout_v = js_get(js, default_export, "idleTimeout");
   request_timeout_v = js_get(js, default_export, "requestTimeout");
+  max_body_v = js_get(js, default_export, "maxRequestBodySize");
   websocket_v = js_get(js, default_export, "websocket");
 
   if (vtype(port_v) != kTypeUndefined && vtype(port_v) != kTypeNull) {
@@ -1953,8 +1979,18 @@ ant_value_t server_start_from_export(ant_t *js, ant_value_t default_export) {
       free(server);
       return js_mkerr_typed(js, JS_ERR_RANGE, "server requestTimeout must be >= 0");
     }
-    
     server->request_timeout_ms = (uint64_t)(timeout * 1000.0);
+  }
+
+  if (vtype(max_body_v) != kTypeUndefined && vtype(max_body_v) != kTypeNull) {
+    double max_body = vtype(max_body_v) == kTypeNumber ? js_getnum(max_body_v) : 0;
+    if (!(max_body >= 1)) {
+      free(server->unix_path);
+      free(server->hostname);
+      free(server);
+      return js_mkerr_typed(js, JS_ERR_RANGE, "server maxRequestBodySize must be a number > 0");
+    }
+    server->max_request_body_size = max_body >= (double)SIZE_MAX ? SIZE_MAX : (size_t)max_body;
   }
 
   if (vtype(websocket_v) != kTypeUndefined && vtype(websocket_v) != kTypeNull) {

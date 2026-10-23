@@ -151,6 +151,7 @@ ant_ws_frame_result_t ant_ws_parse_frame(
   bool require_mask,
   bool allow_rsv1,
   bool inplace,
+  size_t max_payload,
   ant_ws_frame_t *out
 ) {
   size_t pos = 2;
@@ -184,6 +185,7 @@ ant_ws_frame_result_t ant_ws_parse_frame(
   }
 
   if (payload_len > SIZE_MAX) return ANT_WS_FRAME_PROTOCOL_ERROR;
+  if (payload_len > max_payload) return ANT_WS_FRAME_TOO_BIG;
   
   if (masked) {
     if (len < pos + 4) return ANT_WS_FRAME_INCOMPLETE;

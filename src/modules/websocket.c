@@ -782,13 +782,20 @@ void ant_websocket_server_on_read(ant_t *js, ant_value_t socket_obj, ant_conn_t 
   while (ant_conn_buffer_len(conn) > 0) {
     ant_ws_frame_t frame = {0};
     
+    size_t budget = ws->fragmenting ? ws->max_payload_len - ws->fragment_len : ws->max_payload_len;
     ant_ws_frame_result_t result = ant_ws_parse_frame(
       (uint8_t *)(uintptr_t)ant_conn_buffer(conn),
       ant_conn_buffer_len(conn), true,
-      ws->per_message_deflate, true, &frame
+      ws->per_message_deflate, true, budget, &frame
     );
     
     if (result == ANT_WS_FRAME_INCOMPLETE) return;
+    
+    if (result == ANT_WS_FRAME_TOO_BIG) {
+      websocket_fragment_clear(ws);
+      websocket_server_close_with_code(ws, conn, 1009, "Message Too Big");
+      return;
+    }
     
     if (result == ANT_WS_FRAME_PROTOCOL_ERROR) {
       websocket_emit_simple(js, ws, WS_HANDLER_ERROR);

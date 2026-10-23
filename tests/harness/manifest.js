@@ -327,6 +327,7 @@ export function targets() {
     'test_return_for_of_close.cjs',
     'test_rope_large_property_concat.cjs',
     'test_server_graceful_stop.cjs',
+    'test_server_request_limits.cjs',
     'test_spawn_sync_stdin_pump.cjs',
     'test_spread_memory_pressure.cjs',
     'test_startup_time.cjs',

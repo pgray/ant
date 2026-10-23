@@ -120,16 +120,18 @@ static void esm_url_fetch_body_cb(tlsuv_http_req_t *http_req, char *body, ssize_
     return;
   }
 
-  if (ctx->size + (size_t)len > ctx->capacity) {
+  if (ctx->size + (size_t)len >= ctx->capacity) {
     size_t new_cap = ctx->capacity * 2;
-    while (new_cap < ctx->size + (size_t)len) new_cap *= 2;
+    while (new_cap <= ctx->size + (size_t)len) new_cap *= 2;
     char *new_data = realloc(ctx->data, new_cap);
+    
     if (!new_data) {
       ctx->failed = 1;
       ctx->error_msg = strdup("Out of memory");
       tlsuv_http_close(&ctx->http_client, esm_url_fetch_close_cb);
       return;
     }
+    
     ctx->data = new_data;
     ctx->capacity = new_cap;
   }
@@ -307,20 +309,16 @@ char *esm_fetch_url(ant_t *js, const char *url, size_t *out_len, char **out_erro
   ctx.http_req->data = &ctx;
   while (!ctx.completed) ant_uv_run(loop, UV_RUN_ONCE);
 
-  if (ctx.failed || ctx.status_code < 200 || ctx.status_code >= 400) {
-    if (out_error) {
-      if (ctx.error_msg) {
-        *out_error = ctx.error_msg;
-        ctx.error_msg = NULL;
-      } else {
-        char err_buf[64];
-        snprintf(err_buf, sizeof(err_buf), "HTTP error: %d", ctx.status_code);
-        *out_error = strdup(err_buf);
-      }
-    }
+  if (ctx.failed || ctx.status_code < 200 || ctx.status_code >= 300) {
+    char err_buf[64];
+    snprintf(err_buf, sizeof(err_buf), "HTTP error: %d", ctx.status_code);
+    
+    if (out_error) *out_error = ctx.error_msg ? ctx.error_msg : strdup(err_buf);
+    else free(ctx.error_msg);
+    
     free(ctx.data);
-    if (ctx.error_msg) free(ctx.error_msg);
-    if (cache_path) free(cache_path);
+    free(cache_path);
+    
     return NULL;
   }
 
@@ -406,6 +404,16 @@ char *esm_resolve_url(const char *specifier, const char *base_url) {
 
 char *esm_resolve(ant_t *js, const char *specifier, const char *base_path, char FILE_RESOLVER) {
   if (esm_is_data_url(specifier)) return strdup(specifier);
-  if (esm_is_url(specifier) || esm_is_url(base_path)) return esm_resolve_url(specifier, base_path);
+  
+  if (esm_is_url(specifier) || esm_is_url(base_path)) {
+    char *resolved = esm_resolve_url(specifier, base_path);
+    if (resolved && base_path && strncmp(base_path, "https://", 8) == 0 && strncmp(resolved, "http://", 7) == 0) {
+      free(resolved);
+      return NULL;
+    }
+    
+    return resolved;
+  }
+  
   return file_resolver(js, specifier, base_path);
 }

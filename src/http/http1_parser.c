@@ -177,16 +177,31 @@ static int parser_on_header_value_complete(llhttp_t *parser) {
   return parser_copy_header(ctx) ? 0 : -1;
 }
 
+static bool parser_charge_body_bytes(parser_ctx_t *ctx, size_t length) {
+  if (ctx->body_limit == 0) return true;
+  if (length <= ctx->body_limit - ctx->body_bytes) {
+    ctx->body_bytes += length;
+    return true;
+  }
+  ctx->body_overflow = true;
+  return false;
+}
+
 static int parser_on_headers_complete(llhttp_t *parser) {
   parser_ctx_t *ctx = (parser_ctx_t *)parser->data;
   if (ctx->header_field.len > 0 || ctx->header_value.len > 0)
     if (!parser_copy_header(ctx)) return -1;
+  if (ctx->body_limit != 0 && (parser->flags & F_CONTENT_LENGTH) && parser->content_length > ctx->body_limit) {
+    ctx->body_overflow = true;
+    return -1;
+  }
   ctx->headers_complete = true;
   return 0;
 }
 
 static int parser_on_body(llhttp_t *parser, const char *at, size_t length) {
   parser_ctx_t *ctx = (parser_ctx_t *)parser->data;
+  if (!parser_charge_body_bytes(ctx, length)) return -1;
   if (ctx->stream_body && ctx->body.len == 0) {
     if (!ctx->body_span) {
       ctx->body_span = at;
@@ -338,9 +353,11 @@ void ant_http1_conn_parser_reset(ant_http1_conn_parser_t *cp) {
   char *header_value_data = cp->ctx.header_value.data;
   size_t header_value_cap = cp->ctx.header_value.cap;
   size_t header_limit = cp->ctx.header_limit;
+  size_t body_limit = cp->ctx.body_limit;
   memset(&cp->ctx, 0, sizeof(cp->ctx));
   
   cp->ctx.header_limit = header_limit;
+  cp->ctx.body_limit = body_limit;
   cp->ctx.header_field.data = header_field_data;
   cp->ctx.header_field.cap = header_field_cap;
   cp->ctx.header_value.data = header_value_data;

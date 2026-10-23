@@ -22,6 +22,7 @@ typedef enum {
   ANT_WS_FRAME_INCOMPLETE = 0,
   ANT_WS_FRAME_OK,
   ANT_WS_FRAME_PROTOCOL_ERROR,
+  ANT_WS_FRAME_TOO_BIG,
 } ant_ws_frame_result_t;
 
 typedef struct {
@@ -51,6 +52,7 @@ ant_ws_frame_result_t ant_ws_parse_frame(
   bool require_mask,
   bool allow_rsv1,
   bool inplace,
+  size_t max_payload,
   ant_ws_frame_t *out
 );
 
