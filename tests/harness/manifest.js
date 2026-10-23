@@ -286,6 +286,7 @@ export function targets() {
     'test_object_spread_sources.cjs',
     'test_object_values_entries_semantics.cjs',
     'test_perf_hooks_eld.mjs',
+    'test_pkg_lifecycle_trust_identity.cjs',
     'test_plain_object_index_access.cjs',
     'test_poly_field_ic.cjs',
     'test_poly_field_store.cjs',

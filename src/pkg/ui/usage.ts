@@ -59,15 +59,6 @@ Options
   --verbose            print debug messages
   -h, --help           show help
 
-Notes
-  Dependency lifecycle scripts run only for trustedDependencies; ant trust adds
-  packages there and runs their scripts. ant.lockb is read once and replaced by
-  ant.lock. update with no names resolves everything again; with names it moves
-  them to their newest allowed versions. A package with no dependencies, scripts
-  or native binaries that imports nothing undeclared is kept once in the store
-  and symlinked; set install.sharedLeaves off when a tool needs every file
-  inside the project.
-
 Config
 ${keys}
   File: ${configPath()}

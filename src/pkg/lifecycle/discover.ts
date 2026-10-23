@@ -1,3 +1,4 @@
+import { fromLockfile } from 'upm/src/lock.ts';
 import { STATE_FILE } from 'upm/src/state.ts';
 
 import fs from 'node:fs';
@@ -12,12 +13,14 @@ import type { Manifest } from '../project.ts';
 export const MARKER = '.postinstall';
 const MARKER_HEADER = 'ant lifecycle v1';
 const CACHE = '.ant-lifecycle.json';
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 const SCRIPTS = ['preinstall', 'install', 'postinstall'] as const;
 const SKIPPED = new Set(['esbuild']);
 
 export interface Pending {
   name: string;
+  slot: string;
+  trust: string;
   version: string;
   dir: string;
   modules: string;
@@ -70,19 +73,29 @@ function installOrder(lock: Lockfile): string[] {
   return order;
 }
 
+function directKeys(lock: Lockfile): Set<string> {
+  const tops = [lock.root.dependencies, ...Object.values(lock.workspaces ?? {}).flatMap(ws => [ws.dependencies, ws.optionalDependencies])];
+  return new Set(tops.flatMap(edges => Object.entries(edges ?? {}).map(([name, version]) => `${name}@${version}`)));
+}
+
 function scan(root: string): Pending[] {
   const lock = readLock(root);
   if (!lock) return [];
+  const resolved = fromLockfile(lock).packages;
+  const direct = directKeys(lock);
   const entries = storeEntries(root);
   const candidates: Pending[] = [];
   for (const key of installOrder(lock)) {
-    const { name, version } = lockedEntry(lock, key);
+    const { name: slot, version } = lockedEntry(lock, key);
+    const pkg = resolved[key];
+    const name = pkg?.fetchName ?? slot;
     if (SKIPPED.has(name)) continue;
-    for (const entry of entries.get(`${name}@${version}`) ?? []) {
+    const trust = pkg?.source === undefined || direct.has(key) ? name : key;
+    for (const entry of entries.get(`${slot}@${version}`) ?? []) {
       const manifest = readJson<Manifest>(path.join(entry.dir, 'package.json'));
       if (!manifest) continue;
       const scripts = buildScripts(manifest, () => fs.existsSync(path.join(entry.dir, 'binding.gyp')));
-      if (scripts.length > 0) candidates.push({ name, version, dir: entry.dir, modules: entry.modules, scripts });
+      if (scripts.length > 0) candidates.push({ name, slot, trust, version, dir: entry.dir, modules: entry.modules, scripts });
     }
   }
   return candidates;
@@ -98,6 +111,10 @@ export function discover(root: string): Pending[] {
     if (hash) writeJson(path.join(modules, CACHE), { version: CACHE_VERSION, hash, root, candidates } satisfies Cached);
   }
   return candidates.filter(pkg => !ran(pkg));
+}
+
+export function trustLabel(pkg: Pending): string {
+  return pkg.slot === pkg.name ? pkg.trust : `${pkg.trust} (as ${pkg.slot})`;
 }
 
 export function scriptLine(pkg: Pending): string {

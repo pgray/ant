@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { parseArgs } from '../args.ts';
-import { discover, scriptLine } from '../lifecycle/discover.ts';
+import { discover, scriptLine, trustLabel } from '../lifecycle/discover.ts';
 import { runLifecycle } from '../lifecycle/run.ts';
 import { readManifest, writeJson } from '../project.ts';
 import { projectRoot } from '../session.ts';
@@ -26,14 +26,14 @@ export async function trust(args: string[], session: Session): Promise<number> {
   }
 
   if (!all && names.length === 0) {
-    out(list(pending.map(pkg => [pkg.name, scriptLine(pkg)])));
+    out(list(pending.map(pkg => [trustLabel(pkg), scriptLine(pkg)])));
     note('run `ant trust <name>` or `ant trust --all` to run them');
     return 0;
   }
 
   const wanted = new Set(names);
-  const chosen = all ? pending : pending.filter(pkg => wanted.has(pkg.name));
-  const found = new Set(chosen.map(pkg => pkg.name));
+  const chosen = all ? pending : pending.filter(pkg => wanted.has(pkg.trust));
+  const found = new Set(chosen.map(pkg => pkg.trust));
   for (const name of names) {
     if (!found.has(name)) note(`${name} has no lifecycle scripts waiting to run`, 'warn');
   }
