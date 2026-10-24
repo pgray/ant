@@ -8,10 +8,12 @@ import { Readable } from 'node:stream';
 import { EventEmitter } from 'node:events';
 import { STATUS_CODES } from 'ant:internal/http_metadata';
 
-export const maxHeaderSize = 16 * 1024;
-
 const EMPTY_BUFFER = Buffer.alloc(0);
 const CONTINUE_EXPRESSION = /(?:^|\W)100-continue(?:$|\W)/i;
+const INVALID_PATH_CHAR = /[^\u0021-\u00ff]/;
+
+export const maxHeaderSize = 16 * 1024;
+const { headerKey, isFieldValue, isToken } = httpWriter;
 
 let cachedDate = '';
 let cachedDateExpires = 0;
@@ -31,6 +33,26 @@ function createHeadersObject() {
 
 function normalizeHeaderName(name) {
   return String(name).toLowerCase();
+}
+
+function httpError(Ctor, code, message) {
+  const error = new Ctor(message);
+  error.code = code;
+  return error;
+}
+
+function invalidToken(label, name) {
+  return httpError(TypeError, 'ERR_INVALID_HTTP_TOKEN', `${label} must be a valid HTTP token ["${name}"]`);
+}
+
+function validatedHeaderKey(name, value) {
+  const key = headerKey(name, value);
+  if (typeof key === 'string') return key;
+  
+  if (key === 1) throw invalidToken('Header name', name);
+  if (key === 2) throw httpError(TypeError, 'ERR_HTTP_INVALID_HEADER_VALUE', `Invalid value "undefined" for header "${name}"`);
+  
+  throw httpError(TypeError, 'ERR_INVALID_CHAR', `Invalid character in header content ["${name}"]`);
 }
 
 function appendHeaderValue(headers, key, value) {
@@ -419,7 +441,11 @@ function buildRawRequestHeaders(options, headers) {
     appendRawHeader(rawHeaders, name, headers[name]);
   });
 
-  if (!seen.host) appendRawHeader(rawHeaders, 'Host', formatHostHeader(options));
+  if (!seen.host) {
+    const host = formatHostHeader(options);
+    validatedHeaderKey('Host', host);
+    appendRawHeader(rawHeaders, 'Host', host);
+  }
 
   return rawHeaders;
 }
@@ -574,11 +600,17 @@ export class ClientRequest extends OutgoingMessage {
 
     this.agent = options.agent ?? globalAgent;
     this.method = String(options.method || 'GET').toUpperCase();
+    if (!isToken(this.method)) throw invalidToken('Method', this.method);
+    
     this.protocol = options.protocol || 'http:';
     this.host = options.host ?? options.hostname ?? 'localhost';
     this.hostname = options.hostname ?? options.host ?? 'localhost';
     this.port = options.port ?? defaultPortForProtocol(this.protocol);
     this.path = options.path || '/';
+    
+    if (INVALID_PATH_CHAR.test(String(this.path)))
+      throw httpError(TypeError, 'ERR_UNESCAPED_CHARACTERS', 'Request path contains unescaped characters');
+    
     this.servername = options.servername;
     this.ALPNProtocols = options.ALPNProtocols;
     this.createConnection = options.createConnection;
@@ -803,7 +835,7 @@ export class ClientRequest extends OutgoingMessage {
   }
 
   setHeader(name, value) {
-    this._headers[normalizeHeaderName(name)] = value;
+    this._headers[validatedHeaderKey(name, value)] = value;
     return this;
   }
 
@@ -1031,10 +1063,9 @@ export class ServerResponse extends EventEmitter {
   }
 
   setHeader(name, value) {
-    const headerName = String(name);
-    const key = normalizeHeaderName(headerName);
+    const key = validatedHeaderKey(name, value);
     this._headers[key] = value;
-    this._headerNames[key] = headerName;
+    this._headerNames[key] = name;
     return this;
   }
 
@@ -1059,7 +1090,7 @@ export class ServerResponse extends EventEmitter {
   }
 
   appendHeader(name, value) {
-    const key = normalizeHeaderName(name);
+    const key = validatedHeaderKey(name, value);
     const existing = this._headers[key];
     if (existing === undefined) {
       this._headers[key] = value;
@@ -1093,6 +1124,9 @@ export class ServerResponse extends EventEmitter {
     if (typeof statusMessage === 'string') {
       this.statusMessage = statusMessage;
     }
+
+    if (this.statusMessage !== undefined && !isFieldValue(String(this.statusMessage)))
+      throw httpError(TypeError, 'ERR_INVALID_CHAR', 'Invalid character in statusMessage');
 
     if (headers) {
       applyHeaderObject(this, headers);

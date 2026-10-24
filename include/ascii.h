@@ -15,6 +15,10 @@ static inline bool ant_ascii_is_lower(int c) {
   return c >= 'a' && c <= 'z';
 }
 
+static inline bool ant_ascii_is_field_char(int c) {
+  return c == '\t' || (c >= 0x20 && c != 0x7f);
+}
+
 static inline bool ant_ascii_is_alpha(int c) {
   return ant_ascii_is_upper(c) || ant_ascii_is_lower(c);
 }

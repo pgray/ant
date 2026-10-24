@@ -1,3 +1,4 @@
+#include "ascii.h"
 #include "bind.h"
 #include "isolate.h"
 #include "inspector.h"
@@ -72,12 +73,25 @@ static const char *header_value(const char *headers, const char *name, char *buf
 
 static bool host_allowed(const char *headers) {
   char host[256];
-  const char *value = header_value(headers, "Host", host, sizeof(host));
-  if (!value) return true;
-  if (strncmp(value, "127.0.0.1", 9) == 0) return true;
-  if (strncmp(value, "localhost", 9) == 0) return true;
-  if (strncmp(value, "[::1]", 5) == 0) return true;
-  return false;
+  unsigned char addr[16];
+  if (!header_value(headers, "Host", host, sizeof(host))) return true;
+
+  char *colon = strrchr(host, ':');
+  char *bracket = strrchr(host, ']');
+  
+  if (colon && (!bracket || colon > bracket)) {
+    if (!colon[1]) return false;
+    for (const char *p = colon + 1; *p; p++) if (!ant_ascii_is_digit((unsigned char)*p)) return false;
+    *colon = '\0';
+  }
+
+  size_t len = strlen(host);
+  if (strcasecmp(host, "localhost") == 0) return true;
+  if (uv_inet_pton(AF_INET, host, addr) == 0) return true;
+  if (len < 4 || host[0] != '[' || host[len - 1] != ']') return false;
+  
+  host[len - 1] = '\0';
+  return uv_inet_pton(AF_INET6, host + 1, addr) == 0;
 }
 
 static bool header_token_eq(const char *headers, const char *name, const char *expected) {

@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import type { Lockfile } from 'upm/src/lock.ts';
+import type { InstallState } from 'upm/src/state.ts';
 
 import { lockedEntry, storeEntries } from '../entries.ts';
 import { readJson, readLock, writeJson } from '../project.ts';
@@ -12,8 +13,10 @@ import type { Manifest } from '../project.ts';
 
 export const MARKER = '.postinstall';
 const MARKER_HEADER = 'ant lifecycle v1';
+
 const CACHE = '.ant-lifecycle.json';
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 1;
+
 const SCRIPTS = ['preinstall', 'install', 'postinstall'] as const;
 const SKIPPED = new Set(['esbuild']);
 
@@ -78,7 +81,7 @@ function directKeys(lock: Lockfile): Set<string> {
   return new Set(tops.flatMap(edges => Object.entries(edges ?? {}).map(([name, version]) => `${name}@${version}`)));
 }
 
-function scan(root: string): Pending[] {
+function scan(root: string, linked: Set<string>): Pending[] {
   const lock = readLock(root);
   if (!lock) return [];
   const resolved = fromLockfile(lock).packages;
@@ -92,6 +95,7 @@ function scan(root: string): Pending[] {
     if (SKIPPED.has(name)) continue;
     const trust = pkg?.source === undefined || direct.has(key) ? name : key;
     for (const entry of entries.get(`${slot}@${version}`) ?? []) {
+      if (!linked.has(entry.key)) continue;
       const manifest = readJson<Manifest>(path.join(entry.dir, 'package.json'));
       if (!manifest) continue;
       const scripts = buildScripts(manifest, () => fs.existsSync(path.join(entry.dir, 'binding.gyp')));
@@ -103,11 +107,12 @@ function scan(root: string): Pending[] {
 
 export function discover(root: string): Pending[] {
   const modules = path.join(root, 'node_modules');
-  const hash = readJson<{ hash?: string }>(path.join(modules, STATE_FILE))?.hash;
+  const state = readJson<Partial<InstallState>>(path.join(modules, STATE_FILE));
+  const hash = state?.hash;
   const cached = readJson<Cached>(path.join(modules, CACHE));
   let candidates = hash && cached?.version === CACHE_VERSION && cached.hash === hash && cached.root === root ? cached.candidates : undefined;
   if (!candidates) {
-    candidates = scan(root);
+    candidates = scan(root, new Set(state?.entries ?? []));
     if (hash) writeJson(path.join(modules, CACHE), { version: CACHE_VERSION, hash, root, candidates } satisfies Cached);
   }
   return candidates.filter(pkg => !ran(pkg));
