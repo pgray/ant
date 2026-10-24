@@ -4,7 +4,6 @@
 #include "silver/vm.h"
 #include "internal.h"
 #include "runtime.h"
-#include "errors.h"
 
 #include "gc.h"
 #include "gc/objects.h"
@@ -111,13 +110,22 @@ typedef struct {
   bool maybe_numeric;
 } sv_atom_t;
 
+static inline sv_atom_t sv_length_atom(ant_t *js) {
+  return (sv_atom_t){ js->intern.length, 6, false };
+}
+
 static inline bool sv_op_has_ic_slot(sv_op_t op) {
   return (unsigned)op < OP__COUNT && sv_op_ic_slots[op];
 }
 
-static inline sv_atom_t sv_length_atom(ant_t *js) {
-  return (sv_atom_t){ js->intern.length, 6, false };
+static inline bool sv_op_is_yield_star(sv_op_t op) {
+  return op >= OP_YIELD_STAR_INIT && op <= OP_YIELD_STAR_ASYNC_RESULT;
 }
+
+static_assert(
+  OP_YIELD_STAR_ASYNC_RESULT - OP_YIELD_STAR_INIT == 6, 
+  "yield* opcodes must stay contiguous"
+);
 
 typedef enum {
   SV_MAP_TEMPLATE_GET = 0,
@@ -1192,6 +1200,11 @@ static inline int32_t sv_get_i32(const uint8_t *ip) {
 
 static inline bool sv_frame_is_strict(const sv_frame_t *frame) {
   return frame && frame->func && frame->func->is_strict;
+}
+
+static inline void sv_frame_reset_handlers(sv_vm_t *vm, sv_frame_t *frame) {
+  vm->handler_depth = frame->handler_base;
+  frame->handler_top = frame->handler_base;
 }
 
 static inline bool sv_slot_in_range(

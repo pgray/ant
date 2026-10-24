@@ -107,6 +107,8 @@ void ant_conn_pause_read(ant_conn_t *conn);
 void ant_conn_resume_read(ant_conn_t *conn);
 void ant_conn_close(ant_conn_t *conn);
 void ant_conn_shutdown(ant_conn_t *conn);
+void ant_conn_shutdown_write(ant_conn_t *conn);
+void ant_conn_mark_read_done(ant_conn_t *conn);
 void ant_conn_ref(ant_conn_t *conn);
 void ant_conn_unref(ant_conn_t *conn);
 void ant_conn_set_timeout_ms(ant_conn_t *conn, uint64_t timeout_ms);

@@ -1,5 +1,4 @@
 #include <compat.h> // IWYU pragma: keep
-
 #include <stdlib.h>
 #include <string.h>
 
@@ -14,7 +13,6 @@
 #include "modules/events.h"
 #include "modules/stream.h"
 #include "modules/timer.h"
-
 #include "worker_internal.h"
 
 bool worker_stdio_writer(FILE *stream, const void *data, size_t len, void *user) {
@@ -31,10 +29,6 @@ static ant_value_t worker_stdio_bytes(ant_t *js, const char *bytes, size_t len) 
   if (!ab) return Ant_Error_CreateOutOfMemory(js);
   if (len) memcpy(ab->data, bytes, len);
   return create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, js->builtins.buffer_proto);
-}
-
-static ant_value_t worker_stdio_noop(ant_params_t) {
-  return js_mkundef();
 }
 
 static ant_value_t worker_make_readable(ant_t *js, ant_value_t read) {
@@ -156,8 +150,8 @@ static ant_value_t worker_make_stdin(ant_t *js, ant_value_t worker_obj) {
 }
 
 void worker_stdio_parent_init(ant_t *js, ant_worker_t *w) {
-  w->stdout_obj = worker_make_readable(js, Ant_Function_Create(worker_stdio_noop));
-  w->stderr_obj = worker_make_readable(js, Ant_Function_Create(worker_stdio_noop));
+  w->stdout_obj = worker_make_readable(js, Ant_Function_Create(js_cfunc_noop));
+  w->stderr_obj = worker_make_readable(js, Ant_Function_Create(js_cfunc_noop));
   if (w->stdin_enabled) w->stdin_obj = worker_make_stdin(js, w->obj);
 }
 

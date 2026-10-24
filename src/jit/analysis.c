@@ -163,10 +163,11 @@ static jit_local_effect_t jit_local_effect(const sv_func_t *func, int off) {
     case OP_PUT_LOCAL8: case OP_SET_LOCAL8: e.write = sv_get_u8(ip + 1); break;
     case OP_INC_LOCAL: case OP_DEC_LOCAL: case OP_ADD_LOCAL: e.reads[e.nreads++] = sv_get_u8(ip + 1); break;
     case OP_PUT_LOCAL_CHK: e.reads[e.nreads++] = sv_get_u16(ip + 1); break;
-    case OP_YIELD_STAR_INIT: case OP_YIELD_STAR_NEXT: case OP_YIELD_STAR_THROW: case OP_YIELD_STAR_RETURN:
-      e.all = true;
-      break;
     default: {
+      if (sv_op_is_yield_star(op)) {
+        e.all = true;
+        break;
+      }
       uint8_t fmt = sv_op_fmts[op];
       if (fmt != SVF_loc && fmt != SVF_loc8 && fmt != SVF_loc_atom) break;
       int idx = fmt == SVF_loc8 ? sv_get_u8(ip + 1) : sv_get_u16(ip + 1);

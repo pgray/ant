@@ -369,10 +369,6 @@ static ant_value_t v8_get_heap_space_statistics(ant_params_t) {
   return arr;
 }
 
-static ant_value_t v8_noop(ant_params_t) {
-  return js_mkundef();
-}
-
 static ant_value_t v8_noop_false(ant_params_t) {
   return js_false;
 }
@@ -407,23 +403,23 @@ static ant_value_t v8_cached_data_version_tag(ant_params_t) {
 ant_value_t v8_library(ant_t *js) {
   ant_value_t lib = Ant_Object_CreateBare(js);
 
-  js_set(js, lib, "serialize",              Ant_Function_CreateWithArity(v8_serialize, 1));
-  js_set(js, lib, "deserialize",            Ant_Function_CreateWithArity(v8_deserialize, 1));
-  js_set(js, lib, "writeHeapSnapshot",      Ant_Function_CreateWithArity(v8_write_heap_snapshot, 2));
-  js_set(js, lib, "getHeapSnapshot",        Ant_Function_CreateWithArity(v8_get_heap_snapshot, 1));
-  js_set(js, lib, "getHeapStatistics",      Ant_Function_Create(v8_get_heap_statistics));
+  js_set(js, lib, "serialize", Ant_Function_CreateWithArity(v8_serialize, 1));
+  js_set(js, lib, "deserialize", Ant_Function_CreateWithArity(v8_deserialize, 1));
+  js_set(js, lib, "writeHeapSnapshot", Ant_Function_CreateWithArity(v8_write_heap_snapshot, 2));
+  js_set(js, lib, "getHeapSnapshot", Ant_Function_CreateWithArity(v8_get_heap_snapshot, 1));
+  js_set(js, lib, "getHeapStatistics", Ant_Function_Create(v8_get_heap_statistics));
   js_set(js, lib, "getHeapSpaceStatistics", Ant_Function_Create(v8_get_heap_space_statistics));
-  js_set(js, lib, "getHeapCodeStatistics",  Ant_Function_Create(v8_get_heap_code_statistics));
-  js_set(js, lib, "cachedDataVersionTag",   Ant_Function_Create(v8_cached_data_version_tag));
-  js_set(js, lib, "setFlagsFromString",     Ant_Function_CreateWithArity(v8_noop, 1));
-  js_set(js, lib, "stopCoverage",           Ant_Function_CreateWithArity(v8_noop, 1));
-  js_set(js, lib, "takeCoverage",           Ant_Function_CreateWithArity(v8_noop, 1));
-  js_set(js, lib, "promiseEvents",          Ant_Function_CreateWithArity(v8_noop, 1));
+  js_set(js, lib, "getHeapCodeStatistics", Ant_Function_Create(v8_get_heap_code_statistics));
+  js_set(js, lib, "cachedDataVersionTag", Ant_Function_Create(v8_cached_data_version_tag));
+  js_set(js, lib, "setFlagsFromString", Ant_Function_CreateWithArity(js_cfunc_noop, 1));
+  js_set(js, lib, "stopCoverage", Ant_Function_CreateWithArity(js_cfunc_noop, 1));
+  js_set(js, lib, "takeCoverage", Ant_Function_CreateWithArity(js_cfunc_noop, 1));
+  js_set(js, lib, "promiseEvents", Ant_Function_CreateWithArity(js_cfunc_noop, 1));
 
   ant_value_t snapshot = Ant_Object_CreateBare(js);
-  js_set(js, snapshot, "isBuildingSnapshot",      Ant_Function_Create(v8_noop_false));
-  js_set(js, snapshot, "addSerializeCallback",    Ant_Function_CreateWithArity(v8_noop, 1));
-  js_set(js, snapshot, "addDeserializeCallback",  Ant_Function_CreateWithArity(v8_noop, 1));
+  js_set(js, snapshot, "isBuildingSnapshot", Ant_Function_Create(v8_noop_false));
+  js_set(js, snapshot, "addSerializeCallback", Ant_Function_CreateWithArity(js_cfunc_noop, 1));
+  js_set(js, snapshot, "addDeserializeCallback", Ant_Function_CreateWithArity(js_cfunc_noop, 1));
   
   js_set(js, lib, "startupSnapshot", snapshot);
   js_set(js, lib, "constants", Ant_Object_CreateBare(js));

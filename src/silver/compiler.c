@@ -3048,10 +3048,19 @@ static void compile_yield_star_expr(sv_compiler_t *c, sv_ast_t *node) {
   int base_local = reserve_hidden_locals(c, 4);
   uint16_t base_slot = (uint16_t)(base_local - c->param_locals);
 
-  emit_op(c, OP_YIELD_STAR_INIT);
-  emit_u16(c, base_slot);
+  if (c->is_async_generator) {
+    emit_op(c, OP_YIELD_STAR_INIT_ASYNC);
+    emit_u16(c, base_slot);
+    emit_op(c, OP_YIELD_STAR_ASYNC_CALL);
+    emit_u16(c, base_slot);
+    emit_op(c, OP_AWAIT);
+    emit_op(c, OP_YIELD_STAR_ASYNC_RESULT);
+    emit_u16(c, base_slot);
+  } else {
+    emit_op(c, OP_YIELD_STAR_INIT);
+    emit_u16(c, base_slot);
+  }
 
-  emit_op(c, OP_UNDEF);
   emit_op(c, OP_YIELD_STAR_NEXT);
   emit_u16(c, base_slot);
 }
@@ -7663,9 +7672,6 @@ static bool sv_func_compute_fusable_leaf(sv_func_t *func) {
       case OP_FOR_AWAIT_OF:
       case OP_YIELD:
       case OP_ASYNC_YIELD:
-      case OP_YIELD_STAR_INIT:
-      case OP_YIELD_STAR_NEXT:
-      case OP_YIELD_STAR_THROW:
         return false;
       case OP_JMP:
       case OP_JMP_FALSE:

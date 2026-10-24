@@ -476,12 +476,10 @@ void jit_induction_locals(sv_func_t *func, uint8_t *kinds, int n_locals, int par
         if (step) kind = step > 0 ? UNSEEN : SIGNED;
         break;
       }
-      case OP_YIELD_STAR_INIT: case OP_YIELD_STAR_NEXT:
-      case OP_YIELD_STAR_THROW: case OP_YIELD_STAR_RETURN:
-        index = sv_get_u16(ip + 1);
-        break;
       default:
-        if (sv_op_flags[op] & SV_OPF_BUILDER_TARGET)
+        if (sv_op_is_yield_star(op))
+          index = sv_get_u16(ip + 1);
+        else if (sv_op_flags[op] & SV_OPF_BUILDER_TARGET)
           index = (int)sv_get_u16(ip + 1) - param_count;
         break;
     }

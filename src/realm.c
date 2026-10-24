@@ -285,10 +285,6 @@ ant_value_t sv_invoke_builtin_in_realm(
   return result;
 }
 
-static ant_value_t realm_console_noop(ant_params_t) {
-  return js_mkundef();
-}
-
 static ant_value_t realm_console_task_run(ant_params_t) {
   if (nargs < 1 || !is_callable(args[0]))
     return js_mkerr_typed(js, JS_ERR_TYPE, "task.run requires a function");
@@ -326,7 +322,7 @@ static ant_value_t realm_console_object(ant_t *js) {
   GC_ROOT_PIN(js, console);
   js_set_proto_init(console, proto);
 
-  ant_value_t noop = Ant_Function_Create(realm_console_noop);
+  ant_value_t noop = Ant_Function_Create(js_cfunc_noop);
   for (size_t i = 0; i < sizeof(noops) / sizeof(*noops); i++) js_set(js, console, noops[i], noop);
   js_set(js, console, "context", Ant_Function_Create(realm_console_context));
   js_set(js, console, "createTask", Ant_Function_Create(realm_console_create_task));

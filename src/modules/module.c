@@ -15,7 +15,10 @@
 #include "esm/library.h"
 #include "esm/builtin_bundle.h"
 
-typedef struct { ant_t *js; ant_value_t arr; } builtin_iter_ctx_t;
+typedef struct { 
+  ant_t *js; 
+  ant_value_t arr; 
+} builtin_iter_ctx_t;
 
 static void push_builtin_name(const char *name, void *ud) {
   builtin_iter_ctx_t *ctx = (builtin_iter_ctx_t *)ud;
@@ -144,6 +147,46 @@ static ant_value_t builtin_module_node_module_paths(ant_params_t) {
   return esm_node_module_paths(js, *directory ? directory : ".");
 }
 
+enum {
+  COMPILE_CACHE_FAILED,
+  COMPILE_CACHE_ENABLED,
+  COMPILE_CACHE_ALREADY_ENABLED,
+  COMPILE_CACHE_DISABLED
+};
+
+static ant_value_t builtin_module_enableCompileCache(ant_params_t) {
+  GC_ROOT_SAVE(root_mark, js);
+  
+  ant_value_t out = Ant_Object_Create(js);
+  GC_ROOT_PIN(js, out);
+  
+  js_set(js, out, "status", js_mknum(COMPILE_CACHE_DISABLED));
+  js_set(js, out, "message", js_mkstr(js, "Compile cache is not supported by Ant", 37));
+  GC_ROOT_RESTORE(js, root_mark);
+  
+  return out;
+}
+
+static ant_value_t module_constants(ant_t *js) {
+  GC_ROOT_SAVE(root_mark, js);
+  
+  ant_value_t status = Ant_Object_CreateBare(js);
+  GC_ROOT_PIN(js, status);
+  
+  js_set(js, status, "FAILED", js_mknum(COMPILE_CACHE_FAILED));
+  js_set(js, status, "ENABLED", js_mknum(COMPILE_CACHE_ENABLED));
+  js_set(js, status, "ALREADY_ENABLED", js_mknum(COMPILE_CACHE_ALREADY_ENABLED));
+  js_set(js, status, "DISABLED", js_mknum(COMPILE_CACHE_DISABLED));
+
+  ant_value_t constants = Ant_Object_CreateBare(js);
+  GC_ROOT_PIN(js, constants);
+  
+  js_set(js, constants, "compileCacheStatus", status);
+  GC_ROOT_RESTORE(js, root_mark);
+  
+  return constants;
+}
+
 static ant_value_t builtin_module_constructor(ant_params_t) {
   if (nargs && vtype(args[0]) != kTypeUndefined && vtype(args[0]) != kTypeString)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Module id must be a string");
@@ -156,6 +199,7 @@ ant_value_t module_library(ant_t *js) {
   if (is_object_type(js->modules.cjs.constructor)) return js->modules.cjs.constructor;
   ant_value_t cache = esm_require_cache(js);
   GC_ROOT_SAVE(root_mark, js);
+  
   ant_value_t proto = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, proto);
   
@@ -172,6 +216,12 @@ ant_value_t module_library(ant_t *js) {
   js_set(js, lib, "createRequire", Ant_Function_CreateWithArity(builtin_createRequire, 1));
   js_set(js, lib, "registerHooks", Ant_Function_CreateWithArity(builtin_module_registerHooks, 1));
   js_set(js, lib, "isBuiltin", Ant_Function_CreateWithArity(builtin_module_isBuiltin, 1));
+  
+  // stub
+  js_set(js, lib, "enableCompileCache", Ant_Function_CreateWithArity(builtin_module_enableCompileCache, 1));
+  js_set(js, lib, "getCompileCacheDir", Ant_Function_CreateWithArity(js_cfunc_noop, 0));
+  js_set(js, lib, "flushCompileCache", Ant_Function_CreateWithArity(js_cfunc_noop, 0));
+  js_set(js, lib, "constants", module_constants(js));
 
   ant_value_t modules_arr = js_mkarr(js);
   builtin_iter_ctx_t ctx = { js, modules_arr };

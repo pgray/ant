@@ -300,14 +300,14 @@ const disposable = addAbortListener(addAbortController.signal, () => {
 });
 addAbortController.abort();
 test('events.addAbortListener fires on abort', addAbortValue, 1);
-test('events.addAbortListener returns disposable', typeof disposable.dispose, 'function');
+test('events.addAbortListener returns disposable', typeof disposable[Symbol.dispose], 'function');
 
 let disposedAbortValue = 0;
 const disposedAbortController = new AbortController();
 const disposedAbort = addAbortListener(disposedAbortController.signal, () => {
   disposedAbortValue++;
 });
-disposedAbort.dispose();
+disposedAbort[Symbol.dispose]();
 disposedAbortController.abort();
 test('events.addAbortListener dispose removes listener', disposedAbortValue, 0);
 

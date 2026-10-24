@@ -1412,10 +1412,9 @@ ant_value_t jit_helper_await_park(sv_vm_t *vm, sv_func_t *fn, int64_t site_index
   
   sv_frame_t *frame = &vm->frames[vm->fp];
   int base_sp = (int)(frame->lp + fn->max_locals - vm->stack);
+  
   vm->sp = base_sp + (int)vstack_sp;
-
-  vm->handler_depth = frame->handler_base;
-  frame->handler_top = frame->handler_base;
+  sv_frame_reset_handlers(vm, frame);
   
   if (site->in_try) sv_frame_push_try_handlers(vm, frame, fn, (int)site->bc_off, base_sp);
   frame->ip = fn->code + site->bc_off;

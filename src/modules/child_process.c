@@ -545,6 +545,12 @@ static ant_value_t child_kill(ant_params_t) {
   return js_bool(result == 0);
 }
 
+static ant_value_t child_dispose(ant_params_t) {
+  if (js_truthy(js, js_get(js, js_getthis(js), "killed"))) return js_mkundef();
+  child_kill(js, NULL, 0, js_mkundef());
+  return js_mkundef();
+}
+
 static void child_write_link(child_process_t *cp, child_write_req_t *write) {
   write->prev = NULL;
   write->next = cp->pending_writes;
@@ -736,9 +742,11 @@ static void child_process_init_constructor(ant_t *js) {
 
   js->builtins.child_process_proto = Ant_Object_CreateBare(js);
   if (is_object_type(ee_proto)) js_set_proto_init(js->builtins.child_process_proto, ee_proto);
+  
   js_set(js, js->builtins.child_process_proto, "kill", Ant_Function_CreateWithArity(child_kill, 1));
   js_set(js, js->builtins.child_process_proto, "ref", Ant_Function_Create(child_ref));
   js_set(js, js->builtins.child_process_proto, "unref", Ant_Function_Create(child_unref));
+  js_set_sym(js, js->builtins.child_process_proto, js->sym.dispose_sym, Ant_Function_Create(child_dispose));
 
   js->builtins.child_process_ctor = Ant_Function_CreateConstructor(js, child_process_ctor, js->builtins.child_process_proto, "ChildProcess", 0);
 }

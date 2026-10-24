@@ -38,6 +38,7 @@
 #include "ops/exceptions.h"
 #include "ops/async.h"
 #include "ops/iteration.h"
+#include "ops/generators.h"
 #include "ops/using.h"
 #include "ops/objects.h"
 #include "ops/coercion.h"
@@ -1121,152 +1122,6 @@ static inline ant_value_t sv_stage_frame_args(
   return js_mkundef();
 }
 
-static inline void sv_yield_star_store_state(sv_vm_t *vm, ant_value_t *lp, uint16_t base) {
-  lp[base + 0] = vm->stack[vm->sp - 3];
-  lp[base + 1] = vm->stack[vm->sp - 2];
-  lp[base + 2] = vm->stack[vm->sp - 1];
-}
-
-static inline void sv_yield_star_push_state(sv_vm_t *vm, ant_value_t *lp, uint16_t base) {
-  vm->stack[vm->sp++] = lp[base + 0];
-  vm->stack[vm->sp++] = lp[base + 1];
-  vm->stack[vm->sp++] = lp[base + 2];
-}
-
-static inline void sv_yield_star_clear_state(ant_t *js, ant_value_t *lp, uint16_t base) {
-  lp[base + 0] = js_mkundef();
-  lp[base + 1] = js_mkundef();
-  lp[base + 2] = js_mkundef();
-  lp[base + 3] = js_false;
-}
-
-static inline ant_value_t sv_yield_star_unpack_result(
-  ant_t *js, ant_value_t result, ant_value_t *out_value, bool *out_done
-) {
-  if (!is_object_type(result))
-    return js_mkerr_typed(js, JS_ERR_TYPE, "Iterator result is not an object");
-
-  ant_value_t done = js_mkundef();
-  GC_ROOT_SAVE(root_mark, js);
-  GC_ROOT_PIN(js, result);
-  
-  sv_iter_result_unpack(js, result, &done, out_value);
-  GC_ROOT_RESTORE(js, root_mark);
-  
-  if (is_err(done)) return done;
-  if (is_err(*out_value)) return *out_value;
-  *out_done = js_truthy(js, done);
-  
-  return js_mkundef();
-}
-
-static inline ant_value_t sv_yield_star_call_method(
-  sv_vm_t *vm, ant_t *js, ant_value_t iterator,
-  const char *name, ant_value_t arg, ant_value_t *out_value, bool *out_done
-) {
-  ant_value_t method = js_getprop_fallback(js, iterator, name);
-  uint8_t mt = vtype(method);
-  
-  if (mt != kTypeFunction && mt != kTypeBuiltin) {
-    *out_value = js_mkundef();
-    *out_done = true;
-    return js_mkundef();
-  }
-
-  ant_value_t call_args[1] = { arg };
-  ant_value_t result = sv_vm_call(vm, js, method, iterator, call_args, 1, NULL, js_mkundef());
-  if (is_err(result)) return result;
-  
-  return sv_yield_star_unpack_result(js, result, out_value, out_done);
-}
-
-static inline ant_value_t sv_yield_star_close_iterator(
-  sv_vm_t *vm, ant_t *js, ant_value_t iterator
-) {
-  ant_value_t close_value = js_mkundef();
-  bool close_done = true;
-  
-  return sv_yield_star_call_method(
-    vm, js, iterator, "return", js_mkundef(), 
-    &close_value, &close_done
-  );
-}
-
-static inline ant_value_t sv_yield_star_next(
-  sv_vm_t *vm, ant_t *js, ant_value_t *lp, uint16_t base,
-  ant_value_t sent, ant_value_t *out_value, bool *out_done
-) {
-  int tag = (int)js_getnum(lp[base + 2]);
-  bool first = js_truthy(js, lp[base + 3]);
-  lp[base + 3] = js_false;
-
-  if (tag == SV_ITER_GENERIC) {
-    ant_value_t iterator = lp[base + 0];
-    ant_value_t next_method = lp[base + 1];
-    
-    uint8_t nt = vtype(next_method);
-    if (nt != kTypeFunction && nt != kTypeBuiltin)
-      return js_mkerr(js, "iterator.next is not a function");
-      
-    ant_value_t call_args[1] = { sent };
-    ant_value_t result = sv_vm_call(
-      vm, js, next_method, iterator, first ? NULL : call_args, first ? 0 : 1,
-      NULL, js_mkundef()
-    );
-    
-    if (is_err(result)) return result;
-    return sv_yield_star_unpack_result(js, result, out_value, out_done);
-  }
-
-  sv_yield_star_push_state(vm, lp, base);
-  ant_value_t status = sv_iter_advance(vm, js, 0, out_value, out_done);
-  if (is_err(status)) return status;
-  
-  sv_yield_star_store_state(vm, lp, base);
-  vm->sp -= 3;
-  
-  return js_mkundef();
-}
-
-static inline ant_value_t sv_yield_star_throw(
-  sv_vm_t *vm, ant_t *js, ant_value_t *lp, uint16_t base,
-  ant_value_t thrown, ant_value_t *out_value, bool *out_done
-) {
-  int tag = (int)js_getnum(lp[base + 2]);
-  if (tag != SV_ITER_GENERIC) return js_throw(js, thrown);
-
-  ant_value_t iterator = lp[base + 0];
-  ant_value_t throw_method = js_getprop_fallback(js, iterator, "throw");
-  uint8_t tt = vtype(throw_method);
-  
-  if (tt != kTypeFunction && tt != kTypeBuiltin) {
-    ant_value_t close_status = sv_yield_star_close_iterator(vm, js, iterator);
-    if (is_err(close_status)) return close_status;
-    return js_throw(js, thrown);
-  }
-
-  ant_value_t call_args[1] = { thrown };
-  ant_value_t result = sv_vm_call(vm, js, throw_method, iterator, call_args, 1, NULL, js_mkundef());
-  if (is_err(result)) return result;
-  
-  return sv_yield_star_unpack_result(js, result, out_value, out_done);
-}
-
-static inline ant_value_t sv_yield_star_return(
-  sv_vm_t *vm, ant_t *js, ant_value_t *lp, uint16_t base,
-  ant_value_t value, ant_value_t *out_value, bool *out_done
-) {
-  int tag = (int)js_getnum(lp[base + 2]);
-  
-  if (tag != SV_ITER_GENERIC) {
-    *out_value = value;
-    *out_done = true;
-    return js_mkundef();
-  }
-
-  return sv_yield_star_call_method(vm, js, lp[base + 0], "return", value, out_value, out_done);
-}
-
 static inline ant_value_t sv_execute_entry_common(
   sv_vm_t *vm, sv_func_t *func, sv_upvalue_t **upvalues, int upvalue_count,
   ant_value_t callee_func, ant_value_t super_val, ant_value_t new_target,
@@ -1993,6 +1848,54 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
 #endif
   #define NEXT(op)   ({ ip += sv_op_size[(op)]; DISPATCH(); })
 
+  #define COMPLETE_FRAME(value) do {                                        \
+    ant_value_t done_value_ = (value);                                      \
+    if (vm->fp <= entry_fp) {                                               \
+      vm_result = done_value_;                                              \
+      goto sv_leave;                                                        \
+    }                                                                       \
+    sv_drop_frame_runtime_state_keep(js, frame, done_value_);               \
+    vm->sp = frame->prev_sp;                                                \
+    vm->fp--;                                                               \
+    frame = &vm->frames[vm->fp];                                            \
+    func = frame->func;                                                     \
+    lp = frame->lp;                                                         \
+    ip = frame->ip;                                                         \
+    vm->stack[vm->sp++] = done_value_;                                      \
+    DISPATCH();                                                             \
+  } while (0)
+
+  #define SUSPEND_YIELD(resume_ip, value) do {                              \
+    vm->suspend.active = true;                                              \
+    vm->suspend.entry_fp = entry_fp;                                        \
+    vm->suspend.saved_fp = entry_fp - 1;                                    \
+    frame->ip = (resume_ip);                                                \
+    vm_result = (value);                                                    \
+    goto sv_leave;                                                          \
+  } while (0)
+
+  #define RETURN_VALUE(value) do {                                          \
+    ant_value_t ret_value_ = (value);                                       \
+    if (__builtin_expect(vm->handler_depth != frame->handler_base, 0)) {    \
+      uint8_t *finally_ip = sv_vm_unwind_for_return(vm, ret_value_);        \
+      if (finally_ip) {                                                     \
+        frame = &vm->frames[vm->fp];                                        \
+        func = frame->func;                                                 \
+        lp = frame->lp;                                                     \
+        ip = finally_ip;                                                    \
+        DISPATCH();                                                         \
+      }                                                                     \
+      sv_frame_reset_handlers(vm, frame);                                   \
+    }                                                                       \
+    if (__builtin_expect(sv_async_inline_at(vm, vm->fp), 0)) {              \
+      if (sv_async_inline_elides_promise(vm, ret_value_))                   \
+        vm->async_inline.len--;                                             \
+      else ret_value_ = sv_async_inline_settle(                             \
+        vm, js, ret_value_, false, false);                                  \
+    }                                                                       \
+    COMPLETE_FRAME(ret_value_);                                             \
+  } while (0)
+
   #define JIT_OSR_BACK_EDGE() do {                                          \
     if (!func->jit_compile_failed) {                                        \
       if (!sv_func_type_feedback(func)) sv_tfb_ensure(func);                \
@@ -2009,27 +1912,17 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
         if (sv_async_inline_at(vm, vm->fp))                                 \
           osr_r = sv_async_inline_settle(                                   \
             vm, js, osr_r, false, sv_async_inline_top_pending(vm));         \
-        if (vm->fp <= entry_fp) {                                           \
-          vm_result = osr_r;                                                \
-          goto sv_leave;                                                    \
-        }                                                                   \
-        vm->sp = frame->prev_sp;                                            \
-        vm->fp--;                                                           \
-        frame = &vm->frames[vm->fp];                                        \
-        func = frame->func;                                                 \
-        lp = frame->lp;                                                     \
-        ip = frame->ip;                                                     \
-        vm->stack[vm->sp++] = osr_r;                                        \
-        DISPATCH();                                                         \
+        COMPLETE_FRAME(osr_r);                                              \
       }                                                                     \
       }                                                                     \
     }                                                                       \
   } while (0)
   if (resuming) {
     bool yield_star_resume = ip && (
-      *ip == OP_YIELD_STAR_NEXT ||
-      *ip == OP_YIELD_STAR_THROW ||
-      *ip == OP_YIELD_STAR_RETURN
+      *ip == OP_YIELD_STAR_NEXT   ||
+      *ip == OP_YIELD_STAR_THROW  ||
+      *ip == OP_YIELD_STAR_RETURN ||
+      *ip == OP_YIELD_STAR_ASYNC_CALL
     );
     
     if (!yield_star_resume) {
@@ -3050,72 +2943,8 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
   L_PUT_EVAL_GLOBAL:       { VM_CHECK(sv_op_put_eval_global(vm, js, frame, func, ip)); NEXT(OP_PUT_EVAL_GLOBAL); }
   L_DELETE_EVAL_VAR:       { sv_op_delete_eval_var(vm, js, frame, func, ip);           NEXT(OP_DELETE_EVAL_VAR); }
 
-  // TODO: make the methods below DRY
-  L_RETURN: {
-    ant_value_t r = vm->stack[vm->sp - 1];
-    if (__builtin_expect(vm->handler_depth != frame->handler_base, 0)) {
-      uint8_t *finally_ip = sv_vm_unwind_for_return(vm, r);
-      if (finally_ip) {
-        frame = &vm->frames[vm->fp];
-        func = frame->func;
-        lp = frame->lp;
-        ip = finally_ip;
-        DISPATCH();
-      }
-      vm->handler_depth = frame->handler_base;
-      frame->handler_top = frame->handler_base;
-    }
-    if (__builtin_expect(sv_async_inline_at(vm, vm->fp), 0)) {
-      if (sv_async_inline_elides_promise(vm, r)) vm->async_inline.len--;
-      else r = sv_async_inline_settle(vm, js, r, false, false);
-    }
-    if (vm->fp <= entry_fp) {
-      vm_result = r;
-      goto sv_leave;
-    }
-    sv_drop_frame_runtime_state_keep(js, frame, r);
-    vm->sp = frame->prev_sp;
-    vm->fp--;
-    frame = &vm->frames[vm->fp];
-    func = frame->func;
-    lp = frame->lp;
-    ip = frame->ip;
-    vm->stack[vm->sp++] = r;
-    DISPATCH();
-  }
-
-  L_RETURN_UNDEF: {
-    ant_value_t r = js_mkundef();
-    if (__builtin_expect(vm->handler_depth != frame->handler_base, 0)) {
-      uint8_t *finally_ip = sv_vm_unwind_for_return(vm, r);
-      if (finally_ip) {
-        frame = &vm->frames[vm->fp];
-        func = frame->func;
-        lp = frame->lp;
-        ip = finally_ip;
-        DISPATCH();
-      }
-      vm->handler_depth = frame->handler_base;
-      frame->handler_top = frame->handler_base;
-    }
-    if (__builtin_expect(sv_async_inline_at(vm, vm->fp), 0)) {
-      if (sv_async_inline_elides_promise(vm, r)) vm->async_inline.len--;
-      else r = sv_async_inline_settle(vm, js, r, false, false);
-    }
-    if (vm->fp <= entry_fp) {
-      vm_result = r;
-      goto sv_leave;
-    }
-    sv_drop_frame_runtime_state_keep(js, frame, r);
-    vm->sp = frame->prev_sp;
-    vm->fp--;
-    frame = &vm->frames[vm->fp];
-    func = frame->func;
-    lp = frame->lp;
-    ip = frame->ip;
-    vm->stack[vm->sp++] = r;
-    DISPATCH();
-  }
+  L_RETURN:       RETURN_VALUE(vm->stack[vm->sp - 1]);
+  L_RETURN_UNDEF: RETURN_VALUE(js_mkundef());
 
   L_CHECK_CTOR:      { VM_CHECK(sv_op_check_ctor(vm, js));  NEXT(OP_CHECK_CTOR); }
   L_CHECK_CTOR_RET:  { sv_op_check_ctor_ret(vm, frame);     NEXT(OP_CHECK_CTOR_RET); }
@@ -3155,25 +2984,11 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
       goto sv_throw;
     }
     if (action == SV_FINALLY_RET_RETURN) {
-      vm->handler_depth = frame->handler_base;
-      frame->handler_top = frame->handler_base;
+      sv_frame_reset_handlers(vm, frame);
       if (vm->open_upvalues && frame->bp) sv_close_upvalues_from_slot(vm, frame->bp);
       if (__builtin_expect(sv_async_inline_at(vm, vm->fp), 0))
         completion = sv_async_inline_settle(vm, js, completion, false, false);
-      if (vm->fp <= entry_fp) {
-        vm_result = completion;
-        goto sv_leave;
-      }
-      sv_drop_frame_runtime_state_keep(js, frame, completion);
-      vm->sp = frame->prev_sp;
-      vm->fp--;
-      frame = &vm->frames[vm->fp];
-      func = frame->func;
-      lp = frame->lp;
-      
-      ip = frame->ip;
-      vm->stack[vm->sp++] = completion;
-      DISPATCH();
+      COMPLETE_FRAME(completion);
     }
     ip = resume_ip;
     DISPATCH();
@@ -3291,20 +3106,9 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
       if (is_err(tail_promise)) { sv_err = tail_promise; goto sv_throw; }
       vm->async_inline.deferred = caller_awaits;
       vm->async_inline.len--;
-      if (vm->fp <= entry_fp) {
-        vm_result = tail_promise;
-        goto sv_leave;
-      }
-      sv_drop_frame_runtime_state_keep(js, frame, tail_promise);
-      vm->sp = frame->prev_sp;
-      vm->fp--;
-      frame = &vm->frames[vm->fp];
-      func = frame->func;
-      lp = frame->lp;
-      ip = frame->ip;
-      vm->stack[vm->sp++] = tail_promise;
-      DISPATCH();
+      COMPLETE_FRAME(tail_promise);
     }
+    
     sv_await_result_t await_result = sv_await_tail(js, await_val);
     if (await_result.state == SV_AWAIT_ERROR) {
       sv_err = await_result.value;
@@ -3313,23 +3117,16 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
     
     bool tail_pending = await_result.state == SV_AWAIT_SUSPENDED;
     ant_value_t r = tail_pending ? js_mkundef() : await_result.value;
+    
     bool tail_inline = sv_async_inline_at(vm, vm->fp);
     if (tail_inline) r = sv_async_inline_settle(vm, js, r, false, tail_pending);
-    if (vm->fp <= entry_fp || !tail_inline) {
+    
+    if (!tail_inline) {
       vm_result = r;
       goto sv_leave;
     }
     
-    sv_drop_frame_runtime_state_keep(js, frame, r);
-    vm->sp = frame->prev_sp;
-    vm->fp--;
-    frame = &vm->frames[vm->fp];
-    func = frame->func;
-    lp = frame->lp;
-    ip = frame->ip;
-    vm->stack[vm->sp++] = r;
-    
-    DISPATCH();
+    COMPLETE_FRAME(r);
   }
 
   L_ASYNC_YIELD: {
@@ -3338,12 +3135,7 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
     if (!coro || !coro->is_generator || !sv_await_type_is_primitive(vtype(yielded))) goto L_AWAIT;
     vm->sp--;
     coro->yield_tick = true;
-    vm->suspend.active = true;
-    vm->suspend.entry_fp = entry_fp;
-    vm->suspend.saved_fp = entry_fp - 1;
-    frame->ip = ip + sv_op_size[OP_ASYNC_YIELD] + sv_op_size[OP_YIELD];
-    vm_result = yielded;
-    goto sv_leave;
+    SUSPEND_YIELD(ip + sv_op_size[OP_ASYNC_YIELD] + sv_op_size[OP_YIELD], yielded);
   }
 
   L_YIELD: {
@@ -3353,23 +3145,38 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
       sv_err = js_mkerr(js, "yield can only be used inside generator functions");
       goto sv_throw;
     }
-    vm->suspend.active = true;
-    vm->suspend.entry_fp = entry_fp;
-    vm->suspend.saved_fp = entry_fp - 1;
-    frame->ip = ip + sv_op_size[OP_YIELD];
-    vm_result = yielded;
-    goto sv_leave;
+    SUSPEND_YIELD(ip + sv_op_size[OP_YIELD], yielded);
   }
   
   L_YIELD_STAR_INIT: {
-    uint16_t base = sv_get_u16(ip + 1);
-    ant_value_t iterable = vm->stack[--vm->sp];
-    vm->stack[vm->sp++] = iterable;
-    VM_CHECK(sv_op_for_of(vm, js));
-    sv_yield_star_store_state(vm, lp, base);
-    vm->sp -= 3;
-    lp[base + 3] = js_true;
+    VM_CHECK(sv_yield_star_init(vm, js, lp, sv_get_u16(ip + 1)));
     NEXT(OP_YIELD_STAR_INIT);
+  }
+
+  L_YIELD_STAR_INIT_ASYNC: {
+    frame->ip = ip;
+    ant_value_t is_async = sv_yield_star_init_async(vm, js, lp, sv_get_u16(ip + 1));
+    if (is_err(is_async)) { sv_err = is_async; goto sv_throw; }
+    if (is_async == js_true) NEXT(OP_YIELD_STAR_INIT_ASYNC);
+    ip += SV_YS_ASYNC_SYNC_SKIP;
+    DISPATCH();
+  }
+
+  L_YIELD_STAR_ASYNC_CALL: {
+    sv_resume_kind_t resume_kind = suspended_resume_kind;
+    suspended_resume_kind = SV_RESUME_NEXT;
+    VM_CHECK(sv_yield_star_async_call(vm, js, lp, sv_get_u16(ip + 1), resume_kind));
+    NEXT(OP_YIELD_STAR_ASYNC_CALL);
+  }
+
+  L_YIELD_STAR_ASYNC_RESULT: {
+    frame->ip = ip;
+    sv_ys_step_t step = sv_yield_star_async_result(vm, js, lp, sv_get_u16(ip + 1));
+    if (is_err(step.status)) { sv_err = step.status; goto sv_throw; }
+    if (step.kind == SV_YS_STEP_SUSPEND) SUSPEND_YIELD(ip - SV_YS_ASYNC_RESUME_BACK, vm->stack[--vm->sp]);
+    if (step.kind == SV_YS_STEP_RETURN) goto L_RETURN;
+    ip += SV_YS_ASYNC_DONE_SKIP;
+    DISPATCH();
   }
 
   L_YIELD_STAR_NEXT:
@@ -3418,12 +3225,7 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
       NEXT(*ip);
     }
 
-    vm->suspend.active = true;
-    vm->suspend.entry_fp = entry_fp;
-    vm->suspend.saved_fp = entry_fp - 1;
-    frame->ip = ip;
-    vm_result = yielded;
-    goto sv_leave;
+    SUSPEND_YIELD(ip, yielded);
   }
 
   L_SPREAD:              { VM_CHECK(sv_op_spread(vm, js));         NEXT(OP_SPREAD); }
@@ -3573,6 +3375,9 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
 
   #undef DISPATCH
   #undef NEXT
+  #undef COMPLETE_FRAME
+  #undef SUSPEND_YIELD
+  #undef RETURN_VALUE
   #undef VM_CHECK
 }
 

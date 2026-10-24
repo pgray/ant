@@ -1904,6 +1904,7 @@ static void fs_init_filehandle_proto(ant_t *js) {
   js_set(js, js->builtins.filehandle_proto, "read", Ant_Function_Create(builtin_fs_filehandle_read));
   js_set(js, js->builtins.filehandle_proto, "write", Ant_Function_Create(builtin_fs_filehandle_write));
   js_set(js, js->builtins.filehandle_proto, "writeFile", Ant_Function_Create(builtin_fs_filehandle_writeFile));
+  js_set_sym(js, js->builtins.filehandle_proto, js->sym.asyncDispose_sym, Ant_Function_Create(builtin_fs_filehandle_close));
   js_set_tostringtag(js, js->builtins.filehandle_proto, js_mkstr(js, "FileHandle", 10));
 }
 
@@ -2544,6 +2545,54 @@ static bool fs_fd_arg(ant_value_t arg, uv_file *out) {
   return true;
 }
 
+static ant_value_t fs_path_arg_cstr(ant_t *js, ant_value_t *arg, const char *fn_name, char **out) {
+  ant_value_t path_val = *arg = fs_coerce_path(js, *arg);
+  if (is_err(path_val)) return path_val;
+  if (vtype(path_val) != kTypeString) return js_mkerr(js, "%s() path must be a string or URL", fn_name);
+
+  size_t path_len;
+  char *path = js_getstr(js, path_val, &path_len);
+  if (!path) return js_mkerr(js, "Failed to get path string");
+
+  *out = strndup(path, path_len);
+  return *out ? js_mkundef() : Ant_Error_CreateOutOfMemory(js);
+}
+
+static ant_value_t fs_open_sync(ant_t *js, const char *path, int flags, int mode, uv_file *out) {
+  uv_fs_t req;
+  int fd = uv_fs_open(NULL, &req, path, flags, mode, NULL);
+  uv_fs_req_cleanup(&req);
+
+  if (fd < 0) return fs_mk_uv_error(js, fd, "open", path, NULL);
+  *out = fd;
+
+  return js_mkundef();
+}
+
+static int fs_close_sync(uv_file fd) {
+  uv_fs_t req;
+  int rc = uv_fs_close(NULL, &req, fd, NULL);
+  uv_fs_req_cleanup(&req);
+  return rc;
+}
+
+static int fs_write_all_fd(uv_file fd, const char *data, size_t len) {
+  uv_fs_t req;
+  size_t written = 0;
+
+  while (written < len) {
+    uv_buf_t buf = uv_buf_init((char *)data + written, (unsigned int)(len - written));
+    int rc = uv_fs_write(NULL, &req, fd, &buf, 1, -1, NULL);
+    uv_fs_req_cleanup(&req);
+
+    if (rc < 0) return rc;
+    if (rc == 0) return UV_EIO;
+    written += (size_t)rc;
+  }
+
+  return 0;
+}
+
 static ant_value_t builtin_fs_readFileSync(ant_params_t) {
   if (nargs < 1) return js_mkerr(js, "readFileSync() requires a path argument");
 
@@ -2552,35 +2601,18 @@ static ant_value_t builtin_fs_readFileSync(ant_params_t) {
   
   size_t file_size = 0;
   uv_file fd = -1;
-  uv_fs_t req;
 
   bool owns_fd = !fs_fd_arg(args[0], &fd);
   if (owns_fd) {
-    ant_value_t path_val = args[0] = fs_coerce_path(js, args[0]);
-    if (is_err(path_val)) return path_val;
-    if (vtype(path_val) != kTypeString) return js_mkerr(js, "readFileSync() path must be a string or URL");
+    ant_value_t err = fs_path_arg_cstr(js, &args[0], "readFileSync", &path_cstr);
+    if (is_err(err)) return err;
 
-    size_t path_len;
-    char *path = js_getstr(js, path_val, &path_len);
-    if (!path) return js_mkerr(js, "Failed to get path string");
-
-    path_cstr = strndup(path, path_len);
-    if (!path_cstr) return Ant_Error_CreateOutOfMemory(js);
-
-    fd = uv_fs_open(NULL, &req, path_cstr, O_RDONLY, 0, NULL);
-    uv_fs_req_cleanup(&req);
-    if (fd < 0) {
-      ant_value_t err = fs_mk_uv_error(js, fd, "open", path_cstr, NULL);
-      free(path_cstr);
-      return err;
-    }
+    err = fs_open_sync(js, path_cstr, O_RDONLY, 0, &fd);
+    if (is_err(err)) { free(path_cstr); return err; }
   }
 
   int rc = fs_read_all_fd(fd, &data, &file_size);
-  if (owns_fd) {
-    uv_fs_close(NULL, &req, fd, NULL);
-    uv_fs_req_cleanup(&req);
-  }
+  if (owns_fd) fs_close_sync(fd);
 
   if (rc < 0) {
     ant_value_t err = rc == UV_ENOMEM
@@ -2689,9 +2721,7 @@ static ant_value_t fs_parse_write_options(ant_t *js, ant_value_t options, fs_wri
 }
 
 static ant_value_t fs_write_file_sync_impl(
-  ant_native_params_t,
-  const char *fn_name,
-  int default_flags
+  ant_native_params_t, const char *fn_name, int default_flags
 ) {
   if (nargs < 2) return js_mkerr(js, "%s() requires path and data arguments", fn_name);
 
@@ -2699,63 +2729,30 @@ static ant_value_t fs_write_file_sync_impl(
   ant_value_t opts_result = fs_parse_write_options(js, nargs > 2 ? args[2] : js_mkundef(), &opts);
   if (is_err(opts_result)) return opts_result;
 
-  args[0] = fs_coerce_path(js, args[0]);
-  if (is_err(args[0])) return args[0];
-  if (vtype(args[0]) != kTypeString) return js_mkerr(js, "%s() path must be a string", fn_name);
+  uv_file fd = -1;
+  char *path_cstr = NULL;
+  bool owns_fd = !fs_fd_arg(args[0], &fd);
 
-  size_t path_len;
-  char *path = js_getstr(js, args[0], &path_len);
-  if (!path) return js_mkerr(js, "Failed to get arguments");
+  ant_value_t err = owns_fd ? fs_path_arg_cstr(js, &args[0], fn_name, &path_cstr) : js_mkundef();
+  if (is_err(err)) return err;
 
   fs_write_data_t write_data;
-  ant_value_t data_result = fs_get_write_data_arg(js, args[1], fn_name, &write_data);
-  if (is_err(data_result)) return data_result;
+  err = fs_get_write_data_arg(js, args[1], fn_name, &write_data);
+  if (!is_err(err) && owns_fd) err = fs_open_sync(js, path_cstr, opts.flags, opts.mode, &fd);
 
-  char *path_cstr = strndup(path, path_len);
-  if (!path_cstr) return Ant_Error_CreateOutOfMemory(js);
-
-  uv_fs_t req;
-  int fd = uv_fs_open(NULL, &req, path_cstr, opts.flags, opts.mode, NULL);
-  uv_fs_req_cleanup(&req);
-  
-  if (fd < 0) {
-    ant_value_t err = fs_mk_uv_error(js, fd, "open", path_cstr, NULL);
+  if (is_err(err)) {
     free(path_cstr);
     return err;
   }
 
-  size_t written = 0;
-  int rc = 0;
-  while (written < write_data.len) {
-    uv_buf_t buf = uv_buf_init(
-      (char *)write_data.data + written, 
-      (unsigned int)(write_data.len - written)
-    );
-    
-    rc = uv_fs_write(NULL, &req, fd, &buf, 1, -1, NULL);
-    uv_fs_req_cleanup(&req);
-    
-    if (rc <= 0) break;
-    written += (size_t)rc;
-  }
+  int rc = fs_write_all_fd(fd, write_data.data, write_data.len);
+  int closed = owns_fd ? fs_close_sync(fd) : 0;
 
-  int closed = uv_fs_close(NULL, &req, fd, NULL);
-  uv_fs_req_cleanup(&req);
-
-  if (written == write_data.len && closed < 0) {
-    ant_value_t err = fs_mk_uv_error(js, closed, "close", path_cstr, NULL);
-    free(path_cstr);
-    return err;
-  }
-
-  if (written != write_data.len) {
-    ant_value_t err = fs_mk_uv_error(js, rc < 0 ? rc : UV_EIO, "write", path_cstr, NULL);
-    free(path_cstr);
-    return err;
-  }
+  if (rc < 0) err = fs_mk_uv_error(js, rc, "write", path_cstr, NULL);
+  else if (closed < 0) err = fs_mk_uv_error(js, closed, "close", path_cstr, NULL);
 
   free(path_cstr);
-  return js_mkundef();
+  return err;
 }
 
 static ant_value_t builtin_fs_writeFileSync(ant_params_t) {

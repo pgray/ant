@@ -9,14 +9,12 @@
 typedef struct ant_listener_s ant_listener_t;
 typedef struct ant_conn_s ant_conn_t;
 
-typedef enum {
+typedef enum: uint8_t {
   ANT_CONN_KIND_TCP = 0,
   ANT_CONN_KIND_PIPE,
 } ant_conn_kind_t;
 
 struct ant_conn_s {
-  ant_conn_kind_t kind;
-  
   union {
     uv_tcp_t tcp;
     uv_pipe_t pipe;
@@ -27,6 +25,7 @@ struct ant_conn_s {
   
   void *user_data;
   char *buffer;
+  struct ant_conn_s *next;
   
   size_t buffer_len;
   size_t buffer_cap;
@@ -36,22 +35,26 @@ struct ant_conn_s {
   uint64_t bytes_read;
   uint64_t bytes_written;
   
-  int close_handles;
-  bool resolving;
-  bool closing;
-  bool read_paused;
-  bool read_eof;
-  bool has_local_addr;
-  bool has_remote_addr;
+  uint16_t local_port;
+  uint16_t remote_port;
+  ant_conn_kind_t kind;
+  uint8_t close_handles;
   
-  char local_addr[64];
-  char remote_addr[64];
+  bool resolving: 1;
+  bool closing: 1;
+  bool shutting_down: 1;
+  bool close_after_read_done: 1;
+  bool write_done: 1;
+  bool read_done: 1;
+  bool read_paused: 1;
+  bool read_eof: 1;
+  bool has_local_addr: 1;
+  bool has_remote_addr: 1;
+  
   char local_family[8];
   char remote_family[8];
-  
-  int local_port;
-  int remote_port;
-  struct ant_conn_s *next;
+  char local_addr[64];
+  char remote_addr[64];
 };
 
 typedef void (*ant_conn_connect_cb)(

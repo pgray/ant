@@ -287,6 +287,11 @@ sv_jit_func_t sv_jit_tier_up(ant_t *js, sv_func_t *func, sv_closure_t *closure) 
   return hot;
 }
 
+static inline ant_value_t jit_osr_finish(sv_vm_t *vm, sv_frame_t *frame, ant_value_t result) {
+  if (result != SV_JIT_RETRY_INTERP && result != SV_JIT_AWAIT_PARKED) sv_frame_reset_handlers(vm, frame);
+  return result;
+}
+
 static void jit_osr_seed_invariant_locals(sv_func_t *func, sv_frame_t *frame) {
   if (!func->local_type_feedback) return;
   
@@ -424,7 +429,7 @@ __attribute__((noinline)) ant_value_t sv_jit_try_osr(
     return SV_JIT_RETRY_INTERP;
   }
 
-  return result;
+  return jit_osr_finish(vm, frame, result);
 }
 
 __attribute__((noinline)) ant_value_t sv_jit_await_resume(
@@ -467,7 +472,7 @@ __attribute__((noinline)) ant_value_t sv_jit_await_resume(
     return SV_JIT_RETRY_INTERP;
   }
   
-  return result;
+  return jit_osr_finish(vm, frame, result);
 }
 
 void sv_jit_drop_func_code(sv_func_t *func) {

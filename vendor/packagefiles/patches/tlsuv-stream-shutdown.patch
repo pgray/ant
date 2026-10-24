@@ -1,0 +1,45 @@
+diff --git a/include/tlsuv/tlsuv.h b/include/tlsuv/tlsuv.h
+index c39837f..f8929e3 100644
+--- a/include/tlsuv/tlsuv.h
++++ b/include/tlsuv/tlsuv.h
+@@ -150,6 +150,8 @@
+ 
+ int tlsuv_stream_close(tlsuv_stream_t *clt, uv_close_cb close_cb);
+ 
++int tlsuv_stream_shutdown(tlsuv_stream_t *clt);
++
+ int tlsuv_stream_free(tlsuv_stream_t *clt);
+ 
+ int tlsuv_stream_peername(const tlsuv_stream_t *clt, struct sockaddr *addr, int *namelen);
+diff --git a/src/tlsuv.c b/src/tlsuv.c
+index 7f03c11..550a325 100644
+--- a/src/tlsuv.c
++++ b/src/tlsuv.c
+@@ -238,6 +238,27 @@
+     return 0;
+ }
+ 
++int tlsuv_stream_shutdown(tlsuv_stream_t *clt) {
++    if (uv_handle_get_type((uv_handle_t*)&clt->watcher) != UV_POLL ||
++        uv_is_closing((uv_handle_t*)&clt->watcher) || clt->tls_engine == NULL) {
++        return UV_EINVAL;
++    }
++
++    if (!TAILQ_EMPTY(&clt->queue)) {
++        return UV_EBUSY;
++    }
++
++    clt->tls_engine->close(clt->tls_engine);
++#if _WIN32
++    if (shutdown(clt->sock, SD_SEND) != 0) {
++#else
++    if (shutdown(clt->sock, SHUT_WR) != 0) {
++#endif
++        return err_to_uv(get_error());
++    }
++    return 0;
++}
++
+ int tlsuv_stream_keepalive(tlsuv_stream_t *clt, int keepalive, unsigned int delay) {
+     uv_os_sock_t s;
+     if (uv_fileno((const uv_handle_t *) &clt->watcher, (uv_os_fd_t *) &s) == 0) {

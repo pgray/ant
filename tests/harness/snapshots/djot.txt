@@ -6,16 +6,7 @@
   children: [
     {
       tag: 'para',
-      children: [
-        { tag: 'str', text: 'hi ', pos: undefined },
-        {
-          tag: 'emph',
-          children: [
-            { tag: 'str', text: 'there', pos: undefined }
-          ],
-          pos: undefined
-        }
-      ],
+      children: [Array],
       attributes: undefined,
       pos: undefined
     }

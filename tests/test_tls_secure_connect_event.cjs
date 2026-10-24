@@ -42,6 +42,7 @@ assert.strictEqual(detachedSocket.encrypted, true);
 assert.strictEqual(detachedSocket.renegotiate({}, (err) => assert.strictEqual(err, null)), true);
 
 const server = net.createServer((socket) => {
+  socket.resume();
   socket.end();
 });
 

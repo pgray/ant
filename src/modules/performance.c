@@ -463,6 +463,7 @@ void init_performance_module(ant_t *js) {
   js_set(js, perf_obj, "timeOrigin", js_mknum(js->perf_time_origin_ms));
   js_set(js, perf_obj, "toJSON", Ant_Function_Create(js_performance_to_json));
   js_set(js, perf_obj, "eventLoopUtilization", Ant_Function_CreateWithArity(js_performance_elu, 2));
+  js_set(js, perf_obj, "markResourceTiming", Ant_Function_CreateWithArity(js_cfunc_noop, 7));
   
   js_set_tostringtag(js, perf_obj, ANT_STRING("Performance"));
   js_set(js, glob, "performance", perf_obj);

@@ -23,14 +23,13 @@ function finishWithInvalidHostCheck() {
 }
 
 function finishWithInvalidPortCheck() {
-  const socket = net.connect({ host: '127.0.0.1', port: 65536 });
-  socket.on('error', (error) => {
-    invalidPortError = true;
-    assert(error instanceof Error);
-    assert.strictEqual(typeof error.message, 'string');
-    clearTimeout(timeout);
-    console.log('net:create-connection:ok');
-  });
+  assert.throws(
+    () => net.connect({ host: '127.0.0.1', port: 65536 }),
+    { name: 'RangeError', code: 'ERR_SOCKET_BAD_PORT' }
+  );
+  invalidPortError = true;
+  clearTimeout(timeout);
+  console.log('net:create-connection:ok');
 }
 
 const server = net.createServer((socket) => {

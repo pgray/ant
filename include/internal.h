@@ -109,6 +109,7 @@ typedef struct {
   bool writable;
   bool enumerable;
   bool configurable;
+  int32_t slot;
   ant_value_t getter;
   ant_value_t setter;
 } prop_meta_t;

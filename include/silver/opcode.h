@@ -248,12 +248,16 @@ OP_DEF(  AWAIT,             1,   1,   1, none)      /* promise -> resolved value
 OP_DEF(  AWAIT_RETURN,      1,   1,   0, none)      /* value -> (settles the async promise once awaited) */
 OP_DEF(  YIELD,             1,   1,   1, none)      /* val -> received */
 OP_DEF(  ASYNC_YIELD,       1,   1,   1, none)      /* val -> awaited val, or yields a primitive and skips the next YIELD */
-OP_DEF(  YIELD_STAR_INIT,   3,   1,   0, loc)       /* iterable -> delegate locals */
+OP_DEF(  YIELD_STAR_INIT,   3,   1,   1, loc)       /* iterable -> undefined (delegate locals) */
 OP_DEF(  YIELD_STAR_NEXT,   3,   1,   1, loc)       /* sent -> final value | suspend */
 OP_DEF(  YIELD_STAR_THROW,  3,   1,   1, loc)       /* thrown -> final value | suspend */
 OP_DEF(  YIELD_STAR_RETURN, 3,   1,   1, loc)       /* return value -> final value | suspend */
-OP_DEF(  SPREAD,            1,   1,   0, none)      /* arr iterable -> arr */
 
+OP_DEF(  YIELD_STAR_INIT_ASYNC,   3,   1,   1, loc) /* iterable -> undefined; sync iterables skip to YIELD_STAR_NEXT */
+OP_DEF(  YIELD_STAR_ASYNC_CALL,   3,   1,   1, loc) /* received -> next/throw/return result (resume target) */
+OP_DEF(  YIELD_STAR_ASYNC_RESULT, 3,   1,   1, loc) /* awaited result -> final value (skips YIELD_STAR_NEXT) | suspend */
+
+OP_DEF(  SPREAD,            1,   1,   0, none)      /* arr iterable -> arr */
 OP_DEF(  DEFINE_METHOD,     6,   2,   1, atom_u8)   /* obj func -> obj (flags: get/set/static) */
 OP_DEF(  DEFINE_METHOD_COMP,2,   3,   1, u8)        /* obj key func -> obj (computed name) */
 OP_DEF(  SET_NAME,          5,   1,   1, atom)      /* set .name on function */

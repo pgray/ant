@@ -1,4 +1,5 @@
 diff --git a/src/boringssl/engine.c b/src/boringssl/engine.c
+index da90ea2..a31fbce 100644
 --- a/src/boringssl/engine.c
 +++ b/src/boringssl/engine.c
 @@ -28,11 +28,31 @@
@@ -344,3 +345,12 @@ diff --git a/src/boringssl/engine.c b/src/boringssl/engine.c
      if (context->pkey != NULL) {
          if (tls_set_cert_internal(engine->ssl, context->store, context->pkey) != 0) {
              UM_LOG(ERR, "failed to set cert/key pair");
+@@ -1329,7 +1546,7 @@
+ 
+     *out_bytes = 0;
+ 
+-    if (SSL_get_shutdown(eng->ssl)) {
++    if (SSL_get_shutdown(eng->ssl) & SSL_RECEIVED_SHUTDOWN) {
+         return TLS_EOF;
+     }
+ 

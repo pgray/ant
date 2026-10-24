@@ -15,7 +15,7 @@
 #include "net/connection.h"
 #include "net/listener.h"
 
-#define ANT_CONN_READ_BUFFER_SIZE (16 * 1024)
+static constexpr size_t ANT_CONN_READ_BUFFER_SIZE = 16 * 1024;
 
 typedef struct {
   uv_write_t req;
@@ -53,23 +53,19 @@ static void ant_listener_remove_conn(ant_listener_t *listener, ant_conn_t *conn)
 static bool ant_conn_store_addr(
   uv_tcp_t *handle,
   int (*get_name)(const uv_tcp_t *, struct sockaddr *, int *),
-  char *out_addr,
-  size_t out_addr_len,
-  char *out_family,
-  size_t out_family_len,
-  int *out_port,
-  bool *out_has_addr
+  char *out_addr, size_t out_addr_len, char *out_family,
+  size_t out_family_len, uint16_t *out_port
 ) {
   struct sockaddr_storage addr;
+  
   int len = sizeof(addr);
-
   if (get_name(handle, (struct sockaddr *)&addr, &len) != 0) return false;
+  
   if (addr.ss_family == AF_INET) {
     struct sockaddr_in *in = (struct sockaddr_in *)&addr;
     uv_ip4_name(in, out_addr, out_addr_len);
     memcpy(out_family, "IPv4", out_family_len < 5 ? out_family_len : 5);
     *out_port = ntohs(in->sin_port);
-    *out_has_addr = true;
     return true;
   }
 
@@ -78,7 +74,6 @@ static bool ant_conn_store_addr(
     uv_ip6_name(in6, out_addr, out_addr_len);
     memcpy(out_family, "IPv6", out_family_len < 5 ? out_family_len : 5);
     *out_port = ntohs(in6->sin6_port);
-    *out_has_addr = true;
     return true;
   }
 
@@ -87,30 +82,30 @@ static bool ant_conn_store_addr(
 
 static bool ant_conn_store_peer_addr(ant_conn_t *conn) {
   if (!conn || conn->kind != ANT_CONN_KIND_TCP) return false;
-  return ant_conn_store_addr(
+  bool stored = ant_conn_store_addr(
     &conn->handle.tcp,
     (int (*)(const uv_tcp_t *, struct sockaddr *, int *))uv_tcp_getpeername,
     conn->remote_addr,
-    sizeof(conn->remote_addr),
-    conn->remote_family,
-    sizeof(conn->remote_family),
-    &conn->remote_port,
-    &conn->has_remote_addr
+    sizeof(conn->remote_addr), conn->remote_family,
+    sizeof(conn->remote_family), &conn->remote_port
   );
+  
+  if (stored) conn->has_remote_addr = true;
+  return stored;
 }
 
 static bool ant_conn_store_local_addr(ant_conn_t *conn) {
   if (!conn || conn->kind != ANT_CONN_KIND_TCP) return false;
-  return ant_conn_store_addr(
+  bool stored = ant_conn_store_addr(
     &conn->handle.tcp,
     (int (*)(const uv_tcp_t *, struct sockaddr *, int *))uv_tcp_getsockname,
     conn->local_addr,
-    sizeof(conn->local_addr),
-    conn->local_family,
-    sizeof(conn->local_family),
-    &conn->local_port,
-    &conn->has_local_addr
+    sizeof(conn->local_addr), conn->local_family,
+    sizeof(conn->local_family), &conn->local_port
   );
+  
+  if (stored) conn->has_local_addr = true;
+  return stored;
 }
 
 static void ant_conn_timeout_cb(uv_timer_t *handle) {
@@ -212,10 +207,15 @@ static void ant_conn_write_cb_impl(uv_write_t *req, int status) {
 
 static void ant_conn_shutdown_cb(uv_shutdown_t *req, int status) {
   GC_UV_CALLBACK();
+  
   ant_conn_shutdown_req_t *shutdown_req = (ant_conn_shutdown_req_t *)req;
   ant_conn_t *conn = shutdown_req ? shutdown_req->conn : NULL;
   free(shutdown_req);
-  ant_conn_close(conn);
+  
+  if (!conn) return;
+  conn->write_done = true;
+  
+  if (!conn->close_after_read_done || conn->read_done || status < 0) ant_conn_close(conn);
 }
 
 static void ant_conn_finish_close(ant_conn_t *conn) {
@@ -545,7 +545,7 @@ void ant_conn_shutdown(ant_conn_t *conn) {
   ant_conn_shutdown_req_t *req = NULL;
   int rc = 0;
 
-  if (!conn || conn->closing) return;
+  if (!conn || conn->closing || conn->shutting_down) return;
 
   req = calloc(1, sizeof(*req));
   if (!req) {
@@ -553,9 +553,23 @@ void ant_conn_shutdown(ant_conn_t *conn) {
     return;
   }
 
+  conn->shutting_down = true;
   req->conn = conn;
+  
   rc = uv_shutdown(&req->req, ant_conn_stream(conn), ant_conn_shutdown_cb);
   if (rc != 0) { free(req); ant_conn_close(conn); }
+}
+
+void ant_conn_shutdown_write(ant_conn_t *conn) {
+  if (!conn) return;
+  conn->close_after_read_done = true;
+  ant_conn_shutdown(conn);
+}
+
+void ant_conn_mark_read_done(ant_conn_t *conn) {
+  if (!conn) return;
+  conn->read_done = true;
+  if (conn->write_done) ant_conn_close(conn);
 }
 
 void ant_conn_ref(ant_conn_t *conn) {

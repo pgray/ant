@@ -1849,6 +1849,11 @@ static ant_value_t js_typedarray_subarray(ant_params_t) {
   return out;
 }
 
+ant_value_t buffer_typedarray_subarray(ant_t *js, ant_value_t value, size_t begin, size_t end) {
+  ant_value_t args[2] = { js_mknum((double)begin), js_mknum((double)end) };
+  return sv_call_native_this(js, js_typedarray_subarray, value, args, 2);
+}
+
 // TypedArray.prototype.fill(value, start, end)
 static ant_value_t js_typedarray_fill(ant_params_t) {
   ant_value_t this_val = js_getthis(js);

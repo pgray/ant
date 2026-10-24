@@ -1327,6 +1327,10 @@ export class Server extends net.Server {
     return super.close(callback);
   }
 
+  async [Symbol.asyncDispose]() {
+    await new Promise((resolve, reject) => this.close(err => (err ? reject(err) : resolve())));
+  }
+
   closeAllConnections() {
     for (const state of [...this._socketStates]) {
       closeSocket(state.socket);

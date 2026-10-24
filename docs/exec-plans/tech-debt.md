@@ -1,7 +1,7 @@
 # Technical Debt Tracker
 
 Status: active
-Last reviewed: 2026-10-22
+Last reviewed: 2026-10-24
 Owner: theMackabu
 
 Use this file to record debt that is important enough to preserve but not yet
@@ -234,3 +234,21 @@ scheduled.
   - Validation: hello-world instruction count back within noise (±0.1M) of 16f2cca5.
   - Owner: theMackabu
   - Status: backlog (2026-10-22)
+
+- Area: `node:zlib` zstd support (`src/modules/zlib.c`, new vendored libzstd)
+  - Issue: Node's zstd API is missing: `createZstdCompress`, `createZstdDecompress`, `zstdCompress`, `zstdDecompress` and their `Sync` variants are all `undefined`. `zlib.constants` still defines the `ZSTD_*` constants, so the module looks like it supports zstd.
+  - Impact: undici (and pi's bundled copy) always sends `accept-encoding: br, gzip, deflate, zstd` over HTTPS without feature detection. Any server that picks zstd (pi.dev does) makes the request fail with `TypeError: fetch failed`, cause `undefined is not a function` from `zlib.createZstdDecompress`. In pi this is why the `anthropic` and `openai` model catalogs never refresh. Ant's own `fetch` doesn't advertise zstd and is unaffected.
+  - Proposed fix: Vendor zstd 1.5.7 as a meson wrap, built without legacy formats, multithreading or the dictionary builder, and implement the Node API (streams, callback and sync forms, `ZSTD_c_*`/`ZSTD_d_*` params, `info`, the zlib-style error shape) alongside the brotli bindings. Measured code size on arm64 before link-time dead stripping: compression plus decompression 371 KB at `-Os` (429 KB at `-O2`), decompression only 64 KB (79 KB); `build/ant` is 9.86 MB. Ship both directions so the API is complete; until then, consider dropping the `ZSTD_*` constants.
+  - Repro: `./build/ant -e "const z=require('node:zlib'); console.log(typeof z.createZstdDecompress, typeof z.zstdCompressSync, z.constants.ZSTD_e_end)"` prints `undefined undefined 2`; node prints `function function 2`. End to end: `./build/ant exec --ant @earendil-works/pi-coding-agent update --models` reports `anthropic: fetch failed; openai: fetch failed`.
+  - Validation: Node differential round trips (sync, callback, stream, chunked and flushed input, `ZSTD_e_flush`, truncated and corrupt input errors, `maxOutputLength`), undici `fetch` of a zstd-encoded HTTPS response, the pi model refresh above, and an instructions-retired check that startup cost doesn't change. Update the nix build and record the binary size delta.
+  - Owner: theMackabu
+  - Status: backlog (2026-10-24; repro verified on 79b7bce0)
+
+- Area: `node:http2` (`src/builtins/node/http2.mjs`; no HTTP/2 framing anywhere in Ant)
+  - Issue: `node:http2` is a compatibility stub. `connect()` throws `node:http2 client transport is not implemented yet`, `createServer`/`createSecureServer` return plain HTTP/1 servers, and the session and stream classes are empty. The only nghttp2 Ant ever had was the wrap libpkg used, removed with libpkg (see [drop-libpkg-for-upm](active/drop-libpkg-for-upm.md)). The node-compat count "HTTP/2 (235/256)" reflects tests that pass against the stub, not real HTTP/2 coverage.
+  - Impact: Any client that uses HTTP/2 fails. A standalone undici 8.10 negotiates `h2` via ALPN with servers that offer it (pi.dev does) and fails with `fetch failed`, cause `node:http2 client transport is not implemented yet`; pi's bundled undici stays on HTTP/1.1 and is unaffected today. gRPC clients, `http2.connect` users and HTTP/2-only servers don't work, and HTTP/2 servers silently serve HTTP/1.1.
+  - Proposed fix: Re-vendor nghttp2 (or another HTTP/2 framing layer) on top of the existing `src/net` connection and TLS stack, with ALPN `h2` support in `tls.c`, and implement `ClientHttp2Session`/`ServerHttp2Session` and streams (settings, flow control, `GOAWAY`, trailers, push off by default). Client first, since that's what undici and npm-style tooling need; server second. Decide on nghttp2 vs. a native implementation after measuring binary size and the per-request cost.
+  - Repro: `./build/ant -e "require('node:http2').connect('https://pi.dev')"` throws `node:http2 client transport is not implemented yet`; node connects. undici: `const { fetch } = await import('undici'); await fetch('https://pi.dev/api/models/providers/anthropic')` fails on Ant with that cause and returns 200 on node.
+  - Validation: the upstream node-compat HTTP/2 family run for real (not just the stub-shaped API tests), undici `fetch` with `allowH2` against an h2-only server, a `grpc-js` unary and streaming call, and an h2load/HTTP-1.1 throughput comparison against Node.
+  - Owner: theMackabu
+  - Status: backlog (2026-10-24; repro verified on 79b7bce0)

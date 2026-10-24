@@ -1,0 +1,99 @@
+diff --git a/src/api.ts b/src/api.ts
+--- a/src/api.ts
++++ b/src/api.ts
+@@ -300,6 +300,8 @@
+    * `node_modules/.bin` above `dir` on PATH either way. Takes no `args`.
+    */
+   call?: boolean;
++  onProgress?: (progress: Progress) => void;
++  onReady?: () => void;
+   experimental?: Experimental;
+ }
+ 
+@@ -1396,9 +1398,12 @@
+   if (call && args.length > 0) throw fail("exec takes a call line or args, not both", "EOPTION");
+   const log = options.log ?? (() => {});
+   const cwd = builtin.path.resolve(options.dir ?? globalThis.process.cwd());
+-  const run = (line: string, dirs: string[]) =>
+-    runShell(line, cwd, withPath([...dirs, ...binDirs(cwd)]));
++  const run = (line: string, dirs: string[]) => {
++    options.onReady?.();
++    return runShell(line, cwd, withPath([...dirs, ...binDirs(cwd)]));
++  };
+   const spawn = (words: string[], dirs: string[]) => {
++    options.onReady?.();
+     const env = withPath([...dirs, ...binDirs(cwd)]);
+     return runArgs(words.map((word) => quote(word)).join(" "), args, cwd, env, words[0]);
+   };
+diff --git a/src/cli.ts b/src/cli.ts
+--- a/src/cli.ts
++++ b/src/cli.ts
+@@ -752,6 +752,12 @@
+ async function execCommand(cli: Cli): Promise<number> {
+   const [command = cli.call!, ...args] = cli.specs;
+   const resolvePool = cli.resolvePool === RESOLVE_POOL_DEFAULT ? undefined : cli.resolvePool;
++  const onProgress = await progress(cli);
++  bar?.wait(`resolving ${cli.packages?.join(", ") ?? command}`);
++  const onReady = () => {
++    bar?.stop();
++    bar = undefined;
++  };
+   const { code } = await exec(command!, {
+     dir: cli.dir,
+     registry: cli.registry,
+@@ -765,8 +771,10 @@
+     call: cli.call !== undefined,
+     args,
+     log: note,
++    onProgress,
++    onReady,
+     experimental: { resolvePool, linkPool: cli.linkPool },
+-  });
++  }).finally(onReady);
+   return code;
+ }
+ 
+diff --git a/src/progress.ts b/src/progress.ts
+--- a/src/progress.ts
++++ b/src/progress.ts
+@@ -9,11 +9,14 @@
+   /** Takes the line off the screen; the next tick draws it again. */
+   clear: () => void;
+   stop: () => void;
++  wait: (label: string) => void;
+ }
+ 
+ const WIDTH = 20;
+ /** About 30 frames a second. */
+ const TICK = 33;
++const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
++const SPIN = 80;
+ 
+ /**
+  * What it hears is kept, and drawn on each tick it changed. Never in CI or on a terminal that
+@@ -29,8 +32,14 @@
+   const seen: Seen = {};
+   let shown = "";
+   let reported = "";
++  let label = "";
+   const draw = () => {
+-    const line = barLine(seen, (stream.columns || 80) - 1, gray);
++    const columns = (stream.columns || 80) - 1;
++    let line = barLine(seen, label ? columns - 2 : columns, gray);
++    if (label) {
++      const frame = FRAMES[Math.floor(Date.now() / SPIN) % FRAMES.length];
++      line = `${frame} ${line || label.slice(0, columns - 2)}`;
++    }
+     const report = osc ? oscProgress(fraction(seen)) : "";
+     if (line === shown && report === reported) return;
+     stream.write(`${report === reported ? "" : report}\r${line}\x1b[K`);
+@@ -55,7 +64,8 @@
+     globalThis.process.kill(globalThis.process.pid, "SIGINT");
+   };
+   if (osc) globalThis.process.once("SIGINT", interrupted);
+-  return { hear: (progress) => void (seen[progress.phase] = progress), clear, stop };
++  const wait = (text: string) => void (label = text);
++  return { hear: (progress) => void (seen[progress.phase] = progress), clear, stop, wait };
+ }
+ 
+ /**

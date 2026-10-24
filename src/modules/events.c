@@ -1812,6 +1812,7 @@ static ant_value_t js_events_add_abort_listener(ant_params_t) {
   if (already_aborted) {
     ant_value_t event = Ant_Event_CreateTrusted(js, js->builtins.event_proto, ANT_EVENT_BASE, "abort");
     if (is_err(event)) return event;
+    
     Ant_Event_BeginDispatch(js, event, args[0]);
     eventemitter_call_listener(js, args[1], args[0], &event, 1);
     Ant_Event_EndDispatch(js, event);
@@ -1819,11 +1820,12 @@ static ant_value_t js_events_add_abort_listener(ant_params_t) {
 
   ant_value_t state = Ant_Object_CreateBare(js);
   js_set_slot(state, SLOT_SETTLED, js_bool(already_aborted));
+  
   js_set(js, state, "signal", args[0]);
   js_set(js, state, "listener", args[1]);
 
   ant_value_t disposable = Ant_Object_CreateBare(js);
-  js_set(js, disposable, "dispose", js_heavy_mkfun(js, js_events_disposable_dispose, state));
+  js_set_sym(js, disposable, js->sym.dispose_sym, js_heavy_mkfun(js, js_events_disposable_dispose, state));
   
   return disposable;
 }

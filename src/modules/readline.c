@@ -1233,6 +1233,7 @@ static ant_value_t rl_get_interface_proto(ant_t *js) {
   js_set_proto_init(js->builtins.rl_interface_proto, eventemitter_prototype(js));
 
   js_set(js, js->builtins.rl_interface_proto, "close", Ant_Function_Create(rl_interface_close));
+  js_set_sym(js, js->builtins.rl_interface_proto, js->sym.dispose_sym, Ant_Function_Create(rl_interface_close));
   js_set(js, js->builtins.rl_interface_proto, "pause", Ant_Function_Create(rl_interface_pause));
   js_set(js, js->builtins.rl_interface_proto, "resume", Ant_Function_Create(rl_interface_resume));
   js_set(js, js->builtins.rl_interface_proto, "prompt", Ant_Function_Create(rl_interface_prompt));

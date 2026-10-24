@@ -492,6 +492,12 @@ static ant_value_t js_set_interval(ant_params_t) {
   return timer_make_object(js, entry, delay_ms, timer_args);
 }
 
+static ant_value_t js_timer_dispose(ant_params_t) {
+  timer_entry_t *entry = timer_open_entry_of(js_getthis(js));
+  if (entry) timer_close_entry(js, entry);
+  return js_mkundef();
+}
+
 // clearTimeout(timerId | timerObject)
 static ant_value_t js_clear_timeout(ant_params_t) {
   if (nargs < 1) return js_mkundef();
@@ -1421,6 +1427,7 @@ void init_timer_module(ant_t *js) {
   js_set(js, js->builtins.timeout_proto, "unref", Ant_Function_Create(js_timer_unref));
   js_set(js, js->builtins.timeout_proto, "hasRef", Ant_Function_Create(js_timer_has_ref));
   js_set(js, js->builtins.timeout_proto, "refresh", Ant_Function_Create(js_timer_refresh));
+  js_set_sym(js, js->builtins.timeout_proto, js->sym.dispose_sym, Ant_Function_Create(js_timer_dispose));
   js_set_tostringtag(js, js->builtins.timeout_proto, js_mkstr(js, "Timeout", 7));
   js_set_sym(js, js->builtins.timeout_proto, js->sym.inspect_sym, Ant_Function_Create(timer_inspect));
   js_set_sym(js, js->builtins.timeout_proto, js->sym.toPrimitive_sym, Ant_Function_Create(timer_to_primitive));
@@ -1444,6 +1451,7 @@ void init_timer_module(ant_t *js) {
   js_set(js, js->builtins.interval_proto, "unref", Ant_Function_Create(js_timer_unref));
   js_set(js, js->builtins.interval_proto, "hasRef", Ant_Function_Create(js_timer_has_ref));
   js_set(js, js->builtins.interval_proto, "refresh", Ant_Function_Create(js_timer_refresh));
+  js_set_sym(js, js->builtins.interval_proto, js->sym.dispose_sym, Ant_Function_Create(js_timer_dispose));
   js_set_tostringtag(js, js->builtins.interval_proto, js_mkstr(js, "Interval", 8));
   js_set_sym(js, js->builtins.interval_proto, js->sym.inspect_sym, Ant_Function_Create(timer_inspect));
   js_set_sym(js, js->builtins.interval_proto, js->sym.toPrimitive_sym, Ant_Function_Create(timer_to_primitive));

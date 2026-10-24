@@ -18,6 +18,7 @@ void js_define_methods(
 );
 
 ant_value_t js_mkfun_dyn(ant_cfunc_t fn);
+ant_value_t js_cfunc_noop(ant_params_t);
 ant_value_t js_mkfun_meta(const ant_cfunc_meta_t *meta);
 ant_value_t js_mkfun_site(ant_cfunc_site_t *site);
 
