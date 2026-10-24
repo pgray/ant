@@ -58,6 +58,20 @@ const coerce = (effect, result = 0x41) => ({
 }
 
 {
+  const { memory, grow } = wasmMemory();
+  const encoding = { toString() { grow(); return 'latin1'; } };
+  assert.strictEqual(Buffer.from(memory.buffer).write('A'.repeat(4096), 0, 4096, encoding), 0);
+}
+
+{
+  const buf = Buffer.alloc(64);
+  for (const value of [undefined, 123, { toString: () => 'ab' }]) {
+    assert.throws(() => buf.write(value, 0, 64, 'latin1'), { code: 'ERR_INVALID_ARG_TYPE' });
+  }
+  assert.throws(() => buf.write(), { code: 'ERR_INVALID_ARG_TYPE' });
+}
+
+{
   let moved;
   const { buffer, view } = transferred();
   assert.throws(() => view.fill(coerce(() => { moved = buffer.transfer(); })), TypeError);

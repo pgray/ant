@@ -3818,12 +3818,13 @@ static ant_value_t js_buffer_fill(ant_params_t) {
 
 // Buffer.prototype.write(string, offset, length, encoding)
 static ant_value_t js_buffer_write(ant_params_t) {
-  if (nargs < 1) return js_mkerr(js, "write requires a string");
-  
   ant_value_t this_val = js_getthis(js);
   TypedArrayData *ta_data = buffer_get_typedarray_data(this_val);
   if (!ta_data) return js_mkerr(js, "Invalid Buffer");
   
+  if (nargs < 1 || vtype(args[0]) != kTypeString)
+    return js_mkerr_code(js, JS_ERR_TYPE, "ERR_INVALID_ARG_TYPE", "argument must be a string");
+
   size_t str_len;
   char *str = js_getstr(js, args[0], &str_len);
   
@@ -3858,6 +3859,7 @@ static ant_value_t js_buffer_write(ant_params_t) {
   if (js_truthy(js, encoding_val)) {
     ant_value_t checked = buffer_require_encoding(js, encoding_val, &encoding);
     if (is_err(checked)) return checked;
+    if (vtype(encoding_val) != kTypeString) Ant_Buffer_GetViewBytes(ta_data, &bytes, &buf_len);
   }
   
   if (offset >= buf_len) return js_mknum(0);
