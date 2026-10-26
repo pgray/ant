@@ -460,12 +460,17 @@ typedef struct {
 typedef struct {
   uint8_t *type_feedback;
   uint8_t *elem_types;
+  
   ant_shape_t *ctor_proto_shape;
   uint32_t ctor_proto_slot;
   bool ctor_proto_shape_registered;
   uint8_t poly_recompiles;
+  
   struct sv_jit_await_map *jit_await_map;
   const struct sv_try_table *try_table;
+  
+  uint8_t *builder_targets;
+  uint32_t builder_target_bits;
 } sv_func_sidecar_t;
 
 static_assert(

@@ -189,8 +189,14 @@ found:
   if (lt->col_line == line && lt->col_off <= off) {
     pos = lt->col_off;
     col = lt->col;
+  } else if (lt->col_line == line && lt->col_off - off < off - start) {
+    col = lt->col;
+    for (pos = lt->col_off; pos > off; pos--) 
+      col -= utf16_units_for_utf8_byte((unsigned char)lt->source[pos - 1]);
   }
-  for (; pos < off; pos++) col += utf16_units_for_utf8_byte((unsigned char)lt->source[pos]);
+  
+  for (; pos < off; pos++) 
+    col += utf16_units_for_utf8_byte((unsigned char)lt->source[pos]);
 
   lt->col_line = line;
   lt->col_off = off;

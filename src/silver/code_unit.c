@@ -251,6 +251,7 @@ static void func_free_sidecar(sv_func_t *func) {
   free(sidecar->type_feedback);
   free(sidecar->elem_types);
   free(sidecar->jit_await_map);
+  free(sidecar->builder_targets);
   
   sv_try_table_free(sidecar->try_table);
   free(sidecar);

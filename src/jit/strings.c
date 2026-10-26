@@ -1,4 +1,5 @@
 #include "jit_internal.h"
+#include "silver/feedback.h"
 void mir_emit_branch_if_string_builder(
     MIR_context_t ctx, MIR_item_t fn,
     MIR_reg_t value, MIR_reg_t scratch, MIR_label_t builder) {
@@ -26,6 +27,41 @@ void mir_emit_branch_if_string_builder(
   MIR_append_insn(ctx, fn, done);
 }
 
+static const uint8_t *jit_builder_targets(sv_func_t *func, uint32_t *bits) {
+  sv_func_sidecar_t *sidecar = sv_func_ensure_sidecar(func);
+  if (!sidecar) return NULL;
+
+  if (!sidecar->builder_targets) {
+    uint8_t *end = func->code + func->code_len;
+    uint32_t count = 0;
+    bool malformed = false;
+
+    for (uint8_t *ip = func->code; ip < end;) {
+      int sz = sv_op_size[*ip];
+      if (sz == 0 || ip + sz > end) { malformed = true; break; }
+      if (sv_op_flags[*ip] & SV_OPF_BUILDER_TARGET) {
+        uint32_t index = sv_get_u16(ip + 1);
+        if (index >= count) count = index + 1;
+      }
+      ip += sz;
+    }
+
+    uint8_t *set = calloc(count / 8 + 1, 1);
+    if (!set) return NULL;
+    for (uint8_t *ip = func->code; !malformed && ip < end; ip += sv_op_size[*ip]) {
+      if (!(sv_op_flags[*ip] & SV_OPF_BUILDER_TARGET)) continue;
+      uint32_t index = sv_get_u16(ip + 1);
+      set[index >> 3] |= (uint8_t)(1u << (index & 7));
+    }
+
+    sidecar->builder_targets = set;
+    sidecar->builder_target_bits = malformed ? UINT32_MAX : count;
+  }
+
+  *bits = sidecar->builder_target_bits;
+  return sidecar->builder_targets;
+}
+
 bool jit_upvalue_is_builder_target(sv_func_t *func, uint32_t idx) {
   sv_func_t *f = func;
   uint32_t i = idx;
@@ -37,18 +73,10 @@ bool jit_upvalue_is_builder_target(sv_func_t *func, uint32_t idx) {
     if (!p) return true;
 
     if (d->is_local) {
-      uint8_t *ip = p->code;
-      uint8_t *end = p->code + p->code_len;
-      while (ip < end) {
-        sv_op_t op = (sv_op_t)*ip;
-        int sz = sv_op_size[op];
-        if (sz == 0) return true;
-        if (ip + sz > end) return true;
-        if ((sv_op_flags[op] & SV_OPF_BUILDER_TARGET) != 0 &&
-            sv_get_u16(ip + 1) == d->index) return true;
-        ip += sz;
-      }
-      return false;
+      uint32_t bits;
+      const uint8_t *set = jit_builder_targets(p, &bits);
+      if (!set || bits == UINT32_MAX) return true;
+      return d->index < bits && ((set[d->index >> 3] >> (d->index & 7)) & 1);
     }
 
     f = p;
