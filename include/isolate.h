@@ -5,13 +5,13 @@
 
 #include "arena.h"
 #include "errors.h"
+#include "shapes.h"
 #include "pool.h"
+#include "runtime.h"
+#include "descriptors.h"
+#include "primordials.h"
 #include "gc/objects.h"
 #include "silver/code_unit.h"
-#include "runtime.h"
-#include "primordials.h"
-#include "descriptors.h"
-#include "shapes.h"
 
 #include "esm/loader.h"
 #include "modules/json.h"
@@ -189,13 +189,7 @@ struct ant_isolate_t {
   
   uint32_t prototype_write_epoch;
   uint32_t array_chain_plain_epoch;
-
-  bool promise_constructor_protector_invalid;
-  bool promise_resolve_lookup_protector_invalid;
-  bool promise_species_protector_invalid;
-  bool array_species_protector_invalid;
-  bool array_iteration_protector_invalid;
-  bool promise_then_protector_invalid;
+  uint32_t protectors_invalid;
 
   struct {
     uint32_t epoch;

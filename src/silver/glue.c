@@ -589,32 +589,46 @@ static ant_value_t jit_iter_advance_from_buf(
     ant_value_t next_method = iter_buf[1];
     GC_ROOT_PIN(js, iterator);
     GC_ROOT_PIN(js, next_method);
+    
     if (!is_callable(next_method)) {
       GC_ROOT_RESTORE(js, root_mark);
       return js_mkerr(js, "iterator.next is not a function");
     }
+    
+    if (js_generator_can_resume_sync(iterator, next_method, SV_RESUME_NEXT)) {
+      *out_value = js_generator_resume_sync(js, iterator, js_mkundef(), SV_RESUME_NEXT, out_done);
+      GC_ROOT_RESTORE(js, root_mark);
+      return is_err(*out_value) ? *out_value : tov(0);
+    }
+    
     ant_value_t result = sv_vm_call(vm, js, next_method, iterator, NULL, 0, NULL, js_mkundef());
     if (is_err(result)) {
       GC_ROOT_RESTORE(js, root_mark);
       return result;
     }
+    
     GC_ROOT_PIN(js, result);
     if (!is_object_type(result)) {
       GC_ROOT_RESTORE(js, root_mark);
       return js_mkerr_typed(js, JS_ERR_TYPE, "Iterator result is not an object");
     }
+    
     ant_value_t done = js_mkundef();
     GC_ROOT_PIN(js, done);
+    
     sv_iter_result_unpack(js, result, &done, out_value);
     GC_ROOT_PIN(js, *out_value);
+    
     if (is_err(done)) {
       GC_ROOT_RESTORE(js, root_mark);
       return done;
     }
+    
     if (is_err(*out_value)) {
       GC_ROOT_RESTORE(js, root_mark);
       return *out_value;
     }
+    
     *out_done = js_truthy(js, done);
     GC_ROOT_RESTORE(js, root_mark);
     return tov(0);

@@ -3,6 +3,7 @@
 
 #include <limits.h>
 #include "silver/call.h"
+#include "protectors.h"
 #include "silver/jit.h"
 #include "silver/feedback.h"
 #include "gc/roots.h"
@@ -23,7 +24,7 @@ static inline ant_value_t sv_load_stable_builtin(
   if (kind != SV_STABLE_BUILTIN_PROMISE_RESOLVE)
     return js_mkerr(js, "invalid stable builtin");
 
-  if (!js->promise_resolve_lookup_protector_invalid) {
+  if (ant_protector_intact(js, ANT_PROTECTOR_PROMISE_RESOLVE_LOOKUP)) {
     *receiver_out = js->sym.promise_ctor;
     return js->sym.promise_resolve;
   }

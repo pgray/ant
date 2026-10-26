@@ -13,6 +13,7 @@
 #include "modules/globals.h"
 #include "modules/timer.h"
 #include "modules/promise.h"
+#include "protectors.h"
 
 static const UT_icd promise_handler_icd = {
   .sz = sizeof(promise_handler_t),
@@ -212,9 +213,20 @@ static inline ant_value_t js_get_thenable_then(ant_t *js, ant_value_t value) {
 
   if (
     vtype(value) == kTypePromise &&
-    !js->promise_then_protector_invalid &&
+    ant_protector_intact(js, ANT_PROTECTOR_PROMISE_THEN) &&
     js_get_slot(value, SLOT_PROTO) == js->sym.promise_proto
   ) return js->sym.promise_then;
+
+  if (vtype(value) == kTypeObject && ant_protector_intact(js, ANT_PROTECTOR_OBJECT_THEN)) {
+    ant_object_t *obj = js_obj_ptr(value);
+    ant_object_t *object_proto = js_obj_ptr(js->sym.object_proto);
+    
+    if (
+      obj->proto == js->sym.object_proto && !obj->flags.is_exotic && obj->shape &&
+      object_proto && !is_object_type(object_proto->proto) &&
+      ant_shape_lookup_interned(obj->shape, js->intern.then) < 0
+    ) return js_mkundef();
+  }
 
   return js_getprop_fallback(js, value, "then");
 }
@@ -222,7 +234,7 @@ static inline ant_value_t js_get_thenable_then(ant_t *js, ant_value_t value) {
 ant_value_t js_promise_assimilate_awaitable(ant_t *js, ant_value_t value) {
   if (
     vtype(value) == kTypePromise &&
-    !js->promise_constructor_protector_invalid &&
+    ant_protector_intact(js, ANT_PROTECTOR_PROMISE_CONSTRUCTOR) &&
     js_get_slot(value, SLOT_PROTO) == js->sym.promise_proto
   ) return value;
 
@@ -625,7 +637,7 @@ void js_process_promise_thenable_job(
   if (
     vtype(thenable) == kTypePromise &&
     then_fn == js->sym.promise_then &&
-    !js->promise_species_protector_invalid &&
+    ant_protector_intact(js, ANT_PROTECTOR_PROMISE_SPECIES) &&
     js_get_slot(thenable, SLOT_PROTO) == js->sym.promise_proto
   ) {
     ant_promise_state_t *source = js_promise_data(js, thenable, false);
@@ -967,8 +979,11 @@ static void promise_init_derived_promise(
 
 static ant_value_t promise_then_species_ctor(ant_t *js, ant_value_t p_obj, ant_value_t *out) {
   *out = js->sym.promise_ctor;
-  if (!js->promise_species_protector_invalid && js_get_slot(p_obj, SLOT_PROTO) == js->sym.promise_proto)
-    return js_mkundef();
+  
+  if (
+    ant_protector_intact(js, ANT_PROTECTOR_PROMISE_SPECIES) && 
+    js_get_slot(p_obj, SLOT_PROTO) == js->sym.promise_proto
+  ) return js_mkundef();
 
   GC_ROOT_SAVE(root_mark, js);
   ant_value_t ctor = js_get(js, p_obj, "constructor");
@@ -1554,10 +1569,10 @@ static iter_action_t promise_all_settled_iter_cb(ant_t *js, ant_value_t value, v
 static bool promise_all_fast_eligible(ant_t *js, ant_value_t ctor, ant_value_t iterable) {
   if (ctor != js->sym.promise_ctor) return false;
   
-  if (
-    js->promise_constructor_protector_invalid || js->promise_resolve_lookup_protector_invalid ||
-    js->promise_species_protector_invalid || js->promise_then_protector_invalid
-  ) return false;
+  if (!ant_protector_intact(js,
+    ANT_PROTECTOR_PROMISE_CONSTRUCTOR | ANT_PROTECTOR_PROMISE_RESOLVE_LOOKUP |
+    ANT_PROTECTOR_PROMISE_SPECIES | ANT_PROTECTOR_PROMISE_THEN
+  )) return false;
 
   if (vtype(iterable) != kTypeArray || !js_array_iteration_default(js, iterable)) return false;
 

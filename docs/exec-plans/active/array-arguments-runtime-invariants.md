@@ -56,8 +56,9 @@ and the JIT guards in `src/jit/values.c` and `src/jit/emit_properties.c`.
 
 ### Species and fresh results
 
-- `js->array_species_protector_invalid` is set when `Symbol.species` is
-  defined on `Array`. While it is clear, an array whose proto is
+- The `ANT_PROTECTOR_ARRAY_SPECIES` bit of `js->protectors_invalid` is set
+  when `Symbol.species` is defined on `Array`. While it is clear, an array
+  whose proto is
   `Array.prototype` creates results with the intrinsic `Array`
   (`array_constructor_from_receiver`).
 - `array_species_create(js, receiver, len, &intrinsic)` reports whether the

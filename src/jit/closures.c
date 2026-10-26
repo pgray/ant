@@ -1,4 +1,5 @@
 #include "jit_internal.h"
+#include "protectors.h"
 void mir_emit_call_stable_builtin(
     MIR_context_t ctx, MIR_item_t fn, ant_t *js,
     MIR_reg_t r_vm, MIR_reg_t r_js,
@@ -59,9 +60,14 @@ void mir_emit_call_stable_builtin(
   MIR_append_insn(ctx, fn,
                   MIR_new_insn(ctx, MIR_MOV,
                                MIR_new_reg_op(ctx, guard),
-                               MIR_new_mem_op(ctx, MIR_T_U8,
-                                              (MIR_disp_t)offsetof(ant_t, promise_constructor_protector_invalid),
+                               MIR_new_mem_op(ctx, MIR_T_U32,
+                                              (MIR_disp_t)offsetof(ant_t, protectors_invalid),
                                               r_js, 0, 1)));
+  MIR_append_insn(ctx, fn,
+                  MIR_new_insn(ctx, MIR_AND,
+                               MIR_new_reg_op(ctx, guard),
+                               MIR_new_reg_op(ctx, guard),
+                               MIR_new_uint_op(ctx, ANT_PROTECTOR_PROMISE_CONSTRUCTOR)));
   MIR_append_insn(ctx, fn,
                   MIR_new_insn(ctx, MIR_BNE, MIR_new_label_op(ctx, slow),
                                MIR_new_reg_op(ctx, guard),
@@ -120,10 +126,14 @@ void mir_emit_load_stable_builtin(
   MIR_append_insn(ctx, fn,
                   MIR_new_insn(ctx, MIR_MOV,
                                MIR_new_reg_op(ctx, guard),
-                               MIR_new_mem_op(ctx, MIR_T_U8,
-                                              (MIR_disp_t)offsetof(
-                                                  ant_t, promise_resolve_lookup_protector_invalid),
+                               MIR_new_mem_op(ctx, MIR_T_U32,
+                                              (MIR_disp_t)offsetof(ant_t, protectors_invalid),
                                               r_js, 0, 1)));
+  MIR_append_insn(ctx, fn,
+                  MIR_new_insn(ctx, MIR_AND,
+                               MIR_new_reg_op(ctx, guard),
+                               MIR_new_reg_op(ctx, guard),
+                               MIR_new_uint_op(ctx, ANT_PROTECTOR_PROMISE_RESOLVE_LOOKUP)));
   MIR_append_insn(ctx, fn,
                   MIR_new_insn(ctx, MIR_BNE,
                                MIR_new_label_op(ctx, slow),

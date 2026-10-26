@@ -25,6 +25,7 @@
 #include "modules/string_decoder.h"
 #include "modules/symbol.h"
 #include "streams/readable.h"
+#include "tokens.h"
 
 static constexpr uint32_t STREAM_OP_TAG = Ant_NativeTag("STRO");
 static constexpr uint32_t STREAM_NATIVE_TAG = Ant_NativeTag("STRM");
@@ -80,6 +81,7 @@ typedef struct {
   double length;
   double high_water_mark;
   ant_offset_t buffer_head;
+  size_t head_offset;
   bool object_mode;
   bool auto_destroy;
   bool ended;
@@ -442,22 +444,6 @@ static ant_value_t stream_readable_buffer(ant_t *js, stream_private_state_t *pri
   return priv->readable.buffer;
 }
 
-static ant_value_t stream_field_get(ant_params_t) {
-  const stream_field_t *field = stream_current_field(js);
-  stream_private_state_t *priv = stream_field_owner(js_getthis(js), field);
-  if (!priv) return js_mkundef();
-
-  void *ptr = (char *)priv + field->offset;
-  switch (field->kind) {
-    case STREAM_FIELD_BOOL: return js_bool(*(bool *)ptr);
-    case STREAM_FIELD_NUM: return js_mknum(*(double *)ptr);
-    case STREAM_FIELD_VALUE: return *(ant_value_t *)ptr;
-    case STREAM_FIELD_BUFFER: return stream_readable_buffer(js, priv);
-  }
-
-  return js_mkundef();
-}
-
 static ant_value_t stream_field_set(ant_params_t) {
   const stream_field_t *field = stream_current_field(js);
   ant_value_t receiver = js_getthis(js);
@@ -482,23 +468,11 @@ static ant_value_t stream_field_set(ant_params_t) {
     case STREAM_FIELD_BUFFER:
       stream_store(js, priv, ptr, value);
       priv->readable.buffer_head = 0;
+      priv->readable.head_offset = 0;
       break;
   }
 
   return js_mkundef();
-}
-
-static void stream_define_fields(ant_t *js, ant_value_t target, stream_field_target_t on) {
-  int flags = on == STREAM_ON_READABLE_STATE || on == STREAM_ON_WRITABLE_STATE ? JS_DESC_E | JS_DESC_C : JS_DESC_C;
-
-  for (size_t i = 0; i < countof(stream_fields); i++) {
-    const stream_field_t *field = &stream_fields[i];
-    if (field->target != on) continue;
-
-    ant_value_t getter = js_heavy_mkfun(js, stream_field_get, js_mknum((double)i));
-    ant_value_t setter = field->readonly ? js_mkundef() : js_heavy_mkfun(js, stream_field_set, js_mknum((double)i));
-    js_set_accessor_desc(js, target, field->name, strlen(field->name), getter, setter, flags);
-  }
 }
 
 static ant_value_t stream_state_object(ant_t *js, stream_private_state_t *priv, bool readable) {
@@ -539,27 +513,6 @@ static ant_value_t js_stream_writable_state_setter(ant_params_t) {
 static ant_value_t js_writable_writable_getter(ant_params_t) {
   stream_private_state_t *priv = stream_writable_of(js_getthis(js));
   return js_bool(priv && !priv->destroyed && !priv->writable.ended);
-}
-
-static void stream_define_stream_accessors(ant_t *js, ant_value_t target) {
-  stream_define_fields(js, target, STREAM_ON_STREAM);
-
-  js_set_accessor_desc(
-    js, target, "_readableState", 14,
-    Ant_Function_Create(js_stream_readable_state_getter),
-    Ant_Function_Create(js_stream_readable_state_setter), JS_DESC_C
-  );
-
-  js_set_accessor_desc(
-    js, target, "_writableState", 14,
-    Ant_Function_Create(js_stream_writable_state_getter),
-    Ant_Function_Create(js_stream_writable_state_setter), JS_DESC_C
-  );
-}
-
-static void stream_define_writable_accessors(ant_t *js, ant_value_t target) {
-  stream_define_fields(js, target, STREAM_ON_WRITABLE);
-  js_set_getter_desc(js, target, "writable", 8, Ant_Function_Create(js_writable_writable_getter), JS_DESC_C);
 }
 
 static bool stream_key_is_cstr(ant_t *js, ant_value_t value, const char *expected) {
@@ -673,6 +626,7 @@ static double stream_chunk_size(ant_t *js, ant_value_t chunk, bool object_mode) 
   const uint8_t *bytes = NULL;
   size_t byte_len = 0;
   if (object_mode) return 1;
+  if (vtype(chunk) == kTypeString) return (double)str_utf16_len(js, chunk);
   if (buffer_source_get_bytes(js, chunk, &bytes, &byte_len)) return (double)byte_len;
   return 1;
 }
@@ -708,30 +662,147 @@ static ant_offset_t stream_readable_buffer_len(ant_t *js, stream_readable_state_
 static void stream_buffer_push(ant_t *js, stream_private_state_t *priv, ant_value_t value) {
   js_arr_push(js, stream_readable_buffer(js, priv), value);
   priv->readable.length += stream_chunk_size(js, value, priv->readable.object_mode);
+}
+
+static ant_value_t stream_bytes_view(ant_t *js, ant_value_t chunk, double start, double end) {
+  if (!buffer_get_typedarray_data(chunk)) {
+    chunk = stream_make_buffer(js, chunk, js_mkundef());
+    if (is_err(chunk)) return chunk;
   }
   
+  return buffer_byte_subarray(js, chunk, (size_t)start, (size_t)end);
+}
+
+static ant_value_t stream_readable_head(ant_t *js, stream_readable_state_t *rs) {
+  return js_arr_get(js, rs->buffer, rs->buffer_head);
+}
+
+static ant_value_t stream_readable_head_rest(ant_t *js, stream_readable_state_t *rs) {
+  ant_value_t head = stream_readable_head(js, rs);
+  if (rs->head_offset == 0) return head;
+
+  double start = (double)rs->head_offset;
+  double end = stream_chunk_size(js, head, false);
+
+  return vtype(head) == kTypeString
+    ? js_string_slice(js, head, start, end)
+    : stream_bytes_view(js, head, start, end);
+}
+
+static ant_value_t stream_readable_settle_head(ant_t *js, stream_private_state_t *priv) {
+  stream_readable_state_t *rs = &priv->readable;
+  if (rs->head_offset == 0) return js_mkundef();
+
+  if (stream_readable_buffer_len(js, rs) == 0) {
+    rs->head_offset = 0;
+    return js_mkundef();
+  }
+
+  ant_value_t rest = stream_readable_head_rest(js, rs);
+  if (is_err(rest)) return rest;
+
+  js_arr_set_index(js, rs->buffer, rs->buffer_head, rest);
+  rs->head_offset = 0;
+
+  return js_mkundef();
+}
+
+static ant_value_t stream_field_get(ant_params_t) {
+  const stream_field_t *field = stream_current_field(js);
+  stream_private_state_t *priv = stream_field_owner(js_getthis(js), field);
+  if (!priv) return js_mkundef();
+
+  void *ptr = (char *)priv + field->offset;
+  switch (field->kind) {
+    case STREAM_FIELD_BOOL: return js_bool(*(bool *)ptr);
+    case STREAM_FIELD_NUM: return js_mknum(*(double *)ptr);
+    case STREAM_FIELD_VALUE: return *(ant_value_t *)ptr;
+    case STREAM_FIELD_BUFFER: {
+      ant_value_t settled = stream_readable_settle_head(js, priv);
+      return is_err(settled) ? settled : stream_readable_buffer(js, priv);
+    }
+  }
+
+  return js_mkundef();
+}
+
+static void stream_define_fields(ant_t *js, ant_value_t target, stream_field_target_t on) {
+  int flags = on == STREAM_ON_READABLE_STATE || on == STREAM_ON_WRITABLE_STATE ? JS_DESC_E | JS_DESC_C : JS_DESC_C;
+
+  for (size_t i = 0; i < countof(stream_fields); i++) {
+    const stream_field_t *field = &stream_fields[i];
+    if (field->target != on) continue;
+
+    ant_value_t getter = js_heavy_mkfun(js, stream_field_get, js_mknum((double)i));
+    ant_value_t setter = field->readonly ? js_mkundef() : js_heavy_mkfun(js, stream_field_set, js_mknum((double)i));
+    js_set_accessor_desc(js, target, field->name, strlen(field->name), getter, setter, flags);
+  }
+}
+
+static void stream_define_writable_accessors(ant_t *js, ant_value_t target) {
+  stream_define_fields(js, target, STREAM_ON_WRITABLE);
+  js_set_getter_desc(js, target, "writable", 8, Ant_Function_Create(js_writable_writable_getter), JS_DESC_C);
+}
+
+static void stream_define_stream_accessors(ant_t *js, ant_value_t target) {
+  stream_define_fields(js, target, STREAM_ON_STREAM);
+
+  js_set_accessor_desc(
+    js, target, "_readableState", 14,
+    Ant_Function_Create(js_stream_readable_state_getter),
+    Ant_Function_Create(js_stream_readable_state_setter), JS_DESC_C
+  );
+
+  js_set_accessor_desc(
+    js, target, "_writableState", 14,
+    Ant_Function_Create(js_stream_writable_state_getter),
+    Ant_Function_Create(js_stream_writable_state_setter), JS_DESC_C
+  );
+}
+
+static void stream_buffer_consume(stream_readable_state_t *rs, double n) {
+  rs->length = rs->length > n ? rs->length - n : 0;
+  rs->data_emitted = true;
+}
+
+static void stream_buffer_drop_head(ant_t *js, stream_private_state_t *priv, double rest_size) {
+  stream_readable_state_t *rs = &priv->readable;
+  rs->buffer_head++;
+  rs->head_offset = 0;
+  stream_buffer_consume(rs, rest_size);
+  stream_queue_compact(js, priv, &rs->buffer, &rs->buffer_head, 32);
+}
+
 static ant_value_t stream_buffer_shift(ant_t *js, stream_private_state_t *priv) {
   stream_readable_state_t *rs = &priv->readable;
   if (stream_readable_buffer_len(js, rs) == 0) return js_mkundef();
 
-  ant_value_t value = js_arr_get(js, rs->buffer, rs->buffer_head++);
-  double next_length = rs->length - stream_chunk_size(js, value, rs->object_mode);
+  ant_value_t value = stream_readable_head_rest(js, rs);
+  if (is_err(value)) return value;
 
-  rs->length = next_length > 0 ? next_length : 0;
-  rs->data_emitted = true;
-  stream_queue_compact(js, priv, &rs->buffer, &rs->buffer_head, 32);
+  GC_ROOT_SAVE(root_mark, js);
+  GC_ROOT_PIN(js, value);
+  stream_buffer_drop_head(js, priv, stream_chunk_size(js, value, rs->object_mode));
+  GC_ROOT_RESTORE(js, root_mark);
   
   return value;
 }
 
-static void stream_buffer_unshift(ant_t *js, stream_private_state_t *priv, ant_value_t value) {
+static ant_value_t stream_buffer_unshift(ant_t *js, stream_private_state_t *priv, ant_value_t value) {
   stream_readable_state_t *rs = &priv->readable;
   ant_value_t buffer = stream_readable_buffer(js, priv);
 
+  GC_ROOT_SAVE(root_mark, js);
+  GC_ROOT_PIN(js, value);
+
+  ant_value_t settled = stream_readable_settle_head(js, priv);
+  if (is_err(settled)) {
+    GC_ROOT_RESTORE(js, root_mark);
+    return settled;
+  }
+
   if (rs->buffer_head > 0) js_arr_set_index(js, buffer, --rs->buffer_head, value);
   else {
-    GC_ROOT_SAVE(root_mark, js);
-    GC_ROOT_PIN(js, value);
     ant_value_t next = js_mkarr(js);
     GC_ROOT_PIN(js, next);
     
@@ -740,54 +811,30 @@ static void stream_buffer_unshift(ant_t *js, stream_private_state_t *priv, ant_v
     for (ant_offset_t i = 0; i < len; i++) js_arr_push(js, next, js_arr_get(js, buffer, i));
     
     stream_store(js, priv, &rs->buffer, next);
-    GC_ROOT_RESTORE(js, root_mark);
   }
 
-  rs->length += stream_chunk_size(js, value, rs->object_mode);
-}
-
-static ant_value_t stream_bytes_view(ant_t *js, ant_value_t chunk, double start, double end) {
-  if (vtype(chunk) != kTypeTypedArray) {
-    chunk = stream_make_buffer(js, chunk, js_mkundef());
-    if (is_err(chunk)) return chunk;
-  }
-  
-  return buffer_typedarray_subarray(js, chunk, (size_t)start, (size_t)end);
-}
-
-static ant_value_t stream_buffer_drop_head_bytes(ant_t *js, stream_private_state_t *priv, ant_value_t head, double n) {
-  stream_readable_state_t *rs = &priv->readable;
-  ant_value_t rest = stream_bytes_view(js, head, n, stream_chunk_size(js, head, false));
-  if (is_err(rest)) return rest;
-
-  js_arr_set_index(js, rs->buffer, rs->buffer_head, rest);
-  rs->length = rs->length > n ? rs->length - n : 0;
-  rs->data_emitted = true;
-
-  return js_mkundef();
-}
-
-static ant_value_t stream_buffer_split_head(ant_t *js, stream_private_state_t *priv, double n) {
-  ant_value_t head = js_arr_get(js, priv->readable.buffer, priv->readable.buffer_head);
-
-  GC_ROOT_SAVE(root_mark, js);
-  GC_ROOT_PIN(js, head);
-  
-  ant_value_t out = stream_bytes_view(js, head, 0, n);
-  GC_ROOT_PIN(js, out);
-  
-  ant_value_t dropped = is_err(out) ? out : stream_buffer_drop_head_bytes(js, priv, head, n);
   GC_ROOT_RESTORE(js, root_mark);
+  rs->length += stream_chunk_size(js, value, rs->object_mode);
   
-  return is_err(dropped) ? dropped : out;
+  return js_mkundef();
 }
 
 static ant_value_t stream_buffer_take_bytes(ant_t *js, stream_private_state_t *priv, double n) {
   stream_readable_state_t *rs = &priv->readable;
-  double head_size = stream_chunk_size(js, js_arr_get(js, rs->buffer, rs->buffer_head), false);
+  ant_value_t head = stream_readable_head(js, rs);
+  double head_rest = stream_chunk_size(js, head, false) - (double)rs->head_offset;
 
-  if (n == head_size) return stream_buffer_shift(js, priv);
-  if (n < head_size) return stream_buffer_split_head(js, priv, n);
+  if (n == head_rest) return stream_buffer_shift(js, priv);
+  if (n < head_rest) {
+    double start = (double)rs->head_offset;
+    ant_value_t out = stream_bytes_view(js, head, start, start + n);
+    if (is_err(out)) return out;
+
+    rs->head_offset += (size_t)n;
+    stream_buffer_consume(rs, n);
+
+    return out;
+  }
 
   ArrayBufferData *ab = create_array_buffer_data(js, (size_t)n);
   if (!ab) return Ant_Error_CreateOutOfMemory(js);
@@ -800,34 +847,119 @@ static ant_value_t stream_buffer_take_bytes(ant_t *js, stream_private_state_t *p
 
   size_t filled = 0;
   while (filled < (size_t)n && stream_readable_buffer_len(js, rs) > 0) {
-    ant_value_t chunk = js_arr_get(js, rs->buffer, rs->buffer_head);
+    ant_value_t chunk = stream_readable_head(js, rs);
     const uint8_t *bytes = NULL;
     size_t len = 0;
 
     if (!buffer_source_get_bytes(js, chunk, &bytes, &len)) {
-      chunk = stream_make_buffer(js, chunk, js_mkundef());
+      ant_value_t settled = stream_readable_settle_head(js, priv);
+      chunk = is_err(settled) ? settled : stream_make_buffer(js, stream_readable_head(js, rs), js_mkundef());
       if (is_err(chunk) || !buffer_source_get_bytes(js, chunk, &bytes, &len)) {
         GC_ROOT_RESTORE(js, root_mark);
         return is_err(chunk) ? chunk : js_mkerr(js, "readable chunk is not binary");
       }
+    } else {
+      bytes += rs->head_offset;
+      len -= rs->head_offset;
     }
 
     size_t take = len < (size_t)n - filled ? len : (size_t)n - filled;
     if (take > 0) memcpy(ab->data + filled, bytes, take);
     filled += take;
 
-    ant_value_t status = take == len
-      ? stream_buffer_shift(js, priv)
-      : stream_buffer_drop_head_bytes(js, priv, chunk, (double)take);
-    
-    if (is_err(status)) {
-      GC_ROOT_RESTORE(js, root_mark);
-      return status;
+    if (take == len) stream_buffer_drop_head(js, priv, (double)len);
+    else {
+      rs->head_offset += take;
+      stream_buffer_consume(rs, (double)take);
     }
   }
 
   GC_ROOT_RESTORE(js, root_mark);
   return out;
+}
+
+static ant_value_t stream_buffer_take_chars(ant_t *js, stream_private_state_t *priv, double n) {
+  stream_readable_state_t *rs = &priv->readable;
+  ant_value_t out = js_mkundef();
+  double filled = 0;
+
+  GC_ROOT_SAVE(root_mark, js);
+  while (filled < n && stream_readable_buffer_len(js, rs) > 0) {
+    GC_ROOT_RESTORE(js, root_mark);
+    GC_ROOT_PIN(js, out);
+
+    ant_value_t head = stream_readable_head(js, rs);
+    if (vtype(head) != kTypeString) {
+      ant_value_t settled = stream_readable_settle_head(js, priv);
+      head = is_err(settled) ? settled : js_tostring_val(js, stream_readable_head(js, rs));
+      if (is_err(head)) { out = head; break; }
+      js_arr_set_index(js, rs->buffer, rs->buffer_head, head);
+    }
+
+    double start = (double)rs->head_offset;
+    double rest = stream_chunk_size(js, head, false) - start;
+    double take = rest < n - filled ? rest : n - filled;
+    
+    ant_value_t piece = start == 0 && take == rest ? head : js_string_slice(js, head, start, start + take);
+    if (is_err(piece)) { out = piece; break; }
+    GC_ROOT_PIN(js, piece);
+
+    if (take == rest) stream_buffer_drop_head(js, priv, rest);
+    else {
+      rs->head_offset += (size_t)take;
+      stream_buffer_consume(rs, take);
+    }
+
+    out = is_undefined(out) ? piece : do_string_op(js, TOK_PLUS, out, piece);
+    if (is_err(out)) break;
+    filled += take;
+  }
+
+  GC_ROOT_RESTORE(js, root_mark);
+  return is_undefined(out) ? js_mkstr(js, "", 0) : out;
+}
+
+static ant_value_t stream_readable_redecode_buffer(ant_t *js, stream_private_state_t *priv) {
+  stream_readable_state_t *rs = &priv->readable;
+  if (rs->object_mode || stream_readable_buffer_len(js, rs) == 0) return js_mkundef();
+
+  ant_value_t settled = stream_readable_settle_head(js, priv);
+  if (is_err(settled)) return settled;
+
+  ant_value_t content = js_mkstr(js, "", 0);
+  ant_offset_t len = js_arr_len(js, rs->buffer);
+
+  GC_ROOT_SAVE(root_mark, js);
+  for (ant_offset_t i = rs->buffer_head; i < len; i++) {
+    GC_ROOT_RESTORE(js, root_mark);
+    GC_ROOT_PIN(js, content);
+
+    ant_value_t chunk = js_arr_get(js, rs->buffer, i);
+    ant_value_t part = vtype(chunk) == kTypeString ? chunk : stream_readable_decode_chunk(js, rs, chunk, false);
+    if (is_err(part)) {
+      GC_ROOT_RESTORE(js, root_mark);
+      return part;
+    }
+
+    content = do_string_op(js, TOK_PLUS, content, part);
+    if (is_err(content)) {
+      GC_ROOT_RESTORE(js, root_mark);
+      return content;
+    }
+  }
+
+  GC_ROOT_RESTORE(js, root_mark);
+  GC_ROOT_PIN(js, content);
+
+  stream_store(js, priv, &rs->buffer, js_mkarr(js));
+  rs->buffer_head = 0;
+  rs->head_offset = 0;
+  rs->length = 0;
+
+  if (!stream_value_is_empty_string(js, content)) stream_buffer_push(js, priv, content);
+  GC_ROOT_RESTORE(js, root_mark);
+
+  return js_mkundef();
 }
 
 static double stream_grow_high_water_mark(double n) {
@@ -1397,7 +1529,6 @@ static ant_value_t stream_rs_flush(ant_t *js, stream_private_state_t *priv) {
 
   while (rs->flowing && stream_readable_buffer_len(js, rs) > 0) {
     ant_value_t chunk = stream_buffer_shift(js, priv);
-    chunk = stream_readable_decode_chunk(js, rs, chunk, false);
     if (is_err(chunk)) return chunk;
     emitted_data = true;
     eventemitter_emit_args(js, stream_obj, "data", &chunk, 1);
@@ -1463,22 +1594,34 @@ ant_value_t stream_readable_push_value(
   if (!priv || priv->destroyed) return js_false;
 
   stream_readable_state_t *rs = &priv->readable;
+  bool decoded = !rs->object_mode && is_object_type(rs->decoder);
+
   if (is_null(chunk)) {
+    if (decoded && !rs->ended) {
+      ant_value_t tail = stream_readable_decode_chunk(js, rs, js_mkundef(), true);
+      if (is_err(tail)) return tail;
+      if (!is_undefined(tail) && !stream_value_is_empty_string(js, tail)) stream_buffer_push(js, priv, tail);
+    }
+    
     rs->ended = true;
     stream_rs_flush(js, priv);
     stream_readable_schedule_readable(js, priv);
+    
     return js_false;
   }
 
   ant_value_t normalized = stream_normalize_chunk(js, chunk, rs->object_mode, encoding);
   if (is_err(normalized)) return normalized;
+
+  if (decoded) {
+    normalized = stream_readable_decode_chunk(js, rs, normalized, false);
+    if (is_err(normalized)) return normalized;
+    if (stream_value_is_empty_string(js, normalized)) return js_bool(rs->length < rs->high_water_mark);
+  }
   
   if (rs->flowing && stream_readable_buffer_len(js, rs) == 0) {
-    ant_value_t data = stream_readable_decode_chunk(js, rs, normalized, false);
-    if (is_err(data)) return data;
-
     rs->data_emitted = true;
-    eventemitter_emit_args(js, stream_obj, "data", &data, 1);
+    eventemitter_emit_args(js, stream_obj, "data", &normalized, 1);
     stream_readable_after_data(js, priv, true);
   } else {
     stream_buffer_push(js, priv, normalized);
@@ -1523,22 +1666,20 @@ static ant_value_t js_readable_read(ant_params_t) {
   }
 
   ant_value_t chunk = js_mkundef();
-  bool bytes = !rs->object_mode && !is_object_type(rs->decoder);
+  bool decoded = !rs->object_mode && is_object_type(rs->decoder);
   
-  if (bytes && (sized || !rs->flowing)) {
+  if (!rs->object_mode && (sized || !rs->flowing)) {
     double want = sized ? n : rs->length;
     if (want > rs->length) {
       if (!rs->ended) return js_mknull();
       want = rs->length;
     }
-    chunk = stream_buffer_take_bytes(js, priv, want);
-  } else {
-    chunk = stream_buffer_shift(js, priv);
-    chunk = stream_readable_decode_chunk(js, rs, chunk, false);
-  }
+    chunk = decoded 
+      ? stream_buffer_take_chars(js, priv, want) 
+      : stream_buffer_take_bytes(js, priv, want);
+  } else chunk = stream_buffer_shift(js, priv);
   
   if (is_err(chunk)) return chunk;
-
   if (rs->flowing) stream_rs_flush(js, priv);
   else stream_readable_end_if_drained(js, priv);
 
@@ -1566,7 +1707,14 @@ static ant_value_t js_readable_unshift(ant_params_t) {
   ant_value_t normalized = stream_normalize_chunk(js, chunk, rs->object_mode, encoding);
   if (is_err(normalized)) return normalized;
 
-  stream_buffer_unshift(js, priv, normalized);
+  if (!rs->object_mode && is_object_type(rs->decoder) && vtype(normalized) != kTypeString) {
+    ant_value_t to_string_args[1] = { js_get(js, rs->decoder, "encoding") };
+    normalized = stream_call_prop(js, normalized, "toString", to_string_args, 1);
+    if (is_err(normalized)) return normalized;
+  }
+
+  ant_value_t unshifted = stream_buffer_unshift(js, priv, normalized);
+  if (is_err(unshifted)) return unshifted;
   if (rs->flowing) stream_rs_flush(js, priv);
   else stream_readable_schedule_readable(js, priv);
 
@@ -1587,6 +1735,9 @@ static ant_value_t js_readable_set_encoding(ant_params_t) {
   if (is_err(encoding_str)) return encoding_str;
 
   stream_store(js, priv, &priv->readable.decoder, decoder);
+  ant_value_t redecoded = stream_readable_redecode_buffer(js, priv);
+  if (is_err(redecoded)) return redecoded;
+
   js_set(js, stream_obj, "encoding", encoding_str);
   js_set(js, stream_obj, "readableEncoding", encoding_str);
   

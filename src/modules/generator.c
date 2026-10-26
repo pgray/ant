@@ -48,6 +48,12 @@ static ant_value_t generator_result(ant_t *js, bool done, ant_value_t value) {
   return Ant_Iterator_CreateResult(js, value, done);
 }
 
+static inline ant_value_t generator_out(ant_t *js, bool *raw_done, bool done, ant_value_t value) {
+  if (!raw_done) return generator_result(js, done, value);
+  *raw_done = done;
+  return value;
+}
+
 static generator_data_t *generator_data(ant_value_t gen) {
   return (generator_data_t *)js_get_native(gen, GENERATOR_NATIVE_TAG);
 }
@@ -308,7 +314,8 @@ static void generator_finalize(ant_t *js, ant_object_t *obj) {
 }
 
 static ant_value_t generator_resume_kind_inner(
-  ant_t *js, ant_value_t gen, ant_value_t resume_value, sv_resume_kind_t resume_kind
+  ant_t *js, ant_value_t gen, ant_value_t resume_value,
+  sv_resume_kind_t resume_kind, bool *raw_done
 ) {
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, gen);
@@ -322,8 +329,8 @@ static ant_value_t generator_resume_kind_inner(
       return js_throw(js, resume_value);
     }
     
-    ant_value_t out = generator_result(
-      js, true, resume_kind == SV_RESUME_RETURN 
+    ant_value_t out = generator_out(
+      js, raw_done, true, resume_kind == SV_RESUME_RETURN
       ? resume_value : js_mkundef()
     );
     
@@ -344,8 +351,8 @@ static ant_value_t generator_resume_kind_inner(
       return js_throw(js, resume_value);
     }
     
-    ant_value_t out = generator_result(
-      js, true, resume_kind == SV_RESUME_RETURN
+    ant_value_t out = generator_out(
+      js, raw_done, true, resume_kind == SV_RESUME_RETURN
       ? resume_value : js_mkundef()
     );
     
@@ -363,8 +370,10 @@ static ant_value_t generator_resume_kind_inner(
   if (state == GEN_SUSPENDED_START && resume_kind == SV_RESUME_RETURN) {
     generator_set_state(gen, GEN_COMPLETED);
     generator_clear_coro(gen, coro);
-    ant_value_t out = generator_result(js, true, resume_value);
+    
+    ant_value_t out = generator_out(js, raw_done, true, resume_value);
     GC_ROOT_RESTORE(js, root_mark);
+    
     return out;
   }
 
@@ -445,7 +454,7 @@ static ant_value_t generator_resume_kind_inner(
     }
     
     generator_set_state(gen, GEN_SUSPENDED_YIELD);
-    ant_value_t out = generator_result(js, false, result);
+    ant_value_t out = generator_out(js, raw_done, false, result);
     GC_ROOT_RESTORE(js, root_mark);
     
     return out;
@@ -454,22 +463,29 @@ static ant_value_t generator_resume_kind_inner(
   generator_set_state(gen, GEN_COMPLETED);
   generator_clear_coro(gen, coro);
   
-  ant_value_t out = generator_result(js, true, result);
+  ant_value_t out = generator_out(js, raw_done, true, result);
   GC_ROOT_RESTORE(js, root_mark);
   
   return out;
 }
 
-static ant_value_t generator_resume_kind(
-  ant_t *js, ant_value_t gen, ant_value_t resume_value, sv_resume_kind_t resume_kind
+static ant_value_t generator_resume_kind_raw(
+  ant_t *js, ant_value_t gen, ant_value_t resume_value,
+  sv_resume_kind_t resume_kind, bool *raw_done
 ) {
   coroutine_t *coro = generator_coro(gen);
   if (coro) coroutine_retain(coro);
   
-  ant_value_t result = generator_resume_kind_inner(js, gen, resume_value, resume_kind);
+  ant_value_t result = generator_resume_kind_inner(js, gen, resume_value, resume_kind, raw_done);
   if (coro) coroutine_release(coro);
   
   return result;
+}
+
+static ant_value_t generator_resume_kind(
+  ant_t *js, ant_value_t gen, ant_value_t resume_value, sv_resume_kind_t resume_kind
+) {
+  return generator_resume_kind_raw(js, gen, resume_value, resume_kind, NULL);
 }
 
 static ant_value_t generator_resume(ant_t *js, ant_value_t gen, ant_value_t resume_value) {
@@ -480,6 +496,9 @@ static ant_value_t generator_next(ant_params_t) {
   ant_value_t gen = js->this_val;
   if (vtype(gen) != kTypeGenerator)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Generator.prototype.next called on incompatible receiver");
+
+  if (generator_state(gen) == GEN_EXECUTING && !generator_is_async(gen))
+    return js_mkerr_typed(js, JS_ERR_TYPE, "Generator is already executing");
     
   ant_value_t resume_value = nargs > 0 ? args[0] : js_mkundef();
   ant_value_t result = generator_resume(js, gen, resume_value);
@@ -518,6 +537,30 @@ static ant_value_t generator_throw(ant_params_t) {
   
   if (generator_is_async(gen) && vtype(result) == kTypePromise) return result;
   return generator_is_async(gen) ? generator_async_wrap_result(js, result) : result;
+}
+
+bool js_generator_can_resume_sync(ant_value_t gen, ant_value_t method, sv_resume_kind_t kind) {
+  if (vtype(gen) != kTypeGenerator || vtype(method) != kTypeBuiltin) return false;
+
+  generator_data_t *data = generator_data(gen);
+  if (!data || data->is_async || data->state == GEN_EXECUTING) return false;
+
+  switch (kind) {
+    case SV_RESUME_NEXT: return js_cfunc_same_entrypoint(method, generator_next);
+    case SV_RESUME_RETURN: return js_cfunc_same_entrypoint(method, generator_return);
+    case SV_RESUME_THROW: return js_cfunc_same_entrypoint(method, generator_throw);
+  }
+
+  return false;
+}
+
+ant_value_t js_generator_resume_sync(
+  ant_t *js, ant_value_t gen, ant_value_t value,
+  sv_resume_kind_t kind, bool *out_done
+) {
+  if (js_interrupt_pending(js)) return js_interrupt_raise(js);
+  if (sv_check_c_stack_overflow(js)) return Ant_Error_CreateStackOverflow(js);
+  return Ant_Silver_FinishNativeCall(js, generator_resume_kind_raw(js, gen, value, kind, out_done));
 }
 
 void init_generator_module(ant_t *js) {  

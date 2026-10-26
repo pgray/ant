@@ -1849,9 +1849,20 @@ static ant_value_t js_typedarray_subarray(ant_params_t) {
   return out;
 }
 
-ant_value_t buffer_typedarray_subarray(ant_t *js, ant_value_t value, size_t begin, size_t end) {
-  ant_value_t args[2] = { js_mknum((double)begin), js_mknum((double)end) };
-  return sv_call_native_this(js, js_typedarray_subarray, value, args, 2);
+ant_value_t buffer_byte_subarray(ant_t *js, ant_value_t value, size_t begin, size_t end) {
+  TypedArrayData *ta_data = typedarray_view_live(buffer_get_typedarray_data(value));
+  if (!ta_data || !Ant_Buffer_IsLive(ta_data->backing)) return typedarray_this_error(js, value);
+
+  if (end > ta_data->byte_length) end = ta_data->byte_length;
+  if (begin > end) begin = end;
+
+  ant_value_t shared = ta_data->buffer == ta_data->backing ? js_get_slot(value, SLOT_DATA) : js_mkundef();
+  ant_value_t ab_obj = is_object_type(shared) ? shared : create_arraybuffer_obj(js, ta_data->backing);
+
+  return create_typed_array_with_buffer(
+    js, TYPED_ARRAY_UINT8, ta_data->backing, ta_data->byte_offset + begin,
+    end - begin, js->builtins.buffer_proto, ab_obj, false
+  );
 }
 
 // TypedArray.prototype.fill(value, start, end)

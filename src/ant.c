@@ -3341,9 +3341,12 @@ ant_value_t Ant_Object_Create(ant_t *js) {
 
 bool js_array_iteration_default(ant_t *js, ant_value_t arr) {
   ant_object_t *ptr = array_obj_ptr(arr);
-  
   if (!ptr || vtype(js->sym.iterator_sym) != kTypeSymbol) return false;
-  if (!js->array_iteration_protector_invalid && (ptr->flags.arguments_object || ptr->proto == js->sym.array_proto)) return true;
+  
+  if (
+    ant_protector_intact(js, ANT_PROTECTOR_ARRAY_ITERATION) && 
+    (ptr->flags.arguments_object || ptr->proto == js->sym.array_proto)
+  ) return true;
   
   ant_prop_loc_t loc = lkp_sym_proto(js, arr, (ant_offset_t)vdata(js->sym.iterator_sym));
   if (!loc.obj) return false;
@@ -4023,15 +4026,15 @@ bool same_ctor_identity(ant_t *js, ant_value_t a, ant_value_t b) {
 
 static ant_value_t array_constructor_from_receiver(ant_t *js, ant_value_t receiver) {
   if (!is_object_type(receiver)) return js_mkundef();
-  
   ant_object_t *plain = real_array_obj_ptr(receiver);
-  if (plain && plain->proto == js->sym.array_proto && !js->array_species_protector_invalid)
-    return js->sym.array_ctor;
+  
+  if (
+    plain && plain->proto == js->sym.array_proto && 
+    ant_protector_intact(js, ANT_PROTECTOR_ARRAY_SPECIES)
+  ) return js->sym.array_ctor;
   
   ant_value_t species_source = receiver;
-  if (is_proxy(species_source)) {
-    species_source = proxy_read_target(js, species_source);
-  }
+  if (is_proxy(species_source)) species_source = proxy_read_target(js, species_source);
   
   bool receiver_is_array = real_array_obj_ptr(species_source) != NULL;
   if (!receiver_is_array) {
@@ -16914,6 +16917,11 @@ static ant_value_t builtin_string_slice(ant_params_t) {
   return js_mkstr_utf16_range(js, str_ptr, byte_len, start, end);
 }
 
+ant_value_t js_string_slice(ant_t *js, ant_value_t str, double start, double end) {
+  ant_value_t args[2] = { js_mknum(start), js_mknum(end) };
+  return sv_call_native_this(js, builtin_string_slice, str, args, 2);
+}
+
 static ant_value_t builtin_string_includes(ant_params_t) {
   if (vtype(js->this_val) == kTypeNull || vtype(js->this_val) == kTypeUndefined)
     return js_mkerr_typed(js, JS_ERR_TYPE, "String.prototype.includes called on null or undefined");
@@ -21045,9 +21053,11 @@ static void realm_init_core(ant_t *js) {
   js->sym.boolean_proto = boolean_proto;
   js->sym.promise_ctor = p_ctor_func;
   js->sym.promise_proto = promise_proto;
-  js->promise_resolve_lookup_protector_invalid = false;
+  
+  ant_protector_rearm(js, ANT_PROTECTOR_PROMISE_RESOLVE_LOOKUP);
 
   ant_protector_holder_mark(glob);
+  ant_protector_holder_mark(object_proto);
   ant_protector_holder_mark(array_proto);
   ant_protector_holder_mark(js->sym.array_ctor);
   ant_protector_holder_mark(p_ctor_func);
@@ -21168,11 +21178,13 @@ void init_intrinsic_symbols(ant_t *js) {
   mkprop(js, async_proto, js->sym.toStringTag_sym, ANT_STRING("AsyncFunction"), ANT_PROP_ATTR_CONFIGURABLE);
   js_define_species_getter(js, js->sym.promise_ctor);
   js_define_species_getter(js, js_get(js, js->global, "Array"));
+  
   defalias_sym_of(js, js->builtins.disposable_stack_proto, js->sym.dispose_sym, "dispose");
   defalias_sym_of(js, js->builtins.async_disposable_stack_proto, js->sym.asyncDispose_sym, "disposeAsync");
-  js->promise_species_protector_invalid = false;
-  js->array_species_protector_invalid = false;
-  js->array_iteration_protector_invalid = false;
+  
+  ant_protector_rearm(js,
+    ANT_PROTECTOR_PROMISE_SPECIES | ANT_PROTECTOR_ARRAY_SPECIES | 
+    ANT_PROTECTOR_ARRAY_ITERATION | ANT_PROTECTOR_ARRAY_ASYNC_ITERATION | ANT_PROTECTOR_OBJECT_THEN);
 }
 
 bool js_realm_finish_intrinsics(ant_t *js) {

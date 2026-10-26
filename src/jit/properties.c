@@ -81,14 +81,9 @@ static void mir_emit_promise_protector_invalidation(
 
   if (!ant_property_key_is_protector(js, atom->str)) return;
 
-  size_t protector_offset;
-  if (invalidates_constructor)
-    protector_offset = offsetof(ant_t, promise_constructor_protector_invalid);
-  else if (invalidates_then)
-    protector_offset = offsetof(ant_t, promise_then_protector_invalid);
-  else
-    protector_offset =
-        offsetof(ant_t, promise_resolve_lookup_protector_invalid);
+  uint32_t protector_mask = invalidates_constructor
+    ? ANT_PROTECTOR_PROMISE_CONSTRUCTOR | ANT_PROTECTOR_PROMISE_SPECIES
+    : invalidates_then ? ANT_PROTECTOR_PROMISE_THEN : ANT_PROTECTOR_PROMISE_RESOLVE_LOOKUP;
 
   MIR_reg_t type_tag = mir_new_ic_reg(ctx, fn, "pf", "ps_tag", bc_off, ic_idx);
   MIR_reg_t realms = mir_new_ic_reg(ctx, fn, "pf", "ps_realms", bc_off, ic_idx);
@@ -136,17 +131,17 @@ static void mir_emit_promise_protector_invalidation(
   }
   MIR_append_insn(ctx, fn, invalidate);
   MIR_append_insn(ctx, fn,
+                  MIR_new_insn(ctx, MIR_MOV, MIR_new_reg_op(ctx, type_tag),
+                               MIR_new_mem_op(ctx, MIR_T_U32,
+                                              (MIR_disp_t)offsetof(ant_t, protectors_invalid), r_js, 0, 1)));
+  MIR_append_insn(ctx, fn,
+                  MIR_new_insn(ctx, MIR_OR, MIR_new_reg_op(ctx, type_tag),
+                               MIR_new_reg_op(ctx, type_tag), MIR_new_uint_op(ctx, protector_mask)));
+  MIR_append_insn(ctx, fn,
                   MIR_new_insn(ctx, MIR_MOV,
-                               MIR_new_mem_op(ctx, MIR_T_U8,
-                                              (MIR_disp_t)protector_offset, r_js, 0, 1),
-                               MIR_new_int_op(ctx, 1)));
-  if (invalidates_constructor)
-    MIR_append_insn(ctx, fn,
-                    MIR_new_insn(ctx, MIR_MOV,
-                                 MIR_new_mem_op(ctx, MIR_T_U8,
-                                                (MIR_disp_t)offsetof(ant_t, promise_species_protector_invalid),
-                                                r_js, 0, 1),
-                                 MIR_new_int_op(ctx, 1)));
+                               MIR_new_mem_op(ctx, MIR_T_U32,
+                                              (MIR_disp_t)offsetof(ant_t, protectors_invalid), r_js, 0, 1),
+                               MIR_new_reg_op(ctx, type_tag)));
   MIR_append_insn(ctx, fn, done);
 }
 

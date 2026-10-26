@@ -173,9 +173,10 @@ static ant_value_t get_array_iterator_prototype(ant_t *js) {
   ant_value_t iterator_proto = get_iterator_prototype(js);
   js->sym.array_iterator_proto = Ant_Object_CreateBare(js);
   
-  bool iteration_patched = js->array_iteration_protector_invalid;
+  bool iteration_intact = ant_protector_intact(js, ANT_PROTECTOR_ARRAY_ITERATION);
   js->sym.array_iterator_next = defmethod(js, js->sym.array_iterator_proto, "next", 4, Ant_Function_Create(arr_iter_next));
-  js->array_iteration_protector_invalid = iteration_patched;
+  
+  if (iteration_intact) ant_protector_rearm(js, ANT_PROTECTOR_ARRAY_ITERATION);
   ant_protector_holder_mark(js->sym.array_iterator_proto);
   
   mkprop(js, js->sym.array_iterator_proto, js->sym.toStringTag_sym, ANT_STRING("Array Iterator"), ANT_PROP_ATTR_CONFIGURABLE);

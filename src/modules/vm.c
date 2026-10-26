@@ -12,6 +12,7 @@
 #include "errors.h"
 #include "cfunc.h"
 #include "internal.h"
+#include "protectors.h"
 #include "realm.h"
 #include "silver/engine.h"
 #include "silver/call.h"
@@ -205,7 +206,7 @@ static ant_value_t vm_context_create(ant_t *js, ant_value_t sandbox, const vm_co
   if (!is_err(proxy)) {
     js->global_sandbox = sandbox;
     js->global_this = proxy;
-    js->promise_resolve_lookup_protector_invalid = true;
+    ant_protector_break(js, ANT_PROTECTOR_PROMISE_RESOLVE_LOOKUP);
     js_set_global_builtin(js, "globalThis", proxy);
   }
 

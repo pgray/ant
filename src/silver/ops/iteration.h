@@ -5,8 +5,10 @@
 #include "async.h"
 #include "utf8.h"
 #include "property.h"
+#include "protectors.h"
 #include "silver/call.h"
 #include "modules/collections.h"
+#include "modules/generator.h"
 
 enum: uint8_t {
   SV_ITER_GENERIC = 0,
@@ -138,8 +140,15 @@ static inline ant_value_t sv_op_for_of(sv_vm_t *vm, ant_t *js) {
   return tov(0);
 }
 
+static inline bool sv_array_lacks_async_iterator(ant_t *js, ant_value_t arr) {
+  if (!ant_protector_intact(js, ANT_PROTECTOR_ARRAY_ASYNC_ITERATION) || vtype(arr) != kTypeArray) return false;
+  ant_object_t *ptr = js_obj_ptr(arr);
+  ant_object_t *array_proto = js_obj_ptr(js->sym.array_proto);
+  return ptr && array_proto && ptr->proto == js->sym.array_proto && array_proto->proto == js->sym.object_proto;
+}
+
 static inline bool sv_array_iter_pristine(ant_t *js, ant_value_t arr) {
-  if (is_callable(js_get_sym(js, arr, js->sym.asyncIterator_sym))) return false;
+  if (!sv_array_lacks_async_iterator(js, arr) && is_callable(js_get_sym(js, arr, js->sym.asyncIterator_sym))) return false;
   return js_array_iteration_default(js, arr);
 }
 
@@ -290,6 +299,10 @@ static inline ant_value_t sv_iter_advance(
     ant_value_t iterator = vm->stack[vm->sp - 3];
     if (!is_callable(next_method))
       return js_mkerr(js, "iterator.next is not a function");
+    if (js_generator_can_resume_sync(iterator, next_method, SV_RESUME_NEXT)) {
+      *out_value = js_generator_resume_sync(js, iterator, js_mkundef(), SV_RESUME_NEXT, out_done);
+      return is_err(*out_value) ? *out_value : tov(0);
+    }
     ant_value_t result = sv_vm_call(vm, js, next_method, iterator, NULL, 0, NULL, js_mkundef());
     if (is_err(result)) return result;
     if (!is_object_type(result))

@@ -365,7 +365,8 @@ static ant_value_t sc_transfer_item_error(ant_t *js, sc_entry_t **transfer, ant_
   ArrayBufferData *data = is_object_type(item) ? buffer_get_arraybuffer_data(item) : NULL;
   if (!data || data->is_shared) return sc_clone_error(js, "Found invalid value in transferList.");
   if (sc_find(transfer, item)) return sc_clone_error(js, "Transfer list contains duplicate ArrayBuffer");
-  if (!buffer_can_transfer(data)) return sc_clone_error(js, "Cannot transfer object of unsupported type.");
+  if (!buffer_can_transfer(data) || data->untransferable || ant_wire_is_untransferable(js, item))
+    return sc_clone_error(js, "Cannot transfer object of unsupported type.");
   return js_mkundef();
 }
 

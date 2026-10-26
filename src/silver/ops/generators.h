@@ -7,6 +7,7 @@
 #include "silver/call.h"
 #include "silver/engine.h"
 #include "iteration.h"
+#include "modules/generator.h"
 
 enum {
   SV_YS_ITER = 0,
@@ -79,16 +80,21 @@ static inline ant_value_t sv_yield_star_unpack_result(
   return js_mkundef();
 }
 
-static inline ant_value_t sv_yield_star_call_method(
+static inline ant_value_t sv_yield_star_call_return(
   sv_vm_t *vm, ant_t *js, ant_value_t iterator,
-  const char *name, ant_value_t arg, ant_value_t *out_value, bool *out_done
+  ant_value_t arg, ant_value_t *out_value, bool *out_done
 ) {
-  ant_value_t method = js_getprop_fallback(js, iterator, name);
+  ant_value_t method = js_getprop_fallback(js, iterator, "return");
   
   if (!is_callable(method)) {
     *out_value = js_mkundef();
     *out_done = true;
     return js_mkundef();
+  }
+
+  if (js_generator_can_resume_sync(iterator, method, SV_RESUME_RETURN)) {
+    *out_value = js_generator_resume_sync(js, iterator, arg, SV_RESUME_RETURN, out_done);
+    return is_err(*out_value) ? *out_value : js_mkundef();
   }
 
   ant_value_t call_args[1] = { arg };
@@ -101,7 +107,7 @@ static inline ant_value_t sv_yield_star_call_method(
 static inline ant_value_t sv_yield_star_close_iterator(sv_vm_t *vm, ant_t *js, ant_value_t iterator) {
   ant_value_t close_value = js_mkundef();
   bool close_done = true;
-  return sv_yield_star_call_method(vm, js, iterator, "return", js_mkundef(), &close_value, &close_done);
+  return sv_yield_star_call_return(vm, js, iterator, js_mkundef(), &close_value, &close_done);
 }
 
 static inline ant_value_t sv_yield_star_next(
@@ -118,6 +124,11 @@ static inline ant_value_t sv_yield_star_next(
     
     if (!is_callable(next_method))
       return js_mkerr(js, "iterator.next is not a function");
+
+    if (js_generator_can_resume_sync(iterator, next_method, SV_RESUME_NEXT)) {
+      *out_value = js_generator_resume_sync(js, iterator, sent, SV_RESUME_NEXT, out_done);
+      return is_err(*out_value) ? *out_value : js_mkundef();
+    }
       
     ant_value_t call_args[1] = { sent };
     ant_value_t result = sv_vm_call(
@@ -155,6 +166,11 @@ static inline ant_value_t sv_yield_star_throw(
     return js_throw(js, thrown);
   }
 
+  if (js_generator_can_resume_sync(iterator, throw_method, SV_RESUME_THROW)) {
+    *out_value = js_generator_resume_sync(js, iterator, thrown, SV_RESUME_THROW, out_done);
+    return is_err(*out_value) ? *out_value : js_mkundef();
+  }
+
   ant_value_t call_args[1] = { thrown };
   ant_value_t result = sv_vm_call(vm, js, throw_method, iterator, call_args, 1, NULL, js_mkundef());
   if (is_err(result)) return result;
@@ -174,7 +190,7 @@ static inline ant_value_t sv_yield_star_return(
     return js_mkundef();
   }
 
-  return sv_yield_star_call_method(vm, js, lp[base + SV_YS_ITER], "return", value, out_value, out_done);
+  return sv_yield_star_call_return(vm, js, lp[base + SV_YS_ITER], value, out_value, out_done);
 }
 
 static inline ant_value_t sv_yield_star_init(sv_vm_t *vm, ant_t *js, ant_value_t *lp, uint16_t base) {
@@ -193,7 +209,9 @@ static inline __attribute__((noinline)) ant_value_t sv_yield_star_init_async(
   sv_vm_t *vm, ant_t *js, ant_value_t *lp, uint16_t base
 ) {
   ant_value_t iterable = vm->stack[vm->sp - 1];
-  ant_value_t method = js_get_sym(js, iterable, js->sym.asyncIterator_sym);
+  ant_value_t method = sv_array_lacks_async_iterator(js, iterable)
+    ? js_mkundef()
+    : js_get_sym(js, iterable, js->sym.asyncIterator_sym);
   
   if (is_err(method)) return method;
   

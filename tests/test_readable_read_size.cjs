@@ -26,6 +26,18 @@ const big = new Readable({ highWaterMark: 4, read() {} });
 assert.strictEqual(big.read(100), null);
 assert.ok(big.readableHighWaterMark >= 100);
 
+const views = new Readable({ read() {} });
+views.push(Buffer.from('__abcdef').subarray(2));
+views.push(new Uint8Array([0x67, 0x68, 0x69]));
+const firstView = views.read(2);
+assert.ok(Buffer.isBuffer(firstView));
+assert.strictEqual(String(firstView), 'ab');
+assert.strictEqual(String(views.read(3)), 'cde');
+const spanning = views.read(3);
+assert.ok(Buffer.isBuffer(spanning));
+assert.strictEqual(String(spanning), 'fgh');
+assert.strictEqual(String(views.read(1)), 'i');
+
 const objects = new Readable({ objectMode: true, read() {} });
 objects.push({ a: 1 });
 objects.push({ b: 2 });
