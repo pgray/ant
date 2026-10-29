@@ -582,6 +582,11 @@ void sv_jit_drop_func_code(sv_func_t *func) {
   func->call_count = SV_JIT_THRESHOLD - SV_JIT_RECOMPILE_DELAY;
 }
 
+void sv_jit_drop_closure_pinned(sv_func_t *func) {
+  func->opt_closure_pinned = false;
+  opt_tier_drop_closure_pinned(func);
+}
+
 void sv_jit_drop_all_code(ant_t *js) {
   jit_drop_all_code(js->jit_ctx);
 }

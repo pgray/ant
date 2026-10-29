@@ -559,6 +559,13 @@ static void opt_drop_code(opt_code_t *code) {
   func->call_count = SV_JIT_THRESHOLD - SV_JIT_RECOMPILE_DELAY;
 }
 
+void opt_tier_drop_closure_pinned(sv_func_t *func) {
+  sv_func_sidecar_t *sidecar = sv_func_sidecar(func);
+  opt_func_state_t *state = sidecar ? sidecar->opt_state : NULL;
+  for (opt_code_t *code = state ? state->codes : NULL; code; code = code->func_next)
+    if (code->closure_pinned && !code->dropped) opt_drop_code(code);
+}
+
 void opt_code_invalidate(opt_code_t *code) {
   if (code->invalidated) return;
   code->invalidated = true;
@@ -970,21 +977,18 @@ ant_value_t opt_rt_new_this(sv_vm_t *vm, ant_value_t callee) {
   ant_object_t *func_obj = js_obj_ptr(closure->func_obj);
   ant_value_t proto;
   if (!func_obj->flags.is_constructor || !sv_construct_prototype_data(js, func_obj, closure->func, &proto)) return T_EMPTY;
-  ant_value_t object = js_mkobj_with_proto(js, proto);
+  ant_value_t object = js_mkobj_with_proto_slots(js, proto, sv_construct_slots(closure->func));
   if (vtype(object) != kTypeObject) return T_EMPTY;
   return object;
 }
 
 ant_value_t opt_rt_allocate_object(sv_vm_t *vm, ant_shape_t *shape, ant_value_t proto, uint64_t property_count) {
-  ant_value_t object = Ant_Object_CreateBare(vm->js);
-  if (vtype(object) != kTypeObject) return is_err(object) ? object : js_mkerr(vm->js, "oom");
-  ant_object_t *ptr = js_obj_ptr(object);
   ant_shape_retain(shape);
-  ant_shape_release(ptr->shape);
-  ptr->shape = shape;
+  ant_object_t *ptr = obj_alloc_shaped(vm->js, kTypeObject, shape);
+  if (!ptr) return js_mkerr(vm->js, "oom");
   ptr->prop_count = (uint32_t)property_count;
   ptr->proto = proto;
-  return object;
+  return js_obj_from_ptr(ptr);
 }
 
 uint64_t opt_rt_revalidate_add(sv_vm_t *vm, const opt_rt_add_epoch_t *site) {
@@ -1422,6 +1426,8 @@ sv_jit_func_t opt_tier_compile(ant_t *js, sv_func_t *func, sv_closure_t *closure
   }
 
   opt_register_code(jc, code);
+  code->closure_pinned = build_stats.closure_pinned;
+  if (code->closure_pinned) func->opt_closure_pinned = true;
   code->func_next = state->codes;
   state->codes = code;
   state->compiles++;

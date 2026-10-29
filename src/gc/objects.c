@@ -23,6 +23,7 @@
 #include "gc/roots.h"
 #include "gc/weak.h"
 #include "gc/modules.h"
+#include "gc/object_arenas.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -710,7 +711,7 @@ void gc_mark_value(ant_t *js, ant_value_t v) {
   }
   
   ant_object_t *obj = (ant_object_t *)vptr(v);
-  if (!fixed_arena_holds_offset(&js->obj_arena, vdata(v), obj)) return;
+  if (!ant_object_holds_offset(js, vdata(v), obj)) return;
   
   gc_grey_obj(js, obj);
 }
@@ -726,7 +727,7 @@ static inline void gc_mark_value_fast(ant_t *js, ant_value_t v) {
   if (bit & GC_OBJ_TYPE_MASK) {
     if (bit == (1u << kTypeError) && vdata(v) < 2) return;
     ant_object_t *obj = (ant_object_t *)vptr(v);
-    if (!fixed_arena_holds_offset(&js->obj_arena, vdata(v), obj)) return;
+    if (!ant_object_holds_offset(js, vdata(v), obj)) return;
     gc_grey_obj(js, obj);
   } 
   
@@ -875,7 +876,7 @@ static void gc_scan_obj(ant_t *js, ant_object_t *obj) {
 typedef struct {
   ant_object_t **stack;
   size_t sp, cap;
-  const ant_fixed_arena_t *objects;
+  const ant_t *js;
   uint32_t other_refs;
   uint8_t epoch;
   bool minor;
@@ -899,7 +900,7 @@ static inline __attribute__((always_inline)) void gc_marker_value(ant_t *js, gc_
   if (__builtin_expect((bit & GC_OBJ_TYPE_MASK) != 0, 1)) {
     if (bit == (1u << kTypeError) && vdata(v) < 2) return;
     ant_object_t *obj = (ant_object_t *)vptr(v);
-    if (!fixed_arena_holds_offset(m->objects, vdata(v), obj)) return;
+    if (!ant_object_holds_offset(m->js, vdata(v), obj)) return;
 
     uint8_t epoch = obj->mark_epoch;
     if (epoch == m->epoch || epoch == ANT_GC_DEAD) return;
@@ -953,7 +954,7 @@ static inline __attribute__((always_inline)) bool gc_marker_scan_plain(ant_t *js
 
 static void gc_drain_mark_stack(ant_t *js) {
   gc_marker_t m = {
-    .objects = &js->obj_arena,
+    .js = js,
     .other_refs = GC_VALUE_OTHER_REFS_MASK | (js->gc.realm_reach ? 1u << kTypeBuiltin : 0),
     .epoch = js->gc.obj_epoch,
     .minor = js->gc.minor,
@@ -991,7 +992,7 @@ static bool gc_weak_key_alive(ant_t *js, ant_value_t key) {
   
   if (((1u << type) & GC_OBJ_TYPE_MASK) == 0) return false;
   ant_object_t *obj = js_obj_ptr(key);
-  if (!obj || !fixed_arena_contains(&js->obj_arena, obj) ||
+  if (!obj || !ant_object_arena_contains(js, obj) ||
       obj->mark_epoch == ANT_GC_DEAD) return false;
   
   return (js->gc.minor && obj->flags.generation == 1) ||
@@ -1106,7 +1107,7 @@ static void gc_scan_range(ant_t *js, uintptr_t lo, uintptr_t hi) {
     
     bool in_cage = ant_cage_contains((const void *)(uintptr_t)w);
     ant_object_t *raw_obj = (ant_object_t *)(uintptr_t)w;
-    if (in_cage && fixed_arena_contains(&js->obj_arena, raw_obj)) gc_grey_obj(js, raw_obj);
+    if (in_cage && ant_object_arena_contains(js, raw_obj)) gc_grey_obj(js, raw_obj);
       
     sv_closure_t *raw_closure = (sv_closure_t *)(uintptr_t)w;
     if (in_cage && fixed_arena_contains(&js->closure_arena, raw_closure)) gc_mark_closure(js, raw_closure);
@@ -1128,7 +1129,7 @@ static void gc_scan_range(ant_t *js, uintptr_t lo, uintptr_t hi) {
     
     if ((1u << type) & GC_OBJ_TYPE_MASK) {
       ant_object_t *obj = (ant_object_t *)vptr(w);
-      if (fixed_arena_contains(&js->obj_arena, obj)) gc_grey_obj(js, obj);
+      if (ant_object_arena_contains(js, obj)) gc_grey_obj(js, obj);
     }
     
     if (type == kTypeFunction) {
@@ -1669,7 +1670,7 @@ void gc_object_free(ant_t *js, ant_object_t *obj) {
   if (!obj) return;
 
   if (gc_object_release_plain(js, obj)) {
-    fixed_arena_free_elem(&js->obj_arena, obj);
+    ant_object_cell_free(js, obj);
     return;
   }
 
@@ -1783,17 +1784,19 @@ void gc_object_free(ant_t *js, ant_object_t *obj) {
   obj->exotic_ops = NULL;
   
   GC_VERIFY_POISON_OBJECT(obj);
-  fixed_arena_free_elem(&js->obj_arena, obj);
+  ant_object_cell_free(js, obj);
 }
 
 static void gc_sweep_young_and_promote(ant_t *js) {
-  ant_fixed_arena_t *oa = &js->obj_arena;
+  ant_fixed_arena_t *oa = &js->obj_arena, *wa = &js->obj_wide_arena;
   uint8_t epoch = js->gc.obj_epoch;
   
   ant_object_t *obj = js->objects;
   void *free_list = oa->free_list;
+  void *wide_free_list = wa->free_list;
   
-  size_t freed = 0;
+  size_t freed = 0, wide_freed = 0;
+  bool any_wide = wa->live_count != 0;
   js->objects = NULL;
   
   while (obj) {
@@ -1805,13 +1808,21 @@ static void gc_sweep_young_and_promote(ant_t *js) {
       obj->next = js->objects_old;
       js->objects_old = obj;
     } else if (gc_object_release_plain(js, obj)) {
-      *(void **)obj = free_list;
-      free_list = obj;
+      if (__builtin_expect(any_wide && ant_object_is_wide(obj), 0)) {
+        *(void **)obj = wide_free_list;
+        wide_free_list = obj;
+        wide_freed++;
+      } else {
+        *(void **)obj = free_list;
+        free_list = obj;
+      }
       freed++;
     } else {
       oa->free_list = free_list;
+      wa->free_list = wide_free_list;
       gc_object_free(js, obj);
       free_list = oa->free_list;
+      wide_free_list = wa->free_list;
     }
     
     obj = next;
@@ -1819,22 +1830,21 @@ static void gc_sweep_young_and_promote(ant_t *js) {
   
   oa->free_list = free_list;
   oa->live_count = oa->live_count > freed ? oa->live_count - freed : 0;
+  wa->free_list = wide_free_list;
+  wa->live_count = wa->live_count > wide_freed ? wa->live_count - wide_freed : 0;
 }
 
-static void gc_sweep(ant_t *js) {
-  ant_fixed_arena_t *oa = &js->obj_arena;
+static void gc_sweep_arena(ant_t *js, ant_fixed_arena_t *oa, ant_object_t **old) {
   size_t elem = oa->elem_size;
   uint8_t epoch = js->gc.obj_epoch;
   
-  ant_object_t *old = NULL;
   void *free_list = NULL;
   size_t freed = 0;
   
   bool found_live = false;
   uint32_t live_chunk = 0;
+  
   size_t live_used = 0;
-
-  js->objects = NULL;
   oa->free_list = NULL;
 
   for (uint32_t chunk = oa->chunk_count; chunk-- > 0;) {
@@ -1859,8 +1869,8 @@ static void gc_sweep(ant_t *js) {
         
         if (obj->flags.gc_permanent) continue;
         obj->flags.generation = 1;
-        obj->next = old;
-        old = obj;
+        obj->next = *old;
+        *old = obj;
         
         continue;
       }
@@ -1879,12 +1889,21 @@ static void gc_sweep(ant_t *js) {
 
   oa->free_list = free_list;
   oa->live_count = oa->live_count > freed ? oa->live_count - freed : 0;
-  js->objects_old = old;
+  if (oa != &js->obj_arena)
+    js->obj_arena.live_count = js->obj_arena.live_count > freed ? js->obj_arena.live_count - freed : 0;
   
   if (
     oa->chunk_count && (live_chunk + 1 < oa->chunk_count || 
     live_used < fixed_arena_chunk_used(oa, live_chunk))
   ) fixed_arena_trim(oa, live_chunk, live_used);
+}
+
+static void gc_sweep(ant_t *js) {
+  ant_object_t *old = NULL;
+  js->objects = NULL;
+  gc_sweep_arena(js, &js->obj_wide_arena, &old);
+  gc_sweep_arena(js, &js->obj_arena, &old);
+  js->objects_old = old;
 }
 
 void gc_pin_existing_objects(ant_t *js) {

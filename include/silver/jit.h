@@ -25,6 +25,7 @@ void sv_jit_init(ant_t *js);
 void sv_jit_destroy(ant_t *js);
 void sv_jit_drop_all_code(ant_t *js);
 void sv_jit_drop_func_code(sv_func_t *func);
+void sv_jit_drop_closure_pinned(sv_func_t *func);
 
 void opt_tier_func_free(ant_t *js, sv_func_t *func);
 void opt_tier_func_trace(ant_t *js, sv_func_t *func);
@@ -70,6 +71,7 @@ static inline void sv_func_note_multi_closure(sv_func_t *func) {
   if (func->multi_closure) return;
   func->multi_closure = true;
   if (func->jit_tdz_specialized) sv_jit_drop_func_code(func);
+  if (func->opt_closure_pinned) sv_jit_drop_closure_pinned(func);
 }
 
 static inline void sv_func_note_bound_closure(sv_func_t *func) {

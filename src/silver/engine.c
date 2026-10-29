@@ -83,9 +83,7 @@ void sv_gf_mega_clear(ant_t *js) {
   sv_gf_mega_clear_entries(cache->secondary, SV_GF_MEGA_SECONDARY);
 }
 
-__attribute__((noinline, cold)) void sv_ic_identities_reset(ant_t *js) {
-  ant_fixed_arena_t *oa = &js->obj_arena;
-  
+static void sv_ic_identities_reset_arena(ant_fixed_arena_t *oa) {
   for (uint32_t chunk = 0; chunk < oa->chunk_count; chunk++) {
     uint8_t *base = oa->chunks[chunk].base;
     size_t used = fixed_arena_chunk_used(oa, chunk);
@@ -95,6 +93,11 @@ __attribute__((noinline, cold)) void sv_ic_identities_reset(ant_t *js) {
       if (obj->mark_epoch != ANT_GC_DEAD) obj->ic_identity = 0;
     }
   }
+}
+
+__attribute__((noinline, cold)) void sv_ic_identities_reset(ant_t *js) {
+  sv_ic_identities_reset_arena(&js->obj_arena);
+  sv_ic_identities_reset_arena(&js->obj_wide_arena);
 }
 
 #define SV_POLY_LINK(list, block) do { \
@@ -3047,25 +3050,33 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
       ant_value_t new_target = vm->stack[vm->sp - new_argc - 1];
       ant_value_t effective_new_target = new_target;
       ant_value_t proto = sv_prepare_construct_meta(js, new_func, new_target, &effective_new_target);
+      
       if (is_err(proto)) {
         vm->sp -= new_argc + 2;
         sv_err = proto;
         goto sv_throw;
       }
+      
       if (vm->fp + 1 >= vm->max_frames && !sv_vm_grow_frames(vm)) {
         vm->sp -= new_argc + 2;
         sv_err = Ant_Error_CreateStackOverflow(js);
         goto sv_throw;
       }
+      
       GC_ROOT_SAVE(new_mark, js);
       GC_ROOT_PIN(js, proto);
-      ant_value_t new_obj = js_mkobj_with_proto(js, is_object_type(proto) ? proto : js_mkundef());
+      
+      ant_value_t new_obj = js_mkobj_with_proto_slots(
+        js, is_object_type(proto) ? proto : 
+        js_mkundef(), sv_construct_slots_of(new_func)
+      );
+      
       GC_ROOT_RESTORE(js, new_mark);
-
       uint32_t new_count = ++new_callee->call_count;
+      
       if (__builtin_expect(new_count == SV_TFB_ALLOC_THRESHOLD, 0)) sv_tfb_ensure(new_callee);
-
       ant_value_t *new_args = &vm->stack[vm->sp - new_argc];
+      
       frame = &vm->frames[vm->fp];
       frame->ip = ip + sv_op_size[OP_NEW];
       vm->sp -= new_argc + 2;

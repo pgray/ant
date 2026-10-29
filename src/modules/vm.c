@@ -14,6 +14,7 @@
 #include "internal.h"
 #include "protectors.h"
 #include "realm.h"
+#include "gc/object_arenas.h"
 #include "silver/engine.h"
 #include "silver/call.h"
 #include "silver/code_unit.h"
@@ -885,7 +886,7 @@ static ant_value_t vm_measure_memory(ant_params_t) {
   }
 
   size_t used =
-    js->obj_arena.live_count * js->obj_arena.elem_size +
+    ant_object_live_bytes(js) +
     js->closure_arena.live_count * js->closure_arena.elem_size +
     js->gc.pool_last_live + js->gc.pool_alloc +
     js->alloc_bytes.closures + js->alloc_bytes.upvalues;

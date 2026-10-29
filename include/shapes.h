@@ -13,9 +13,12 @@ typedef struct ant_shape_heap {
   void *pool;
 } ant_shape_heap_t;
 
-#ifndef ANT_INOBJ_MAX_SLOTS
-#define ANT_INOBJ_MAX_SLOTS 4u
+#ifndef ANT_INOBJ_BASE_SLOTS
+#define ANT_INOBJ_BASE_SLOTS 4u
 #endif
+
+#define ANT_INOBJ_WIDE_SLOTS 8u
+#define ANT_INOBJ_MAX_SLOTS ANT_INOBJ_WIDE_SLOTS
 
 static constexpr unsigned ANT_PROP_ATTR_WRITABLE     = 1u << 0;
 static constexpr unsigned ANT_PROP_ATTR_ENUMERABLE   = 1u << 1;

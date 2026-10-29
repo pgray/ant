@@ -262,7 +262,10 @@ static inline ant_value_t sv_op_new(sv_vm_t *vm, ant_t *js, uint8_t *ip) {
   GC_ROOT_PIN(js, proto);
   GC_ROOT_PIN(js, obj);
   
-  obj = js_mkobj_with_proto(js, is_object_type(proto) ? proto : js_mkundef());
+  obj = js_mkobj_with_proto_slots(
+    js, is_object_type(proto) ? proto : 
+    js_mkundef(), sv_construct_slots_of(func)
+  );
   
   ant_value_t ctor_this = obj;
   ant_value_t result = sv_vm_call(vm, js, func, obj, args, argc, &ctor_this, effective_new_target);
@@ -416,7 +419,10 @@ static inline __attribute__((noinline)) ant_value_t sv_op_new_apply(sv_vm_t *vm,
   GC_ROOT_PIN(js, proto);
   GC_ROOT_PIN(js, obj);
   
-  obj = js_mkobj_with_proto(js, is_object_type(proto) ? proto : js_mkundef());
+  obj = js_mkobj_with_proto_slots(
+    js, is_object_type(proto) ? proto : 
+    js_mkundef(), sv_construct_slots_of(func)
+  );
   
   ant_value_t ctor_this = obj;
   ant_value_t result = sv_vm_call(vm, js, func, obj, call.args, call.argc, &ctor_this, effective_new_target);

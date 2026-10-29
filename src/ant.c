@@ -37,6 +37,7 @@
 #include "bootstrap.h"
 #include "gc/weak.h"
 #include "gc/bigints.h"
+#include "gc/object_arenas.h"
 
 #include "esm/remote.h"
 #include "esm/loader.h"
@@ -375,8 +376,8 @@ static ant_shape_t *object_proto_root_cached(ant_t *js, ant_value_t proto) {
   if (js->shapes.cached_protos[line] == proto) return js->shapes.cached_roots[line];
   
   ant_object_sidecar_t *sidecar = ant_object_sidecar(js_obj_ptr(js_as_obj(proto)));
-  ant_shape_t *root = sidecar && sidecar->shape_roots ? sidecar->shape_roots->roots[ANT_INOBJ_MAX_SLOTS] : NULL;
-  if (!root && (root = object_proto_root(js, proto, (uint8_t)ANT_INOBJ_MAX_SLOTS))) ant_shape_release(root);
+  ant_shape_t *root = sidecar && sidecar->shape_roots ? sidecar->shape_roots->roots[ANT_INOBJ_BASE_SLOTS] : NULL;
+  if (!root && (root = object_proto_root(js, proto, (uint8_t)ANT_INOBJ_BASE_SLOTS))) ant_shape_release(root);
   
   if (root) {
     js->shapes.cached_protos[line] = proto;
@@ -386,8 +387,15 @@ static ant_shape_t *object_proto_root_cached(ant_t *js, ant_value_t proto) {
   return root;
 }
 
+static ant_shape_t *object_proto_root_wide(ant_t *js, ant_value_t proto, uint8_t inobj_limit) {
+  ant_object_sidecar_t *sidecar = ant_object_sidecar(js_obj_ptr(js_as_obj(proto)));
+  ant_shape_t *root = sidecar && sidecar->shape_roots ? sidecar->shape_roots->roots[inobj_limit] : NULL;
+  if (!root && (root = object_proto_root(js, proto, inobj_limit))) ant_shape_release(root);
+  return root;
+}
+
 static ant_object_t *obj_alloc_with_proto(ant_t *js, uint8_t type_tag, ant_value_t proto) {
-  if (!is_object_type(proto)) return obj_alloc(js, type_tag, (uint8_t)ANT_INOBJ_MAX_SLOTS);
+  if (!is_object_type(proto)) return obj_alloc(js, type_tag, (uint8_t)ANT_INOBJ_BASE_SLOTS);
   ant_shape_t *root = object_proto_root_cached(js, proto);
   if (!root) return NULL;
   
@@ -410,7 +418,7 @@ void ant_object_set_proto(ant_t *js, ant_object_t *obj, ant_value_t proto) {
   ant_shape_t *next = NULL;
   
   if (ant_shape_is_empty(shape)) {
-    if (obj->inobj_limit == ANT_INOBJ_MAX_SLOTS && is_object_type(proto)) next = object_proto_root_cached(js, proto);
+    if (obj->inobj_limit == ANT_INOBJ_BASE_SLOTS && is_object_type(proto)) next = object_proto_root_cached(js, proto);
     else if ((next = object_proto_root(js, proto, obj->inobj_limit))) ant_shape_release(next);
     if (next) ant_shape_retain(next);
   }
@@ -487,10 +495,12 @@ ant_object_t *obj_alloc(ant_t *js, uint8_t type_tag, uint8_t inobj_limit) {
 
 ant_object_t *obj_alloc_shaped(ant_t *js, uint8_t type_tag, ant_shape_t *shape) {
   gc_alloc_check(js);
-  ant_object_t *obj = (ant_object_t *)fixed_arena_alloc_uninit(&js->obj_arena);
+  uint8_t inobj_limit = ant_shape_get_inobj_limit(shape);
+  bool wide = inobj_limit > ANT_INOBJ_BASE_SLOTS;
+  ant_object_t *obj = ant_object_cell_alloc(js, wide);
   
-  if (!obj && gc_reclaim_arena(js, &js->obj_arena)) 
-    obj = (ant_object_t *)fixed_arena_alloc_uninit(&js->obj_arena);
+  if (!obj && gc_reclaim_arena(js, wide ? &js->obj_wide_arena : &js->obj_arena)) 
+    obj = ant_object_cell_alloc(js, wide);
   
   if (!obj) {
     ant_shape_release(shape);
@@ -508,22 +518,19 @@ ant_object_t *obj_alloc_shaped(ant_t *js, uint8_t type_tag, ant_shape_t *shape) 
   obj->u.array.cap = 0;
   
   obj->shape = shape;
-  obj->inobj_limit = ant_shape_get_inobj_limit(shape);
+  obj->inobj_limit = inobj_limit;
   
   obj->overflow_prop = NULL;
   obj->overflow_cap = 0;
   obj->prop_count = 0;
   
-#if ANT_INOBJ_MAX_SLOTS == 4
   const ant_value_t undef = js_mkundef();
   obj->inobj[0] = undef;
   obj->inobj[1] = undef;
   obj->inobj[2] = undef;
   obj->inobj[3] = undef;
-#else
-  for (uint32_t i = 0; i < ANT_INOBJ_MAX_SLOTS; i++)
-    obj->inobj[i] = js_mkundef();
-#endif
+  for (uint32_t i = ANT_INOBJ_BASE_SLOTS; i < obj->inobj_limit; i++)
+    obj->inobj[i] = undef;
   
   obj->exotic_ops = NULL;
   obj->extra_slots = NULL;
@@ -3449,17 +3456,25 @@ static ant_value_t mkobj_with_inobj_limit(ant_t *js, ant_offset_t parent, uint8_
 }
 
 ant_value_t mkobj(ant_t *js, ant_offset_t parent) {
-  return mkobj_with_inobj_limit(js, parent, (uint8_t)ANT_INOBJ_MAX_SLOTS);
+  return mkobj_with_inobj_limit(js, parent, (uint8_t)ANT_INOBJ_BASE_SLOTS);
 }
 
-ant_value_t js_mkobj_with_proto(ant_t *js, ant_value_t proto) {
+ant_value_t js_mkobj_with_proto_slots(ant_t *js, ant_value_t proto, uint8_t inobj_limit) {
   if (!is_object_type(proto)) {
     ant_value_t obj = mkobj(js, 0);
     if (vtype(proto) != kTypeUndefined && vtype(obj) == kTypeObject) ant_object_set_proto(js, js_obj_ptr(obj), proto);
     return obj;
   }
   
-  ant_object_t *obj = obj_alloc_with_proto(js, kTypeObject, proto);
+  ant_object_t *obj = NULL;
+  if (inobj_limit == ANT_INOBJ_BASE_SLOTS) obj = obj_alloc_with_proto(js, kTypeObject, proto);
+  else {
+    ant_shape_t *root = object_proto_root_wide(js, proto, inobj_limit);
+    if (root) {
+      ant_shape_retain(root);
+      if ((obj = obj_alloc_shaped(js, kTypeObject, root))) obj->proto = proto;
+    }
+  }
   if (!obj) {
     ant_value_t failure = is_err(js->exception_oom) ? js->exception_oom : mkval(kTypeError, 0);
     Ant_Exception_Set(js, failure);
@@ -3467,6 +3482,10 @@ ant_value_t js_mkobj_with_proto(ant_t *js, ant_value_t proto) {
   }
   
   return mkref(kTypeObject, obj);
+}
+
+ant_value_t js_mkobj_with_proto(ant_t *js, ant_value_t proto) {
+  return js_mkobj_with_proto_slots(js, proto, ANT_INOBJ_BASE_SLOTS);
 }
 
 ant_value_t Ant_Exception_CreateRecord(ant_t *js, ant_value_t value, ant_value_t stack) {
@@ -3510,11 +3529,11 @@ ant_value_t js_mkobj_from_template(ant_t *js, ant_value_t template) {
     memcpy(overflow, source->overflow_prop, overflow_bytes);
   }
   
-  ant_object_t *target = fixed_arena_alloc_uninit(&js->obj_arena);
+  ant_object_t *target = ant_object_cell_alloc(js, ant_object_is_wide(source));
   if (!target) { free(overflow); return js_mkerr(js, "oom"); }
   if (overflow_bytes) gc_note_overflow_alloc(js, overflow_bytes);
   
-  *target = *source;
+  memcpy(target, source, ant_object_cell_size(source->inobj_limit));
   target->overflow_prop = overflow;
   ant_shape_retain(target->shape);
   target->mark_epoch = 0;
@@ -21150,6 +21169,7 @@ static inline void isolate_arenas_destroy(ant_t *js) {
   fixed_arena_destroy(&js->promise_arena);
   fixed_arena_destroy(&js->upvalue_arena);
   fixed_arena_destroy(&js->closure_arena);
+  fixed_arena_destroy(&js->obj_wide_arena);
   fixed_arena_destroy(&js->obj_arena);
 }
 
@@ -21163,7 +21183,8 @@ static inline size_t isolate_object_arena_size(const ant_isolate_options_t *opti
 static inline bool isolate_arenas_init(ant_t *js, const ant_isolate_options_t *options) {
   size_t objects = isolate_object_arena_size(options);
   if (
-    !fixed_arena_init(&js->obj_arena, sizeof(ant_object_t), offsetof(ant_object_t, mark_epoch), objects)                                             ||
+    !fixed_arena_init(&js->obj_arena, ANT_OBJECT_SIZE, offsetof(ant_object_t, mark_epoch), objects)                                             ||
+    !fixed_arena_init(&js->obj_wide_arena, ANT_OBJECT_WIDE_SIZE, offsetof(ant_object_t, mark_epoch), objects / 4)                                 ||
     !fixed_arena_init(&js->closure_arena, sizeof(sv_closure_t), offsetof(sv_closure_t, gc_epoch), objects / (ANT_ARENA_MAX / ANT_CLOSURE_ARENA_MAX)) ||
     !fixed_arena_init(&js->upvalue_arena, sizeof(sv_upvalue_t), offsetof(sv_upvalue_t, gc_epoch), objects / (ANT_ARENA_MAX / ANT_UPVALUE_ARENA_MAX)) ||
     !fixed_arena_init(&js->promise_arena, sizeof(ant_promise_state_t), 0, objects / (ANT_ARENA_MAX / ANT_PROMISE_ARENA_MAX))

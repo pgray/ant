@@ -735,7 +735,7 @@ static_assert(
 );
 
 ant_shape_t *ant_shape_new(ant_t *js) {
-  return ant_shape_new_with_inobj_limit(js, (uint8_t)ANT_INOBJ_MAX_SLOTS);
+  return ant_shape_new_with_inobj_limit(js, (uint8_t)ANT_INOBJ_BASE_SLOTS);
 }
 
 void ant_shapes_destroy(ant_t *js) {
@@ -963,7 +963,7 @@ bool ant_gc_shapes_sweep(ant_t *js) {
 }
 
 uint8_t ant_shape_get_inobj_limit(const ant_shape_t *shape) {
-  if (!shape) return (uint8_t)ANT_INOBJ_MAX_SLOTS;
+  if (!shape) return (uint8_t)ANT_INOBJ_BASE_SLOTS;
   return shape_clamp_inobj_limit(shape->inobj_limit);
 }
 

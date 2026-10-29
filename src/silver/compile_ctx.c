@@ -95,6 +95,7 @@ void sv_compile_ctx_cleanup(sv_compiler_t *ctx) {
   free(ctx->local_lookup_heads);
   free(ctx->upval_descs);
   free(ctx->upval_bindings);
+  free(ctx->write_counts);
   for (int i = 0; i < ctx->eval_scope_count; i++)
     free(ctx->eval_scopes[i].bindings);
   free(ctx->eval_scopes);

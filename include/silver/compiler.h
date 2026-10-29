@@ -51,6 +51,12 @@ typedef struct {
 
 typedef struct {
   const char *name;
+  uint32_t len;
+  uint8_t writes;
+} sv_write_count_t;
+
+typedef struct {
+  const char *name;
   uint32_t name_len;
   uint32_t name_hash;
   int lookup_next;
@@ -199,6 +205,11 @@ typedef struct sv_compiler {
   const sv_ast_t *value_params_node;
   uint64_t value_params;
   bool value_params_known;
+
+  const sv_ast_t *write_scan_node;
+  sv_write_count_t *write_counts;
+  uint32_t write_count_cap;
+  bool write_counts_known;
 
   bool is_arrow;
   bool is_async;

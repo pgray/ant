@@ -653,5 +653,5 @@ void gc_idle(ant_t *js, int64_t budget_ms) {
     js->gc.minor_cost_ns ? js->gc.minor_cost_ns : 2000000, true, budget_ms)
   ) gc_run_minor(js);
   
-  js->gc.idle_retry_at = gc_alloc_marker(js) + GC_NURSERY_THRESHOLD * sizeof(ant_object_t) / 8;
+  js->gc.idle_retry_at = gc_alloc_marker(js) + GC_NURSERY_THRESHOLD * ANT_OBJECT_SIZE / 8;
 }

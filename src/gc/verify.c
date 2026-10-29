@@ -29,7 +29,7 @@ void gc_verify_poison_object(ant_object_t *obj) {
   obj->shape = NULL;
   obj->overflow_prop = (ant_value_t *)(uintptr_t)0xdead0001;
   
-  for (size_t i = 0; i < ANT_INOBJ_MAX_SLOTS; i++) obj->inobj[i] = bad;
+  for (size_t i = 0; i < ant_object_inobj_limit(obj); i++) obj->inobj[i] = bad;
   
   obj->u.array.data = (ant_value_t *)(uintptr_t)0xdead0002;
   obj->u.array.len = 0x7fffffff;

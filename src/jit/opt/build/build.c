@@ -10,6 +10,7 @@
 #include "protectors.h"
 #include "proto_watch.h"
 #include "gc/objects.h"
+#include "gc/object_arenas.h"
 #include "modules/math.h"
 #include "runtime.h"
 #include "shapes.h"
@@ -99,6 +100,7 @@ typedef struct {
   bool used_native_finally;
   uint32_t inlined_instructions;
   uint32_t inlined_calls;
+  bool closure_pinned;
   ir_node_vec_t object_like;
   ir_node_vec_t likely_nodes;
   OPT_VEC(ant_value_t) likely_values;
@@ -1941,7 +1943,7 @@ static void opt_field_case_add(opt_field_case_t *cases, uint32_t *count, const o
 
 static ant_object_t *opt_live_object(ant_t *js, ant_value_t value) {
   ant_object_t *object = js_obj_ptr(js_as_obj(value));
-  return object && fixed_arena_contains(&js->obj_arena, object) && object->mark_epoch != ANT_GC_DEAD ? object : NULL;
+  return object && ant_object_arena_contains(js, object) && object->mark_epoch != ANT_GC_DEAD ? object : NULL;
 }
 
 static ant_object_t *opt_prototype_object(ant_t *js, ant_value_t value) {
@@ -2065,7 +2067,11 @@ static ant_value_t opt_likely_value(const opt_builder_t *b, ir_node_id_t node) {
   ir_node_id_t unrefined = ir_unrefined(b->graph, node);
   for (uint32_t i = b->ctx->likely_nodes.len; i-- > 0;)
     if (b->ctx->likely_nodes.items[i] == node || b->ctx->likely_nodes.items[i] == unrefined) return b->ctx->likely_values.items[i];
-  return 0;
+  uint64_t bits;
+  if (!ir_constant_value(b->graph, unrefined, &bits) || ir_node(b->graph, unrefined)->repr != OPT_REPR_TAGGED) return 0;
+  uint8_t type = vtype(bits);
+  if (type == kTypeFunction && !js_func_closure(bits)) return 0;
+  return type == kTypeFunction || type == kTypeBuiltin || type == kTypeObject ? (ant_value_t)bits : 0;
 }
 
 static void opt_expect_value(opt_builder_t *b, ir_node_id_t value, ant_value_t expected, ir_block_id_t *slow, uint32_t *slow_count) {
@@ -2659,6 +2665,14 @@ static opt_flow_t opt_build_upvalue(opt_builder_t *b, const uint8_t *ip, sv_op_t
     return OPT_FLOW_CONTINUE;
   }
   ant_value_t *location = owner && owner->func == b->func && owner->upvalues && owner->upvalues[index] ? owner->upvalues[index]->location : NULL;
+  if (op == OP_GET_UPVAL && location && b->func->upval_descs[index].write_once && (b->inline_call || !b->func->multi_closure)) {
+    ant_value_t value = *location;
+    if (value != SV_TDZ && vtype(value) != kTypeUndefined && opt_retain(b, value)) {
+      if (!b->inline_call) b->ctx->closure_pinned = true;
+      opt_push(b, opt_constant(b, value));
+      return OPT_FLOW_CONTINUE;
+    }
+  }
   bool initialized = !b->func->upval_descs[index].may_tdz || (known && location && *location != SV_TDZ);
   if ((op == OP_GET_UPVAL && jit_upvalue_is_builder_target(b->func, index)) || (!initialized && !opt_may_speculate(b, OPT_EXIT_UNEXPECTED_VALUE)))
     return OPT_FLOW_GENERIC;
@@ -3182,7 +3196,7 @@ static ir_node_id_t opt_construct_this(opt_builder_t *b, ir_node_id_t closure) {
   ant_value_t held = ant_object_prop_get_unchecked(func_obj, slot);
   if (func_obj->shape != sidecar->ctor_proto_shape || slot > 0xffff || !jit_snapshot_shape(js, func_obj->shape)
     || !opt_retain(b, held)) return IR_NONE;
-  ant_shape_t *shape = ant_object_proto_root(b->js, proto, (uint8_t)ANT_INOBJ_MAX_SLOTS);
+  ant_shape_t *shape = ant_object_proto_root(b->js, proto, sv_construct_slots(constructor->func));
   if (!shape) return IR_NONE;
   bool held_shape = jit_snapshot_shape(js, shape);
   ant_shape_release(shape);
@@ -5718,7 +5732,7 @@ bool opt_build_graph(
     for (uint32_t i = 0; i < no_virtual_count; i++) opt_vec_push(&graph->arena, &ctx.no_virtual_arguments, no_virtual[i]);
     *failure = (opt_build_failure_t){0};
     bool ok = opt_build_attempt(js, func, &ctx, graph, failure);
-    if (stats) *stats = (opt_build_stats_t){ctx.inlined_calls};
+    if (stats) *stats = (opt_build_stats_t){ctx.inlined_calls, ctx.closure_pinned};
     if (!ok && !ctx.retry && ctx.built_catch_entries && attempt < 8) {
       ctx.retry = true;
       no_catch_entries = true;

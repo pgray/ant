@@ -186,6 +186,7 @@ typedef struct {
   bool is_const: 1;
   bool may_tdz: 1;
   bool by_value: 1;
+  bool write_once: 1;
 } sv_upval_desc_t;
 
 static_assert(
@@ -675,6 +676,8 @@ struct sv_func {
   bool fb_unit_target: 1;
   bool has_bound_closure: 1;
   bool jit_self_guarded: 1;
+  bool opt_closure_pinned: 1;
+  bool ctor_wide: 1;
 
   sv_code_unit_t *unit;
   struct sv_func *unit_next;
@@ -684,6 +687,10 @@ static_assert(
   sizeof(void *) != 8 || sizeof(sv_func_t) <= 232,
   "sv_func_t must not grow past 232 bytes on 64-bit targets"
 );
+
+static inline uint8_t sv_construct_slots(const sv_func_t *func) {
+  return func && func->ctor_wide ? ANT_INOBJ_WIDE_SLOTS : ANT_INOBJ_BASE_SLOTS;
+}
 
 static inline const sv_map_template_desc_t *sv_map_template_desc_at(
   const sv_func_t *func, uint32_t index
@@ -712,6 +719,7 @@ static inline const sv_map_template_desc_t *sv_map_template_desc_at(
 
   for (uint8_t i = 0; i <= desc->substitution_count; i++)
     if (desc->segments[i].len > 0 && !desc->segments[i].str) return NULL;
+  
   return desc;
 }
 

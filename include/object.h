@@ -177,9 +177,7 @@ typedef struct ant_object {
   
   const ant_exotic_ops_t *exotic_ops;
   ant_extra_slot_t *extra_slots;
-  
   void (*finalizer)(ant_t *, struct ant_object *);
-  ant_value_t inobj[ANT_INOBJ_MAX_SLOTS];
 
   void *native_ptr;
   uint32_t native_tag;
@@ -203,12 +201,15 @@ typedef struct ant_object {
   
   ant_object_flags_t flags;
   uint32_t ic_identity;
+  ant_value_t inobj[];
 } ant_object_t;
 
+static constexpr size_t ANT_OBJECT_SIZE = sizeof(ant_object_t) + ANT_INOBJ_BASE_SLOTS * sizeof(ant_value_t);
+static constexpr size_t ANT_OBJECT_WIDE_SIZE = sizeof(ant_object_t) + ANT_INOBJ_WIDE_SLOTS * sizeof(ant_value_t);
 static constexpr size_t ANT_OBJECT_FLAGS_HIGH_BYTE = offsetof(ant_object_t, flags) + 1;
 
 static_assert(
-  sizeof(void *) != 8 || ANT_INOBJ_MAX_SLOTS != 4 || sizeof(ant_object_t) == 136,
+  sizeof(void *) != 8 || ANT_INOBJ_BASE_SLOTS != 4 || ANT_OBJECT_SIZE == 136,
   "ordinary 64-bit object layout changed"
 );
 
@@ -384,8 +385,12 @@ static inline uint32_t ant_object_overflow_cap(const ant_object_t *obj) {
   return obj->overflow_cap ? (1u << obj->overflow_cap) : 0;
 }
 
+static inline size_t ant_object_cell_size(uint32_t inobj_limit) {
+  return inobj_limit > ANT_INOBJ_BASE_SLOTS ? ANT_OBJECT_WIDE_SIZE : ANT_OBJECT_SIZE;
+}
+
 static inline uint32_t ant_object_inobj_limit(const ant_object_t *obj) {
-  if (!obj) return ANT_INOBJ_MAX_SLOTS;
+  if (!obj) return ANT_INOBJ_BASE_SLOTS;
   uint32_t limit = obj->inobj_limit;
   return (limit > ANT_INOBJ_MAX_SLOTS) ? ANT_INOBJ_MAX_SLOTS : limit;
 }

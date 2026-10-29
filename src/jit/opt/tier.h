@@ -131,6 +131,7 @@ typedef struct opt_code {
   uint32_t watch_count;
   bool dropped;
   bool invalidated;
+  bool closure_pinned;
 } opt_code_t;
 
 static constexpr uint64_t OPT_SLOW_PATH_LIMIT = 1000;
@@ -196,6 +197,7 @@ bool opt_tier_enabled(void);
 uintptr_t opt_tier_generic_step(void);
 uintptr_t opt_tier_access_helper(sv_op_t op, bool adding);
 sv_jit_func_t opt_tier_compile(ant_t *js, sv_func_t *func, sv_closure_t *closure, bool sole_tier);
+void opt_tier_drop_closure_pinned(sv_func_t *func);
 
 opt_code_t *opt_code_new(sv_func_t *func);
 void opt_code_invalidate(opt_code_t *code);

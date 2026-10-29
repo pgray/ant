@@ -188,6 +188,11 @@ static inline ant_value_t sv_construct_prototype_from(
   return sv_construct_prototype_from_object(js, proto_source, ptr);
 }
 
+static inline uint8_t sv_construct_slots_of(ant_value_t callee) {
+  sv_closure_t *closure = vtype(callee) == kTypeFunction ? js_func_closure(callee) : NULL;
+  return sv_construct_slots(closure ? closure->func : NULL);
+}
+
 static inline ant_value_t sv_prepare_construct_meta(
   ant_t *js, ant_value_t func, ant_value_t requested_new_target, ant_value_t *effective_new_target
 ) {

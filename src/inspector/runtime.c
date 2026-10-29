@@ -7,6 +7,7 @@
 #include "internal.h"
 
 #include "gc/roots.h"
+#include "gc/object_arenas.h"
 #include "silver/engine.h"
 #include "silver/eval_env.h"
 
@@ -519,7 +520,7 @@ static size_t inspector_heap_used(ant_t *js) {
   ant_pool_stats_t permanent = js_pool_stats(&js->pool.permanent);
   ant_pool_stats_t bigints = js_class_pool_stats(&js->pool.bigint);
   return
-    js->obj_arena.live_count * js->obj_arena.elem_size +
+    ant_object_live_bytes(js) +
     js->closure_arena.live_count * js->closure_arena.elem_size +
     js->upvalue_arena.live_count * js->upvalue_arena.elem_size +
     strings.total.used + ropes.used + symbols.used + permanent.used + bigints.used +
@@ -534,7 +535,7 @@ static size_t inspector_heap_total(ant_t *js) {
   ant_pool_stats_t permanent = js_pool_stats(&js->pool.permanent);
   ant_pool_stats_t bigints = js_class_pool_stats(&js->pool.bigint);
   return
-    js->obj_arena.committed +
+    ant_object_committed(js) +
     js->closure_arena.committed +
     js->upvalue_arena.committed +
     strings.total.capacity + ropes.capacity + symbols.capacity + permanent.capacity + bigints.capacity +

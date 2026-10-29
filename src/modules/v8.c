@@ -7,6 +7,7 @@
 #include "arena.h"
 #include "cfunc.h"
 #include "errors.h"
+#include "gc/object_arenas.h"
 #include "internal.h"
 #include "modules/buffer.h"
 #include "silver/call.h"
@@ -303,9 +304,9 @@ static ant_value_t v8_get_heap_statistics(ant_params_t) {
   size_t rss = 0;
   uv_resident_set_memory(&rss);
 
-  size_t arena_committed  = js->obj_arena.committed;
-  size_t arena_reserved   = js->obj_arena.limit;
-  size_t arena_live_bytes = js->obj_arena.live_count * js->obj_arena.elem_size;
+  size_t arena_committed  = ant_object_committed(js);
+  size_t arena_reserved   = js->obj_arena.limit + js->obj_wide_arena.limit;
+  size_t arena_live_bytes = ant_object_live_bytes(js);
 
   size_t closure_committed = js->closure_arena.committed;
   size_t closure_reserved  = js->closure_arena.limit;
@@ -342,8 +343,9 @@ static ant_value_t v8_get_heap_statistics(ant_params_t) {
 
 static ant_value_t v8_get_heap_space_statistics(ant_params_t) {
   ant_value_t nursery = Ant_Object_Create(js);
-  size_t arena_committed  = js->obj_arena.committed;
-  size_t arena_live_bytes = js->obj_arena.live_count * js->obj_arena.elem_size;
+  
+  size_t arena_committed  = ant_object_committed(js);
+  size_t arena_live_bytes = ant_object_live_bytes(js);
   double arena_available = (double)(arena_committed / 2 > arena_live_bytes / 2 ? arena_committed / 2 - arena_live_bytes / 2 : 0);
 
   js_set(js, nursery, "space_name",            js_mkstr(js, "new_space", 9));

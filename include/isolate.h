@@ -7,6 +7,7 @@
 #include "errors.h"
 #include "shapes.h"
 #include "pool.h"
+#include "object.h"
 #include "runtime.h"
 #include "primordials.h"
 #include "descriptors.h"
@@ -188,6 +189,7 @@ struct ant_isolate_t {
   } defaults;
 
   ant_fixed_arena_t obj_arena;
+  ant_fixed_arena_t obj_wide_arena;
   ant_fixed_arena_t closure_arena;
   ant_fixed_arena_t upvalue_arena;
   ant_fixed_arena_t promise_arena;
