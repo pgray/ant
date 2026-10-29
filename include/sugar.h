@@ -40,6 +40,7 @@ typedef struct coroutine {
   bool await_registered: 1;
   bool yield_tick: 1;
   bool tail_await: 1;
+  bool yield_raw: 1;
 
   uint64_t gc_epoch;
   uint32_t refcount;
@@ -74,7 +75,7 @@ void coroutine_unhold(coroutine_t *coro, uint8_t hold);
 
 ant_value_t start_async_in_coroutine(
   ant_t *js, const char *code, size_t code_len,
-  ant_value_t closure_scope, ant_value_t *args, int nargs
+  ant_value_t closure_scope, ant_args_t
 );
 
 void Ant_Coroutine_ResumeAwaitJob(ant_t *js, coroutine_t *coro, ant_value_t value, bool is_error);

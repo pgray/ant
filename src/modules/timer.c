@@ -113,7 +113,7 @@ static timer_entry_t *find_timer_entry_by_id(ant_t *js, int timer_id) {
   return NULL;
 }
 
-static int timer_copy_args(timer_entry_t *entry, ant_value_t *args, int nargs) {
+static int timer_copy_args(timer_entry_t *entry, ant_args_t) {
   entry->nargs = nargs > 2 ? nargs - 2 : 0;
   if (entry->nargs > 0) {
     entry->args = calloc(1, sizeof(ant_value_t) * entry->nargs);
@@ -165,8 +165,8 @@ static ant_value_t timer_make_args_array(ant_native_params_t) {
 static constexpr uint32_t TIMER_NATIVE_TAG = Ant_NativeTag("TIMR");
 static constexpr uint32_t IMMEDIATE_NATIVE_TAG = Ant_NativeTag("IMMD");
 
-static timer_entry_t *timer_entry_of(ant_value_t handle) {
-  return is_object_type(handle) ? js_get_native(handle, TIMER_NATIVE_TAG) : NULL;
+static inline timer_entry_t *timer_entry_of(ant_value_t handle) {
+  return js_get_native(handle, TIMER_NATIVE_TAG);
 }
 
 static timer_entry_t *timer_open_entry_of(ant_value_t handle) {
@@ -179,8 +179,8 @@ static ant_value_t timer_to_primitive(ant_params_t) {
   return entry ? js_mknum((double)entry->timer_id) : js_mkundef();
 }
 
-static immediate_entry_t *immediate_entry_of(ant_value_t handle) {
-  return is_object_type(handle) ? js_get_native(handle, IMMEDIATE_NATIVE_TAG) : NULL;
+static inline immediate_entry_t *immediate_entry_of(ant_value_t handle) {
+  return js_get_native(handle, IMMEDIATE_NATIVE_TAG);
 }
 
 static ant_value_t timer_inspect(ant_params_t) {
@@ -1012,7 +1012,7 @@ void queue_microtask(ant_t *js, ant_value_t callback) {
   queue_job(js, entry);
 }
 
-void queue_microtask_with_args(ant_t *js, ant_value_t callback, ant_value_t *args, int nargs) {
+void queue_microtask_with_args(ant_t *js, ant_value_t callback, ant_args_t) {
   if (nargs <= 0) { queue_microtask(js, callback); return; }
   
   microtask_entry_t *entry = microtask_entry_new(js, nargs);
@@ -1108,7 +1108,7 @@ void queue_next_tick(ant_t *js, ant_value_t callback) {
   queue_microtask_entry(&js->timers.next_ticks, &js->timers.next_ticks_tail, entry);
 }
 
-void queue_next_tick_with_args(ant_t *js, ant_value_t callback, ant_value_t *args, int nargs) {
+void queue_next_tick_with_args(ant_t *js, ant_value_t callback, ant_args_t) {
   if (nargs <= 0) { queue_next_tick(js, callback); return; }
 
   microtask_entry_t *entry = microtask_entry_new(js, nargs);
@@ -1327,9 +1327,11 @@ void process_microtasks(ant_t *js) {
 bool js_maybe_drain_microtasks(ant_t *js) {
   if (!js) return false;
   if (js->microtasks_draining) return false;
-  if (js->vm_exec_depth != 0) return false;
+  if (js->vm_exec_depth != 0 || js->jit_active_depth != 0) return false;
+  
   if (!has_pending_microtasks(js)) return false;
   process_microtasks_internal(js, true);
+  
   return true;
 }
 

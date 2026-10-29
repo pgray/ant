@@ -602,7 +602,7 @@ static inspector_await_t *inspector_take_pending_await(uint32_t await_id) {
 }
 
 static uint32_t inspector_current_await_id(ant_t *js) {
-  ant_value_t state = js_get_slot(js_getcurrentfunc(js), SLOT_DATA);
+  ant_value_t state = js_func_data(js->current_func);
   if (vtype(state) != kTypeNumber) return 0;
   double id = js_getnum(state);
   return id > 0 && id <= UINT32_MAX ? (uint32_t)id : 0;
@@ -890,7 +890,7 @@ oom:
   inspector_send_error(client, id, -32000, "Out of memory");
 }
 
-void ant_inspector_console_api_called(ant_t *js, const char *level, ant_value_t *args, int nargs) {
+void ant_inspector_console_api_called(ant_t *js, const char *level, ant_args_t) {
   if (!g_inspector.started) return;
   sbuf_t b = {0};
   if (!sbuf_append(&b, "{\"method\":\"Runtime.consoleAPICalled\",\"params\":{\"type\":")) goto done;

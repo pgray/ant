@@ -579,8 +579,9 @@ static ant_value_t util_format_with_options(ant_params_t) {
   return util_format_impl(js, args, nargs, 1);
 }
 
-static int util_inspect_depth(ant_t *js, ant_value_t *args, int nargs) {
+static int util_inspect_depth(ant_native_params_t) {
   ant_value_t depth = js_mkundef();
+  
   if (nargs > 1 && is_object_type(args[1])) depth = js_get(js, args[1], "depth");
   else if (nargs > 2) depth = args[2];
 
@@ -593,7 +594,7 @@ static int util_inspect_depth(ant_t *js, ant_value_t *args, int nargs) {
   return d >= MAX_STRINGIFY_DEPTH ? MAX_STRINGIFY_DEPTH : (int)d;
 }
 
-static uint8_t util_inspect_flags(ant_t *js, ant_value_t *args, int nargs) {
+static uint8_t util_inspect_flags(ant_native_params_t) {
   if (nargs < 2) return 0;
   if (!is_object_type(args[1])) return vtype(args[1]) == kTypeBool && js_truthy(js, args[1]) ? ANT_INSPECT_SHOW_HIDDEN : 0;
 
@@ -1279,7 +1280,7 @@ static ant_value_t util_promisified_call(ant_params_t) {
 }
 
 static ant_value_t util_callbackify_success(ant_params_t) {
-  ant_value_t state = js_get_slot(js_getcurrentfunc(js), SLOT_DATA);
+  ant_value_t state = js_func_data(js->current_func);
   if (!is_object_type(state)) return js_mkundef();
 
   ant_value_t callback = js_get_slot(state, SLOT_DATA);
@@ -1294,7 +1295,7 @@ static ant_value_t util_callbackify_success(ant_params_t) {
 }
 
 static ant_value_t util_callbackify_error(ant_params_t) {
-  ant_value_t state = js_get_slot(js_getcurrentfunc(js), SLOT_DATA);
+  ant_value_t state = js_func_data(js->current_func);
   if (!is_object_type(state)) return js_mkundef();
 
   ant_value_t callback = js_get_slot(state, SLOT_DATA);
@@ -1403,7 +1404,7 @@ static ant_value_t util_callbackify(ant_params_t) {
 }
 
 static ant_value_t util_aborted_listener(ant_params_t) {
-  ant_value_t promise = js_get_slot(js_getcurrentfunc(js), SLOT_DATA);
+  ant_value_t promise = js_func_data(js->current_func);
   if (vtype(promise) == kTypePromise) js_resolve_promise(js, promise, js_mkundef());
   return js_mkundef();
 }

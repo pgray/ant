@@ -17,7 +17,7 @@
 
 #include "worker_internal.h"
 
-static void node_worker_emit(ant_t *js, ant_worker_t *w, const char *event, ant_value_t *args, int nargs) {
+static void node_worker_emit(ant_t *js, ant_worker_t *w, const char *event, ant_args_t) {
   if (!is_object_type(w->obj)) return;
   eventemitter_emit_args(js, w->obj, event, args, nargs);
   process_microtasks(js);
@@ -61,7 +61,7 @@ static const worker_ops_t node_worker_ops = {
 };
 
 static ant_value_t js_worker_elu(ant_params_t) {
-  ant_worker_t *w = worker_data(js_get_slot(js_getcurrentfunc(js), SLOT_DATA));
+  ant_worker_t *w = worker_data(js_func_data(js->current_func));
   if (!w || w->exited) return ant_performance_elu_zero(js);
 
   ant_value_t pair;

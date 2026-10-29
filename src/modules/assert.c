@@ -421,7 +421,7 @@ static ant_value_t assertion_fail_text(ant_t *js, ant_value_t custom, const char
   return assertion_fail(js, custom, info);
 }
 
-static inline assertion_info_t assert_compared(ant_value_t *args, int nargs, const char *op) {
+static inline assertion_info_t assert_compared(ant_args_t, const char *op) {
   return (assertion_info_t){
     .op = op,
     .actual = nargs > 0 ? args[0] : js_mkundef(),
@@ -1182,7 +1182,7 @@ static ant_value_t assert_rejection_settle(
 }
 
 static ant_value_t assert_rejection_on_settled(ant_params_t) {
-  ant_value_t state = js_get_slot(js_getcurrentfunc(js), SLOT_DATA);
+  ant_value_t state = js_func_data(js->current_func);
   return assert_rejection_settle(
     js, js_get(js, state, "promise"), js_get(js, state, "result"), nargs > 0 ? args[0] : js_mkundef(),
     js_get(js, state, "expected"), js_get(js, state, "message"),

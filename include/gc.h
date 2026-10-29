@@ -8,15 +8,17 @@
 static constexpr size_t GC_MAJOR_MIN_PROMOTIONS = 4;
 static constexpr size_t GC_MIN_TICK = 1024;
 
-static constexpr uint32_t GC_MAJOR_EVERY_N_MINOR = 8;
+static constexpr uint32_t GC_MAJOR_EVERY_N_MINOR   = 8;
 static constexpr uint32_t GC_MAJOR_TIME_SHARE_LOW  = 41;
 static constexpr uint32_t GC_MAJOR_TIME_SHARE_HIGH = 102;
 static constexpr uint32_t GC_MAJOR_WORK_SHARE_HIGH = 800;
+static constexpr uint32_t GC_SKIP_MINOR_SURVIVAL   = 192;
 
 static constexpr size_t GC_NURSERY_THRESHOLD = 32768;
 static constexpr size_t GC_RECLAIM_MIN_FREE_DIVISOR = 64;
 static constexpr size_t GC_CLOSURE_NURSERY_THRESHOLD = 131072;
 static constexpr size_t GC_CLOSURE_PROMOTED_MAJOR = 262144;
+static constexpr size_t GC_SKIP_PROBE_NURSERY = GC_NURSERY_THRESHOLD / 4;
 
 static constexpr size_t GC_CLOSURE_MAJOR_GROWTH = 16u * 1024u * 1024u;
 static constexpr size_t GC_POOL_PRESSURE_FLOOR = 8u * 1024u * 1024u;
@@ -88,6 +90,7 @@ static inline bool gc_value_ref_is_young(ant_value_t v) {
 
 static inline void gc_write_barrier(ant_t *js, ant_object_t *writer_obj, ant_value_t new_val) {
   if (writer_obj->flags.generation != 1) return;
+  if (writer_obj->flags.in_remember_set && writer_obj->type_tag != kTypeArray) return;
   if (gc_value_is_heap_ref(new_val) && gc_value_ref_is_young(new_val)) gc_remember_add(js, writer_obj);
 }
 

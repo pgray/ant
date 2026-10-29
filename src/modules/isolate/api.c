@@ -59,11 +59,11 @@ void guest_release(ant_guest_t *g) {
 
 static ant_guest_t *isolate_this(ant_t *js) {
   ant_value_t self = js_getthis(js);
-  return is_object_type(self) ? js_get_native(self, ISOLATE_NATIVE_TAG) : NULL;
+  return js_get_native(self, ISOLATE_NATIVE_TAG);
 }
 
 static isolate_handle_t *isolate_handle(ant_value_t obj, isolate_handle_kind_t kind) {
-  isolate_handle_t *h = is_object_type(obj) ? js_get_native(obj, ISOLATE_HANDLE_TAG) : NULL;
+  isolate_handle_t *h = js_get_native(obj, ISOLATE_HANDLE_TAG);
   return h && h->kind == kind ? h : NULL;
 }
 
@@ -322,13 +322,15 @@ static void isolate_awaiting_remove(ant_guest_t *g, guest_host_call_t *call) {
 }
 
 static ant_value_t isolate_host_settled(ant_t *js, guest_host_call_t *call, ant_value_t value, bool fulfilled) {
-  ant_guest_t *g = js_get_native(js_get_slot(js_getcurrentfunc(js), SLOT_DATA), ISOLATE_NATIVE_TAG);
+  ant_guest_t *g = js_get_native(js_func_data(js->current_func), ISOLATE_NATIVE_TAG);
   if (fulfilled) isolate_host_call_value(js, call, value);
   else isolate_host_call_error(js, call, value);
+  
   if (g) {
     isolate_awaiting_remove(g, call);
     isolate_host_call_done(js, g, call);
   } else guest_host_call_free(call);
+  
   return js_mkundef();
 }
 
@@ -508,7 +510,7 @@ static ant_value_t isolate_simple(ant_t *js, ant_guest_t *g, guest_op_t op, bool
   return call ? isolate_submit(js, g, call, sync) : Ant_Error_CreateOutOfMemory(js);
 }
 
-static ant_value_t isolate_compile(ant_t *js, ant_value_t *args, int nargs, bool sync) {
+static ant_value_t isolate_compile(ant_native_params_t, bool sync) {
   ant_guest_t *g = isolate_this(js);
   if (!g) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
 
@@ -547,7 +549,7 @@ static ant_value_t isolate_run(ant_t *js, guest_op_t op, isolate_handle_t *targe
   return isolate_submit(js, target->g, call, sync);
 }
 
-static ant_value_t isolate_property(ant_t *js, guest_op_t op, ant_value_t *args, int nargs, bool sync) {
+static ant_value_t isolate_property(ant_t *js, guest_op_t op, ant_args_t, bool sync) {
   isolate_handle_t *ref = isolate_handle(js_getthis(js), HANDLE_REFERENCE);
   if (!ref) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
 
@@ -565,7 +567,7 @@ static ant_value_t isolate_property(ant_t *js, guest_op_t op, ant_value_t *args,
   return is_err(r) ? isolate_fail(call, r) : isolate_submit(js, ref->g, call, sync);
 }
 
-static ant_value_t isolate_apply(ant_t *js, ant_value_t *args, int nargs, bool sync) {
+static ant_value_t isolate_apply(ant_native_params_t, bool sync) {
   isolate_handle_t *ref = isolate_handle(js_getthis(js), HANDLE_REFERENCE);
   if (!ref) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
 
@@ -767,7 +769,7 @@ static ant_value_t js_isolate_ctor(ant_params_t) {
 
 static ant_value_t js_handle_release(ant_params_t) {
   ant_value_t self = js_getthis(js);
-  isolate_handle_t *h = is_object_type(self) ? js_get_native(self, ISOLATE_HANDLE_TAG) : NULL;
+  isolate_handle_t *h = js_get_native(self, ISOLATE_HANDLE_TAG);
   if (h && !h->released) {
     h->released = true;
     isolate_queue_release(h->g, h->kind, h->id);
@@ -828,7 +830,7 @@ static ant_value_t js_copy_fn(ant_params_t) {
 
 static ant_wire_t *isolate_copy_this(ant_t *js) {
   ant_value_t self = js_getthis(js);
-  return is_object_type(self) ? js_get_native(self, ISOLATE_COPY_TAG) : NULL;
+  return js_get_native(self, ISOLATE_COPY_TAG);
 }
 
 static ant_value_t js_copy_copy(ant_params_t) {

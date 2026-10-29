@@ -224,7 +224,7 @@ static ant_value_t zlib_read_options(
   return js_mkundef();
 }
 
-static ant_value_t pick_callback(ant_value_t *args, int nargs) {
+static ant_value_t pick_callback(ant_args_t) {
   if (nargs > 2 && is_callable(args[2])) return args[2];
   if (nargs > 1 && is_callable(args[1])) return args[1];
   return js_mkundef();
@@ -598,7 +598,7 @@ static ant_value_t js_zlib_flush(ant_params_t) {
 
   if (is_callable(cb)) {
     ant_value_t null_val = js_mknull();
-    queue_microtask_with_args(js, cb, &null_val, 1);
+    queue_next_tick_with_args(js, cb, &null_val, 1);
   }
   
   return self;

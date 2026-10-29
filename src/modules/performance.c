@@ -79,14 +79,14 @@ ant_value_t ant_performance_elu_zero(ant_t *js) {
   return perf_elu_result(js, 0, 0, 0);
 }
 
-bool ant_performance_elu_pair(ant_t *js, ant_value_t *args, int nargs, ant_value_t *out) {
+bool ant_performance_elu_pair(ant_native_params_t, ant_value_t *out) {
   perf_elu_t first, second;
   if (nargs < 2 || !perf_elu_read(js, args[0], &first) || !perf_elu_read(js, args[1], &second)) return false;
   *out = perf_elu_delta(js, first, second);
   return true;
 }
 
-ant_value_t ant_performance_elu_from(ant_t *js, double idle, double active, ant_value_t *args, int nargs) {
+ant_value_t ant_performance_elu_from(ant_t *js, double idle, double active, ant_args_t) {
   perf_elu_t first, current = { idle, active };
   if (nargs > 0 && perf_elu_read(js, args[0], &first)) return perf_elu_delta(js, current, first);
   return perf_elu_result(js, idle, active, active / (idle + active));
@@ -198,8 +198,8 @@ static uint64_t hist_percentile(const perf_histogram_t *h, double percentile) {
   return h->max;
 }
 
-static perf_eld_monitor_t *eld_monitor(ant_value_t value) {
-  return is_object_type(value) ? (perf_eld_monitor_t *)js_get_native(value, ELD_NATIVE_TAG) : NULL;
+static inline perf_eld_monitor_t *eld_monitor(ant_value_t value) {
+  return js_get_native(value, ELD_NATIVE_TAG);
 }
 
 static void eld_timer_closed(uv_handle_t *handle) {

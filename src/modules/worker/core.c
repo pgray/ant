@@ -70,7 +70,7 @@ ant_worker_t *worker_new(ant_t *js, ant_value_t obj, const worker_ops_t *ops) {
 }
 
 ant_worker_t *worker_data(ant_value_t obj) {
-  return is_object_type(obj) ? (ant_worker_t *)js_get_native(obj, WORKER_NATIVE_TAG) : NULL;
+  return js_get_native(obj, WORKER_NATIVE_TAG);
 }
 
 static void worker_free_events(worker_event_t *e) {
@@ -732,7 +732,7 @@ ant_value_t worker_read_options(ant_t *js, ant_worker_t *w, ant_value_t options)
   return is_err(map) ? map : ant_wire_serialize(js, map, js_mkundef(), js_mkundef(), &w->environment_data);
 }
 
-ant_value_t worker_transfer_arg(ant_t *js, ant_value_t *args, int nargs) {
+ant_value_t worker_transfer_arg(ant_native_params_t) {
   if (nargs < 2) return js_mkundef();
   ant_value_t opt = args[1];
   if (!is_object_type(opt) || vtype(opt) == kTypeArray) return opt;

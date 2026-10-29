@@ -66,7 +66,7 @@ static bool esm_hook_next_was_called(ant_t *js, ant_value_t next) {
 }
 
 static ant_value_t builtin_esm_next_resolve(ant_params_t) {
-  ant_value_t data = js_get_slot(js_getcurrentfunc(js), SLOT_DATA);
+  ant_value_t data = js_func_data(js->current_func);
   js_set(js, data, "called", js_true);
 
   int level = (int)js_getnum(js_get(js, data, "level"));
@@ -98,7 +98,7 @@ static ant_value_t builtin_esm_next_resolve(ant_params_t) {
 }
 
 static ant_value_t builtin_esm_next_load(ant_params_t) {
-  ant_value_t data = js_get_slot(js_getcurrentfunc(js), SLOT_DATA);
+  ant_value_t data = js_func_data(js->current_func);
   js_set(js, data, "called", js_true);
 
   int level = (int)js_getnum(js_get(js, data, "level"));
@@ -334,7 +334,7 @@ static ant_value_t esm_run_load_chain(ant_t *js, const esm_chain_t *chain, int l
   ant_value_t out = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, out);
 
-  js_set(js, out, "source", js_mkstr(js, file.data, file.size));
+  js_set(js, out, "source", js_mkstr_utf8(js, file.data, file.size));
   if (esm_is_json(path)) js_set(js, out, "format", js_mkstr(js, "json", 4));
   else {
     ant_module_format_t fmt = esm_decide_module_format(js, path);
