@@ -3917,6 +3917,37 @@ static opt_flow_t opt_build_getter_field(opt_builder_t *b, const opt_field_plan_
   return opt_join_call_arms(b, &arms);
 }
 
+static bool opt_try_builtin_call(opt_builder_t *b, ir_node_id_t *inputs, uint32_t argc, uint32_t operands, bool tail, opt_flow_t *flow) {
+  uint64_t bits;
+  ir_node_id_t callee = inputs[0];
+  bool constant = ir_constant_value(b->graph, callee, &bits) && ir_node(b->graph, callee)->repr == OPT_REPR_TAGGED;
+  ant_value_t known = constant ? (ant_value_t)bits : opt_likely_value(b, callee);
+  if (!known) return false;
+  ant_value_t cfunc = vtype(known) == kTypeBuiltin ? known : sv_native_closure_cfunc(known);
+  if (!cfunc || (cfunc != known && !opt_retain(b, known))) return false;
+  if (!constant) {
+    if (!opt_may_speculate(b, OPT_EXIT_BAD_CALL_TARGET)) return false;
+    ir_op_t check = ir_op(IR_OP_CHECK_VALUE);
+    check.check_value.expected = known;
+    check.check_value.kind = OPT_EXIT_BAD_CALL_TARGET;
+    opt_emit_checked(b, check, &callee, 1, OPT_REPR_NONE);
+  }
+  ir_op_t call = ir_op(IR_OP_CALL_NATIVE);
+  call.call.func = b->func;
+  call.call.bc_off = b->pc;
+  call.call.stores_operands = true;
+  call.call.argc = (uint16_t)argc;
+  call.call.helper = (uintptr_t)((const ant_cfunc_meta_t *)vptr(cfunc))->fn;
+  call.call.extra = cfunc == known ? 0 : (uintptr_t)known;
+  call.call.builtin = true;
+  ir_node_id_t result = opt_emit(b, call, inputs, 2 + argc, OPT_REPR_TAGGED);
+  ir_node(b->graph, result)->frame_state = opt_call_position(b);
+  opt_mark_catch(b, result);
+  opt_forget_memory(b);
+  *flow = opt_finish_call(b, operands, result, tail);
+  return true;
+}
+
 static opt_flow_t opt_build_call(opt_builder_t *b, const uint8_t *ip, sv_op_t op) {
   bool construct = op == OP_NEW, tail = op == OP_TAIL_CALL || op == OP_TAIL_CALL_METHOD;
   bool method = op == OP_CALL_METHOD || op == OP_TAIL_CALL_METHOD;
@@ -3972,6 +4003,7 @@ static opt_flow_t opt_build_call(opt_builder_t *b, const uint8_t *ip, sv_op_t op
   ir_node_id_t math;
   if (!construct && opt_try_math(b, callee, argc, inputs + 2, &math)) return opt_finish_call(b, operands, math, tail);
   opt_flow_t flow;
+  if (!construct && opt_try_builtin_call(b, inputs, argc, operands, tail, &flow)) return flow;
   if (!construct && opt_try_polymorphic_call(b, op, argc, operands, inputs, &flow)) return flow;
   if (opt_try_inline(b, op, argc, operands, callee, second, inputs + 2, target, &flow)) return flow;
   return opt_emit_call(b, construct, target, inputs, argc, operands, tail);

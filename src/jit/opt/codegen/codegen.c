@@ -18,6 +18,8 @@
 #include "silver/engine.h"
 #include "silver/feedback.h"
 #include "protectors.h"
+#include "realm.h"
+#include "silver/glue.h"
 #include "modules/math.h"
 
 #include <assert.h>
@@ -33,6 +35,8 @@ static constexpr uint64_t OPT_ERROR_TAG = (NANBOX_PREFIX >> NANBOX_TYPE_SHIFT) |
 static constexpr int64_t OPT_STRING_TAG_SIGNED = (int64_t)(((NANBOX_PREFIX >> NANBOX_TYPE_SHIFT) | (uint64_t)kTypeString) | ~(UINT64_MAX >> NANBOX_TYPE_SHIFT));
 static constexpr int64_t OPT_FUNCTION_TAG_SIGNED = (int64_t)(OPT_FUNCTION_TAG | ~(UINT64_MAX >> NANBOX_TYPE_SHIFT));
 static constexpr int64_t OPT_ERROR_TAG_SIGNED = (int64_t)(OPT_ERROR_TAG | ~(UINT64_MAX >> NANBOX_TYPE_SHIFT));
+static constexpr int64_t OPT_UNDEFINED_TAG_SIGNED = (int64_t)(OPT_UNDEFINED_TAG | ~(UINT64_MAX >> NANBOX_TYPE_SHIFT));
+static constexpr int64_t OPT_NULL_TAG_SIGNED = (int64_t)(OPT_NULL_TAG | ~(UINT64_MAX >> NANBOX_TYPE_SHIFT));
 static constexpr uint32_t OPT_OUTGOING_BYTES = 16;
 static constexpr uint32_t OPT_IDENTITY_TYPES =
   (1u << kTypeObject) | (1u << kTypeArray) | (1u << kTypeFunction) | (1u << kTypePromise) | (1u << kTypeGenerator) |
@@ -2635,6 +2639,69 @@ static void opt_cg_emit_call_slows(opt_cg_t *cg) {
   }
 }
 
+static void opt_cg_call_builtin(opt_cg_t *cg, ir_node_id_t node_id) {
+  masm_t *m = &cg->masm;
+  const ir_node_t *node = ir_node(cg->graph, node_id);
+  const ir_op_t *op = &node->op;
+  const asm_gpr_t *a = MASM_ARGUMENT_GPRS;
+  asm_gpr_t scratch = cg->pinned.scratch, result = MASM_RETURN_GPRS[0];
+  asm_label_t single = masm_new_label(m), keep = masm_new_label(m), finish = masm_new_label(m);
+  asm_label_t slow = masm_new_label(m), done = masm_new_label(m);
+  for (uint32_t i = 0; i < node->inputs.len; i++) opt_cg_store_input(cg, node_id, i, opt_cg_call_slot(cg, i));
+  masm_load64(m, a[0], asm_addr(cg->pinned.vm, (int32_t)offsetof(sv_vm_t, js)));
+  masm_load64(m, scratch, asm_addr(a[0], (int32_t)offsetof(ant_t, realms)));
+  masm_branch64_imm(m, ASM_COND_EQUAL, scratch, 0, single);
+  masm_load64(m, scratch, asm_addr(scratch, (int32_t)offsetof(ant_realm_t, next)));
+  masm_branch64_imm(m, ASM_COND_NOT_EQUAL, scratch, 0, slow);
+  masm_bind(m, single);
+  masm_load64(m, scratch, asm_addr(a[0], (int32_t)offsetof(ant_t, exception)));
+  masm_sar64_imm(m, scratch, scratch, NANBOX_TYPE_SHIFT);
+  masm_branch64_imm(m, ASM_COND_NOT_EQUAL, scratch, OPT_UNDEFINED_TAG_SIGNED, slow);
+  masm_load64(m, a[1], asm_addr(a[0], (int32_t)offsetof(ant_t, this_val)));
+  masm_store64(m, opt_cg_call_slot(cg, 0), a[1]);
+  masm_load64(m, a[1], opt_cg_call_slot(cg, 1));
+  if (!op->call.extra) {
+    masm_sar64_imm(m, scratch, a[1], NANBOX_TYPE_SHIFT);
+    masm_branch64_imm(m, ASM_COND_NOT_EQUAL, scratch, OPT_NULL_TAG_SIGNED, keep);
+    masm_move_imm64(m, a[1], IR_VALUE_UNDEFINED);
+  }
+  masm_bind(m, keep);
+  masm_store64(m, asm_addr(a[0], (int32_t)offsetof(ant_t, this_val)), a[1]);
+  if (op->call.extra) {
+    masm_load64(m, a[1], asm_addr(a[0], (int32_t)offsetof(ant_t, current_func)));
+    masm_store64(m, opt_cg_call_slot(cg, 1), a[1]);
+    masm_move_imm64(m, a[1], op->call.extra);
+    masm_store64(m, asm_addr(a[0], (int32_t)offsetof(ant_t, current_func)), a[1]);
+  }
+  masm_load_effective_address(m, a[1], opt_cg_call_slot(cg, 2));
+  masm_move_imm32(m, a[2], op->call.argc);
+  masm_move_imm64(m, a[3], IR_VALUE_UNDEFINED);
+  masm_call_absolute(m, op->call.helper);
+  opt_cg_record_call(cg, node->frame_state, -1);
+  masm_load64(m, scratch, asm_addr(cg->pinned.vm, (int32_t)offsetof(sv_vm_t, js)));
+  masm_load64(m, a[1], opt_cg_call_slot(cg, 0));
+  masm_store64(m, asm_addr(scratch, (int32_t)offsetof(ant_t, this_val)), a[1]);
+  if (op->call.extra) {
+    masm_load64(m, a[1], opt_cg_call_slot(cg, 1));
+    masm_store64(m, asm_addr(scratch, (int32_t)offsetof(ant_t, current_func)), a[1]);
+  }
+  masm_sar64_imm(m, a[1], result, NANBOX_TYPE_SHIFT);
+  masm_branch64_imm(m, ASM_COND_EQUAL, a[1], OPT_ERROR_TAG_SIGNED, finish);
+  masm_load64(m, a[1], asm_addr(scratch, (int32_t)offsetof(ant_t, exception)));
+  masm_sar64_imm(m, a[1], a[1], NANBOX_TYPE_SHIFT);
+  masm_branch64_imm(m, ASM_COND_EQUAL, a[1], OPT_UNDEFINED_TAG_SIGNED, done);
+  masm_bind(m, finish);
+  masm_move64(m, a[1], result);
+  masm_move64(m, a[0], scratch);
+  masm_call_absolute(m, (uint64_t)(uintptr_t)jit_helper_native_finish);
+  opt_cg_record_call(cg, node->frame_state, -1);
+  masm_jump(m, done);
+  masm_bind(m, slow);
+  opt_cg_call_runtime(cg, node_id, (uint64_t)(uintptr_t)opt_rt_call);
+  masm_bind(m, done);
+  opt_cg_branch_error(cg, node_id);
+}
+
 static void opt_cg_call(opt_cg_t *cg, ir_node_id_t node_id) {
   masm_t *m = &cg->masm;
   const ir_node_t *node = ir_node(cg->graph, node_id);
@@ -2644,6 +2711,10 @@ static void opt_cg_call(opt_cg_t *cg, ir_node_id_t node_id) {
   if (op->code == IR_OP_CALL_NATIVE && op->call.slow_path) opt_cg_count_slow_path(cg, op->call.func, op->call.bc_off);
   if (op->code == IR_OP_CALL_DIRECT && op->call.target) {
     opt_cg_call_known(cg, node_id);
+    return;
+  }
+  if (op->code == IR_OP_CALL_NATIVE && op->call.builtin) {
+    opt_cg_call_builtin(cg, node_id);
     return;
   }
   for (uint32_t i = 0; i < node->inputs.len; i++) opt_cg_store_input(cg, node_id, i, opt_cg_call_slot(cg, i));

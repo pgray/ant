@@ -288,6 +288,7 @@ typedef struct {
       bool computes_only;
       bool needs_frame;
       bool slow_path;
+      bool builtin;
     } call;
     struct {
       sv_func_t *func;
