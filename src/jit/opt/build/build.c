@@ -2484,6 +2484,16 @@ static void opt_narrow_to_prototype(opt_builder_t *b, opt_field_plan_t *plan, ir
   plan->count = kept;
 }
 
+static void opt_drop_superseded_cases(opt_builder_t *b, opt_field_plan_t *plan) {
+  uint32_t kept = 0;
+  for (uint32_t i = 0; i < plan->count; i++) kept += !ant_shape_is_superseded(plan->cases[i].shape);
+  if (!kept || kept == plan->count || !opt_may_speculate(b, OPT_EXIT_BAD_SHAPE)) return;
+  kept = 0;
+  for (uint32_t i = 0; i < plan->count; i++)
+    if (!ant_shape_is_superseded(plan->cases[i].shape)) plan->cases[kept++] = plan->cases[i];
+  plan->count = kept;
+}
+
 static bool opt_getter_plan(opt_builder_t *b, opt_field_plan_t *plan) {
   uint32_t getters = 0;
   for (uint32_t i = 0; i < plan->count; i++) getters += plan->cases[i].getter != 0;
@@ -2522,6 +2532,7 @@ static opt_flow_t opt_build_field(opt_builder_t *b, const uint8_t *ip, sv_op_t o
   plan.add_count = store ? opt_add_cases(b->js, ic, atom, plan.adds, plan.runtime_adds, &plan.runtime_count) : 0;
   if (store && !plan.add_count && ic->guard.add.to_shape) return opt_build_access_call(b, false);
   if (!store) opt_narrow_to_prototype(b, &plan, opt_peek(b, 0));
+  opt_drop_superseded_cases(b, &plan);
   bool getters = opt_getter_plan(b, &plan);
   if (!plan.count && !plan.add_count) return opt_build_field_without_cases(b, ic, ic_index, store, opcode);
   if (!opt_retain_field_plan(b, &plan)) return OPT_FLOW_GENERIC;

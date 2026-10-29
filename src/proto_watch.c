@@ -47,6 +47,7 @@ ant_proto_watch_t *ant_proto_watch(ant_object_t *obj) {
     return NULL;
   }
 
+  ant_shape_mark_superseded(obj->shape);
   ant_shape_release(obj->shape);
   
   obj->shape = shape;

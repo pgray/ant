@@ -90,6 +90,7 @@ void ant_shape_retain(ant_shape_t *shape);
 void ant_shape_release(ant_shape_t *shape);
 void ant_shape_index_layout_trim(ant_shape_t **cache);
 void ant_shape_mark_jit_snapshot(ant_shape_t *shape);
+void ant_shape_mark_superseded(ant_shape_t *shape);
 void ant_shape_transition_existing(ant_shape_t **shape_pp, ant_shape_t *to_shape);
 
 uint8_t ant_shape_get_inobj_limit(const ant_shape_t *shape);
@@ -119,6 +120,7 @@ bool ant_shape_add_accessor_tr(
 bool ant_shape_remove_slot(ant_t *js, ant_shape_t *shape, uint32_t slot);
 bool ant_shape_should_compact(const ant_shape_t *shape);
 bool ant_shape_is_shared(const ant_shape_t *shape);
+bool ant_shape_is_superseded(const ant_shape_t *shape);
 
 uint32_t ant_shape_count(const ant_shape_t *shape);
 bool ant_shape_may_have_gc_refs(const ant_shape_t *shape);

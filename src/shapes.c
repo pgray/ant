@@ -103,6 +103,7 @@ struct ant_shape {
   uint32_t index_mask;
   bool jit_snapshot;
   bool may_have_index_keys;
+  bool superseded;
   uint64_t first_child_key;
   ant_shape_t *first_child;
   shape_child_entry_t *children;
@@ -823,6 +824,14 @@ size_t ant_shape_storage_bytes(const ant_shape_t *shape) {
 
 void ant_shape_mark_jit_snapshot(ant_shape_t *shape) {
   if (shape) shape->jit_snapshot = true;
+}
+
+void ant_shape_mark_superseded(ant_shape_t *shape) {
+  shape->superseded = true;
+}
+
+bool ant_shape_is_superseded(const ant_shape_t *shape) {
+  return shape->superseded;
 }
 
 bool ant_shape_is_shared(const ant_shape_t *shape) {
