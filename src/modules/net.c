@@ -48,6 +48,7 @@ struct net_socket_s {
   bool destroyed;
   bool connecting;
   bool had_error;
+  bool need_drain;
 };
 
 struct net_server_s {
@@ -94,6 +95,7 @@ struct net_write_args_s {
 
 static constexpr uint32_t NET_SERVER_NATIVE_TAG = Ant_NativeTag("NETS");
 static constexpr uint32_t NET_SOCKET_NATIVE_TAG = Ant_NativeTag("NETK");
+static constexpr size_t NET_SOCKET_HIGH_WATER_MARK = 64 * 1024;
 
 static net_server_t *net_server_data(ant_value_t value) {
   return (net_server_t *)js_get_native(value, NET_SERVER_NATIVE_TAG);
@@ -864,21 +866,31 @@ static ant_value_t js_net_socket_unref(ant_params_t) {
   return js_getthis(js);
 }
 
+static void net_socket_on_write(ant_conn_t *conn, int status, void *user_data) {
+  net_socket_t *socket = (net_socket_t *)ant_conn_get_user_data(conn);
+
+  if (!socket || !socket->need_drain) return;
+  if (status < 0 || ant_conn_write_queue_size(conn) > 0) return;
+  
+  socket->need_drain = false;
+  eventemitter_emit_args(socket->js, socket->obj, "drain", NULL, 0);
+}
+
 static ant_value_t js_net_socket_write(ant_params_t) {
   net_socket_t *socket = net_require_socket(js, js_getthis(js));
   net_write_args_t parsed;
-  char *copy = NULL;
 
   if (!socket) return Ant_Exception_Current(js);
   if (!socket->conn) return js_false;
   if (!net_parse_write_args(js, args, nargs, &parsed)) return parsed.error;
   if (parsed.len == 0) return js_true;
 
-  copy = malloc(parsed.len);
-  if (!copy) return Ant_Error_CreateOutOfMemory(js);
-  
-  memcpy(copy, parsed.bytes, parsed.len);
-  if (ant_conn_write(socket->conn, copy, parsed.len, NULL, NULL) != 0) return js_false;
+  int rc = ant_conn_write_copy(socket->conn, (const char *)parsed.bytes, parsed.len, net_socket_on_write, NULL);
+  if (rc == UV_ENOMEM) return Ant_Error_CreateOutOfMemory(js);
+  if (rc != 0) return js_false;
+
+  bool ok = ant_conn_write_queue_size(socket->conn) < NET_SOCKET_HIGH_WATER_MARK;
+  if (!ok) socket->need_drain = true;
 
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, parsed.callback);
@@ -887,7 +899,7 @@ static ant_value_t js_net_socket_write(ant_params_t) {
   if (is_callable(parsed.callback)) sv_call_value(js, parsed.callback, js_mkundef(), NULL, 0);
   GC_ROOT_RESTORE(js, root_mark);
   
-  return js_true;
+  return js_bool(ok);
 }
 
 static ant_value_t js_net_socket_end(ant_params_t) {

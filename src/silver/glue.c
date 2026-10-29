@@ -127,10 +127,10 @@ static inline bool jit_numeric_operand(ant_value_t v) {
 }
 
 #define JIT_ARITH_HELPERS(X) X(sub, OP_SUB) X(mul, OP_MUL) X(div, OP_DIV) X(mod, OP_MOD)
-#define X(name, op)                                                                    \
+#define X(name, op)                                                                     \
   ant_value_t jit_helper_##name(sv_vm_t *vm, ant_t *js, ant_value_t l, ant_value_t r) { \
-    if (!jit_numeric_operand(l) || !jit_numeric_operand(r)) return SV_JIT_BAILOUT;     \
-    return sv_arith_values(js, op, l, r);                                              \
+    if (!jit_numeric_operand(l) || !jit_numeric_operand(r)) return SV_JIT_BAILOUT;      \
+    return sv_arith_values(js, op, l, r);                                               \
   }
 JIT_ARITH_HELPERS(X)
 #undef X
@@ -1299,14 +1299,17 @@ ant_value_t jit_resume_in_interpreter(
   vm->jit.resume.finally    = finally;
 
   sv_jit_scrub_stack();
+  ant_value_t final_this = this_val;
+  
   ant_value_t result = sv_execute_closure_entry(
     vm, closure, sv_closure_heap_value(vm->js, closure),
-    super_val, new_target, this_val, args, argc, NULL
+    super_val, new_target, this_val, args, argc, &final_this
   );
   
+  if (closure->func->is_derived_ctor && vtype(result) == kTypeUndefined) result = final_this;
   if (!async_direct) return result;
-  vm->jit.async_settled = true;
   
+  vm->jit.async_settled = true;
   return sv_async_entry_finish(vm, entry_fp, result);
 }
 

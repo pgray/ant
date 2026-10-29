@@ -59,6 +59,7 @@ typedef enum : uint8_t {
   IR_FIELD_EXECUTABLE,
   IR_FIELD_SUPER_VALUE,
   IR_FIELD_CALLEE,
+  IR_FIELD_NEW_TARGET,
 } ir_frame_field_t;
 
 typedef enum : uint8_t {

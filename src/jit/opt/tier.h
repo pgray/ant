@@ -226,6 +226,10 @@ ant_value_t opt_rt_array_includes(sv_vm_t *vm, ant_value_t callee, ant_value_t t
 ant_value_t opt_rt_string_intrinsic(sv_vm_t *vm, ant_value_t callee, ant_value_t this_val, ant_value_t *args, int64_t argc, int64_t kind);
 ant_value_t opt_rt_stable_builtin(sv_vm_t *vm, ant_value_t callee, ant_value_t this_val, ant_value_t *args, int64_t argc, int64_t kind);
 ant_value_t opt_rt_regexp_exec_truthy(sv_vm_t *vm, ant_value_t callee, ant_value_t this_val, ant_value_t *args, int64_t argc, int64_t kind);
+ant_value_t opt_rt_super_call(sv_vm_t *vm, ant_value_t this_val, ant_value_t func, ant_value_t *args, int64_t argc, int64_t forward);
+ant_value_t opt_rt_import_default(sv_vm_t *vm, ant_value_t ns, ant_value_t unused, ant_value_t *args, int64_t argc, int64_t kind);
+ant_value_t opt_rt_import_named(sv_vm_t *vm, ant_value_t ns, ant_value_t unused, ant_value_t *args, int64_t argc, const sv_atom_t *atom);
+ant_value_t opt_rt_derived_return(sv_vm_t *vm, ant_value_t value, ant_value_t this_val, ant_value_t *args, int64_t argc, int64_t kind);
 ant_value_t opt_rt_call_call(sv_vm_t *vm, ant_value_t callee, ant_value_t arg, ant_value_t *args, int64_t argc, int64_t kind);
 ant_value_t opt_rt_to_string(sv_vm_t *vm, ant_value_t value, ant_value_t unused, ant_value_t *args, int64_t argc, int64_t defer_number);
 ant_value_t opt_rt_regexp(sv_vm_t *vm, ant_value_t pattern, ant_value_t flags, ant_value_t *args, int64_t argc, int64_t kind);

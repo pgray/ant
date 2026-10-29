@@ -2761,6 +2761,10 @@ static bool opt_cg_frame_code(opt_cg_t *cg, ir_node_id_t node_id, const ir_node_
         masm_or64_imm(m, output, output, (int64_t)(NANBOX_PREFIX | (uint64_t)kTypeFunction << NANBOX_TYPE_SHIFT));
         break;
       }
+      if (node->op.field == IR_FIELD_NEW_TARGET) {
+        masm_load64(m, opt_cg_output(cg, node_id), opt_cg_entry_field(cg, offsetof(opt_entry_t, new_target)));
+        break;
+      }
       if (node->op.field != IR_FIELD_SUPER_VALUE) {
         opt_cg_fail(cg, "frame-field");
         break;

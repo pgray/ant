@@ -2941,6 +2941,37 @@ static ant_value_t buffer_from_array_like(ant_t *js, ant_value_t source, ant_val
   return create_typed_array(js, TYPED_ARRAY_UINT8, buffer, 0, len, js->builtins.buffer_proto);
 }
 
+static ant_value_t buffer_from_typed_array(ant_t *js, const TypedArrayData *ta) {
+  uint8_t *src = NULL;
+  size_t byte_length = 0;
+  size_t len = ta->length;
+
+  if (!Ant_Buffer_GetViewBytes(ta, &src, &byte_length)) len = 0;
+  ArrayBufferData *buffer = create_array_buffer_data(js, len);
+  if (!buffer) return js_mkerr(js, "Failed to allocate buffer");
+
+  switch (ta->type) {
+    case TYPED_ARRAY_UINT8:
+    case TYPED_ARRAY_INT8:
+    case TYPED_ARRAY_UINT8_CLAMPED:
+      if (len > 0) memcpy(buffer->data, src, len);
+      break;
+    case TYPED_ARRAY_BIGINT64:
+    case TYPED_ARRAY_BIGUINT64:
+      if (len > 0) return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot mix BigInt and other types, use explicit conversions");
+      break;
+    default:
+      for (size_t i = 0; i < len; i++) {
+        ant_value_t elem = js_mkundef();
+        buffer_typedarray_data_read_index(js, ta, i, &elem);
+        if (is_err(elem)) return elem;
+        buffer->data[i] = (uint8_t)js_to_uint32(js_to_number(js, elem));
+      }
+  }
+
+  return create_typed_array(js, TYPED_ARRAY_UINT8, buffer, 0, len, js->builtins.buffer_proto);
+}
+
 ant_value_t Ant_Buffer_FromString(ant_t *js, ant_value_t value, ant_value_t encoding_val) {
   size_t len;
   char *str = js_getstr(js, value, &len);
@@ -3016,6 +3047,9 @@ static ant_value_t js_buffer_from(ant_params_t) {
       return js_buffer_from(js, from_args, nargs > 1 ? nargs : 1, js_mkundef());
     }
   }
+
+  TypedArrayData *source_ta = typedarray_live(args[0]);
+  if (source_ta) return buffer_from_typed_array(js, source_ta);
 
   ant_value_t length_val = js_get(js, args[0], "length");
   if (is_err(length_val)) return length_val;

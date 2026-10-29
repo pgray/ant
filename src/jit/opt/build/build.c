@@ -3317,10 +3317,24 @@ static bool opt_try_inline(opt_builder_t *b, sv_op_t op, uint32_t argc, uint32_t
   return true;
 }
 
+static ir_node_id_t opt_derived_return(opt_builder_t *b, ir_node_id_t value) {
+  ir_node_id_t self = opt_root_this(b);
+  if (value == self) return value;
+  ir_op_t check = ir_op(IR_OP_CALL_NATIVE);
+  check.call.func = b->func;
+  check.call.bc_off = b->pc;
+  check.call.stores_operands = true;
+  check.call.helper = (uintptr_t)opt_rt_derived_return;
+  ir_node_id_t result = opt_emit(b, check, (ir_node_id_t[]){opt_tagged(b, value), self}, 2, OPT_REPR_TAGGED);
+  ir_node(b->graph, result)->frame_state = opt_call_position(b);
+  return result;
+}
+
 static opt_flow_t opt_build_return(opt_builder_t *b, ir_node_id_t value) {
   opt_inline_t *call = b->inline_call;
   if (call && opt_is_any_virtual_arguments(b, value)) return opt_no_virtual_arguments(b);
   if (!call) {
+    if (b->func->is_derived_ctor) value = opt_derived_return(b, value);
     opt_set_control(b, ir_op(IR_OP_RETURN), &value, 1);
     return OPT_FLOW_ENDED;
   }
@@ -4547,9 +4561,71 @@ static opt_flow_t opt_build_super_value(opt_builder_t *b) {
   return OPT_FLOW_CONTINUE;
 }
 
+static opt_flow_t opt_build_import(opt_builder_t *b, const uint8_t *ip, sv_op_t op) {
+  ir_node_id_t inputs[2] = {opt_tagged(b, opt_peek(b, 0)), opt_constant(b, IR_VALUE_UNDEFINED)};
+  uint32_t index = op == OP_IMPORT_NAMED ? sv_get_u32(ip + 1) : 0;
+  if (op == OP_IMPORT_NAMED && index >= (uint32_t)b->func->atom_count) {
+    opt_fail(b, "import-atom");
+    return OPT_FLOW_FAILED;
+  }
+  ir_node_id_t value = op == OP_IMPORT_DEFAULT
+    ? opt_runtime_call(b, (uintptr_t)opt_rt_import_default, 0, inputs, 2, false, false)
+    : opt_runtime_call(b, (uintptr_t)opt_rt_import_named, (uintptr_t)&b->func->atoms[index], inputs, 2, false, false);
+  opt_forget_memory(b);
+  opt_poke(b, 0, value);
+  return OPT_FLOW_CONTINUE;
+}
+
+static opt_flow_t opt_build_super_call(opt_builder_t *b, const uint8_t *ip, sv_op_t op) {
+  if (b->inline_call || !b->func->is_derived_ctor) {
+    opt_fail(b, b->inline_call ? "inline-super" : "super-call-kind");
+    return OPT_FLOW_FAILED;
+  }
+  bool forward = op == OP_SUPER_FORWARD;
+  uint32_t argc = forward ? 0 : sv_get_u16(ip + 1);
+  uint32_t operands = argc + 3;
+  if (argc + 1 > OPT_MAX_CALL_ARGS || operands > b->frame.sp) {
+    opt_fail(b, "call-argc");
+    return OPT_FLOW_FAILED;
+  }
+  ir_node_id_t inputs[3 + OPT_MAX_CALL_ARGS];
+  for (uint32_t i = 0; i < operands; i++) inputs[i] = opt_tagged(b, opt_peek(b, operands - 1 - i));
+  ir_node_id_t result = opt_runtime_call(b, (uintptr_t)opt_rt_super_call, forward, inputs, operands, false, true);
+  opt_drop(b, operands);
+  opt_forget_memory(b);
+  opt_push(b, result);
+  b->frame.this_value = result;
+  return OPT_FLOW_CONTINUE;
+}
+
+static ir_node_id_t opt_new_target(opt_builder_t *b) {
+  ir_op_t load = ir_op(IR_OP_LOAD_FRAME_FIELD);
+  load.field = IR_FIELD_NEW_TARGET;
+  return opt_emit(b, load, NULL, 0, OPT_REPR_TAGGED);
+}
+
+static opt_flow_t opt_build_check_ctor(opt_builder_t *b) {
+  if (b->inline_call) return b->inline_call->construct ? OPT_FLOW_CONTINUE : OPT_FLOW_GENERIC;
+  ir_node_id_t target = opt_new_target(b);
+  opt_frame_t before = opt_frame_clone(b, &b->frame);
+  ir_block_id_t called;
+  opt_branch_off(b, ir_cond(IR_COND_UNDEFINED), &target, 1, true, &called);
+  ir_block_id_t fast_end = b->block;
+  opt_frame_t fast = b->frame;
+  ir_block_id_t slow_end = opt_build_slow_path_counted(b, &called, 1, &before, false);
+  opt_frame_t slow_frame = b->frame;
+  b->frame = fast;
+  opt_join_slow_path(b, fast_end, slow_end, &slow_frame, 0);
+  return OPT_FLOW_CONTINUE;
+}
+
 static opt_flow_t opt_build_special_object(opt_builder_t *b, const uint8_t *ip) {
   if (ip[1] == SV_SPECIAL_ARGUMENTS && b->virtual_arguments) return opt_build_virtual_arguments(b);
   if (ip[1] == SV_SPECIAL_SUPER) return opt_build_super_value(b);
+  if (ip[1] == SV_SPECIAL_NEW_TARGET && !b->inline_call) {
+    opt_push(b, opt_new_target(b));
+    return OPT_FLOW_CONTINUE;
+  }
   return OPT_FLOW_GENERIC;
 }
 
@@ -5240,10 +5316,16 @@ static opt_flow_t opt_build_instruction(opt_builder_t *b) {
       if (opt_returns_through_finally(b))
         return b->finally_count ? opt_return_through_finally(b, opt_tagged(b, opt_peek(b, 0)), opt_try_state(b, b->pc)) : opt_build_unwind(b);
       return opt_build_return(b, opt_tagged(b, opt_peek(b, 0)));
-    case OP_RETURN_UNDEF:
+    case OP_RETURN_UNDEF: {
+      ir_node_id_t value = b->func->is_derived_ctor && !b->inline_call ? opt_root_this(b) : opt_constant(b, IR_VALUE_UNDEFINED);
       if (opt_returns_through_finally(b))
-        return b->finally_count ? opt_return_through_finally(b, opt_constant(b, IR_VALUE_UNDEFINED), opt_try_state(b, b->pc)) : opt_build_unwind(b);
-      return opt_build_return(b, opt_constant(b, IR_VALUE_UNDEFINED));
+        return b->finally_count ? opt_return_through_finally(b, value, opt_try_state(b, b->pc)) : opt_build_unwind(b);
+      return opt_build_return(b, value);
+    }
+    case OP_CALL_SUPER: case OP_SUPER_FORWARD:
+      return opt_build_super_call(b, ip, op);
+    case OP_IMPORT_DEFAULT: case OP_IMPORT_NAMED:
+      return opt_build_import(b, ip, op);
     case OP_THROW:
       return opt_build_throw(b);
     case OP_TRY_PUSH: case OP_TRY_POP: case OP_TRY_PUSH_FINALLY: case OP_FINALLY:
@@ -5263,7 +5345,7 @@ static opt_flow_t opt_build_instruction(opt_builder_t *b) {
     case OP_ITER_CLOSE: case OP_DESTRUCTURE_CLOSE:
       return opt_build_iteration_close(b, ip);
     case OP_CHECK_CTOR:
-      return b->inline_call && b->inline_call->construct ? OPT_FLOW_CONTINUE : OPT_FLOW_GENERIC;
+      return opt_build_check_ctor(b);
 
     case OP_CALL: case OP_CALL_METHOD: case OP_TAIL_CALL: case OP_TAIL_CALL_METHOD: case OP_NEW:
       return opt_build_call(b, ip, op);
@@ -5487,7 +5569,7 @@ static bool opt_analyze(opt_builder_t *b) {
   sv_func_t *func = b->func;
   b->tracked = b->params + b->locals + b->stack;
   b->layout = opt_frame_layout_of(func);
-  if (func->is_generator || func->is_async || func->has_await || func->is_derived_ctor || func->has_dynamic_eval ||
+  if (func->is_generator || func->is_async || func->has_await || func->has_dynamic_eval ||
       func->is_tla || func->is_eval || func->code_len <= 0) return opt_fail(b, "function-kind");
   int *depth = sv_func_stack_depth_map(func);
   if (!depth) return opt_fail(b, "depth-map");

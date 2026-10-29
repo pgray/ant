@@ -659,6 +659,41 @@ int ant_conn_write(ant_conn_t *conn, char *data, size_t len, ant_conn_write_cb c
   return 0;
 }
 
+int ant_conn_write_copy(ant_conn_t *conn, const char *data, size_t len, ant_conn_write_cb cb, void *user_data) {
+  uv_stream_t *stream = NULL;
+  size_t done = 0;
+  char *rest = NULL;
+
+  if (!conn || conn->closing) return UV_EPIPE;
+  stream = ant_conn_stream(conn);
+
+  if (uv_stream_get_write_queue_size(stream) == 0) {
+    uv_buf_t buf = uv_buf_init((char *)data, (unsigned int)len);
+    int n = uv_try_write(stream, &buf, 1);
+    if (n > 0) {
+      done = (size_t)n;
+      conn->bytes_written += (uint64_t)n;
+    }
+  }
+
+  if (done == len) {
+    ant_conn_restart_timer(conn);
+    if (cb) cb(conn, 0, user_data);
+    return 0;
+  }
+
+  rest = malloc(len - done);
+  if (!rest) return UV_ENOMEM;
+  memcpy(rest, data + done, len - done);
+
+  return ant_conn_write(conn, rest, len - done, cb, user_data);
+}
+
+size_t ant_conn_write_queue_size(const ant_conn_t *conn) {
+  if (!conn) return 0;
+  return uv_stream_get_write_queue_size((const uv_stream_t *)&conn->handle);
+}
+
 uint64_t ant_conn_bytes_read(const ant_conn_t *conn) {
   return conn ? conn->bytes_read : 0;
 }

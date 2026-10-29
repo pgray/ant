@@ -687,17 +687,19 @@ ant_value_t opt_rt_resume(
   ant_value_t *params, ant_value_t *locals, ant_value_t *stack, sv_jit_finally_t *finally
 ) {
   ant_value_t arguments = vm->jit.resume.arguments_obj;
+  ant_value_t this_val = entry->this_val;
   if (entry->frame) {
     sv_frame_t *frame = entry->frame;
     sv_rebase_open_upvalues(&vm->open_upvalues, frame->bp, params, code->param_count);
     sv_rebase_open_upvalues(&vm->open_upvalues, frame->lp, locals, code->local_count);
     if (is_object_type(frame->arguments_obj)) arguments = frame->arguments_obj;
+    if (code->func->is_derived_ctor) this_val = frame->this;
     frame->arguments_obj = js_mkundef();
     opt_rt_leave_frame(0, vm, entry);
   }
   vm->jit.resume.arguments_obj = arguments;
   return jit_resume_in_interpreter(
-    vm, entry->closure, entry->this_val, entry->new_target, entry->super_val,
+    vm, entry->closure, this_val, entry->new_target, entry->super_val,
     entry->args, (int)entry->argc, stack, depth, params, code->param_count,
     locals, code->local_count, bc_off, false, finally
   );
@@ -743,12 +745,14 @@ ant_value_t opt_rt_exit_frames(sv_vm_t *vm, opt_code_t *code, const opt_site_t *
   opt_exit_frame_t *root = &frames[count - 1];
   uint32_t params = code->param_count, locals = code->local_count;
   ant_value_t arguments = root->arguments;
+  ant_value_t root_this = entry->this_val;
   bool borrowed = entry->frame && !entry->owns_frame;
   if (entry->frame) {
     sv_frame_t *frame = entry->frame;
     sv_rebase_open_upvalues(&vm->open_upvalues, frame->bp, root->params, params);
     sv_rebase_open_upvalues(&vm->open_upvalues, frame->lp, root->locals, locals);
     if (is_object_type(frame->arguments_obj)) arguments = frame->arguments_obj;
+    if (func->is_derived_ctor) root_this = frame->this;
     frame->arguments_obj = js_mkundef();
     opt_rt_leave_frame(0, vm, entry);
   }
@@ -788,7 +792,7 @@ ant_value_t opt_rt_exit_frames(sv_vm_t *vm, opt_code_t *code, const opt_site_t *
     if (k == count - 1) {
       vm->jit.resume.arguments_obj = arguments;
       result = jit_resume_in_interpreter(
-        vm, entry->closure, entry->this_val, entry->new_target, entry->super_val,
+        vm, entry->closure, root_this, entry->new_target, entry->super_val,
         entry->args, (int)entry->argc, frame->stack, depth, frame->params, params,
         frame->locals, locals, bc_off, false, frame->finally
       );
@@ -858,6 +862,31 @@ uint64_t opt_rt_string_length(sv_vm_t *vm, ant_value_t string, ant_value_t unuse
 
 ant_value_t opt_rt_instanceof(sv_vm_t *vm, ant_value_t lhs, ant_value_t rhs, ant_value_t *args, int64_t argc, const opt_rt_site_t *site) {
   return jit_helper_instanceof(vm, vm->js, lhs, rhs, site->func, (int32_t)site->bc_off);
+}
+
+ant_value_t opt_rt_super_call(sv_vm_t *vm, ant_value_t this_val, ant_value_t func, ant_value_t *args, int64_t argc, int64_t forward) {
+  sv_frame_t *frame = &vm->frames[vm->fp];
+  ant_value_t *call_args = forward ? frame->bp : args + 1;
+  int call_argc = forward ? frame->argc : (int)argc - 1;
+  ant_value_t super_this = this_val;
+  ant_value_t result = sv_vm_call(vm, vm->js, func, this_val, call_args, call_argc, &super_this, args[0]);
+  if (is_err(result)) return result;
+  frame->this = is_object_type(result) ? result : super_this;
+  return frame->this;
+}
+
+ant_value_t opt_rt_import_default(sv_vm_t *vm, ant_value_t ns, ant_value_t unused, ant_value_t *args, int64_t argc, int64_t kind) {
+  return jit_helper_import_default(vm->js, ns);
+}
+
+ant_value_t opt_rt_import_named(sv_vm_t *vm, ant_value_t ns, ant_value_t unused, ant_value_t *args, int64_t argc, const sv_atom_t *atom) {
+  return jit_helper_import_named(vm->js, ns, atom->str, atom->len);
+}
+
+ant_value_t opt_rt_derived_return(sv_vm_t *vm, ant_value_t value, ant_value_t this_val, ant_value_t *args, int64_t argc, int64_t kind) {
+  if (is_object_type(value) || vtype(value) == kTypeBuiltin) return value;
+  if (vtype(value) == kTypeUndefined) return this_val;
+  return js_mkerr_typed(vm->js, JS_ERR_TYPE, SV_DERIVED_CTOR_RETURN_ERROR);
 }
 
 ant_value_t opt_rt_regexp_exec_truthy(sv_vm_t *vm, ant_value_t callee, ant_value_t this_val, ant_value_t *args, int64_t argc, int64_t kind) {

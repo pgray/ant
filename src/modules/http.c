@@ -65,7 +65,7 @@ struct ant_http_request_s {
   ant_http_header_t *headers;
   uint8_t *body;
   size_t body_len;
-  uv_timer_t done_timer;
+  uv_check_t done_check;
 
   ant_http_result_t result;
   int error_code;
@@ -446,17 +446,20 @@ static void ant_http_pending_remove(ant_http_request_t *req) {
 }
 
 static void ant_http_done_closed(uv_handle_t *handle) {
-  ant_http_request_t *req = handle->data;
+  ant_http_request_free(handle->data);
+}
+
+static void ant_http_done_cb(uv_check_t *check) {
+  ant_http_request_t *req = check->data;
+  uv_check_stop(check);
+  
   if (req->on_complete) req->on_complete(
     req, req->result, req->error_code,
     req->error_message,
     req->user_data
   );
-  ant_http_request_free(req);
-}
-
-static void ant_http_done_cb(uv_timer_t *timer) {
-  uv_close((uv_handle_t *)timer, ant_http_done_closed);
+  
+  uv_close((uv_handle_t *)check, ant_http_done_closed);
 }
 
 static void ant_http_finish(ant_http_request_t *req, int error_code, const char *error_message) {
@@ -483,9 +486,9 @@ static void ant_http_finish(ant_http_request_t *req, int error_code, const char 
     else ant_http_conn_release(conn);
   }
 
-  uv_timer_init(req->loop, &req->done_timer);
-  req->done_timer.data = req;
-  uv_timer_start(&req->done_timer, ant_http_done_cb, 0, 0);
+  uv_check_init(req->loop, &req->done_check);
+  req->done_check.data = req;
+  uv_check_start(&req->done_check, ant_http_done_cb);
 }
 
 static bool ant_http_should_retry(const ant_http_request_t *req, int code) {

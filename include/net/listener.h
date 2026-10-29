@@ -94,6 +94,7 @@ int ant_conn_remote_port(const ant_conn_t *conn);
 int ant_conn_set_no_delay(ant_conn_t *conn, bool enable);
 int ant_conn_set_keep_alive(ant_conn_t *conn, bool enable, unsigned int delay_secs);
 int ant_conn_write(ant_conn_t *conn, char *data, size_t len, ant_conn_write_cb cb, void *user_data);
+int ant_conn_write_copy(ant_conn_t *conn, const char *data, size_t len, ant_conn_write_cb cb, void *user_data);
 
 bool ant_listener_has_connections(const ant_listener_t *listener);
 bool ant_listener_is_closed(const ant_listener_t *listener);
@@ -121,6 +122,7 @@ const char *ant_conn_local_family(const ant_conn_t *conn);
 const char *ant_conn_remote_family(const ant_conn_t *conn);
 
 size_t ant_conn_buffer_len(const ant_conn_t *conn);
+size_t ant_conn_write_queue_size(const ant_conn_t *conn);
 
 uint64_t ant_conn_timeout_ms(const ant_conn_t *conn);
 uint64_t ant_conn_bytes_read(const ant_conn_t *conn);
