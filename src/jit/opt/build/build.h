@@ -19,18 +19,6 @@ static inline uint32_t opt_param_slot(const ir_frame_layout_t *layout, uint32_t 
   return ir_layout_arguments_base(layout) + index;
 }
 
-static inline uint32_t opt_named_offset(uint32_t index, uint8_t inobj_limit) {
-  return (uint32_t)inobj_limit << 16 | index;
-}
-
-static inline uint32_t opt_named_index(uint32_t offset) {
-  return offset & 0xffff;
-}
-
-static inline uint32_t opt_named_inobj_limit(uint32_t offset) {
-  return offset >> 16;
-}
-
 typedef struct {
   const char *reason;
   uint32_t bc_off;

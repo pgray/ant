@@ -1897,6 +1897,16 @@ static void opt_add_fields(opt_builder_t *b, ir_node_id_t object, ir_node_id_t a
     op.add_named.cell = (uint64_t)(uintptr_t)site->adds[members[j]].cell;
     ir_op_t can = op;
     can.code = IR_OP_CAN_ADD_NAMED;
+    bool split = opt_op_at(b, b->pc) == OP_PUT_FIELD && opt_may_speculate(b, OPT_EXIT_UNEXPECTED_VALUE);
+    opt_rt_add_epoch_t *epoch_site = split ? code_arena_bump(b->js, sizeof *epoch_site) : NULL;
+    if (epoch_site) {
+      *epoch_site = (opt_rt_add_epoch_t){.add = &site->adds[members[j]], .key = b->func->atoms[sv_get_u32(b->func->code + b->pc + 1)].str};
+      ir_op_t epoch = op;
+      epoch.code = IR_OP_CHECK_ADD_EPOCH;
+      epoch.add_named.site = (uint64_t)(uintptr_t)epoch_site;
+      opt_emit_checked(b, epoch, NULL, 0, OPT_REPR_NONE);
+      can.add_named.epoch_checked = true;
+    }
     ir_node_id_t allowed = opt_emit(b, can, (ir_node_id_t[]){object, address}, 2, OPT_REPR_BOOL);
     ir_block_id_t no;
     opt_branch_off(b, ir_cond(IR_COND_BOOL), &allowed, 1, false, &no);
@@ -2917,8 +2927,11 @@ static ir_binary_op_t opt_binary_of(sv_op_t op) {
 
 static constexpr uint32_t OPT_MAX_CALL_ARGS = SV_JIT_ARGS_BUF_CAP;
 static constexpr uint32_t OPT_INLINE_MAX_DEPTH = SV_JIT_INLINE_FRAMES_MAX;
+static constexpr uint32_t OPT_INLINE_MAX_RECURSION = 2;
 static constexpr uint32_t OPT_INLINE_MAX_INSTRUCTIONS = 50;
 static constexpr uint32_t OPT_INLINE_BUDGET = 400;
+static constexpr uint32_t OPT_INLINE_ALWAYS_INSTRUCTIONS = 16;
+static constexpr uint32_t OPT_INLINE_MAX_CONSTRUCT_INSTRUCTIONS = 80;
 
 static bool opt_build_bytecode_block(opt_builder_t *b, uint32_t bi);
 static bool opt_analyze(opt_builder_t *b);
@@ -2975,35 +2988,24 @@ static const char *opt_inline_unsupported_op(const sv_func_t *func, bool constru
   return NULL;
 }
 
-static sv_closure_t *opt_constant_closure(const opt_builder_t *b, ir_node_id_t node) {
-  if (node == IR_NONE) return NULL;
-  uint64_t bits;
-  ant_value_t known = ir_constant_value(b->graph, node, &bits) && ir_node(b->graph, node)->repr == OPT_REPR_TAGGED ? bits : opt_likely_value(b, node);
-  return known && vtype(known) == kTypeFunction ? js_func_closure(known) : NULL;
-}
-
-static bool opt_same_closure(const opt_builder_t *caller, sv_closure_t *callee) {
-  if (!callee) return true;
-  sv_closure_t *own = caller->inline_call ? opt_constant_closure(caller, caller->inline_call->closure) : caller->ctx->closure;
-  return !own || own == callee;
-}
-
-static const char *opt_not_inlineable(const opt_builder_t *b, sv_func_t *target, bool construct, uint32_t *count, ir_node_id_t callee) {
+static const char *opt_not_inlineable(const opt_builder_t *b, sv_func_t *target, bool construct, uint32_t *count) {
   if (!target) return "no-target";
   if (target->is_async || target->is_generator || target->is_derived_ctor || target->has_dynamic_eval ||
       target->is_eval || target->is_tla || target->code_len <= 0) return "function-kind";
   if (target->is_arrow && (construct || opt_reads_this(target))) return "arrow-this";
-  uint32_t depth = 0;
+  uint32_t depth = 0, recursion = 0;
   for (const opt_builder_t *caller = b; caller; caller = caller->inline_call ? caller->inline_call->caller : NULL) {
-    if (caller->func == target && opt_same_closure(caller, opt_constant_closure(b, callee))) return "recursive";
+    recursion += caller->func == target;
     depth++;
   }
+  if (recursion > OPT_INLINE_MAX_RECURSION) return "recursive";
   if (depth > OPT_INLINE_MAX_DEPTH) return "depth";
   for (uint32_t i = 0; i < b->ctx->no_inline.len; i++)
     if (b->ctx->no_inline.items[i] == target) return "failed-before";
   *count = opt_instruction_count(target);
-  if (*count > OPT_INLINE_MAX_INSTRUCTIONS) return "size";
-  if (b->ctx->inlined_instructions + *count > OPT_INLINE_BUDGET) return "budget";
+  bool exempt = *count <= OPT_INLINE_ALWAYS_INSTRUCTIONS || (construct && *count <= OPT_INLINE_MAX_CONSTRUCT_INSTRUCTIONS);
+  if (!exempt && *count > OPT_INLINE_MAX_INSTRUCTIONS) return "size";
+  if (!exempt && b->ctx->inlined_instructions + *count > OPT_INLINE_BUDGET) return "budget";
   const char *op = opt_inline_unsupported_op(target, construct);
   if (op) return op;
   return opt_may_speculate(b, OPT_EXIT_BAD_CALL_TARGET) ? NULL : "exited-before";
@@ -3242,7 +3244,7 @@ static bool opt_try_inline(opt_builder_t *b, sv_op_t op, uint32_t argc, uint32_t
   bool construct = op == OP_NEW, tail = op == OP_TAIL_CALL || op == OP_TAIL_CALL_METHOD;
   bool method = op == OP_CALL_METHOD || op == OP_TAIL_CALL_METHOD;
   uint32_t count;
-  const char *refused = opt_not_inlineable(b, target, construct, &count, callee);
+  const char *refused = opt_not_inlineable(b, target, construct, &count);
   for (uint32_t i = 0; i < argc && !refused; i++)
     if (opt_is_any_virtual_arguments(b, args[i]) || opt_is_any_virtual_arguments(b, second)) refused = "arguments";
   if (!refused && construct && (callee != second || !opt_may_speculate(b, OPT_EXIT_OUT_OF_BOUNDS))) refused = "construct";

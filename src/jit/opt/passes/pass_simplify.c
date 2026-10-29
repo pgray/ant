@@ -171,10 +171,13 @@ static ir_node_id_t pass_fold_node(ir_graph_t *graph, pass_constants_t *constant
     case IR_OP_BOX_BOOL:
       if (!ir_constant_value(graph, inputs[0], &bits)) return IR_NONE;
       return pass_constant(constants, graph, bits ? IR_VALUE_TRUE : IR_VALUE_FALSE);
-    case IR_OP_CHECK_INT32:
+    case IR_OP_CHECK_INT32: {
+      ir_node_id_t integer = pass_boxed(graph, IR_OP_BOX_INT32, inputs[0]);
+      if (integer != IR_NONE) return integer;
       if (!ir_constant_value(graph, inputs[0], &bits) || ir_node(graph, inputs[0])->repr != OPT_REPR_TAGGED) return IR_NONE;
       if (!ir_value_as_int32(bits, &lhs)) return IR_NONE;
       return pass_constant_typed(constants, graph, (uint32_t)lhs, OPT_REPR_INT32);
+    }
     case IR_OP_INT32_BINARY:
     case IR_OP_INT32_WRAPPING_BINARY: {
       bool wrapping = op->code == IR_OP_INT32_WRAPPING_BINARY;

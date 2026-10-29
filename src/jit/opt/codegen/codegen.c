@@ -116,6 +116,13 @@ typedef struct {
 } opt_cg_allocation_t;
 
 typedef struct {
+  asm_label_t label;
+  asm_label_t resume;
+  asm_label_t exit;
+  uint64_t site;
+} opt_cg_epoch_check_t;
+
+typedef struct {
   size_t offset;
   asm_label_t exit;
 } opt_cg_invalidation_t;
@@ -124,6 +131,7 @@ typedef struct {
   masm_t masm;
   const ir_graph_t *graph;
   const ra_allocation_t *alloc;
+  opt_exit_table_t *exit_table;
   const ir_frame_layout_t *layout;
   opt_code_t *code;
   opt_arena_t arena;
@@ -149,6 +157,7 @@ typedef struct {
   OPT_VEC(opt_cg_barrier_t) barriers;
   OPT_VEC(opt_cg_generic_t) generics;
   OPT_VEC(opt_cg_allocation_t) allocations;
+  OPT_VEC(opt_cg_epoch_check_t) epoch_checks;
   OPT_VEC(opt_cg_zero_product_t) zero_products;
   OPT_VEC(opt_cg_element_int32_t) element_int32s;
   OPT_VEC(opt_cg_call_slow_t) call_slows;
@@ -371,13 +380,53 @@ static asm_label_t opt_cg_intern_site(opt_cg_t *cg, const opt_site_t *site) {
   return stub.label;
 }
 
+static opt_exit_list_t opt_cg_site_values(opt_cg_t *cg, ir_node_id_t node) {
+  opt_exit_list_t list = opt_cg_node(cg, node)->exits;
+  ir_frame_state_id_t frame_state = ir_node(cg->graph, node)->frame_state;
+  if (frame_state == IR_NONE || !list.count) return list;
+  ir_node_vec_t objects = {0};
+  ir_virtual_objects(cg->graph, frame_state, &cg->arena, &objects);
+  if (!objects.len) return list;
+  ir_slot_values_t values = {0};
+  ir_frame_state_values(cg->graph, frame_state, &cg->arena, &values);
+  if (values.len != list.count) {
+    opt_cg_fail(cg, "exit-virtual-objects");
+    return list;
+  }
+  uint32_t properties = 0;
+  for (uint32_t i = 0; i < objects.len; i++) properties += ir_node(cg->graph, objects.items[i])->inputs.len;
+  uint32_t frame_values = values.len - properties, object = 0, remaining = 0;
+  opt_exit_begin(cg->exit_table);
+  opt_exit_cursor_t cursor = opt_exit_cursor(opt_exit_table_view(cg->exit_table), list);
+  for (uint32_t i = 0; i <= values.len; i++) {
+    while (i >= frame_values && !remaining && object < objects.len) {
+      const ir_node_t *data = ir_node(cg->graph, objects.items[object++]);
+      remaining = data->inputs.len;
+      opt_exit_push(cg->exit_table, (opt_exit_value_t){.slot = IR_VIRTUAL_OBJECT_PROPERTY, .kind = OPT_SITE_OBJECT, .repr = OPT_REPR_TAGGED, .bits = data->op.shape});
+    }
+    if (i == values.len) break;
+    opt_exit_value_t value = *opt_exit_next(&cursor);
+    ir_node_id_t of = values.items[i].value;
+    if (ir_node(cg->graph, of)->op.code == IR_OP_VIRTUAL_OBJECT) {
+      uint32_t index = 0;
+      while (objects.items[index] != of) index++;
+      value.kind = OPT_SITE_VIRTUAL;
+      value.repr = OPT_REPR_TAGGED;
+      value.bits = index;
+    }
+    opt_exit_push(cg->exit_table, value);
+    if (i >= frame_values) remaining--;
+  }
+  return opt_exit_finish(cg->exit_table);
+}
+
 static asm_label_t opt_cg_exit_site(opt_cg_t *cg, ir_node_id_t node) {
   const ir_node_t *data = ir_node(cg->graph, node);
   opt_exit_kind_t kind = OPT_EXIT_SLOW_PATH;
   ir_op_exit_kind(&data->op, &kind);
   if (ir_node_vec_contains(&cg->graph->speculatively_hoisted, node)) kind = OPT_EXIT_HOISTED;
   const ir_frame_state_t *state = ir_frame_state(cg->graph, data->frame_state);
-  opt_exit_list_t values = opt_cg_node(cg, node)->exits;
+  opt_exit_list_t values = opt_cg_site_values(cg, node);
   bool phi_check = data->op.code == IR_OP_CHECK_INT32 || data->op.code == IR_OP_CHECK_NUMBER;
   uint32_t slot = phi_check ? data->op.slot : 0;
   if (kind == OPT_EXIT_BAD_SHAPE) {
@@ -412,7 +461,6 @@ static asm_label_t opt_cg_exit_site(opt_cg_t *cg, ir_node_id_t node) {
       opt_vec_push(&cg->arena, &cg->site_frames, entry);
     }
     if (next > values.count) opt_cg_fail(cg, "exit-values");
-    else if (next != values.count) opt_cg_fail(cg, "exit-virtual-objects");
     site.frame_start = opt_cg_intern_frames(cg, site.frame_start, site.frame_count);
   }
   return opt_cg_intern_site(cg, &site);
@@ -425,7 +473,7 @@ static asm_label_t opt_cg_catch_site(opt_cg_t *cg, ir_node_id_t node) {
     .bc_off = handler->catch_off + (handler->finally ? 0 : sv_op_size[OP_CATCH]),
     .depth = handler->depth + 1,
     .kind = OPT_EXIT_SLOW_PATH,
-    .values = opt_cg_node(cg, node)->exits,
+    .values = opt_cg_site_values(cg, node),
     .handler = data->handler,
   };
   return opt_cg_intern_site(cg, &site);
@@ -1721,6 +1769,37 @@ static void opt_cg_check_not_hole(opt_cg_t *cg, ir_node_id_t node) {
   masm_branch64_imm(&cg->masm, ASM_COND_ABOVE_OR_EQUAL, opt_cg_input(cg, node, 0), (int64_t)ANT_SENTINEL_TAG, exit);
 }
 
+static void opt_cg_check_add_epoch(opt_cg_t *cg, ir_node_id_t node) {
+  masm_t *m = &cg->masm;
+  const ir_op_t *op = &ir_node(cg->graph, node)->op;
+  asm_gpr_t temp = opt_cg_temp(cg, node, 0), scratch = cg->pinned.scratch;
+  opt_cg_epoch_check_t check = {.label = masm_new_label(m), .resume = masm_new_label(m), .exit = opt_cg_exit_site(cg, node), .site = op->add_named.site};
+  masm_load64(m, scratch, asm_addr(cg->pinned.vm, (int32_t)offsetof(sv_vm_t, js)));
+  masm_load32(m, scratch, asm_addr(scratch, (int32_t)offsetof(ant_t, ic.epoch)));
+  masm_move_imm64(m, temp, op->add_named.cell);
+  masm_load32(m, temp, asm_addr(temp, 0));
+  masm_branch32(m, ASM_COND_NOT_EQUAL, scratch, temp, check.label);
+  masm_bind(m, check.resume);
+  opt_vec_push(&cg->arena, &cg->epoch_checks, check);
+}
+
+static void opt_cg_emit_epoch_checks(opt_cg_t *cg) {
+  masm_t *m = &cg->masm;
+  const asm_gpr_t *a = MASM_ARGUMENT_GPRS;
+  for (uint32_t i = 0; i < cg->epoch_checks.len; i++) {
+    const opt_cg_epoch_check_t *check = &cg->epoch_checks.items[i];
+    masm_bind(m, check->label);
+    opt_cg_dump_caller_saved_gprs(cg);
+    masm_move64(m, a[0], cg->pinned.vm);
+    masm_move_imm64(m, a[1], check->site);
+    masm_call_absolute(m, (uint64_t)(uintptr_t)opt_rt_revalidate_add);
+    masm_move64(m, cg->pinned.scratch, MASM_RETURN_GPRS[0]);
+    opt_cg_restore_caller_saved_gprs(cg);
+    masm_branch64_imm(m, ASM_COND_EQUAL, cg->pinned.scratch, 0, check->exit);
+    masm_jump(m, check->resume);
+  }
+}
+
 static void opt_cg_can_add_named(opt_cg_t *cg, ir_node_id_t node) {
   masm_t *m = &cg->masm;
   const ir_op_t *op = &ir_node(cg->graph, node)->op;
@@ -1753,11 +1832,13 @@ static void opt_cg_can_add_named(opt_cg_t *cg, ir_node_id_t node) {
     masm_move_imm64(m, temp, op->add_named.proto);
     masm_branch64(m, ASM_COND_NOT_EQUAL, scratch, temp, fail);
   }
-  masm_load64(m, scratch, asm_addr(cg->pinned.vm, (int32_t)offsetof(sv_vm_t, js)));
-  masm_load32(m, scratch, asm_addr(scratch, (int32_t)offsetof(ant_t, ic.epoch)));
-  masm_move_imm64(m, temp, op->add_named.cell);
-  masm_load32(m, temp, asm_addr(temp, 0));
-  masm_branch32(m, ASM_COND_NOT_EQUAL, scratch, temp, fail);
+  if (!op->add_named.epoch_checked) {
+    masm_load64(m, scratch, asm_addr(cg->pinned.vm, (int32_t)offsetof(sv_vm_t, js)));
+    masm_load32(m, scratch, asm_addr(scratch, (int32_t)offsetof(ant_t, ic.epoch)));
+    masm_move_imm64(m, temp, op->add_named.cell);
+    masm_load32(m, temp, asm_addr(temp, 0));
+    masm_branch32(m, ASM_COND_NOT_EQUAL, scratch, temp, fail);
+  }
   masm_move_imm32(m, output, 1);
   masm_jump(m, done);
   masm_bind(m, fail);
@@ -3122,6 +3203,7 @@ static bool opt_cg_object_code(opt_cg_t *cg, ir_node_id_t node_id, const ir_node
     case IR_OP_STORE_NAMED: opt_cg_store_named(cg, node_id, node->op.offset); break;
     case IR_OP_ADD_NAMED: opt_cg_add_named(cg, node_id); break;
     case IR_OP_CAN_ADD_NAMED: opt_cg_can_add_named(cg, node_id); break;
+    case IR_OP_CHECK_ADD_EPOCH: opt_cg_check_add_epoch(cg, node_id); break;
     case IR_OP_ALLOCATE_OBJECT: opt_cg_allocate_object(cg, node_id); break;
     case IR_OP_INITIALIZE_NAMED: opt_cg_initialize_named(cg, node_id); break;
     case IR_OP_LOAD_PROTOTYPE:
@@ -3420,6 +3502,38 @@ static uint64_t opt_cg_site_bits(const opt_site_value_t *value, const uint64_t *
   }
 }
 
+static ant_value_t opt_cg_site_value(const opt_site_value_t *value, const uint64_t *dump, const uint64_t *spills, const ant_value_t *objects) {
+  if (value->kind == OPT_SITE_VIRTUAL) return objects[value->bits];
+  return ir_value_boxed_constant(opt_cg_site_bits(value, dump, spills), (opt_repr_t)value->repr);
+}
+
+static uint32_t opt_cg_site_object_count(const opt_code_t *code, const opt_site_t *site) {
+  uint32_t count = 0;
+  opt_exit_cursor_t cursor = opt_exit_cursor((opt_exit_view_t){code->values, code->chunks, code->refs}, site->values);
+  for (const opt_site_value_t *value; (value = opt_exit_next(&cursor));) count += value->kind == OPT_SITE_OBJECT;
+  return count;
+}
+
+static ant_value_t opt_cg_materialize_objects(sv_vm_t *vm, const opt_code_t *code, const opt_site_t *site, const uint64_t *dump, const uint64_t *spills, ant_value_t *objects) {
+  uint32_t count = 0;
+  opt_exit_cursor_t cursor = opt_exit_cursor((opt_exit_view_t){code->values, code->chunks, code->refs}, site->values);
+  for (const opt_site_value_t *value; (value = opt_exit_next(&cursor));) {
+    if (value->kind != OPT_SITE_OBJECT) continue;
+    ant_value_t object = opt_rt_materialize_object(vm, (ant_shape_t *)(uintptr_t)value->bits);
+    if (is_err(object)) return object;
+    objects[count++] = object;
+  }
+  uint32_t current = 0, index = 0;
+  cursor = opt_exit_cursor((opt_exit_view_t){code->values, code->chunks, code->refs}, site->values);
+  for (const opt_site_value_t *value; (value = opt_exit_next(&cursor));) {
+    if (value->kind == OPT_SITE_OBJECT) {
+      current++;
+      index = 0;
+    } else if (current) opt_rt_materialize_property(vm, objects[current - 1], index++, opt_cg_site_value(value, dump, spills, objects));
+  }
+  return 0;
+}
+
 static ant_value_t opt_cg_materialize_arguments(sv_vm_t *vm, ant_value_t *slots, uint32_t count, ant_value_t callee, ant_value_t *args, uint32_t argc) {
   ant_value_t arguments = js_mkundef();
   for (uint32_t i = 0; i < count; i++) {
@@ -3445,7 +3559,7 @@ static uint32_t opt_cg_site_finally_count(const opt_code_t *code, const opt_site
   return 0;
 }
 
-static sv_jit_finally_t *opt_cg_site_finally(const opt_code_t *code, const opt_site_t *site, const uint64_t *dump, const uint64_t *spills, sv_jit_finally_t *out, uint32_t count) {
+static sv_jit_finally_t *opt_cg_site_finally(const opt_code_t *code, const opt_site_t *site, const uint64_t *dump, const uint64_t *spills, const ant_value_t *objects, sv_jit_finally_t *out, uint32_t count) {
   if (!count) return NULL;
   for (uint32_t i = 0; i < count; i++) out[i] = (sv_jit_finally_t){.kind = SV_COMPLETION_NONE, .value = js_mkundef()};
   sv_func_t *func = code->func;
@@ -3456,7 +3570,7 @@ static sv_jit_finally_t *opt_cg_site_finally(const opt_code_t *code, const opt_s
     int index = sv_func_finally_index(func, (int)((value->slot - OPT_COMPLETION_SLOT) >> 1));
     if (index < 0 || (uint32_t)index >= count) continue;
     sv_jit_finally_t *entry = &out[index];
-    ant_value_t boxed = ir_value_boxed_constant(opt_cg_site_bits(value, dump, spills), (opt_repr_t)value->repr);
+    ant_value_t boxed = opt_cg_site_value(value, dump, spills, objects);
     if (value->slot & 1) {
       if (entry->kind != SV_COMPLETION_JUMP) entry->value = boxed;
       continue;
@@ -3487,6 +3601,9 @@ static ant_value_t opt_cg_exit_frames(sv_vm_t *vm, const opt_site_t *site, opt_c
   const opt_site_value_t *boxes[value_total];
   ant_value_t *box_slots[value_total];
   uint32_t box_count = 0;
+  ant_value_t objects[opt_cg_site_object_count(code, site) + 1];
+  ant_value_t failed = opt_cg_materialize_objects(vm, code, site, dump, spills, objects);
+  if (failed) return opt_rt_leave_frame(failed, vm, entry);
   opt_exit_cursor_t values = opt_exit_cursor((opt_exit_view_t){code->values, code->chunks, code->refs}, site->values);
   for (uint32_t k = 0; k < count; k++) {
     const opt_site_frame_t *at = &code->frames[site->frame_start + k];
@@ -3504,8 +3621,7 @@ static ant_value_t opt_cg_exit_frames(sv_vm_t *vm, const opt_site_t *site, opt_c
     for (uint32_t i = 0; i < locals + depth; i++) frame->locals[i] = root && entry->frame ? entry->locals[i] : js_mkundef();
     for (uint32_t i = 0; i < at->value_count; i++) {
       const opt_site_value_t *value = opt_exit_next(&values);
-      uint64_t bits = opt_cg_site_bits(value, dump, spills);
-      ant_value_t boxed = ir_value_boxed_constant(bits, (opt_repr_t)value->repr);
+      ant_value_t boxed = opt_cg_site_value(value, dump, spills, objects);
       uint32_t slot = value->slot;
       ant_value_t *to = NULL;
       if (slot == OPT_THIS_SLOT) frame->this_val = boxed;
@@ -3534,7 +3650,7 @@ static ant_value_t opt_cg_exit_frames(sv_vm_t *vm, const opt_site_t *site, opt_c
     opt_rt_reopen_box(vm, (sv_upvalue_t *)(uintptr_t)opt_cg_site_bits(boxes[i], dump, spills), box_slots[i]);
   uint32_t finally_count = opt_cg_site_finally_count(code, site);
   sv_jit_finally_t finally[finally_count ? finally_count : 1];
-  frames[count - 1].finally = opt_cg_site_finally(code, site, dump, spills, finally, finally_count);
+  frames[count - 1].finally = opt_cg_site_finally(code, site, dump, spills, objects, finally, finally_count);
   ant_value_t result = opt_rt_exit_frames(vm, code, site, entry, frames, count);
   opt_rt_close_storage(vm, storage, storage + total);
   return result;
@@ -3550,9 +3666,11 @@ static ant_value_t *opt_cg_site_slot(const opt_code_t *code, uint32_t slot, uint
 
 static bool opt_cg_site_values_plain(const opt_code_t *code, const opt_site_t *site, const uint64_t *dump, const uint64_t *spills) {
   opt_exit_cursor_t cursor = opt_exit_cursor((opt_exit_view_t){code->values, code->chunks, code->refs}, site->values);
-  for (const opt_site_value_t *value; (value = opt_exit_next(&cursor));)
+  for (const opt_site_value_t *value; (value = opt_exit_next(&cursor));) {
+    if (value->kind == OPT_SITE_VIRTUAL || value->kind == OPT_SITE_OBJECT) return false;
     if (value->repr != OPT_REPR_POINTER && ir_value_virtual_arguments_kind(ir_value_boxed_constant(opt_cg_site_bits(value, dump, spills), (opt_repr_t)value->repr)) >= 0)
       return false;
+  }
   return true;
 }
 
@@ -3618,11 +3736,17 @@ static ant_value_t opt_cg_catch(sv_vm_t *vm, uint8_t *locals, const opt_site_t *
   for (uint32_t i = params; i < params + local_count + depth; i++) frame[i] = entry->frame ? entry->locals[i - params] : IR_VALUE_UNDEFINED;
   frame[params + local_count + depth] = caught;
   ant_value_t *frame_locals = frame + params, *stack = frame + params + local_count;
+  ant_value_t objects[opt_cg_site_object_count(code, site) + 1];
+  ant_value_t failed = opt_cg_materialize_objects(vm, code, site, dump, spills, objects);
+  if (failed) {
+    GC_ROOT_RESTORE(js, mark);
+    return opt_rt_leave_frame(failed, vm, entry);
+  }
   opt_exit_cursor_t cursor = opt_exit_cursor((opt_exit_view_t){code->values, code->chunks, code->refs}, site->values);
   for (const opt_site_value_t *value; (value = opt_exit_next(&cursor));) {
     if (value->repr == OPT_REPR_POINTER) continue;
     ant_value_t *to = opt_cg_site_slot(code, value->slot, depth, frame, frame_locals, stack);
-    if (to) *to = ir_value_boxed_constant(opt_cg_site_bits(value, dump, spills), (opt_repr_t)value->repr);
+    if (to) *to = opt_cg_site_value(value, dump, spills, objects);
   }
   ant_value_t callee = sv_closure_heap_value(js, entry->closure);
   ant_value_t arguments = opt_cg_materialize_arguments(vm, frame_locals, local_count + depth, callee, entry->args, (uint32_t)entry->argc);
@@ -3636,7 +3760,7 @@ static ant_value_t opt_cg_catch(sv_vm_t *vm, uint8_t *locals, const opt_site_t *
   opt_rt_caught(vm, code, handler, false);
   uint32_t finally_count = opt_cg_site_finally_count(code, site);
   sv_jit_finally_t finally[finally_count ? finally_count : 1];
-  sv_jit_finally_t *pending = opt_cg_site_finally(code, site, dump, spills, finally, finally_count);
+  sv_jit_finally_t *pending = opt_cg_site_finally(code, site, dump, spills, objects, finally, finally_count);
   vm->jit.resume.throwing = handler->finally;
   ant_value_t result = opt_rt_resume(vm, code, entry, site->bc_off, depth + 1, frame, frame_locals, stack, pending);
   opt_rt_close_storage(vm, frame, frame + total + 1);
@@ -3656,6 +3780,9 @@ static ant_value_t opt_cg_exit(sv_vm_t *vm, uint8_t *locals, uint32_t index, opt
   for (uint32_t i = params; i < params + local_count + depth; i++)
     frame[i] = entry->frame ? entry->locals[i - params] : IR_VALUE_UNDEFINED;
   uint32_t stack_slots = code->stack_count;
+  ant_value_t objects[opt_cg_site_object_count(code, site) + 1];
+  ant_value_t failed = opt_cg_materialize_objects(vm, code, site, dump, spills, objects);
+  if (failed) return opt_rt_leave_frame(failed, vm, entry);
   for (uint32_t pass = 0; pass < 2; pass++) {
     opt_exit_cursor_t cursor = opt_exit_cursor((opt_exit_view_t){code->values, code->chunks, code->refs}, site->values);
     for (const opt_site_value_t *value; (value = opt_exit_next(&cursor));) {
@@ -3669,7 +3796,7 @@ static ant_value_t opt_cg_exit(sv_vm_t *vm, uint8_t *locals, uint32_t index, opt
       else if (slot > stack_slots + local_count && slot - stack_slots - local_count - 1 < params) to = &frame[slot - stack_slots - local_count - 1];
       if (!to) continue;
       if (pass == 1) opt_rt_reopen_box(vm, (sv_upvalue_t *)(uintptr_t)bits, to);
-      else *to = ir_value_boxed_constant(bits, (opt_repr_t)value->repr);
+      else *to = opt_cg_site_value(value, dump, spills, objects);
     }
     if (pass == 0) {
       ant_value_t callee = sv_closure_heap_value(vm->js, entry->closure);
@@ -3679,7 +3806,7 @@ static ant_value_t opt_cg_exit(sv_vm_t *vm, uint8_t *locals, uint32_t index, opt
   }
   uint32_t finally_count = opt_cg_site_finally_count(code, site);
   sv_jit_finally_t finally[finally_count ? finally_count : 1];
-  sv_jit_finally_t *pending = opt_cg_site_finally(code, site, dump, spills, finally, finally_count);
+  sv_jit_finally_t *pending = opt_cg_site_finally(code, site, dump, spills, objects, finally, finally_count);
   ant_value_t result = opt_rt_exit(vm, code, site, entry, frame, frame + params, frame + params + local_count, pending);
   opt_rt_close_storage(vm, frame, frame + params + local_count + depth + 1);
   return result;
@@ -3792,6 +3919,7 @@ static void opt_cg_tails(opt_cg_t *cg, asm_label_t retry) {
   }
   opt_cg_emit_barriers(cg);
   opt_cg_emit_allocations(cg);
+  opt_cg_emit_epoch_checks(cg);
   for (uint32_t i = 0; i < cg->object_kinds.len; i++) {
     const opt_cg_object_kinds_t *kinds = &cg->object_kinds.items[i];
     asm_gpr_t scratch = cg->pinned.scratch;
@@ -3837,6 +3965,7 @@ opt_code_t *opt_cg_generate(ant_t *js, const ir_graph_t *graph, const ir_frame_l
   ra_allocation_t allocation;
   ra_allocate(graph, &cg.registers, &allocation);
   cg.alloc = &allocation;
+  cg.exit_table = &allocation.exit_table;
   if (dump) ra_dump_allocation(graph, &allocation, dump);
   if (verify) {
     opt_text_t errors = {0};

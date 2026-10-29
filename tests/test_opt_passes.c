@@ -252,6 +252,32 @@ static void verifier_rejects_slow_path_outputs_away_from_their_call(void) {
   tests_run++;
 }
 
+static void simplification_folds_int32_checks_of_boxed_int32s(void) {
+  ir_graph_t graph;
+  ir_graph_init(&graph);
+  BLOCK0(&graph);
+  ir_node_id_t value = NODE0(&graph, load_slot(1), OPT_REPR_TAGGED);
+  ir_node_id_t integer = NODE(&graph, ir_op(IR_OP_UNBOX_INT32), OPT_REPR_INT32, value);
+  ir_node_id_t boxed = NODE(&graph, ir_op(IR_OP_BOX_INT32), OPT_REPR_TAGGED, integer);
+  ir_node_id_t check = NODE(&graph, ir_op(IR_OP_CHECK_INT32), OPT_REPR_INT32, boxed);
+  ir_node(&graph, check)->frame_state = empty_frame_state(&graph);
+  ir_node_id_t result = NODE(&graph, ir_op(IR_OP_BOX_INT32), OPT_REPR_TAGGED, check);
+  push_body(&graph, 0, value);
+  push_body(&graph, 0, integer);
+  push_body(&graph, 0, boxed);
+  push_body(&graph, 0, check);
+  push_body(&graph, 0, result);
+  set_control(&graph, 0, NODE(&graph, ir_op(IR_OP_RETURN), OPT_REPR_NONE, result));
+  assert_valid(&graph);
+
+  pass_simplify(&graph);
+  assert_valid(&graph);
+  assert(!body_contains(&graph, 0, check));
+  assert(ir_node(&graph, result)->inputs.items[0] == integer);
+  ir_graph_free(&graph);
+  tests_run++;
+}
+
 static void simplification_removes_number_checks_of_numeric_constants(void) {
   struct { uint64_t bits; bool folds; double expected; } cases[] = {
     {ir_value_double_bits(0.5), true, 0.5},
@@ -372,6 +398,39 @@ static void typed_array_storage_metadata_moves_out_of_loops_that_only_store_elem
   assert(body_contains(&graph, 0, length) && body_contains(&graph, 0, offset));
   assert(ir_block(&graph, 1)->body.len == 1 && ir_block(&graph, 1)->body.items[0] == store);
   assert_valid(&graph);
+  ir_graph_free(&graph);
+  tests_run++;
+}
+
+static void check_elimination_keeps_refinements_of_constants(void) {
+  ir_graph_t graph;
+  ir_graph_init(&graph);
+  BLOCK0(&graph);
+  BLOCK(&graph, 0);
+  BLOCK(&graph, 0);
+  ir_node_id_t value = NODE0(&graph, constant(0x1234), OPT_REPR_TAGGED);
+  ir_condition_t holey = ir_cond(IR_COND_ELEMENTS_KIND);
+  holey.elements = IR_ELEMENTS_HOLEY;
+  set_control(&graph, 0, NODE(&graph, branch(holey, 1, 2), OPT_REPR_NONE, value));
+  ir_op_t refine_op = ir_op(IR_OP_REFINE);
+  refine_op.refine.condition = holey;
+  refine_op.refine.holds = true;
+  ir_node_id_t refined = NODE(&graph, refine_op, OPT_REPR_TAGGED, value);
+  ir_node_id_t address = NODE(&graph, ir_op(IR_OP_CELL_ADDRESS), OPT_REPR_POINTER, refined);
+  ir_node_id_t length = NODE(&graph, ir_op(IR_OP_LOAD_ELEMENTS_LENGTH), OPT_REPR_INT32, address);
+  ir_node_id_t boxed = NODE(&graph, ir_op(IR_OP_BOX_INT32), OPT_REPR_TAGGED, length);
+  push_body(&graph, 1, refined);
+  push_body(&graph, 1, address);
+  push_body(&graph, 1, length);
+  push_body(&graph, 1, boxed);
+  set_control(&graph, 1, NODE(&graph, ir_op(IR_OP_RETURN), OPT_REPR_NONE, boxed));
+  set_control(&graph, 2, NODE(&graph, ir_op(IR_OP_RETURN), OPT_REPR_NONE, value));
+  assert_valid(&graph);
+
+  pass_check_elimination(&graph);
+  assert_valid(&graph);
+  assert(ir_node(&graph, address)->inputs.items[0] == refined);
+  assert(body_contains(&graph, 1, refined));
   ir_graph_free(&graph);
   tests_run++;
 }
@@ -1333,10 +1392,12 @@ int main(void) {
   verifier_rejects_blocks_no_entry_reaches();
   verifier_rejects_slow_path_outputs_away_from_their_call();
   simplification_removes_number_checks_of_numeric_constants();
+  simplification_folds_int32_checks_of_boxed_int32s();
   element_counts_move_out_of_loops_that_only_store_elements();
   typed_array_storage_offsets_are_reused_across_stores_but_not_calls();
   typed_array_storage_metadata_moves_out_of_loops_that_only_store_elements();
   branches_on_known_kinds_fold();
+  check_elimination_keeps_refinements_of_constants();
   check_elimination_keeps_checks_that_a_later_entry_reaches_blocks_before_it();
   simplification_removes_integer_double_round_trips();
   simplification_tests_the_truthiness_of_boxed_int32_values_unboxed();

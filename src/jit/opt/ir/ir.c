@@ -168,7 +168,8 @@ bool ir_op_equal(const ir_op_t *a, const ir_op_t *b) {
     case IR_OP_CAN_ADD_NAMED:
       return a->add_named.offset == b->add_named.offset && a->add_named.shape == b->add_named.shape
         && a->add_named.property_count == b->add_named.property_count && a->add_named.proto == b->add_named.proto
-        && a->add_named.cell == b->add_named.cell;
+        && a->add_named.cell == b->add_named.cell && a->add_named.epoch_checked == b->add_named.epoch_checked;
+    case IR_OP_CHECK_ADD_EPOCH: return a->add_named.cell == b->add_named.cell && a->add_named.site == b->add_named.site;
     case IR_OP_LOAD_UPVALUE_CELL: return a->index == b->index;
     case IR_OP_LOAD_UPVALUE: return a->initialized == b->initialized;
     case IR_OP_IS_NULLISH:
@@ -374,6 +375,7 @@ ir_node_properties_t ir_op_properties(const ir_op_t *op) {
     case IR_OP_STORE_UPVALUE: return ir_writes(IR_LOC_BINDINGS | IR_LOC_FRAME);
     case IR_OP_CHECK_GLOBAL_LEXICALS: return ir_reads(IR_LOC_GLOBAL_BINDINGS);
     case IR_OP_CAN_ADD_NAMED: return ir_reads(IR_LOC_NAMED | IR_LOC_GLOBAL_BINDINGS);
+    case IR_OP_CHECK_ADD_EPOCH: return ir_reads(IR_LOC_GLOBAL_BINDINGS);
     case IR_OP_STRICT_EQUALS: return (ir_node_properties_t){.is_call = true};
     case IR_OP_OBJECT_ADDRESS: return IR_PURE;
     case IR_OP_CAN_ADD_ELEMENT: return ir_reads(IR_LOC_NAMED | IR_LOC_ELEMENTS_AND_COUNTS | IR_LOC_GLOBAL_BINDINGS);
@@ -431,7 +433,8 @@ bool ir_op_exit_kind(const ir_op_t *op, opt_exit_kind_t *kind) {
       if (op->initialized) return false;
       result = OPT_EXIT_UNEXPECTED_VALUE;
       break;
-    case IR_OP_CHECK_UPVALUE_INITIALIZED: result = OPT_EXIT_UNEXPECTED_VALUE; break;
+    case IR_OP_CHECK_UPVALUE_INITIALIZED:
+    case IR_OP_CHECK_ADD_EPOCH: result = OPT_EXIT_UNEXPECTED_VALUE; break;
     case IR_OP_CHECK_INT32: result = OPT_EXIT_NOT_INT32; break;
     case IR_OP_CHECK_NUMBER:
     case IR_OP_CHECK_STRING:

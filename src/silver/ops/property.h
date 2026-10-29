@@ -1394,8 +1394,8 @@ static inline bool sv_add_proto_matches(const ant_object_t *receiver, uintptr_t 
   return proto && proto->ic_identity == (uint32_t)(key >> 1);
 }
 
-static inline bool sv_add_chain_admits(const ant_object_t *receiver, const char *interned) {
-  ant_value_t cur = receiver->proto;
+static inline bool sv_add_proto_chain_admits(ant_value_t proto, const char *interned) {
+  ant_value_t cur = proto;
   
   sv_proto_guard_t guard;
   sv_proto_guard_init(&guard);
@@ -1419,6 +1419,10 @@ static inline bool sv_add_chain_admits(const ant_object_t *receiver, const char 
   }
   
   return true;
+}
+
+static inline bool sv_add_chain_admits(const ant_object_t *receiver, const char *interned) {
+  return sv_add_proto_chain_admits(receiver->proto, interned);
 }
 
 static __attribute__((noinline, cold)) void sv_pf_poly_keep(

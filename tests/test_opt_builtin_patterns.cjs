@@ -197,6 +197,8 @@ const COMPILED = [
   'Many8', 'Many12', 'Many20', 'Many40', 'Cond',
 ];
 
+const INLINED_INTO = { Many8: 'makeMany8' };
+
 if (process.argv[2] === 'child') {
   runCases();
 } else {
@@ -226,7 +228,10 @@ if (process.argv[2] === 'child') {
     assert.doesNotMatch(child.stderr, /codegen-failed func=/, `${name}: codegen failed`);
     if (tier && name !== 'off') {
       for (const fn of COMPILED) {
-        assert.match(child.stderr, new RegExp(`jit: opt compiled func=${fn} `), `${name}: ${fn} must compile on the opt tier`);
+        const inlinedInto = INLINED_INTO[fn];
+        const onTier = new RegExp(`jit: opt compiled func=${fn} `).test(child.stderr)
+          || (inlinedInto && new RegExp(`jit: opt compiled func=${inlinedInto} .*inlined=[1-9]`).test(child.stderr));
+        assert.ok(onTier, `${name}: ${fn} must compile on the opt tier`);
         assert.doesNotMatch(child.stderr, new RegExp(`jit: opt (rejected|disabled) func=${fn} `), `${name}: ${fn} must not be rejected`);
         assert.doesNotMatch(child.stderr, new RegExp(`callee=${fn} bc=\\d+ reason=(TYPEOF|SET_PROTO|STR_APPEND_LOCAL|STR_ALC_SNAPSHOT)`), `${name}: ${fn} must be inlineable`);
       }

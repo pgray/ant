@@ -115,6 +115,14 @@ static void pass_visit_block(pass_check_elimination_t *pass, ir_block_id_t block
     ir_node_id_t inputs[2];
     uint32_t count = branch->inputs.len < 2 ? branch->inputs.len : 2;
     for (uint32_t i = 0; i < count; i++) inputs[i] = pass_decided_value(pass, branch->inputs.items[i]);
+    uint64_t bits;
+    if (op.branch.condition.kind == IR_COND_BOOL && count == 1 && ir_constant_value(graph, inputs[0], &bits)) {
+      pass_control_decision_t decision = {.node = control, .op = ir_op(IR_OP_JUMP)};
+      decision.op.target = bits ? op.branch.if_true : op.branch.if_false;
+      opt_vec_push(pass->arena, &decisions->controls, decision);
+      pass_push_edge(pass, edges, decision.op.target, facts);
+      return;
+    }
     pass_branch_key_t key;
     if (branch->inputs.len <= 2 && pass_branch_key_of(graph, op.branch.condition, inputs, count, &key)) {
       int holds = pass_facts_branch_outcome(facts, &key);
@@ -161,6 +169,12 @@ static void pass_visit_block(pass_check_elimination_t *pass, ir_block_id_t block
     for (uint32_t i = 0; i < possible_count && !covered; i++) covered = ir_shape_check_equal(possible[i].check, known[j]);
     covers_known = covered;
   }
+  if (covers_known) {
+    uint32_t kept = 0;
+    for (uint32_t i = 0; i < possible_count; i++)
+      if (possible[i].check.shape) possible[kept++] = possible[i];
+    possible_count = kept;
+  }
   if (possible_count == 1 && covers_known) {
     pass_control_decision_t decision = {.node = control, .op = ir_op(IR_OP_JUMP)};
     decision.op.target = possible[0].block;
@@ -183,7 +197,9 @@ static bool pass_accesses_properties(const ir_op_t *op, uint32_t index) {
   switch (op->code) {
     case IR_OP_CHECK_OBJECT:
     case IR_OP_CELL_ADDRESS:
+    case IR_OP_OBJECT_ADDRESS:
     case IR_OP_INITIALIZE_NAMED: return index == 0;
+    case IR_OP_CAN_ADD_NAMED: return true;
     case IR_OP_CHECK_SHAPE:
     case IR_OP_SHAPE_SWITCH:
     case IR_OP_LOAD_NAMED:
@@ -256,7 +272,7 @@ static void pass_visit_node(pass_check_elimination_t *pass, ir_node_id_t node_id
   ir_node_id_t anchor = IR_NONE;
   if (refines) {
     anchor = pass_facts_refinement(facts, inputs.items[0]);
-    if (anchor == IR_NONE && ir_is_constant(graph, inputs.items[0])) anchor = inputs.items[0];
+    if (anchor == IR_NONE && op.code != IR_OP_REFINE && ir_is_constant(graph, inputs.items[0])) anchor = inputs.items[0];
   }
   bool removable = !refines || anchor != IR_NONE;
   bool remove = false;
@@ -397,6 +413,16 @@ static void pass_visit_node(pass_check_elimination_t *pass, ir_node_id_t node_id
       if (op.count) pass_facts_set_elements_kind(facts, node_id, IR_ELEMENTS_PACKED);
       break;
     case IR_OP_CHECK_APPENDABLE_ARRAY: pass_facts_set_object(facts, inputs.items[0]); break;
+    case IR_OP_CAN_ADD_NAMED: {
+      uint32_t known_count = 0;
+      const ir_shape_check_t *known = pass_facts_shapes(facts, inputs.items[0], &known_count);
+      bool inline_slot = opt_named_index(op.add_named.offset) < opt_named_inobj_limit(op.add_named.offset);
+      if (op.add_named.epoch_checked && known && known_count == 1 && inline_slot && pass_facts_is_unexposed(facts, inputs.items[0])) {
+        pass_replace(&decisions->replacements, node_id, pass_constant_typed(pass->constants, graph, 1, OPT_REPR_BOOL));
+        remove = true;
+      } else pass_facts_apply(facts, ir_op_properties(&op));
+      break;
+    }
     default: pass_facts_apply(facts, ir_op_properties(&op)); break;
   }
   if (remove) {

@@ -211,6 +211,7 @@ static void pass_analyze(const ir_graph_t *graph, const ir_node_vec_t *placed, c
       ir_node_id_t node = placed->items[i];
       const ir_node_t *data = ir_node(graph, node);
       bool stands_for_input = data->op.code == IR_OP_EMPTY_TO_UNDEFINED || data->op.code == IR_OP_CELL_ADDRESS
+        || data->op.code == IR_OP_OBJECT_ADDRESS
         || (ir_op_refined_input(&data->op) == 0 && data->repr != OPT_REPR_NONE);
       if (!stands_for_input || analysis->roots[node] != IR_NONE) continue;
       ir_node_id_t root = pass_root(analysis, data->inputs.items[0]);
@@ -243,8 +244,10 @@ static void pass_analyze(const ir_graph_t *graph, const ir_node_vec_t *placed, c
       switch (op->code) {
         case IR_OP_EMPTY_TO_UNDEFINED:
         case IR_OP_CELL_ADDRESS:
+        case IR_OP_OBJECT_ADDRESS:
         case IR_OP_CHECK_OBJECT: accesses_object = true; break;
-        case IR_OP_LOAD_NAMED: accesses_object = op->offset < use->count; break;
+        case IR_OP_LOAD_NAMED: accesses_object = opt_named_index(op->offset) < use->count; break;
+        case IR_OP_CAN_ADD_NAMED: accesses_object = op->add_named.epoch_checked && opt_named_index(op->add_named.offset) == use->count; break;
         case IR_OP_CHECK_SHAPE:
           for (uint32_t i = 0; i < op->shapes.len && !accesses_object; i++)
             accesses_object = op->shapes.items[i].shape == use->shape && !op->shapes.items[i].has_generation;
@@ -252,7 +255,7 @@ static void pass_analyze(const ir_graph_t *graph, const ir_node_vec_t *placed, c
         case IR_OP_INITIALIZE_NAMED:
         case IR_OP_STORE_NAMED:
         case IR_OP_ADD_NAMED: {
-          uint32_t offset = op->code == IR_OP_ADD_NAMED ? op->add_named.offset : op->offset;
+          uint32_t offset = opt_named_index(op->code == IR_OP_ADD_NAMED ? op->add_named.offset : op->offset);
           if (index != 1) {
             accesses_object = op->code == IR_OP_ADD_NAMED ? offset == use->count : offset < use->count;
             break;
@@ -273,7 +276,7 @@ static void pass_analyze(const ir_graph_t *graph, const ir_node_vec_t *placed, c
     if (data->op.code != IR_OP_LOAD_NAMED) continue;
     ir_node_id_t root = pass_root(analysis, data->inputs.items[0]);
     if (root == IR_NONE) continue;
-    pass_store_t load = {.target = root, .offset = data->op.offset};
+    pass_store_t load = {.target = root, .offset = opt_named_index(data->op.offset)};
     opt_vec_push(arena, &loaded, load);
   }
   changed = true;
@@ -489,19 +492,24 @@ static bool pass_replace_objects(ir_graph_t *graph, const pass_analysis_t *analy
           break;
         case IR_OP_ADD_NAMED:
           if (object == IR_NONE) break;
-          pass_property_set(arena, &properties, root, op.add_named.offset, pass_resolve(&replacements, node_data->inputs.items[1]));
+          pass_property_set(arena, &properties, root, opt_named_index(op.add_named.offset), pass_resolve(&replacements, node_data->inputs.items[1]));
           pass_shape_set(arena, &shapes, root, op.add_named.shape, op.add_named.property_count);
           opt_bitset_insert(&removed, node);
           break;
         case IR_OP_INITIALIZE_NAMED:
         case IR_OP_STORE_NAMED:
           if (object == IR_NONE) break;
-          pass_property_set(arena, &properties, root, op.offset, pass_resolve(&replacements, node_data->inputs.items[1]));
+          pass_property_set(arena, &properties, root, opt_named_index(op.offset), pass_resolve(&replacements, node_data->inputs.items[1]));
+          opt_bitset_insert(&removed, node);
+          break;
+        case IR_OP_CAN_ADD_NAMED:
+          if (object == IR_NONE) break;
+          pass_replace(&replacements, node, pass_constant_typed(&constants, graph, 1, OPT_REPR_BOOL));
           opt_bitset_insert(&removed, node);
           break;
         case IR_OP_LOAD_NAMED: {
           if (object == IR_NONE) break;
-          const pass_property_t *property = pass_property_get(&properties, root, op.offset);
+          const pass_property_t *property = pass_property_get(&properties, root, opt_named_index(op.offset));
           pass_replace(&replacements, node, property ? property->value : undefined);
           opt_bitset_insert(&removed, node);
           break;
@@ -510,6 +518,7 @@ static bool pass_replace_objects(ir_graph_t *graph, const pass_analysis_t *analy
         case IR_OP_CHECK_OBJECT:
         case IR_OP_EMPTY_TO_UNDEFINED:
         case IR_OP_CELL_ADDRESS:
+        case IR_OP_OBJECT_ADDRESS:
           if (object == IR_NONE) break;
           if (ir_op_refined_input(&op) >= 0 && node_data->repr != OPT_REPR_NONE)
             pass_replace(&replacements, node, node_data->inputs.items[0]);

@@ -47,6 +47,18 @@ typedef struct {
   uint32_t number_of_arguments;
 } ir_frame_layout_t;
 
+static inline uint32_t opt_named_offset(uint32_t index, uint8_t inobj_limit) {
+  return (uint32_t)inobj_limit << 16 | index;
+}
+
+static inline uint32_t opt_named_index(uint32_t offset) {
+  return offset & 0xffff;
+}
+
+static inline uint32_t opt_named_inobj_limit(uint32_t offset) {
+  return offset >> 16;
+}
+
 static inline uint32_t ir_layout_arguments_base(const ir_frame_layout_t *layout) {
   return layout->registers_and_locals_count + layout->number_of_constants;
 }
@@ -330,6 +342,8 @@ typedef struct {
       uint32_t property_count;
       uint64_t proto;
       uint64_t cell;
+      uint64_t site;
+      bool epoch_checked;
     } add_named;
     struct {
       ir_condition_t condition;

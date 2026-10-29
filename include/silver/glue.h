@@ -3,8 +3,15 @@
 
 #include "silver/engine.h"
 
+typedef struct {
+  ant_shape_t *from, *to;
+  uintptr_t proto;
+  uint32_t *cell;
+} jit_add_cell_t;
+
 int64_t jit_helper_stack_overflow(ant_t *js);
 int64_t jit_helper_is_truthy(ant_t *js, ant_value_t v);
+uint64_t jit_helper_revalidate_add(ant_t *js, const jit_add_cell_t *add, const char *interned);
 
 void jit_helper_close_frame_upvalues(sv_vm_t *vm, uint32_t slot_idx);
 void jit_helper_disable_param_counters(sv_func_t *func, uint64_t params);
@@ -275,12 +282,6 @@ ant_value_t jit_helper_closure_boxes(
   ant_t *js, sv_func_t *func, sv_closure_t *parent_closure, ant_value_t this_val, 
   uint32_t const_idx, const char *name, uint32_t name_len, sv_upvalue_t *const *boxes
 );
-
-typedef struct {
-  ant_shape_t *from, *to;
-  uintptr_t proto;
-  uint32_t *cell;
-} jit_add_cell_t;
 
 ant_value_t jit_helper_slow_put_field_adding(
   ant_t *js, ant_value_t obj, ant_value_t val, 

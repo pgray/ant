@@ -20,6 +20,8 @@ static const pass_t pass_list[] = {
   {"loop invariant code motion", pass_licm},
   {"bounds check elimination", pass_bounds_check_elimination},
   {"dead code elimination", pass_dce},
+  {"escape analysis", pass_escape_analysis},
+  {"dead code elimination", pass_dce},
   {"branch fusion", pass_branch_fusion},
 };
 

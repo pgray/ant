@@ -13,6 +13,7 @@ bool ra_saves_only_gprs(const ir_op_t *op) {
     case IR_OP_CALL_ARRAY_PUSH:
     case IR_OP_CREATE_ARRAY_ITERATOR:
     case IR_OP_ADD_NAMED:
+    case IR_OP_CHECK_ADD_EPOCH:
     case IR_OP_PROBE_KEYED_STORE:
     case IR_OP_PROBE_PROPERTY_CACHE:
     case IR_OP_PROBE_PROPERTY_STORE:
@@ -198,7 +199,8 @@ static ra_constraints_t ra_constraints(const ir_node_t *node, const opt_register
       constraints.temps = 1;
       break;
     case IR_OP_STORE_UPVALUE:
-    case IR_OP_CAN_ADD_NAMED: constraints.temps = 1; break;
+    case IR_OP_CAN_ADD_NAMED:
+    case IR_OP_CHECK_ADD_EPOCH: constraints.temps = 1; break;
     default: break;
   }
   return constraints;

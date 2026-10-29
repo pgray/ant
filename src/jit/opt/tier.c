@@ -987,6 +987,25 @@ ant_value_t opt_rt_allocate_object(sv_vm_t *vm, ant_shape_t *shape, ant_value_t 
   return object;
 }
 
+uint64_t opt_rt_revalidate_add(sv_vm_t *vm, const opt_rt_add_epoch_t *site) {
+  return jit_helper_revalidate_add(vm->js, site->add, site->key);
+}
+
+ant_value_t opt_rt_materialize_object(sv_vm_t *vm, ant_shape_t *shape) {
+  ant_t *js = vm->js;
+  ant_shape_retain(shape);
+  ant_object_t *ptr = obj_alloc_shaped(js, kTypeObject, shape);
+  if (!ptr || !js_obj_ensure_prop_capacity(js, ptr, ant_shape_count(shape))) return Ant_Error_CreateOutOfMemory(js);
+  ptr->proto = ant_shape_proto(shape);
+  return js_obj_from_ptr(ptr);
+}
+
+void opt_rt_materialize_property(sv_vm_t *vm, ant_value_t object, uint32_t index, ant_value_t value) {
+  ant_object_t *ptr = js_obj_ptr(object);
+  ant_object_prop_set_unchecked(ptr, index, value);
+  gc_write_barrier_prop(vm->js, ptr, value);
+}
+
 ant_value_t opt_rt_allocate_array(sv_vm_t *vm, uint64_t count) {
   ant_value_t *data;
   ant_value_t array = js_mkarr_dense_uninit(vm->js, (uint32_t)count, &data);

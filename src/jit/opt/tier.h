@@ -36,6 +36,8 @@ typedef enum : uint8_t {
   OPT_SITE_REGISTER,
   OPT_SITE_STACK,
   OPT_SITE_CONSTANT,
+  OPT_SITE_VIRTUAL,
+  OPT_SITE_OBJECT,
 } opt_site_value_kind_t;
 
 typedef struct {
@@ -249,6 +251,14 @@ ant_value_t opt_rt_set_proto(sv_vm_t *vm, ant_value_t object, ant_value_t proto,
 ant_value_t opt_rt_builder_read(sv_vm_t *vm, ant_value_t value, ant_value_t unused, ant_value_t *args, int64_t argc, int64_t kind);
 
 ant_value_t opt_rt_allocate_object(sv_vm_t *vm, ant_shape_t *shape, ant_value_t proto, uint64_t property_count);
+typedef struct {
+  const jit_add_cell_t *add;
+  const char *key;
+} opt_rt_add_epoch_t;
+
+uint64_t opt_rt_revalidate_add(sv_vm_t *vm, const opt_rt_add_epoch_t *site);
+ant_value_t opt_rt_materialize_object(sv_vm_t *vm, ant_shape_t *shape);
+void opt_rt_materialize_property(sv_vm_t *vm, ant_value_t object, uint32_t index, ant_value_t value);
 ant_value_t opt_rt_allocate_array(sv_vm_t *vm, uint64_t count);
 ant_value_t opt_rt_object(sv_vm_t *vm, ant_value_t unused, ant_value_t unused2, ant_value_t *args, int64_t argc, const opt_rt_site_t *site);
 ant_value_t opt_rt_array(sv_vm_t *vm, ant_value_t unused, ant_value_t unused2, ant_value_t *args, int64_t argc, int64_t kind);
