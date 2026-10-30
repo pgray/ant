@@ -671,7 +671,7 @@ static ant_shape_t *shape_root_in(ant_t *js, ant_shape_t **roots, ant_value_t pr
 }
 
 ant_shape_t *ant_shape_new_with_inobj_limit(ant_t *js, uint8_t inobj_limit) {
-  return shape_root_in(js, js->shapes.roots, js_mkundef(), inobj_limit);
+  return shape_root_in(js, js->shapes.roots, mkval(kTypeUndefined, 0), inobj_limit);
 }
 
 ant_shape_t *ant_shape_root(ant_t *js, ant_shape_roots_t *owner, ant_value_t proto, uint8_t inobj_limit) {
