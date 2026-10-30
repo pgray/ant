@@ -248,6 +248,7 @@ typedef struct jit_compile {
   MIR_item_t tier_up_proto;
   MIR_item_t imp_normalize_this;
   MIR_item_t jit_func;
+  sv_asm_t as;
   MIR_reg_t r_vm;
   MIR_reg_t r_this;
   MIR_reg_t r_new_target;

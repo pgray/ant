@@ -1220,7 +1220,7 @@ void jit_emit_inline_body(
           inl_num[k] = 1;
         }
         isp--;
-        mir_emit_mod_numbers(ctx, jit_func, p_reg_site, ext->fmod_proto, ext->imp_fmod,
+        mir_emit_mod_numbers(&(sv_asm_t){ ctx, jit_func }, p_reg_site, ext->fmod_proto, ext->imp_fmod,
                              inl_d[isp - 1], inl_d[isp], inl_d[isp - 1]);
         inl_num[isp] = 0;
         break;

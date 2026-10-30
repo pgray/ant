@@ -14,6 +14,7 @@
 #include <mir-gen.h>
 #pragma GCC diagnostic pop
 #define MIR_new_func_reg(ctx, func, type, name) MIR_new_func_reg_unique(ctx, func, type, name)
+#include "sv_asm.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -263,8 +264,7 @@ typedef struct {
 } jit_inline_ext_t;
 
 void mir_emit_mod_numbers(
-    MIR_context_t ctx, MIR_item_t fn, int *reg_site,
-    MIR_item_t fmod_proto, MIR_item_t imp_fmod,
+    const sv_asm_t *a, int *reg_site, MIR_item_t fmod_proto, MIR_item_t imp_fmod,
     MIR_reg_t l, MIR_reg_t r, MIR_reg_t dst);
 
 void mir_emit_drop_owner_code_once(

@@ -386,6 +386,7 @@ bool jit_setup_frame(jit_compile_t *c) {
                              MIR_T_P, "args",
                              MIR_T_I32, "argc",
                              MIR_T_P, "closure");
+  c->as = sv_asm(c->ctx, c->jit_func);
 
   c->lm = (jit_label_map_t){0};
   c->depth = sv_func_stack_depth_map(c->func);
