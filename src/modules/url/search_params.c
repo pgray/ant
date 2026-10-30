@@ -88,9 +88,11 @@ static void usp_push_decoded_pair(ant_t *js, ant_value_t arr, const char *start,
     raw_value = eq + 1;
   }
 
-  char *key = form_urldecode(pair);
-  char *value = form_urldecode(raw_value);
-  js_arr_push(js, arr, usp_make_entry(js, js_mkstr(js, key, strlen(key)), js_mkstr(js, value, strlen(value))));
+  // %00 decodes to NUL, so keep the decoded lengths
+  size_t key_len = 0, value_len = 0;
+  char *key = form_urldecode_len(pair, &key_len);
+  char *value = form_urldecode_len(raw_value, &value_len);
+  js_arr_push(js, arr, usp_make_entry(js, js_mkstr(js, key, key_len), js_mkstr(js, value, value_len)));
 
   free(pair);
   free(key);
@@ -606,7 +608,13 @@ static ant_value_t usp_init_from_record(ant_t *js, ant_value_t obj, ant_value_t 
       break;
     }
 
-    js_arr_push(js, entries, usp_make_entry(js, js_mkstr(js, key, key_len), value));
+    ant_value_t name = url_string_value(js, js_mkstr(js, key, key_len));
+    if (is_err(name)) {
+      result = name;
+      break;
+    }
+
+    js_arr_push(js, entries, usp_make_entry(js, name, value));
   }
 
   js_prop_iter_end(&it);
@@ -622,11 +630,7 @@ static ant_value_t js_URLSearchParams(ant_params_t) {
   if (nargs < 1 || is_undefined(args[0]) || is_null(args[0])) return obj;
 
   ant_value_t init = args[0];
-  if (vtype(init) == kTypeString) {
-    const char *s = js_getstr(js, init, NULL);
-    if (s) js_set_slot(obj, SLOT_ENTRIES, parse_query_string_init(js, s));
-    return obj;
-  }
+  if (vtype(init) == kTypeString) return usp_init_from_primitive(js, obj, init);
 
   if (!is_object_type(init) && !is_callable(init)) return usp_init_from_primitive(js, obj, init);
   if (usp_is_urlsearchparams(js, init)) return usp_init_from_usp(js, obj, entries, init);
