@@ -1,0 +1,11 @@
+--- a/meson.build
++++ b/meson.build
+@@ -21,7 +21,7 @@
+ 
+ mir_release_args = []
+ if not get_option('debug')
+-  mir_release_args += ['-DNDEBUG', '-DMIR_NO_GEN_DEBUG=1']
++  mir_release_args += ['-DNDEBUG', '-DMIR_NO_GEN_DEBUG=1', '-DMIR_NO_INTERP']
+ endif
+ 
+ mir_lib = static_library(

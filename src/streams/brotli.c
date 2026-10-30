@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <uv.h>
 #include <brotli/encode.h>
 #include <brotli/decode.h>
 #include <brotli/shared_dictionary.h>
@@ -11,6 +12,12 @@
 #include "modules/buffer.h"
 #include "streams/brotli.h"
 #include "streams/transform.h"
+
+void BrotliEncoderLazyStaticInitInner(void);
+void BrotliDecoderLazyStaticInitInner(void);
+
+static uv_once_t brotli_encoder_tables = UV_ONCE_INIT;
+static uv_once_t brotli_decoder_tables = UV_ONCE_INIT;
 
 struct brotli_stream_state {
   bool decompress;
@@ -30,15 +37,16 @@ static int brotli_emit_chunk(
   return cb(ctx, data, len);
 }
 
-static ant_value_t brotli_enqueue_buffer(
-  ant_t *js, ant_value_t ctrl_obj, const uint8_t *data, size_t len
-) {
+static ant_value_t brotli_enqueue_buffer(ant_t *js, ant_value_t ctrl_obj, const uint8_t *data, size_t len) {
   ArrayBufferData *ab = create_array_buffer_data(js, len);
   if (!ab) return Ant_Error_CreateOutOfMemory(js);
+  
   memcpy(ab->data, data, len);
   ant_value_t arr = create_typed_array(js, TYPED_ARRAY_UINT8, ab, 0, len, js->builtins.typedarray_protos[TYPED_ARRAY_UINT8]);
+  
   if (!ts_is_controller(ctrl_obj))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid TransformStreamDefaultController");
+  
   return ts_ctrl_enqueue(js, ctrl_obj, arr);
 }
 
@@ -143,6 +151,9 @@ brotli_stream_state_t *brotli_stream_state_new_params(
   if (!st) return NULL;
 
   st->decompress = decompress;
+  if (decompress) uv_once(&brotli_decoder_tables, BrotliDecoderLazyStaticInitInner);
+  else uv_once(&brotli_encoder_tables, BrotliEncoderLazyStaticInitInner);
+  
   void *instance = decompress
     ? (void *)(st->u.dec = BrotliDecoderCreateInstance(NULL, NULL, NULL))
     : (void *)(st->u.enc = BrotliEncoderCreateInstance(NULL, NULL, NULL));

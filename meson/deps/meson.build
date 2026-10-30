@@ -92,6 +92,10 @@ deps_info = {
     'dir': 'brotli-1.2.1',
     'inc': 'c/include',
   },
+  'utf8proc': {
+    'dir': 'utf8proc-2.10.0',
+    'inc': '',
+  },
 }
 
 subprojects_src = src_root / 'vendor'
@@ -127,6 +131,7 @@ tlsuv_sub = subproject('tlsuv', default_options: [
   'tls_backend=boringssl',
   'deps_prefix_cmake=' + cmake_prefix,
   'warning_level=0',
+  'optimization=s',
 ])
 tlsuv_dep = tlsuv_sub.get_variable('tlsuv_dep')
 
@@ -138,7 +143,7 @@ base64_dep = declare_dependency(
 mir_dep = subproject('mir').get_variable('mir_dep')
 uthash_dep = subproject('uthash').get_variable('uthash_dep')
 uuidv7_dep = subproject('uuidv7').get_variable('uuidv7_dep')
-argtable3_dep = subproject('argtable3').get_variable('argtable3_dep')
+argtable3_dep = subproject('argtable3', default_options: ['optimization=s']).get_variable('argtable3_dep')
 crprintf_dep = subproject('crprintf').get_variable('crprintf_dep')
 ada_dep = subproject('ada').get_variable('ada_dep')
 wamr_dep = subproject('wasm-micro-runtime').get_variable('wamr_dep')
@@ -156,6 +161,7 @@ utf8proc_base_dep = subproject('utf8proc', default_options: [
   'tests=disabled',
 ]).get_variable('utf8proc_dep')
 
+utf8proc_srcdir = subprojects_src / deps_info['utf8proc']['dir']
 utf8proc_dep = declare_dependency(
   dependencies: [utf8proc_base_dep],
   compile_args: get_option('default_library') == 'static' ? ['-DUTF8PROC_STATIC'] : [],
@@ -163,7 +169,8 @@ utf8proc_dep = declare_dependency(
 
 lmdb_dep = subproject('lmdb', default_options: [
   'warning_level=0',
-  'programs=disabled'
+  'programs=disabled',
+  'optimization=s',
 ]).get_variable('lmdb_dep')
 
 libffi_dep = subproject('libffi', default_options: [
@@ -228,6 +235,10 @@ ant_runtime_deps = [
 ]
 
 ant_deps = allocator_deps + ant_core_deps + ant_format_deps + ant_runtime_deps + win_deps + mir_dep
+
+if get_option('unsafe_c').enabled()
+  ant_deps += [declare_dependency(compile_args: ['-DANT_HAVE_UNSAFE_C=1'])]
+endif
 
 ant_slim_deps = ant_deps
 

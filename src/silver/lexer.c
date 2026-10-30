@@ -8,6 +8,7 @@
 #include "utf8.h"
 #include "errors.h"
 #include "numbers.h"
+#include "unicode.h"
 
 #include <runtime.h>
 #include <stdlib.h>
@@ -127,7 +128,7 @@ static int is_unicode_space(const unsigned char *p, ant_offset_t remaining, bool
   if (cp < 0) return 0;
   if (cp == 0xFEFF) return (int)n;
 
-  utf8proc_category_t cat = utf8proc_category(cp);
+  utf8proc_category_t cat = unicode_category(cp);
   if (cat == UTF8PROC_CATEGORY_ZS) return (int)n;
   
   if (cat == UTF8PROC_CATEGORY_ZL || cat == UTF8PROC_CATEGORY_ZP) {
@@ -504,7 +505,7 @@ static int parse_unicode_escape(const char *buf, ant_offset_t len, ant_offset_t 
 
 static bool is_unicode_id_start(utf8proc_int32_t cp) {
   if (cp == 0x2E2F) return false;
-  utf8proc_category_t cat = utf8proc_category(cp);
+  utf8proc_category_t cat = unicode_category(cp);
   return 
     cat == UTF8PROC_CATEGORY_LU || cat == UTF8PROC_CATEGORY_LL ||
     cat == UTF8PROC_CATEGORY_LT || cat == UTF8PROC_CATEGORY_LM ||
@@ -513,7 +514,7 @@ static bool is_unicode_id_start(utf8proc_int32_t cp) {
 
 static bool is_unicode_id_continue(utf8proc_int32_t cp) {
   if (is_unicode_id_start(cp)) return true;
-  utf8proc_category_t cat = utf8proc_category(cp);
+  utf8proc_category_t cat = unicode_category(cp);
   return 
     cat == UTF8PROC_CATEGORY_MN || cat == UTF8PROC_CATEGORY_MC ||
     cat == UTF8PROC_CATEGORY_ND || cat == UTF8PROC_CATEGORY_PC ||

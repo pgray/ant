@@ -7,6 +7,7 @@
 
 #include "ant.h"
 #include "utf8.h"
+#include "unicode.h"
 #include "output.h"
 #include "utils.h"
 #include "ptr.h"
@@ -18478,38 +18479,30 @@ static ant_value_t builtin_string_normalize(ant_params_t) {
   const char *str_ptr = (const char *)(uintptr_t)(str_off);
 
   if (str_len == 0) return js_mkstr(js, "", 0);
-  utf8proc_option_t opts = UTF8PROC_COMPOSE | UTF8PROC_STABLE;
+  unicode_form_t form = UNICODE_NFC;
 
   if (nargs >= 1 && vtype(args[0]) != kTypeUndefined) {
     ant_value_t form_val = js_tostring_val(js, args[0]);
     if (is_err(form_val)) return form_val;
     ant_offset_t flen, foff = vstr(js, form_val, &flen);
-    const char *form = (const char *)(uintptr_t)(foff);
+    const char *name = (const char *)(uintptr_t)(foff);
 
-    if (flen == 3 && memcmp(form, "NFC", 3) == 0) {
-      opts = UTF8PROC_COMPOSE | UTF8PROC_STABLE;
-    } else if (flen == 3 && memcmp(form, "NFD", 3) == 0) {
-      opts = UTF8PROC_DECOMPOSE | UTF8PROC_STABLE;
-    } else if (flen == 4 && memcmp(form, "NFKC", 4) == 0) {
-      opts = UTF8PROC_COMPOSE | UTF8PROC_STABLE | UTF8PROC_COMPAT;
-    } else if (flen == 4 && memcmp(form, "NFKD", 4) == 0) {
-      opts = UTF8PROC_DECOMPOSE | UTF8PROC_STABLE | UTF8PROC_COMPAT;
-    } else return js_mkerr_typed(js, JS_ERR_RANGE, "The normalization form should be one of NFC, NFD, NFKC, NFKD");
+    if (flen == 3 && memcmp(name, "NFC", 3) == 0) form = UNICODE_NFC;
+    else if (flen == 3 && memcmp(name, "NFD", 3) == 0) form = UNICODE_NFD;
+    else if (flen == 4 && memcmp(name, "NFKC", 4) == 0) form = UNICODE_NFKC;
+    else if (flen == 4 && memcmp(name, "NFKD", 4) == 0) form = UNICODE_NFKD;
+    else return js_mkerr_typed(js, JS_ERR_RANGE, "The normalization form should be one of NFC, NFD, NFKC, NFKD");
   }
 
-  utf8proc_uint8_t *result = NULL;
-  utf8proc_ssize_t rlen = utf8proc_map(
-    (const utf8proc_uint8_t *)str_ptr, (utf8proc_ssize_t)str_len, &result, opts
-  );
+  if (str_is_ascii(str_ptr) || unicode_is_normalized(str_ptr, (size_t)str_len, form)) return str;
 
-  if (rlen < 0 || !result) {
-    if (result) free(result);
-    return js_mkstr(js, str_ptr, str_len);
-  }
+  size_t rlen = 0;
+  char *result = unicode_normalize(str_ptr, (size_t)str_len, form, &rlen);
+  if (!result) return js_mkstr(js, str_ptr, str_len);
 
-  ant_value_t ret = js_mkstr(js, (const char *)result, (ant_offset_t)rlen);
+  ant_value_t ret = js_mkstr(js, result, (ant_offset_t)rlen);
   free(result);
-  
+
   return ret;
 }
 

@@ -5,6 +5,7 @@
 #include "gc/roots.h"
 #include "highlight.h"
 #include "utf8.h"
+#include "unicode.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -107,7 +108,7 @@ static int error_display_cols(const char *s, ant_offset_t len) {
     if (c < 0x80) { cols++; i++; continue; }
     utf8proc_int32_t cp = 0;
     i += utf8_next((const utf8proc_uint8_t *)(s + i), (utf8proc_ssize_t)(len - i), &cp);
-    int w = cp < 0 ? 1 : utf8proc_charwidth(cp);
+    int w = cp < 0 ? 1 : unicode_width(cp);
     cols += w < 0 ? 1 : w;
   }
   return cols;

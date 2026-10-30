@@ -6,7 +6,7 @@ project(
   meson_version: '>= 0.54',
 )
 
-c_args = ['-D_POSIX_SOURCE']
+c_args = ['-D_POSIX_SOURCE', '-DBROTLI_STATIC_INIT=BROTLI_STATIC_INIT_LAZY']
 cc = meson.get_compiler('c')
 
 dep_m = cc.find_library('m', required: false)

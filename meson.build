@@ -77,6 +77,12 @@ theme_h = custom_target('theme_h',
   capture: true,
 )
 
+unicode_data_h = custom_target('unicode_data_h',
+  output: 'unicode_data.h',
+  command: [python, files('meson/unicode_tables.py'), utf8proc_srcdir, '@OUTPUT@'],
+  depend_files: files('meson/unicode_tables.py'),
+)
+
 lib_sources = files(run_command(
   python, files('meson/sources.py'), files('sources.json'), 'engine',
   check: true
@@ -90,7 +96,8 @@ libant = static_library(
     builtins_h,
     generic_step_h,
     messages_h,
-    theme_h
+    theme_h,
+    unicode_data_h,
   ],
   install: true,
   include_directories: [include, sandbox_backend_include],
@@ -208,7 +215,8 @@ if not runtime_binary.disabled()
       builtins_h,
       generic_step_h,
       messages_h,
-      theme_h
+      theme_h,
+      unicode_data_h,
     ],
     include_directories: [include],
     c_args: runtime_c_args,

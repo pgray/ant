@@ -1,5 +1,6 @@
 // TODO: cleanup module, make cleaner. MODULARIZE.
 #include "modules/regex_syntax.h"
+#include "unicode.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -254,7 +255,7 @@ static bool rx_id_start(uint32_t c) {
     case 0x2E2F: return false;
   }
   if (rx_in_ranges(c, rx_id_start_extra, sizeof(rx_id_start_extra) / sizeof(rx_id_start_extra[0]))) return true;
-  switch (utf8proc_category((utf8proc_int32_t)c)) {
+  switch (unicode_category((utf8proc_int32_t)c)) {
     case UTF8PROC_CATEGORY_LU: case UTF8PROC_CATEGORY_LL: case UTF8PROC_CATEGORY_LT:
     case UTF8PROC_CATEGORY_LM: case UTF8PROC_CATEGORY_LO: case UTF8PROC_CATEGORY_NL:
       return true;
@@ -272,7 +273,7 @@ static bool rx_id_part(uint32_t c) {
   }
   if (c >= 0x1369 && c <= 0x1371) return true;
   if (rx_in_ranges(c, rx_id_part_extra, sizeof(rx_id_part_extra) / sizeof(rx_id_part_extra[0]))) return true;
-  switch (utf8proc_category((utf8proc_int32_t)c)) {
+  switch (unicode_category((utf8proc_int32_t)c)) {
     case UTF8PROC_CATEGORY_MN: case UTF8PROC_CATEGORY_MC:
     case UTF8PROC_CATEGORY_ND: case UTF8PROC_CATEGORY_PC:
       return true;

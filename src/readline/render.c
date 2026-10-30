@@ -1,6 +1,7 @@
 #include "readline.h"
 #include "utf8.h"
 #include "readline_internal.h"
+#include "unicode.h"
 
 static crprintf_compiled *hl_prog = NULL;
 static highlight_state hl_line_state = HL_STATE_INIT;
@@ -85,7 +86,7 @@ static void repl_virtual_render(
       cp = c;
     }
 
-    int w = utf8proc_charwidth(cp);
+    int w = unicode_width(cp);
     if (w < 0) w = 1;
 
     if (w > 0) {
@@ -136,7 +137,7 @@ static size_t repl_preview_fit_line(
       cp = (unsigned char)preview[i];
     }
 
-    int w = utf8proc_charwidth(cp);
+    int w = unicode_width(cp);
     if (w < 0) w = 1;
     int limit = (i + (size_t)clen < preview_len) ? max_cols - ellipsis_cols : max_cols;
     if (w > 0 && x + w > limit) break;

@@ -1,6 +1,7 @@
 #include "utf8.h"
 #include "utils.h"
 #include "gc/strings.h"
+#include "unicode.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -1718,7 +1719,7 @@ static bool utf8_case_ignorable(utf8proc_int32_t cp) {
     case 0xFE55: case 0xFF07: case 0xFF0E: case 0xFF1A:
       return true;
   }
-  switch (utf8proc_category(cp)) {
+  switch (unicode_category(cp)) {
     case UTF8PROC_CATEGORY_MN: case UTF8PROC_CATEGORY_ME: case UTF8PROC_CATEGORY_CF:
     case UTF8PROC_CATEGORY_LM: case UTF8PROC_CATEGORY_SK:
       return true;
@@ -1728,9 +1729,9 @@ static bool utf8_case_ignorable(utf8proc_int32_t cp) {
 }
 
 static bool utf8_cased(utf8proc_int32_t cp) {
-  utf8proc_category_t category = utf8proc_category(cp);
+  utf8proc_category_t category = unicode_category(cp);
   if (category == UTF8PROC_CATEGORY_LU || category == UTF8PROC_CATEGORY_LL || category == UTF8PROC_CATEGORY_LT) return true;
-  return utf8proc_tolower(cp) != cp || utf8proc_toupper(cp) != cp;
+  return unicode_tolower(cp) != cp || unicode_toupper(cp) != cp;
 }
 
 static bool utf8_sigma_is_final(const utf8proc_uint8_t *src, utf8proc_ssize_t len, utf8proc_ssize_t pos, utf8proc_ssize_t n) {
@@ -1776,7 +1777,7 @@ int utf8_full_case_map(
         return entry->count;
       }
     }
-    out[0] = utf8proc_toupper(cp);
+    out[0] = unicode_toupper(cp);
     return 1;
   }
 
@@ -1789,7 +1790,7 @@ int utf8_full_case_map(
     out[0] = utf8_sigma_is_final(src, len, pos, n) ? 0x03C2 : 0x03C3;
     return 1;
   }
-  out[0] = utf8proc_tolower(cp);
+  out[0] = unicode_tolower(cp);
   return 1;
 }
 

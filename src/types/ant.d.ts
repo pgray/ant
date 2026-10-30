@@ -147,16 +147,20 @@ interface AntCFunctionOptions<
   args: TArgs;
 }
 
-interface AntUnsafe {
-  c(strings: TemplateStringsArray, ...values: unknown[]): number;
-  c<
+interface AntUnsafeC {
+  (strings: TemplateStringsArray, ...values: unknown[]): number;
+  <
     TReturn extends AntCReturnType,
     const TArgs extends readonly AntCArgumentType[],
   >(options: AntCFunctionOptions<TReturn, TArgs>):
     (strings: TemplateStringsArray, ...values: unknown[]) =>
       (...args: AntCArgumentValues<TArgs>) => AntCReturnValue<TReturn>;
-  c<TReturn extends AntCReturnType>(options: AntCOptions<TReturn>):
+  <TReturn extends AntCReturnType>(options: AntCOptions<TReturn>):
     (strings: TemplateStringsArray, ...values: unknown[]) => AntCReturnValue<TReturn>;
+}
+
+interface AntUnsafe {
+  c?: AntUnsafeC;
 }
 
 interface AntGcMarkProfile {

@@ -486,6 +486,7 @@ Configure options are set via `meson setup` or `meson configure`:
 | `allocator`         | combo   | `mimalloc` | Runtime malloc implementation (`mimalloc`, `system`)     |
 | `static_link`       | boolean | `false`    | Statically link the final binary                         |
 | `temporal`          | feature | `enabled`  | Build the Temporal API using the hermetic Rust toolchain |
+| `unsafe_c`          | feature | `disabled` | Build `Ant.unsafe.c` (runtime C compilation via c2mir)   |
 | `pgo`               | feature | `auto`     | Use matching `meson/pgo/profiles/*.profdata` profiles    |
 | `pgo_profile`       | string  | (empty)    | Override the merged LLVM profile path                  |
 | `runtime_binary`    | feature | `auto`     | Tooling-free `ant-runtime` used by `ant compile`         |
