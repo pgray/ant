@@ -52,8 +52,7 @@ static constexpr size_t SV_STACK_RESERVE = (size_t)SV_STACK_HARD_MAX * sizeof(an
 static constexpr size_t SV_FRAMES_RESERVE = (size_t)SV_FRAMES_HARD_MAX * sizeof(sv_frame_t);
 static constexpr size_t SV_VM_RESERVE = SV_STACK_RESERVE + SV_VM_GUARD_SIZE + SV_FRAMES_RESERVE;
 
-sv_gf_mega_cache_t *sv_gf_mega_ensure(ant_t *js) {
-  if (js->ic.gf_mega) return js->ic.gf_mega;
+static sv_gf_mega_cache_t *sv_gf_mega_new(ant_t *js) {
   if (!sv_ic_shape_ref_reserve(js, SV_GF_MEGA_PRIMARY + SV_GF_MEGA_SECONDARY)) return NULL;
   
   sv_gf_mega_cache_t *cache = calloc(1, sizeof(*cache));
@@ -65,7 +64,75 @@ sv_gf_mega_cache_t *sv_gf_mega_ensure(ant_t *js) {
   for (unsigned i = 0; i < SV_GF_MEGA_SECONDARY; i++)
     sv_ic_shape_ref_register(js, &cache->secondary[i].shape);
   
-  return js->ic.gf_mega = cache;
+  return cache;
+}
+
+sv_gf_mega_cache_t *sv_gf_mega_ensure(ant_t *js) {
+  if (!js->ic.gf_mega) js->ic.gf_mega = sv_gf_mega_new(js);
+  return js->ic.gf_mega;
+}
+
+sv_gf_mega_cache_t *sv_gf_mega_keyed_ensure(ant_t *js) {
+  if (!js->ic.gf_mega_keyed) js->ic.gf_mega_keyed = sv_gf_mega_new(js);
+  return js->ic.gf_mega_keyed;
+}
+
+static void sv_keyed_put_reset(ant_t *js, sv_ic_entry_t *ic) {
+  sv_pf_poly_free(js, ic);
+  
+  ant_shape_t *shapes[3] = {
+    (ic->shape_ref_mask & SV_IC_SHAPE_REF_CACHED) ? ic->cached_shape : NULL,
+    (ic->shape_ref_mask & SV_IC_SHAPE_REF_ADD_FROM) ? ic->guard.add.from_shape : NULL,
+    (ic->shape_ref_mask & SV_IC_SHAPE_REF_ADD_TO) ? ic->guard.add.to_shape : NULL,
+  };
+  
+  for (int i = 0; i < 3; i++) if (shapes[i]) ant_shape_release(shapes[i]);
+  *ic = (sv_ic_entry_t){.shape_ref_mask = SV_IC_UNIT_OWNED};
+}
+
+sv_ic_entry_t *sv_keyed_put_entry(ant_t *js, const ant_shape_t *shape, const char *key) {
+  sv_keyed_put_cache_t *cache = js->ic.keyed_put;
+  if (!cache) {
+    if (!(cache = calloc(1, sizeof(*cache)))) return NULL;
+    for (unsigned i = 0; i < SV_KEYED_PUT_ENTRIES; i++) cache->entries[i].shape_ref_mask = SV_IC_UNIT_OWNED;
+    js->ic.keyed_put = cache;
+  }
+  
+  uintptr_t h = ((uintptr_t)shape >> 5) ^ ((uintptr_t)key >> 3);
+  unsigned index = (unsigned)((h ^ (h >> 9)) & (SV_KEYED_PUT_ENTRIES - 1));
+  
+  sv_ic_entry_t *ic = &cache->entries[index];
+  if (cache->shapes[index] == shape && cache->keys[index] == key) return ic;
+  
+  if (cache->seen_shapes[index] != shape || cache->seen_keys[index] != key) {
+    cache->seen_shapes[index] = shape;
+    cache->seen_keys[index] = key;
+    return NULL;
+  }
+  
+  sv_keyed_put_reset(js, ic);
+  cache->shapes[index] = shape;
+  cache->keys[index] = key;
+  
+  return ic;
+}
+
+void sv_keyed_put_clear(ant_t *js) {
+  sv_keyed_put_cache_t *cache = js->ic.keyed_put;
+  if (!cache) return;
+  for (unsigned i = 0; i < SV_KEYED_PUT_ENTRIES; i++) {
+    sv_keyed_put_reset(js, &cache->entries[i]);
+    cache->shapes[i] = cache->seen_shapes[i] = NULL;
+    cache->keys[i] = cache->seen_keys[i] = NULL;
+  }
+}
+
+void sv_keyed_put_destroy(ant_t *js) {
+  sv_keyed_put_cache_t *cache = js->ic.keyed_put;
+  if (!cache) return;
+  for (unsigned i = 0; i < SV_KEYED_PUT_ENTRIES; i++) sv_keyed_put_reset(js, &cache->entries[i]);
+  free(cache);
+  js->ic.keyed_put = NULL;
 }
 
 static void sv_gf_mega_clear_entries(sv_gf_mega_entry_t *entries, unsigned count) {
@@ -77,10 +144,12 @@ static void sv_gf_mega_clear_entries(sv_gf_mega_entry_t *entries, unsigned count
 }
 
 void sv_gf_mega_clear(ant_t *js) {
-  sv_gf_mega_cache_t *cache = js->ic.gf_mega;
-  if (!cache) return;
-  sv_gf_mega_clear_entries(cache->primary, SV_GF_MEGA_PRIMARY);
-  sv_gf_mega_clear_entries(cache->secondary, SV_GF_MEGA_SECONDARY);
+  sv_gf_mega_cache_t *caches[] = {js->ic.gf_mega, js->ic.gf_mega_keyed};
+  for (size_t i = 0; i < sizeof(caches) / sizeof(caches[0]); i++) {
+    if (!caches[i]) continue;
+    sv_gf_mega_clear_entries(caches[i]->primary, SV_GF_MEGA_PRIMARY);
+    sv_gf_mega_clear_entries(caches[i]->secondary, SV_GF_MEGA_SECONDARY);
+  }
 }
 
 static void sv_ic_identities_reset_arena(ant_fixed_arena_t *oa) {
@@ -98,6 +167,7 @@ static void sv_ic_identities_reset_arena(ant_fixed_arena_t *oa) {
 __attribute__((noinline, cold)) void sv_ic_identities_reset(ant_t *js) {
   sv_ic_identities_reset_arena(&js->obj_arena);
   sv_ic_identities_reset_arena(&js->obj_wide_arena);
+  sv_ic_identities_reset_arena(&js->obj_large_arena);
 }
 
 #define SV_POLY_LINK(list, block) do { \
@@ -989,6 +1059,14 @@ ant_value_t sv_string_builder_append_at(
 
   if (vtype(lhs) == kTypeNumber && vtype(rhs) == kTypeNumber) {
     *slot = tov(tod(lhs) + tod(rhs));
+    sv_record_slot_feedback(frame, func, slot_idx, *slot);
+    return js_mkundef();
+  }
+
+  ant_value_t short_result;
+  if (sv_try_short_string_append(js, lhs, rhs, &short_result)) {
+    if (is_err(short_result)) return short_result;
+    *slot = short_result;
     sv_record_slot_feedback(frame, func, slot_idx, *slot);
     return js_mkundef();
   }

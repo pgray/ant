@@ -305,7 +305,7 @@ static ant_value_t v8_get_heap_statistics(ant_params_t) {
   uv_resident_set_memory(&rss);
 
   size_t arena_committed  = ant_object_committed(js);
-  size_t arena_reserved   = js->obj_arena.limit + js->obj_wide_arena.limit;
+  size_t arena_reserved   = js->obj_arena.limit + js->obj_wide_arena.limit + js->obj_large_arena.limit;
   size_t arena_live_bytes = ant_object_live_bytes(js);
 
   size_t closure_committed = js->closure_arena.committed;

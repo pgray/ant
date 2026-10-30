@@ -1066,8 +1066,16 @@ static void opt_cg_branch_truthy(opt_cg_t *cg, ir_node_id_t node, ir_block_id_t 
   static_assert(kTypeString == 1 && kTypeGenerator == 6 && kTypeSymbol > kTypeGenerator);
   masm_shr64_imm(m, scratch, input, NANBOX_TYPE_SHIFT);
   masm_and32_imm(m, scratch, scratch, NANBOX_TYPE_MASK);
-  asm_label_t ask = opt_cg_label(cg, fallback);
-  masm_branch32_imm(m, ASM_COND_EQUAL, scratch, kTypeString, ask);
+  asm_label_t not_string = masm_new_label(m);
+  masm_branch32_imm(m, ASM_COND_NOT_EQUAL, scratch, kTypeString, not_string);
+  static_assert(offsetof(ant_flat_string_t, len) == 0 && offsetof(ant_rope_heap_t, len) == 0 && offsetof(ant_string_builder_t, len) == 0);
+  masm_and64_imm(m, scratch, input, NANBOX_DATA_MASK);
+  masm_add64_imm(m, scratch, scratch, (int64_t)ant_cage_base());
+  masm_and64_imm(m, scratch, scratch, ~(int64_t)STR_HEAP_TAG_MASK);
+  masm_load64(m, scratch, asm_addr(scratch, 0));
+  masm_branch64_imm(m, ASM_COND_EQUAL, scratch, 0, no);
+  masm_jump(m, yes);
+  masm_bind(m, not_string);
   masm_branch32_imm(m, ASM_COND_BELOW_OR_EQUAL, scratch, kTypeGenerator, yes);
   masm_branch32_imm(m, ASM_COND_EQUAL, scratch, kTypeSymbol, yes);
   opt_cg_jump_to(cg, fallback);
@@ -1878,10 +1886,12 @@ static void opt_cg_add_named(opt_cg_t *cg, ir_node_id_t node) {
     opt_cg_object_barrier(cg, object, value, (uint64_t)(uintptr_t)opt_rt_write_barrier, NULL);
 }
 
-static void opt_cg_take_object(opt_cg_t *cg, asm_gpr_t out, asm_gpr_t count, asm_gpr_t temp, asm_gpr_t js, asm_label_t slow, bool wide) {
+static void opt_cg_take_object(opt_cg_t *cg, asm_gpr_t out, asm_gpr_t count, asm_gpr_t temp, asm_gpr_t js, asm_label_t slow, uint32_t inobj_limit) {
   masm_t *m = &cg->masm;
   const int32_t total = (int32_t)(offsetof(ant_t, obj_arena) + offsetof(ant_fixed_arena_t, live_count));
-  const int32_t arena = wide ? (int32_t)offsetof(ant_t, obj_wide_arena) : (int32_t)offsetof(ant_t, obj_arena);
+  bool wide = inobj_limit > ANT_INOBJ_BASE_SLOTS;
+  const int32_t arena = !wide ? (int32_t)offsetof(ant_t, obj_arena)
+    : inobj_limit <= ANT_INOBJ_WIDE_SLOTS ? (int32_t)offsetof(ant_t, obj_wide_arena) : (int32_t)offsetof(ant_t, obj_large_arena);
   asm_label_t bump = masm_new_label(m), taken = masm_new_label(m);
   masm_load64(m, count, asm_addr(js, total));
   masm_load64(m, temp, asm_addr(js, (int32_t)offsetof(ant_t, gc.alloc_limit)));
@@ -1893,7 +1903,7 @@ static void opt_cg_take_object(opt_cg_t *cg, asm_gpr_t out, asm_gpr_t count, asm
   masm_jump(m, taken);
   masm_bind(m, bump);
   masm_load64(m, out, asm_addr(js, arena + (int32_t)offsetof(ant_fixed_arena_t, cursor)));
-  masm_add64_imm(m, temp, out, (int64_t)(wide ? ANT_OBJECT_WIDE_SIZE : ANT_OBJECT_SIZE));
+  masm_add64_imm(m, temp, out, (int64_t)ant_object_cell_size(inobj_limit));
   masm_branch64_memory(m, ASM_COND_BELOW, asm_addr(js, arena + (int32_t)offsetof(ant_fixed_arena_t, end)), temp, slow);
   masm_store64(m, asm_addr(js, arena + (int32_t)offsetof(ant_fixed_arena_t, cursor)), temp);
   masm_bind(m, taken);
@@ -1922,11 +1932,11 @@ static void opt_cg_allocate_object(opt_cg_t *cg, ir_node_id_t node) {
 #endif
   masm_load64(m, js, asm_addr(cg->pinned.vm, (int32_t)offsetof(sv_vm_t, js)));
   ant_shape_t *shape = (ant_shape_t *)(uintptr_t)op->allocate_object.shape;
-  opt_cg_take_object(cg, out, count, temp, js, allocation.label, ant_shape_get_inobj_limit(shape) > ANT_INOBJ_BASE_SLOTS);
+  opt_cg_take_object(cg, out, count, temp, js, allocation.label, ant_shape_get_inobj_limit(shape));
 
   uint64_t proto;
   bool constant_proto = opt_cg_input_constant(cg, node, 0, &proto);
-  alignas(ant_object_t) unsigned char bytes[ANT_OBJECT_WIDE_SIZE] = {0};
+  alignas(ant_object_t) unsigned char bytes[ANT_OBJECT_LARGE_SIZE] = {0};
   ant_object_t *image = (ant_object_t *)bytes;
   image->shape = shape;
   image->proto = constant_proto ? proto : 0;
@@ -1937,10 +1947,10 @@ static void opt_cg_allocate_object(opt_cg_t *cg, ir_node_id_t node) {
   image->prop_count = op->allocate_object.property_count;
   image->type_tag = kTypeObject;
   image->flags.raw = ANT_OBJECT_FLAG_EXTENSIBLE;
-  uint64_t words[ANT_OBJECT_WIDE_SIZE / 8];
+  uint64_t words[ANT_OBJECT_LARGE_SIZE / 8];
   uint32_t word_count = (uint32_t)(ant_object_cell_size(image->inobj_limit) / 8);
   memcpy(words, bytes, sizeof words);
-  bool stored[ANT_OBJECT_WIDE_SIZE / 8] = {0};
+  bool stored[ANT_OBJECT_LARGE_SIZE / 8] = {0};
   stored[offsetof(ant_object_t, next) / 8] = true;
   stored[offsetof(ant_object_t, shape) / 8] = true;
   masm_move_imm64(m, temp, (uint64_t)(uintptr_t)shape);
@@ -2490,7 +2500,7 @@ static void opt_cg_allocate_array(opt_cg_t *cg, ir_node_id_t node) {
   masm_branch64(m, ASM_COND_NOT_EQUAL, temp, data, allocation.label);
   masm_load64(m, data, asm_addr(js, head));
   masm_branch64_imm(m, ASM_COND_EQUAL, data, 0, allocation.label);
-  opt_cg_take_object(cg, out, count, temp, js, allocation.label, false);
+  opt_cg_take_object(cg, out, count, temp, js, allocation.label, ANT_INOBJ_BASE_SLOTS);
   masm_load64(m, temp, asm_addr(data, 0));
   masm_store64(m, asm_addr(js, head), temp);
   masm_add32_to_memory_imm(m, asm_addr(js, (int32_t)(offsetof(ant_t, array_storage.count) + sizeof(uint32_t) * (size_t)cls)), -1);

@@ -71,6 +71,7 @@ void url_sync_usp(ant_t *js, ant_value_t url_obj, const char *query);
 
 bool ada_set_hash_bool(ada_url url, const char *value, size_t len);
 bool ada_set_search_bool(ada_url url, const char *value, size_t len);
+bool url_can_parse_n(const char *url_str, size_t url_len, const char *base_str, size_t base_len);
 
 int parse_url_to_state_n(
   const char *url_str,

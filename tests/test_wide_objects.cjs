@@ -29,6 +29,17 @@ function child() {
   for (let i = 0; i < N; i++) lens += new Point3(i % 7, 1, 2).len();
   out.push('class ' + lens);
 
+  function Twelve(a) {
+    this.protocol = a; this.slashes = null; this.auth = null; this.host = a + 1; this.port = null; this.hostname = null;
+    this.hash = null; this.search = a + 2; this.query = null; this.pathname = null; this.path = a + 3; this.href = 'h' + a;
+  }
+  let twelves = 0;
+  for (let i = 0; i < N; i++) { const t = new Twelve(i); twelves += t.protocol + t.host + t.search + t.path + t.href.length; }
+  const tw = new Twelve(1);
+  tw.extra1 = 1; tw.extra2 = 2; tw.extra3 = 3; tw.extra4 = 4; tw.extra5 = 5;
+  delete tw.auth;
+  out.push('twelve ' + twelves + ' ' + Object.keys(tw).join(',') + ' ' + JSON.stringify(Object.assign({}, tw)).length);
+
   function Pair(a, b) { this.a = a; this.b = b; }
   let pairs = 0;
   for (let i = 0; i < N; i++) pairs += new Pair(i, 1).b;

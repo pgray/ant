@@ -1875,6 +1875,7 @@ static void opt_store_named(opt_builder_t *b, ir_node_id_t object, ir_node_id_t 
 
 static opt_flow_t opt_build_generic(opt_builder_t *b);
 static opt_flow_t opt_build_access_call(opt_builder_t *b, bool slow_path);
+static opt_flow_t opt_build_access_call_with(opt_builder_t *b, bool slow_path, uintptr_t forced);
 static opt_flow_t opt_build_out_of_line(opt_builder_t *b);
 static opt_flow_t opt_build_probed_field(opt_builder_t *b, sv_func_t *func, uint16_t ic_index, sv_op_t opcode);
 static ir_node_id_t opt_probe_field(opt_builder_t *b, sv_func_t *func, uint16_t ic_index, ir_node_id_t object, ir_node_id_t address, ir_block_id_t *slow, uint32_t *slow_count);
@@ -2853,6 +2854,8 @@ static opt_flow_t opt_build_element(opt_builder_t *b, sv_op_t op) {
   uint8_t *feedback = sv_func_type_feedback(b->func);
   if (op != OP_GET_LENGTH && (!feedback || !feedback[b->pc])) return opt_end_with_exit(b, OPT_EXIT_NO_FEEDBACK);
   uint32_t operands = op == OP_PUT_ELEM ? 3 : op == OP_GET_ELEM ? 2 : 1;
+  if (op != OP_GET_LENGTH && (feedback[b->pc] & SV_TFB_STR) && !(feedback[b->pc] & (SV_TFB_ELEMENT_DENSE | SV_TFB_ELEM_TYPED_ARRAY)))
+    return opt_build_access_call_with(b, false, op == OP_GET_ELEM ? (uintptr_t)opt_rt_get_elem_string : 0);
   ir_node_id_t array = opt_tagged(b, opt_peek(b, operands - 1)), index = IR_NONE;
   if (op != OP_GET_LENGTH && (feedback[b->pc] & SV_TFB_SPEC_MISMATCH) && opt_element_key_exited(b)) return opt_build_access_call(b, false);
   if (op != OP_GET_LENGTH && (index = opt_element_index(b, opt_peek(b, operands - 2))) == IR_NONE) return opt_build_access_call(b, false);
@@ -3541,14 +3544,27 @@ static bool opt_is_char_code_at_builtin(ant_value_t value) {
   return vtype(value) == kTypeBuiltin && js_as_cfunc(value) == builtin_string_charCodeAt;
 }
 
+static ant_value_t opt_uncurried_builtin(ant_value_t value) {
+  if (vtype(value) != kTypeFunction) return 0;
+  sv_closure_t *closure = js_func_closure(value);
+  if (!closure || closure->func || (closure->call_flags & (SV_CALL_IS_UNCURRY | SV_CALL_HAS_BOUND_ARGS)) != SV_CALL_IS_UNCURRY) return 0;
+  return vtype(closure->bound_this) == kTypeBuiltin ? closure->bound_this : 0;
+}
+
 static opt_flow_t opt_build_char_code_at(opt_builder_t *b, const uint8_t *ip) {
   ant_t *js = b->js;
   ant_value_t builtin;
-  if (sv_get_u16(ip + 1) != 1 || b->frame.sp < 3 || !js_try_get_own_data_prop(js, js->sym.string_proto, "charCodeAt", 10, &builtin)
+  uint32_t argc = sv_get_u16(ip + 1);
+  if ((argc != 1 && argc != 2) || b->frame.sp < argc + 2 || !js_try_get_own_data_prop(js, js->sym.string_proto, "charCodeAt", 10, &builtin)
     || !opt_is_char_code_at_builtin(builtin) || !opt_retain(b, builtin)) return opt_build_call_helper(b, ip, OP_CALL_CHAR_CODE_AT);
   ir_node_id_t key = opt_peek(b, 0);
   if (!opt_may_be_int32(b, key) || !opt_may_speculate(b, OPT_EXIT_NOT_INT32)) return opt_build_call_helper(b, ip, OP_CALL_CHAR_CODE_AT);
-  ir_node_id_t callee = opt_tagged(b, opt_peek(b, 1)), receiver = opt_tagged(b, opt_peek(b, 2));
+  ir_node_id_t callee = opt_tagged(b, opt_peek(b, argc)), receiver = opt_tagged(b, opt_peek(b, argc == 2 ? 1 : 2));
+  if (argc == 2) {
+    ant_value_t bound = opt_likely_value(b, callee);
+    if (opt_uncurried_builtin(bound) != builtin || !opt_retain(b, bound)) return opt_build_call_helper(b, ip, OP_CALL_CHAR_CODE_AT);
+    builtin = bound;
+  }
   ir_node_id_t index = opt_int32(b, key);
   opt_frame_t before = opt_frame_clone(b, &b->frame);
   ir_block_id_t slow[4];
@@ -3572,7 +3588,7 @@ static opt_flow_t opt_build_char_code_at(opt_builder_t *b, const uint8_t *ip) {
   opt_branch_off(b, ir_cond(IR_COND_INDEX_IN_BOUNDS), (ir_node_id_t[]){index, length}, 2, false, &slow[count++]);
   ir_node_id_t checked = opt_refine(b, ir_cond(IR_COND_INDEX_IN_BOUNDS), (ir_node_id_t[]){index, length}, 2);
   ir_node_id_t unit = opt_emit(b, ir_op(IR_OP_LOAD_STRING_CODE_UNIT), (ir_node_id_t[]){address, checked}, 2, OPT_REPR_INT32);
-  opt_drop(b, 3);
+  opt_drop(b, argc + 2);
   opt_push(b, unit);
   ir_block_id_t fast_end = b->block;
   opt_frame_t fast = b->frame;
@@ -3975,6 +3991,25 @@ static bool opt_try_builtin_call(opt_builder_t *b, ir_node_id_t *inputs, uint32_
   return true;
 }
 
+static bool opt_uncurry_call(opt_builder_t *b, ir_node_id_t *inputs, uint32_t *argc) {
+  ant_value_t bound = opt_likely_value(b, inputs[0]);
+  ant_value_t builtin = opt_uncurried_builtin(bound);
+  if (!builtin || !opt_retain(b, bound) || !opt_retain(b, builtin)) return false;
+  uint64_t bits;
+  if (!ir_constant_value(b->graph, inputs[0], &bits)) {
+    if (!opt_may_speculate(b, OPT_EXIT_BAD_CALL_TARGET)) return false;
+    ir_op_t check = ir_op(IR_OP_CHECK_VALUE);
+    check.check_value.expected = bound;
+    check.check_value.kind = OPT_EXIT_BAD_CALL_TARGET;
+    opt_emit_checked(b, check, &inputs[0], 1, OPT_REPR_NONE);
+  }
+  inputs[0] = opt_constant(b, builtin);
+  inputs[1] = *argc ? inputs[2] : opt_constant(b, IR_VALUE_UNDEFINED);
+  if (*argc) (*argc)--;
+  for (uint32_t i = 0; i < *argc; i++) inputs[2 + i] = inputs[3 + i];
+  return true;
+}
+
 static opt_flow_t opt_build_call(opt_builder_t *b, const uint8_t *ip, sv_op_t op) {
   bool construct = op == OP_NEW, tail = op == OP_TAIL_CALL || op == OP_TAIL_CALL_METHOD;
   bool method = op == OP_CALL_METHOD || op == OP_TAIL_CALL_METHOD;
@@ -4008,6 +4043,10 @@ static opt_flow_t opt_build_call(opt_builder_t *b, const uint8_t *ip, sv_op_t op
     inputs[1] = second;
     for (uint32_t i = 0; i < argc; i++) inputs[2 + i] = call->args[i];
     target = opt_known_target(b, callee);
+  } else if (!construct && !method && opt_uncurry_call(b, inputs, &argc)) {
+    callee = inputs[0];
+    second = inputs[1];
+    target = NULL;
   } else if (method && opt_expect_builtin(b, callee, js_is_function_call_builtin)) {
     callee = second;
     second = argc ? inputs[2] : opt_constant(b, IR_VALUE_UNDEFINED);
@@ -4053,7 +4092,7 @@ static ir_node_id_t opt_runtime_call(opt_builder_t *b, uintptr_t helper, uintptr
   return result;
 }
 
-static opt_flow_t opt_build_access_call(opt_builder_t *b, bool slow_path) {
+static opt_flow_t opt_build_access_call_with(opt_builder_t *b, bool slow_path, uintptr_t forced) {
   sv_op_t op = opt_op_at(b, b->pc);
   uint32_t operands, popped;
   switch (op) {
@@ -4065,7 +4104,7 @@ static opt_flow_t opt_build_access_call(opt_builder_t *b, bool slow_path) {
     case OP_GET_LENGTH: operands = popped = 1; break;
     default: return OPT_FLOW_GENERIC;
   }
-  uintptr_t helper = op == OP_PUT_ELEM && !slow_path ? (uintptr_t)opt_rt_put_elem_plain : opt_tier_access_helper(op, b->slow_adds != NULL);
+  uintptr_t helper = forced ? forced : op == OP_PUT_ELEM && !slow_path ? (uintptr_t)opt_rt_put_elem_plain : opt_tier_access_helper(op, b->slow_adds != NULL);
   opt_rt_site_t *site = code_arena_bump(b->js, sizeof *site);
   if (!site) return OPT_FLOW_GENERIC;
   *site = (opt_rt_site_t){.func = b->func, .bc_off = b->pc};
@@ -4079,6 +4118,10 @@ static opt_flow_t opt_build_access_call(opt_builder_t *b, bool slow_path) {
   if (op != OP_PUT_FIELD && op != OP_PUT_ELEM) opt_push(b, result);
   opt_forget_memory(b);
   return OPT_FLOW_CONTINUE;
+}
+
+static opt_flow_t opt_build_access_call(opt_builder_t *b, bool slow_path) {
+  return opt_build_access_call_with(b, slow_path, 0);
 }
 
 static opt_flow_t opt_build_object(opt_builder_t *b) {

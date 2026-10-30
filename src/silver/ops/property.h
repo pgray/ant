@@ -409,10 +409,10 @@ static inline bool sv_gf_mega_find(
   return sv_gf_read_slot(source, e->index, key, out, getter_out);
 }
 
-static __attribute__((noinline)) void sv_gf_mega_store(
-  ant_t *js, ant_object_t *receiver, const char *key, ant_object_t *holder, uint32_t index, bool accessor
+static __attribute__((noinline)) void sv_gf_mega_store_in(
+  ant_t *js, sv_gf_mega_cache_t *cache, ant_object_t *receiver, 
+  const char *key, ant_object_t *holder, uint32_t index, bool accessor
 ) {
-  sv_gf_mega_cache_t *cache = sv_gf_mega_ensure(js);
   if (!cache || !receiver->shape) return;
   
   sv_get_field_ic_kind_t kind = sv_gf_kind_for(receiver, holder, accessor);
@@ -438,6 +438,13 @@ static __attribute__((noinline)) void sv_gf_mega_store(
     .holder = holder, .index = index, .proto_id = proto_id,
     .epoch = js->ic.epoch, .kind = kind,
   };
+}
+
+static inline void sv_gf_mega_store(
+  ant_t *js, ant_object_t *receiver, const char *key, 
+  ant_object_t *holder, uint32_t index, bool accessor
+) {
+  sv_gf_mega_store_in(js, sv_gf_mega_ensure(js), receiver, key, holder, index, accessor);
 }
 
 static constexpr uint32_t SV_GF_POLY_MEGA_KEPT = 2 * SV_GF_POLY_WAYS;
@@ -1377,11 +1384,15 @@ static inline void sv_ic_set_add_transition(
 }
 
 static inline uintptr_t sv_add_proto_key(ant_t *js, const ant_object_t *receiver) {
+  if (vtype(receiver->proto) == kTypeNull) return (uintptr_t)receiver->proto;
   if (!is_object_type(receiver->proto)) return 0;
+  
   ant_object_t *proto = js_obj_ptr(js_as_obj(receiver->proto));
   if (!proto) return 0;
+  
   if (proto->flags.generation == 1) return (uintptr_t)receiver->proto;
   uint32_t id = sv_ic_object_identity(js, proto);
+  
   return id ? (uintptr_t)id << 1 | 1u : 0;
 }
 
@@ -1772,6 +1783,66 @@ static inline ant_value_t sv_op_get_elem2(
   return js_mkundef();
 }
 
+static inline bool sv_get_elem_string(ant_t *js, ant_value_t obj, ant_value_t key, ant_value_t *out) {
+  if (vtype(key) != kTypeString || vtype(obj) != kTypeObject || str_is_heap_rope(key) || str_is_heap_builder(key)) return false;
+  ant_object_t *ptr = js_obj_ptr(obj);
+  
+  if (!ptr || !ptr->shape || ptr->flags.is_exotic || ptr->exotic_ops || ptr->type_tag != kTypeObject) return false;
+  ant_offset_t len = 0;
+  const char *bytes = (const char *)(uintptr_t)vstr(js, key, &len);
+  
+  if (len == 0 || (bytes[0] >= '0' && bytes[0] <= '9') || bytes[0] == '-') return false;
+  const char *interned = intern_find_flat(js, bytes, (size_t)len);
+  
+  if (!interned) {
+    if (!sv_chain_is_plain(ptr)) return false;
+    *out = js_mkundef();
+    return true;
+  }
+  
+  sv_gf_mega_cache_t *cache = sv_gf_mega_keyed_ensure(js);
+  if (!cache) return false;
+  int kind = -1;
+  
+  const sv_gf_mega_entry_t *e = sv_gf_mega_lookup(js, cache, ptr, interned, &kind);
+  if (e) {
+    if (kind == SV_GF_IC_MISSING) {
+      *out = js_mkundef();
+      return true;
+    }
+    return sv_gf_read_slot(sv_gf_kind_is_own((sv_get_field_ic_kind_t)kind) ? ptr : e->holder, e->index, interned, out, NULL);
+  }
+  
+  sv_probe_hit_t probe;
+  unsigned flags = sv_field_can_cache_absence(interned) ? SV_PROBE_CACHE_MISS : 0;
+  
+  if (!sv_ic_probe_get_chain(obj, interned, flags, &probe) || probe.accessor) return false;
+  sv_gf_mega_store_in(js, cache, ptr, interned, probe.holder, probe.index, false);
+  *out = probe.value;
+  
+  return true;
+}
+
+static inline bool sv_put_elem_string(ant_t *js, ant_value_t obj, ant_value_t key, ant_value_t val, ant_value_t *out) {
+  if (vtype(key) != kTypeString || vtype(obj) != kTypeObject || str_is_heap_rope(key) || str_is_heap_builder(key)) return false;
+  ant_object_t *ptr = js_obj_ptr(obj);
+  
+  if (!ptr || !ptr->shape || ptr->flags.is_exotic || ptr->exotic_ops || ptr->native_tag) return false;
+  ant_offset_t len = 0;
+  
+  const char *bytes = (const char *)(uintptr_t)vstr(js, key, &len);
+  if (len == 0 || (bytes[0] >= '0' && bytes[0] <= '9') || bytes[0] == '-') return false;
+  
+  const char *interned = intern_string(js, bytes, (size_t)len);
+  if (!interned) return false;
+  
+  sv_ic_entry_t *ic = sv_keyed_put_entry(js, ptr->shape, interned);
+  sv_atom_t atom = {.str = interned, .len = (uint32_t)len};
+  *out = ic ? sv_put_field_cached(js, obj, val, &atom, ic) : sv_put_field_miss(js, obj, val, &atom, NULL);
+  
+  return true;
+}
+
 static inline ant_value_t sv_op_put_elem(sv_vm_t *vm, ant_t *js) {
   ant_value_t val = vm->stack[vm->sp - 1];
   ant_value_t key = vm->stack[vm->sp - 2];
@@ -1782,6 +1853,12 @@ static inline ant_value_t sv_op_put_elem(sv_vm_t *vm, ant_t *js) {
     ant_value_t res = js_setprop_index(js, obj, index, val);
     vm->sp -= 3;
     return res;
+  }
+  
+  ant_value_t fast;
+  if (sv_put_elem_string(js, obj, key, val, &fast)) {
+    vm->sp -= 3;
+    return fast;
   }
   
   ant_value_t prop_key = sv_key_to_property_key(js, key);

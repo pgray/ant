@@ -495,12 +495,12 @@ ant_object_t *obj_alloc(ant_t *js, uint8_t type_tag, uint8_t inobj_limit) {
 
 ant_object_t *obj_alloc_shaped(ant_t *js, uint8_t type_tag, ant_shape_t *shape) {
   gc_alloc_check(js);
-  uint8_t inobj_limit = ant_shape_get_inobj_limit(shape);
-  bool wide = inobj_limit > ANT_INOBJ_BASE_SLOTS;
-  ant_object_t *obj = ant_object_cell_alloc(js, wide);
   
-  if (!obj && gc_reclaim_arena(js, wide ? &js->obj_wide_arena : &js->obj_arena)) 
-    obj = ant_object_cell_alloc(js, wide);
+  uint8_t inobj_limit = ant_shape_get_inobj_limit(shape);
+  ant_object_t *obj = ant_object_cell_alloc(js, inobj_limit);
+  
+  if (!obj && gc_reclaim_arena(js, ant_object_arena_for(js, inobj_limit))) 
+    obj = ant_object_cell_alloc(js, inobj_limit);
   
   if (!obj) {
     ant_shape_release(shape);
@@ -524,11 +524,14 @@ ant_object_t *obj_alloc_shaped(ant_t *js, uint8_t type_tag, ant_shape_t *shape) 
   obj->overflow_cap = 0;
   obj->prop_count = 0;
   
+  static_assert(ANT_INOBJ_BASE_SLOTS == 4, "obj_alloc_shaped unrolls the base slots");
   const ant_value_t undef = js_mkundef();
+  
   obj->inobj[0] = undef;
   obj->inobj[1] = undef;
   obj->inobj[2] = undef;
   obj->inobj[3] = undef;
+  
   for (uint32_t i = ANT_INOBJ_BASE_SLOTS; i < obj->inobj_limit; i++)
     obj->inobj[i] = undef;
   
@@ -3529,7 +3532,7 @@ ant_value_t js_mkobj_from_template(ant_t *js, ant_value_t template) {
     memcpy(overflow, source->overflow_prop, overflow_bytes);
   }
   
-  ant_object_t *target = ant_object_cell_alloc(js, ant_object_is_wide(source));
+  ant_object_t *target = ant_object_cell_alloc(js, source->inobj_limit);
   if (!target) { free(overflow); return js_mkerr(js, "oom"); }
   if (overflow_bytes) gc_note_overflow_alloc(js, overflow_bytes);
   
@@ -11979,6 +11982,31 @@ static bool copy_adopt_shape(ant_t *js, ant_value_t dst, ant_object_t *src, bool
   return true;
 }
 
+static bool copy_same_shape(ant_t *js, ant_value_t dst, ant_object_t *src) {
+  ant_object_t *dst_ptr = vtype(dst) == kTypeObject ? js_obj_ptr(dst) : NULL;
+  ant_shape_t *shape = src->shape;
+  uint32_t count = ant_shape_count(shape);
+  
+  if (
+    !dst_ptr || dst_ptr->shape != shape || count == 0 || count > src->prop_count || count > dst_ptr->prop_count ||
+    ant_shape_may_have_index_keys(shape) || dst_ptr->flags.is_exotic || dst_ptr->type_tag != kTypeObject
+  ) return false;
+  
+  for (uint32_t i = 0; i < count; i++) {
+    const ant_shape_prop_t *prop = ant_shape_prop_at(shape, i);
+    if (!prop || prop->type != ANT_SHAPE_KEY_STRING || prop->has_getter || prop->has_setter) return false;
+    if (ant_shape_get_attrs(shape, i) != ANT_PROP_ATTR_DEFAULT || ant_property_key_is_watched(js, prop->key.interned)) return false;
+  }
+  
+  for (uint32_t i = 0; i < count; i++) {
+    ant_value_t val = ant_object_prop_get_unchecked(src, i);
+    ant_object_prop_set_unchecked(dst_ptr, i, val);
+    gc_write_barrier(js, dst_ptr, val);
+  }
+  
+  return true;
+}
+
 static bool copy_ordinary_data_props(
   ant_t *js, ant_value_t dst, ant_value_t src, const copy_ctx_t *cx, ant_value_t *result
 ) {
@@ -12010,8 +12038,8 @@ static bool copy_ordinary_data_props(
   
   bool indexed = is_arr || vtype(wrapped) == kTypeString;
   if (
-    !has_accessor && !indexed && !cx->count && !index_keys && 
-    copy_adopt_shape(js, dst, ptr, cx->assign)
+    !has_accessor && !indexed && !cx->count && !cx->collect && !index_keys && 
+    (copy_adopt_shape(js, dst, ptr, cx->assign) || copy_same_shape(js, dst, ptr))
   ) {
     *result = js_mkundef();
     return true;
@@ -17173,20 +17201,56 @@ static ant_value_t string_split_code_units(ant_t *js, ant_value_t str, ant_value
   return result;
 }
 
+static ant_value_t string_split_ascii_byte(ant_t *js, const char *str_ptr, size_t str_len, char sep) {
+  uint32_t count = 1;
+  for (const char *at = str_ptr, *end = str_ptr + str_len; (at = memchr(at, sep, (size_t)(end - at))); at++) count++;
+  
+  ant_value_t arr = alloc_array_with_proto_capacity(js, js->sym.array_proto, count, 0, true);
+  if (is_err(arr)) return arr;
+  
+  ant_object_t *obj = array_obj_ptr(arr);
+  if (!obj || !obj->u.array.data || obj->u.array.cap < count) return js_mkerr(js, "oom");
+  obj->flags.may_have_dense_elements = 1;
+  
+  size_t start = 0;
+  for (uint32_t i = 0; i < count; i++) {
+    const char *found = i + 1 < count ? memchr(str_ptr + start, sep, str_len - start) : NULL;
+    size_t end = found ? (size_t)(found - str_ptr) : str_len;
+    size_t len = end - start;
+    
+    ant_value_t part = len == 0 ? js_empty_string(js)
+      : len == 1 && (unsigned char)str_ptr[start] < 0x80 ? js_mk_ascii_char_cached(js, (unsigned char)str_ptr[start])
+      : js_mkstr_byte_range(js, str_ptr, start, len);
+    if (is_err(part)) return part;
+    
+    obj->u.array.data[i] = part;
+    obj->u.array.len = i + 1;
+    gc_write_barrier_elem(js, obj, i, part);
+    start = end + 1;
+  }
+  
+  return arr;
+}
+
 static ant_value_t string_split_impl(ant_t *js, ant_value_t str, ant_args_t) {
   if (vtype(str) != kTypeString) return js_mkerr(js, "split called on non-string");
   ant_offset_t str_len, str_off = vstr(js, str, &str_len);
   const char *str_ptr = (char *)(uintptr_t)(str_off);
+  
+  if (nargs >= 1 && vtype(args[0]) == kTypeString && (nargs < 2 || vtype(args[1]) == kTypeUndefined)) {
+    ant_offset_t sep_len, sep_off = vstr(js, args[0], &sep_len);
+    char sep = sep_len == 1 ? *(const char *)(uintptr_t)sep_off : 0;
+    if (sep_len == 1 && (unsigned char)sep < 0x80) return string_split_ascii_byte(js, str_ptr, (size_t)str_len, sep);
+  }
+  
   ant_value_t arr = mkarr(js);
-
   if (is_err(arr)) return arr;
 
   uint32_t limit;
   ant_value_t limit_status = regexp_split_limit(js, nargs >= 2 ? args[1] : js_mkundef(), &limit);
   if (is_err(limit_status)) return limit_status;
-  if (limit == 0) {
-    return mkval(kTypeArray, vdata(arr));
-  }
+  
+  if (limit == 0) return mkval(kTypeArray, vdata(arr));
   if (nargs == 0) goto return_whole;
 
   ant_value_t sep_arg = args[0];
@@ -17195,11 +17259,14 @@ static ant_value_t string_split_impl(ant_t *js, ant_value_t str, ant_args_t) {
     if (!source_off.obj) {
       sep_arg = js_to_primitive(js, sep_arg, 1);
       if (is_err(sep_arg)) return sep_arg;
+      
       sep_arg = js_tostring_val(js, sep_arg);
       if (is_err(sep_arg)) return sep_arg;
+      
       args[0] = sep_arg;
       goto split_string_separator;
     }
+    
     ant_value_t source_val = js_prop_load(source_off);
     if (vtype(source_val) != kTypeString) goto return_whole;
 
@@ -17430,6 +17497,8 @@ static ant_value_t builtin_string_slice(ant_params_t) {
     
     if (start == 0 && end == len) return receiver;
     size_t result_len = end > start ? end - start : 0;
+
+    if (result_len == 1) return js_mk_ascii_char_cached(js, (unsigned char)flat->bytes[start]);
     GC_ROOT_SAVE(mark, js);
     GC_ROOT_PIN(js, receiver);
     
@@ -21169,6 +21238,7 @@ static inline void isolate_arenas_destroy(ant_t *js) {
   fixed_arena_destroy(&js->promise_arena);
   fixed_arena_destroy(&js->upvalue_arena);
   fixed_arena_destroy(&js->closure_arena);
+  fixed_arena_destroy(&js->obj_large_arena);
   fixed_arena_destroy(&js->obj_wide_arena);
   fixed_arena_destroy(&js->obj_arena);
 }
@@ -21185,6 +21255,7 @@ static inline bool isolate_arenas_init(ant_t *js, const ant_isolate_options_t *o
   if (
     !fixed_arena_init(&js->obj_arena, ANT_OBJECT_SIZE, offsetof(ant_object_t, mark_epoch), objects)                                             ||
     !fixed_arena_init(&js->obj_wide_arena, ANT_OBJECT_WIDE_SIZE, offsetof(ant_object_t, mark_epoch), objects / 4)                                 ||
+    !fixed_arena_init(&js->obj_large_arena, ANT_OBJECT_LARGE_SIZE, offsetof(ant_object_t, mark_epoch), objects / 8)                               ||
     !fixed_arena_init(&js->closure_arena, sizeof(sv_closure_t), offsetof(sv_closure_t, gc_epoch), objects / (ANT_ARENA_MAX / ANT_CLOSURE_ARENA_MAX)) ||
     !fixed_arena_init(&js->upvalue_arena, sizeof(sv_upvalue_t), offsetof(sv_upvalue_t, gc_epoch), objects / (ANT_ARENA_MAX / ANT_UPVALUE_ARENA_MAX)) ||
     !fixed_arena_init(&js->promise_arena, sizeof(ant_promise_state_t), 0, objects / (ANT_ARENA_MAX / ANT_PROMISE_ARENA_MAX))
@@ -21885,14 +21956,18 @@ void js_destroy(ant_t *js) {
   sv_jit_destroy(js);
   
   sv_ic_shape_refs_cleanup(js);
+  sv_keyed_put_destroy(js);
   sv_code_units_destroy(js);
   sv_ic_polys_cleanup(js);
   
   free(js->ic.gf_mega);
+  free(js->ic.gf_mega_keyed);
   free(js->gc.mark_stack);
   free(js->gc.func_stack);
   free(js->gc.fb_funcs);
+  
   js->ic.gf_mega = NULL;
+  js->ic.gf_mega_keyed = NULL;
   
   code_arenas_destroy(js);
   cleanup_rpc_module(js);

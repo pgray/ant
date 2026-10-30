@@ -291,6 +291,7 @@ ant_value_t opt_rt_put_field(sv_vm_t *vm, ant_value_t object, ant_value_t value,
 ant_value_t opt_rt_get_elem(sv_vm_t *vm, ant_value_t object, ant_value_t key, ant_value_t *args, int64_t argc, const opt_rt_site_t *site);
 ant_value_t opt_rt_put_elem(sv_vm_t *vm, ant_value_t object, ant_value_t key, ant_value_t *args, int64_t argc, const opt_rt_site_t *site);
 ant_value_t opt_rt_put_elem_plain(sv_vm_t *vm, ant_value_t object, ant_value_t key, ant_value_t *args, int64_t argc, const opt_rt_site_t *site);
+ant_value_t opt_rt_get_elem_string(sv_vm_t *vm, ant_value_t object, ant_value_t key, ant_value_t *args, int64_t argc, const opt_rt_site_t *site);
 ant_value_t opt_rt_get_length(sv_vm_t *vm, ant_value_t object, ant_value_t unused, ant_value_t *args, int64_t argc, const opt_rt_site_t *site);
 
 typedef struct {

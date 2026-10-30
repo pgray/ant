@@ -190,6 +190,7 @@ struct ant_isolate_t {
 
   ant_fixed_arena_t obj_arena;
   ant_fixed_arena_t obj_wide_arena;
+  ant_fixed_arena_t obj_large_arena;
   ant_fixed_arena_t closure_arena;
   ant_fixed_arena_t upvalue_arena;
   ant_fixed_arena_t promise_arena;
@@ -203,10 +204,15 @@ struct ant_isolate_t {
     uint32_t epoch;
     uint32_t obj_epoch;
     uint32_t next_object_identity;
+    
     ant_shape_t ***shape_ref_slots;
     size_t shape_ref_len;
     size_t shape_ref_cap;
+    
     sv_gf_mega_cache_t *gf_mega;
+    sv_gf_mega_cache_t *gf_mega_keyed;
+    struct sv_keyed_put_cache *keyed_put;
+    
     sv_gf_poly_t *gf_polys;
     sv_pf_poly_t *pf_polys;
   } ic;

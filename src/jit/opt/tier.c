@@ -1133,6 +1133,12 @@ ant_value_t opt_rt_put_elem(sv_vm_t *vm, ant_value_t object, ant_value_t key, an
   return jit_helper_slow_put_elem(vm->js, object, key, args[0], site->func, site->func->code + site->bc_off);
 }
 
+ant_value_t opt_rt_get_elem_string(sv_vm_t *vm, ant_value_t object, ant_value_t key, ant_value_t *args, int64_t argc, const opt_rt_site_t *site) {
+  ant_value_t out;
+  if (jit_helper_get_elem_string(vm->js, object, key, &out)) return out;
+  return opt_rt_get_elem(vm, object, key, args, argc, site);
+}
+
 ant_value_t opt_rt_put_elem_plain(sv_vm_t *vm, ant_value_t object, ant_value_t key, ant_value_t *args, int64_t argc, const opt_rt_site_t *site) {
   if (site->func->is_strict) return jit_helper_put_elem_strict(vm, vm->js, object, key, args[0]);
   return jit_helper_put_elem(vm, vm->js, object, key, args[0]);

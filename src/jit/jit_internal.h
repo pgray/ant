@@ -13,6 +13,8 @@
 #include <mir.h>
 #include <mir-gen.h>
 #pragma GCC diagnostic pop
+#define MIR_new_func_reg(ctx, func, type, name) MIR_new_func_reg_unique(ctx, func, type, name)
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

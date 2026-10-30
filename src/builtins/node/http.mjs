@@ -256,8 +256,26 @@ function buildRequestOptions(input, options) {
   return requestOptions;
 }
 
+const SIMPLE_HOSTNAME = /^[A-Za-z0-9.-]+$/;
+const SIMPLE_PORT = /^[0-9]{1,5}$/;
+
 function buildRequestUrl(options) {
   const protocol = options.protocol || 'http:';
+  const host = options.hostname ?? options.host;
+  
+  const port = options.port;
+  const path = options.path === undefined || options.path === null ? '/' : String(options.path);
+  
+  if (
+    !options.auth && host !== undefined && host !== null && SIMPLE_HOSTNAME.test(String(host)) &&
+    (port === undefined || port === null || port === '' || (SIMPLE_PORT.test(String(port)) && Number(port) <= 65535)) &&
+    path.charCodeAt(0) === 47 && path.charCodeAt(1) !== 47 && path.charCodeAt(1) !== 92 &&
+    (protocol === 'http:' || protocol === 'https:')
+  ) {
+    const authority = port === undefined || port === null || port === '' ? String(host) : `${host}:${port}`;
+    return new URL(`${protocol}//${authority}${path}`).toString();
+  }
+
   const base = new URL(`${protocol}//localhost/`);
 
   if (options.hostname !== undefined && options.hostname !== null) base.hostname = String(options.hostname);

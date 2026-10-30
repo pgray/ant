@@ -6,7 +6,6 @@
 #include "interrupt.h"
 #include "jit_internal.h"
 #include "modules/regex.h"
-
 #include "silver/call.h"
 #include "silver/glue.h"
 #include "silver/feedback.h"

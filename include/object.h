@@ -206,6 +206,7 @@ typedef struct ant_object {
 
 static constexpr size_t ANT_OBJECT_SIZE = sizeof(ant_object_t) + ANT_INOBJ_BASE_SLOTS * sizeof(ant_value_t);
 static constexpr size_t ANT_OBJECT_WIDE_SIZE = sizeof(ant_object_t) + ANT_INOBJ_WIDE_SLOTS * sizeof(ant_value_t);
+static constexpr size_t ANT_OBJECT_LARGE_SIZE = sizeof(ant_object_t) + ANT_INOBJ_LARGE_SLOTS * sizeof(ant_value_t);
 static constexpr size_t ANT_OBJECT_FLAGS_HIGH_BYTE = offsetof(ant_object_t, flags) + 1;
 
 static_assert(
@@ -386,7 +387,8 @@ static inline uint32_t ant_object_overflow_cap(const ant_object_t *obj) {
 }
 
 static inline size_t ant_object_cell_size(uint32_t inobj_limit) {
-  return inobj_limit > ANT_INOBJ_BASE_SLOTS ? ANT_OBJECT_WIDE_SIZE : ANT_OBJECT_SIZE;
+  if (inobj_limit <= ANT_INOBJ_BASE_SLOTS) return ANT_OBJECT_SIZE;
+  return inobj_limit <= ANT_INOBJ_WIDE_SLOTS ? ANT_OBJECT_WIDE_SIZE : ANT_OBJECT_LARGE_SIZE;
 }
 
 static inline uint32_t ant_object_inobj_limit(const ant_object_t *obj) {

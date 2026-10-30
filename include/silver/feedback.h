@@ -430,11 +430,23 @@ static inline __attribute__((noinline)) void sv_tfb_record_typed_array_put(
   sv_tfb_record_typed_array_access(func, site, old, access);
 }
 
+static inline bool sv_tfb_named_string_key(ant_value_t key) {
+  if (vtype(key) != kTypeString) return false;
+  ant_flat_string_t *flat = ant_str_flat_ptr(key);
+  return flat && flat->len > 0 && !(flat->bytes[0] >= '0' && flat->bytes[0] <= '9') && flat->bytes[0] != '-';
+}
+
+static inline uint8_t sv_tfb_note_string_key(sv_func_t *func, uint8_t *site, uint8_t old, ant_value_t key) {
+  if ((old & SV_TFB_STR) || !sv_tfb_named_string_key(key)) return old;
+  sv_tfb_site_update(func, site, old, (uint8_t)(old | SV_TFB_STR));
+  return *site;
+}
+
 static inline void sv_tfb_record_get_elem(sv_func_t *func, uint8_t *ip, ant_value_t object, ant_value_t key) {
   uint8_t *site = sv_tfb_site(func, ip);
   if (!site) return;
   
-  uint8_t old = *site;
+  uint8_t old = sv_tfb_note_string_key(func, site, *site, key);
   if (vtype(object) != kTypeArray) {
     if (!(old & SV_TFB_ELEMENT_OTHER) || sv_tfb_still_sampling(old))
       sv_tfb_record_typed_array_get(func, site, old, object, key);
@@ -487,6 +499,7 @@ static inline void sv_tfb_record_dense_numeric_put(
   uint8_t old;
   uint8_t *site = sv_tfb_specialization_site(func, ip, &old);
   if (!site) return;
+  old = sv_tfb_note_string_key(func, site, old, key);
   
   if (vtype(object) != kTypeArray) {
     sv_tfb_record_typed_array_put(func, site, old, object, key, value);

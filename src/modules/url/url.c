@@ -23,6 +23,7 @@ static inline ant_value_t url_illegal_invocation(ant_t *js) {
 static ant_value_t url_get_href(ant_params_t) {
   url_state_t *s = url_get_state(js->this_val);
   if (!s) return url_illegal_invocation(js);
+  if (s->href) return js_mkstr(js, s->href, strlen(s->href));
   
   char *href = build_href(s);
   if (!href) return js_mkstr(js, "", 0);
@@ -120,10 +121,19 @@ static ant_value_t url_get_origin(ant_params_t) {
 }
 
 static ant_value_t url_get_searchParams(ant_params_t) {
-  if (!url_get_state(js->this_val)) return url_illegal_invocation(js);
+  url_state_t *s = url_get_state(js->this_val);
+  if (!s) return url_illegal_invocation(js);
+  
   ant_value_t usp = js_get_slot(js->this_val, SLOT_ENTRIES);
   if (vtype(usp) == kTypeObject) return usp;
-  return js_mkundef();
+  
+  const char *query = (s->search && s->search[0] == '?') ? s->search + 1 : "";
+  usp = make_usp_for_url(js, js->this_val, query);
+  
+  if (is_err(usp)) return usp;
+  js_set_slot_wb(js, js->this_val, SLOT_ENTRIES, usp);
+  
+  return usp;
 }
 
 static ant_value_t url_set_href(ant_params_t) {
@@ -210,10 +220,14 @@ static ant_value_t url_set_hash(ant_params_t) {
 static ant_value_t url_toString(ant_params_t) {
   url_state_t *s = url_get_state(js->this_val);
   if (!s) return url_illegal_invocation(js);
+  if (s->href) return js_mkstr(js, s->href, strlen(s->href));
+  
   char *href = build_href(s);
   if (!href) return js_mkstr(js, "", 0);
+  
   ant_value_t ret = js_mkstr(js, href, strlen(href));
   free(href);
+  
   return ret;
 }
 
@@ -225,6 +239,7 @@ static ant_value_t js_URL(ant_params_t) {
 
   ant_value_t url_sv = url_string_value(js, args[0]);
   if (is_err(url_sv)) return url_sv;
+  
   size_t url_len = 0;
   const char *url_str = js_getstr(js, url_sv, &url_len);
 
@@ -248,13 +263,10 @@ static ant_value_t js_URL(ant_params_t) {
 
   ant_value_t obj = Ant_Object_CreateBare(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.url_proto, call_new_target);
+  
   js_set_proto_init(obj, is_object_type(proto) ? proto : js->builtins.url_proto);
   js_set_native(obj, s, URL_NATIVE_TAG);
   js_set_finalizer(obj, url_finalize);
-
-  const char *query = (s->search && s->search[0] == '?') ? s->search + 1 : "";
-  ant_value_t usp = make_usp_for_url(js, obj, query);
-  js_set_slot_wb(js, obj, SLOT_ENTRIES, usp);
 
   return obj;
 }
@@ -264,10 +276,6 @@ ant_value_t make_url_obj(ant_t *js, url_state_t *s) {
   js_set_proto_init(obj, js->builtins.url_proto);
   js_set_native(obj, s, URL_NATIVE_TAG);
   js_set_finalizer(obj, url_finalize);
-  
-  const char *query = (s->search && s->search[0] == '?') ? s->search + 1 : "";
-  ant_value_t usp = make_usp_for_url(js, obj, query);
-  js_set_slot_wb(js, obj, SLOT_ENTRIES, usp);
   
   return obj;
 }
@@ -292,11 +300,7 @@ static ant_value_t url_canParse(ant_params_t) {
     base_str = js_getstr(js, base_sv, &base_len);
   }
   
-  url_state_t s;
-  if (parse_url_to_state_n(url_str, url_len, base_str, base_len, &s) != 0) return js_false;
-  url_state_clear(&s);
-  
-  return js_true;
+  return js_bool(url_can_parse_n(url_str, url_len, base_str, base_len));
 }
 
 static ant_value_t url_parse(ant_params_t) {

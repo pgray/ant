@@ -26,6 +26,10 @@ struct headers_data {
   hdr_entry_t  *head;
   hdr_entry_t **tail;
   size_t count;
+  uint64_t version;
+  struct sorted_pair *sorted;
+  size_t sorted_count;
+  uint64_t sorted_version;
   bool inline_used;
   union {
     max_align_t align;
@@ -33,7 +37,7 @@ struct headers_data {
   } inline_entry;
 };
 
-typedef struct {
+typedef struct sorted_pair {
   char *name;
   char *value;
 } sorted_pair_t;
@@ -61,13 +65,27 @@ headers_data_t *headers_data_create(void) {
   return l;
 }
 
+static void free_sorted_view(sorted_pair_t *v, size_t n) {
+  if (!v) return;
+  
+  for (size_t i = 0; i < n; i++) { 
+    free(v[i].name);
+    free(v[i].value); 
+  }
+  
+  free(v);
+}
+
 void headers_data_destroy(headers_data_t *data) {
   if (!data) return;
+  free_sorted_view(data->sorted, data->sorted_count);
+  
   for (hdr_entry_t *e = data->head; e; ) {
     hdr_entry_t *n = e->next;
     if ((void *)e != (void *)data->inline_entry.bytes) free(e);
     e = n;
   }
+  
   free(data);
 }
 
@@ -233,10 +251,12 @@ static bool list_append_parts(
   e->name = e->storage;
   e->value = e->storage + name_len + 1;
   e->next = NULL;
+  
   for (size_t i = 0; i < name_len; i++) {
     unsigned char c = (unsigned char)name[i];
     e->name[i] = lowercase_name ? (char)ant_ascii_to_lower(c) : (char)c;
   }
+  
   e->name[name_len] = '\0';
   memcpy(e->value, value, value_len);
   e->value[value_len] = '\0';
@@ -244,6 +264,8 @@ static bool list_append_parts(
   *l->tail = e;
   l->tail  = &e->next;
   l->count++;
+  l->version++;
+  
   return true;
 }
 
@@ -272,6 +294,7 @@ headers_data_t *headers_data_copy(const headers_data_t *src) {
 }
 
 static void list_delete_name(hdr_list_t *l, const char *lower_name) {
+  l->version++;
   hdr_entry_t **pp = &l->head;
   l->tail = &l->head;
   while (*pp) {
@@ -343,10 +366,14 @@ static sorted_pair_t *build_sorted_view(hdr_list_t *l, size_t *out) {
   return res;
 }
 
-static void free_sorted_view(sorted_pair_t *v, size_t n) {
-  if (!v) return;
-  for (size_t i = 0; i < n; i++) { free(v[i].name); free(v[i].value); }
-  free(v);
+static sorted_pair_t *list_sorted_view(hdr_list_t *l, size_t *count) {
+  if (!l->sorted || l->sorted_version != l->version) {
+    free_sorted_view(l->sorted, l->sorted_count);
+    l->sorted = build_sorted_view(l, &l->sorted_count);
+    l->sorted_version = l->version;
+  }
+  *count = l->sorted ? l->sorted_count : 0;
+  return l->sorted;
 }
 
 static ant_value_t headers_append_name_value_bytes_n(
@@ -573,10 +600,14 @@ bool advance_headers(ant_t *js, iterator_t *it, ant_value_t *out) {
   if (!st) return false;
 
   size_t count = 0;
-  sorted_pair_t *view = build_sorted_view(st->list, &count);
+  sorted_pair_t *view = st->list ? list_sorted_view(st->list, &count) : NULL;
 
   if (st->index >= count) {
-    free_sorted_view(view, count);
+    if (st->list) {
+      free_sorted_view(st->list->sorted, st->list->sorted_count);
+      st->list->sorted = NULL;
+      st->list->sorted_count = 0;
+    }
     return false;
   }
 
@@ -595,7 +626,6 @@ bool advance_headers(ant_t *js, iterator_t *it, ant_value_t *out) {
     break;
   }}
 
-  free_sorted_view(view, count);
   st->index++;
   return true;
 }

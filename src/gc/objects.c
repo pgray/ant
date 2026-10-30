@@ -1788,15 +1788,14 @@ void gc_object_free(ant_t *js, ant_object_t *obj) {
 }
 
 static void gc_sweep_young_and_promote(ant_t *js) {
-  ant_fixed_arena_t *oa = &js->obj_arena, *wa = &js->obj_wide_arena;
+  ant_fixed_arena_t *oa = &js->obj_arena;
   uint8_t epoch = js->gc.obj_epoch;
   
   ant_object_t *obj = js->objects;
   void *free_list = oa->free_list;
-  void *wide_free_list = wa->free_list;
   
-  size_t freed = 0, wide_freed = 0;
-  bool any_wide = wa->live_count != 0;
+  size_t freed = 0;
+  bool any_wide = js->obj_wide_arena.live_count != 0 || js->obj_large_arena.live_count != 0;
   js->objects = NULL;
   
   while (obj) {
@@ -1809,9 +1808,10 @@ static void gc_sweep_young_and_promote(ant_t *js) {
       js->objects_old = obj;
     } else if (gc_object_release_plain(js, obj)) {
       if (__builtin_expect(any_wide && ant_object_is_wide(obj), 0)) {
-        *(void **)obj = wide_free_list;
-        wide_free_list = obj;
-        wide_freed++;
+        ant_fixed_arena_t *wa = ant_object_arena_for(js, obj->inobj_limit);
+        *(void **)obj = wa->free_list;
+        wa->free_list = obj;
+        if (wa->live_count > 0) wa->live_count--;
       } else {
         *(void **)obj = free_list;
         free_list = obj;
@@ -1819,10 +1819,8 @@ static void gc_sweep_young_and_promote(ant_t *js) {
       freed++;
     } else {
       oa->free_list = free_list;
-      wa->free_list = wide_free_list;
       gc_object_free(js, obj);
       free_list = oa->free_list;
-      wide_free_list = wa->free_list;
     }
     
     obj = next;
@@ -1830,8 +1828,6 @@ static void gc_sweep_young_and_promote(ant_t *js) {
   
   oa->free_list = free_list;
   oa->live_count = oa->live_count > freed ? oa->live_count - freed : 0;
-  wa->free_list = wide_free_list;
-  wa->live_count = wa->live_count > wide_freed ? wa->live_count - wide_freed : 0;
 }
 
 static void gc_sweep_arena(ant_t *js, ant_fixed_arena_t *oa, ant_object_t **old) {
@@ -1901,6 +1897,7 @@ static void gc_sweep_arena(ant_t *js, ant_fixed_arena_t *oa, ant_object_t **old)
 static void gc_sweep(ant_t *js) {
   ant_object_t *old = NULL;
   js->objects = NULL;
+  gc_sweep_arena(js, &js->obj_large_arena, &old);
   gc_sweep_arena(js, &js->obj_wide_arena, &old);
   gc_sweep_arena(js, &js->obj_arena, &old);
   js->objects_old = old;

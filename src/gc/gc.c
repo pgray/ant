@@ -324,6 +324,7 @@ void gc_run(ant_t *js) {
   ant_ic_epoch_bump(js);
   ant_ic_obj_epoch_bump(js);
   sv_gf_mega_clear(js);
+  sv_keyed_put_clear(js);
   sv_ic_polys_release_shapes(js);
 
   gc_bigints_sweep(js);

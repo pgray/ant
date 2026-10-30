@@ -11,7 +11,9 @@ typedef struct {
 
 int64_t jit_helper_stack_overflow(ant_t *js);
 int64_t jit_helper_is_truthy(ant_t *js, ant_value_t v);
+
 uint64_t jit_helper_revalidate_add(ant_t *js, const jit_add_cell_t *add, const char *interned);
+bool jit_helper_get_elem_string(ant_t *js, ant_value_t obj, ant_value_t key, ant_value_t *out);
 
 void jit_helper_close_frame_upvalues(sv_vm_t *vm, uint32_t slot_idx);
 void jit_helper_disable_param_counters(sv_func_t *func, uint64_t params);

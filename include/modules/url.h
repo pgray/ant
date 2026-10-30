@@ -14,6 +14,7 @@ typedef struct {
   char *pathname;
   char *search;
   char *hash;
+  char *storage;
 } url_state_t;
 
 

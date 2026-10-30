@@ -19,10 +19,18 @@ url_state_t *url_get_state(ant_value_t obj) {
 
 void url_state_clear(url_state_t *s) {
   if (!s) return;
-  free(s->href);     free(s->protocol); free(s->username);
-  free(s->password);
-  free(s->hostname); free(s->port);    free(s->pathname);
-  free(s->search);   free(s->hash);
+  if (s->storage) free(s->storage);
+  else {
+    free(s->href);
+    free(s->protocol);
+    free(s->username);
+    free(s->password);
+    free(s->hostname);
+    free(s->port);
+    free(s->pathname);
+    free(s->search);
+    free(s->hash);
+  }
   memset(s, 0, sizeof(*s));
 }
 
@@ -149,37 +157,39 @@ char *url_decode_component(const char *str) {
   return url_decode_component_len(str, NULL);
 }
 
-static char *ada_string_dup(ada_string value) {
-  return value.data ? strndup(value.data, value.length) : strdup("");
-}
-
 int ada_url_to_state(ada_url url, url_state_t *s) {
-  s->href = ada_string_dup(ada_get_href(url));
-  s->protocol = ada_string_dup(ada_get_protocol(url));
-  s->username = ada_string_dup(ada_get_username(url));
-  s->password = ada_string_dup(ada_get_password(url));
-  s->hostname = ada_string_dup(ada_get_hostname(url));
-  s->port = ada_string_dup(ada_get_port(url));
-  s->pathname = ada_string_dup(ada_get_pathname(url));
-  s->search = ada_string_dup(ada_get_search(url));
-  s->hash = ada_string_dup(ada_get_hash(url));
-
-  if (s->search && !*s->search && ada_has_search(url)) {
-    free(s->search);
-    s->search = strdup("?");
-  }
-  if (s->hash && !*s->hash && ada_has_hash(url)) {
-    free(s->hash);
-    s->hash = strdup("#");
-  }
-
-  if (
-    !s->href || !s->protocol || !s->username || !s->password || !s->hostname ||
-    !s->port || !s->pathname || !s->search || !s->hash
-  ) {
-    url_state_clear(s);
+  ada_string parts[9] = {
+    ada_get_href(url), ada_get_protocol(url), ada_get_username(url), ada_get_password(url),
+    ada_get_hostname(url), ada_get_port(url), ada_get_pathname(url), ada_get_search(url), ada_get_hash(url),
+  };
+  
+  if (parts[7].length == 0 && ada_has_search(url)) parts[7] = (ada_string){.data = "?", .length = 1};
+  if (parts[8].length == 0 && ada_has_hash(url)) parts[8] = (ada_string){.data = "#", .length = 1};
+  
+  size_t total = 0;
+  for (int i = 0; i < 9; i++) total += parts[i].length + 1;
+  
+  char *storage = malloc(total);
+  if (!storage) {
+    memset(s, 0, sizeof(*s));
     return -1;
   }
+  
+  char *fields[9];
+  char *at = storage;
+  for (int i = 0; i < 9; i++) {
+    fields[i] = at;
+    if (parts[i].length) memcpy(at, parts[i].data, parts[i].length);
+    at[parts[i].length] = '\0';
+    at += parts[i].length + 1;
+  }
+  
+  *s = (url_state_t){
+    .href = fields[0], .protocol = fields[1], .username = fields[2], .password = fields[3],
+    .hostname = fields[4], .port = fields[5], .pathname = fields[6], .search = fields[7], .hash = fields[8],
+    .storage = storage,
+  };
+  
   return 0;
 }
 
@@ -211,6 +221,25 @@ int parse_url_to_state_n(
   int result = ada_url_to_state(url, s);
   ada_free(url);
   return result;
+}
+
+bool url_can_parse_n(const char *url_str, size_t url_len, const char *base_str, size_t base_len) {
+  if (!url_str) return false;
+  
+  char *url_utf8 = wtf8_to_utf8_dup(url_str, &url_len);
+  char *base_utf8 = base_str ? wtf8_to_utf8_dup(base_str, &base_len) : NULL;
+  
+  if (url_utf8) url_str = url_utf8;
+  if (base_utf8) base_str = base_utf8;
+  
+  bool ok = base_str
+    ? ada_can_parse_with_base(url_str, url_len, base_str, base_len)
+    : ada_can_parse(url_str, url_len);
+  
+  free(url_utf8);
+  free(base_utf8);
+  
+  return ok;
 }
 
 int parse_url_to_state(const char *url_str, const char *base_str, url_state_t *s) {

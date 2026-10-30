@@ -136,7 +136,7 @@ static void jit_emit_entry_local_guards(jit_compile_t *c, MIR_disp_t osr_base, c
           jit_integer_range_t range = c->entry_integer_ranges[i];
           MIR_reg_t integer = mir_emit_exact_integer_guard(
               c->ctx, c->jit_func, c->local_regs[i], c->local_d_regs[i], true, c->r_d_slot,
-              (double)range.min, (double)range.max, osr_type_bail, -i - 1);
+              (double)range.min, (double)range.max, osr_type_bail, mir_next_reg_site(&c->reg_site_n));
           MIR_append_insn(c->ctx, c->jit_func, MIR_new_insn(c->ctx, MIR_MOV, MIR_new_reg_op(c->ctx, c->entry_integer_regs[i]), MIR_new_reg_op(c->ctx, integer)));
         }
         if (osr_local_done) MIR_append_insn(c->ctx, c->jit_func, osr_local_done);

@@ -16,6 +16,7 @@
 #include <stdio.h>
 
 static constexpr int SV_JIT_ARGS_BUF_CAP = 16;
+static constexpr unsigned SV_KEYED_PUT_ENTRIES = 256;
 
 static constexpr uint8_t SV_MAP_TEMPLATE_MAX_SUBSTITUTIONS = 3;
 static constexpr uint32_t SV_MAP_TEMPLATE_TABLE_MAGIC = UINT32_C(0x4d54504c);
@@ -298,6 +299,8 @@ struct sv_gf_mega_cache {
 };
 
 sv_gf_mega_cache_t *sv_gf_mega_ensure(ant_t *js);
+sv_gf_mega_cache_t *sv_gf_mega_keyed_ensure(ant_t *js);
+
 void sv_gf_mega_clear(ant_t *js);
 void sv_ic_polys_release_shapes(ant_t *js);
 void sv_ic_identities_reset(ant_t *js);
@@ -386,6 +389,18 @@ static_assert(
   sizeof(sv_ic_entry_t) == 64,
   "IC entries must remain 64 bytes"
 );
+
+typedef struct sv_keyed_put_cache {
+  sv_ic_entry_t entries[SV_KEYED_PUT_ENTRIES];
+  const ant_shape_t *shapes[SV_KEYED_PUT_ENTRIES];
+  const char *keys[SV_KEYED_PUT_ENTRIES];
+  const ant_shape_t *seen_shapes[SV_KEYED_PUT_ENTRIES];
+  const char *seen_keys[SV_KEYED_PUT_ENTRIES];
+} sv_keyed_put_cache_t;
+
+sv_ic_entry_t *sv_keyed_put_entry(ant_t *js, const ant_shape_t *shape, const char *key);
+void sv_keyed_put_clear(ant_t *js);
+void sv_keyed_put_destroy(ant_t *js);
 
 sv_gf_poly_t *sv_gf_poly_new(ant_t *js, sv_ic_entry_t *ic);
 sv_pf_poly_t *sv_pf_poly_new(ant_t *js, sv_ic_entry_t *ic);
@@ -677,7 +692,7 @@ struct sv_func {
   bool has_bound_closure: 1;
   bool jit_self_guarded: 1;
   bool opt_closure_pinned: 1;
-  bool ctor_wide: 1;
+  uint8_t ctor_slot_class: 2;
 
   sv_code_unit_t *unit;
   struct sv_func *unit_next;
@@ -689,7 +704,8 @@ static_assert(
 );
 
 static inline uint8_t sv_construct_slots(const sv_func_t *func) {
-  return func && func->ctor_wide ? ANT_INOBJ_WIDE_SLOTS : ANT_INOBJ_BASE_SLOTS;
+  if (!func || !func->ctor_slot_class) return ANT_INOBJ_BASE_SLOTS;
+  return func->ctor_slot_class == 1 ? ANT_INOBJ_WIDE_SLOTS : ANT_INOBJ_LARGE_SLOTS;
 }
 
 static inline const sv_map_template_desc_t *sv_map_template_desc_at(

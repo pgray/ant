@@ -1312,8 +1312,9 @@ static bool local_written_once(sv_compiler_t *c, int local) {
 }
 
 static void count_this_props(const sv_ast_t *node, const sv_ast_t **names, uint32_t *count) {
-  if (!node || *count > ANT_INOBJ_BASE_SLOTS) return;
+  if (!node || *count > ANT_INOBJ_LARGE_SLOTS) return;
   if ((node->type == N_FUNC && !(node->flags & FN_ARROW)) || node->type == N_CLASS) return;
+  
   const sv_ast_t *target = node->type == N_ASSIGN ? node->left : NULL;
   if (
     target && target->type == N_MEMBER && !(target->flags & 1) && target->left && target->left->type == N_THIS &&
@@ -1324,20 +1325,23 @@ static void count_this_props(const sv_ast_t *node, const sv_ast_t **names, uint3
     for (uint32_t i = 0; i < *count && !seen; i++) seen = names[i]->len == key->len && memcmp(names[i]->str, key->str, key->len) == 0;
     if (!seen) names[(*count)++] = key;
   }
+  
   const sv_ast_t *children[] = {
     node->left, node->right, node->cond, node->body, node->catch_param,
     node->catch_body, node->finally_body, node->init, node->update
   };
+  
   for (size_t i = 0; i < sizeof(children) / sizeof(children[0]); i++) count_this_props(children[i], names, count);
   for (int i = 0; i < node->args.count; i++) count_this_props(node->args.items[i], names, count);
 }
 
-static bool ctor_needs_wide_object(const sv_ast_t *node) {
-  if (!node || (node->flags & (FN_ARROW | FN_GENERATOR | FN_ASYNC))) return false;
-  const sv_ast_t *names[ANT_INOBJ_BASE_SLOTS + 1];
+static uint8_t ctor_slot_class(const sv_ast_t *node) {
+  if (!node || (node->flags & (FN_ARROW | FN_GENERATOR | FN_ASYNC))) return 0;
+  const sv_ast_t *names[ANT_INOBJ_LARGE_SLOTS + 1];
   uint32_t count = 0;
   count_this_props(node->body, names, &count);
-  return count > ANT_INOBJ_BASE_SLOTS;
+  if (count <= ANT_INOBJ_BASE_SLOTS) return 0;
+  return count <= ANT_INOBJ_WIDE_SLOTS ? 1 : 2;
 }
 
 static int resolve_upvalue_to(sv_compiler_t *c, sv_compiler_t *owner, int local) {
@@ -8545,7 +8549,7 @@ sv_func_t *compile_function_body(
   if (comp.super_referenced) node->flags |= FN_USES_SUPER;
   func->is_derived_ctor = !!(node->flags & FN_DERIVED_CTOR);
   func->is_class_ctor = !!(node->flags & FN_CLASS_CTOR);
-  func->ctor_wide = (!func->is_method || func->is_class_ctor) && ctor_needs_wide_object(node);
+  func->ctor_slot_class = (!func->is_method || func->is_class_ctor) ? ctor_slot_class(node) : 0;
   func->is_static = !!(node->flags & FN_STATIC);
   func->is_tla = comp.is_tla;
   func->debug->filename = enclosing->filename ? enclosing->filename : enclosing->js->filename;

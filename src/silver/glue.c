@@ -1598,6 +1598,9 @@ static ant_value_t jit_put_elem(ant_t *js, ant_value_t obj, ant_value_t key, ant
   uint32_t index;
   
   if (sv_number_key_index(key, &index)) return js_setprop_index(js, obj, index, val);
+  ant_value_t fast;
+  
+  if (sv_put_elem_string(js, obj, key, val, &fast)) return fast;
   ant_value_t prop_key = sv_key_to_property_key(js, key);
   
   if (is_err(prop_key)) return prop_key;
@@ -1630,6 +1633,10 @@ ant_value_t jit_helper_slow_get_field(ant_t *js, ant_value_t obj, sv_func_t *fun
 
 ant_value_t jit_helper_slow_put_field(ant_t *js, ant_value_t obj, ant_value_t val, sv_func_t *func, uint8_t *ip) {
   return jit_helper_put_field_ic(js->vm, js, obj, val, &func->atoms[sv_get_u32(ip + 1)], sv_ic_slot_for_ip(func, ip), func->is_strict);
+}
+
+bool jit_helper_get_elem_string(ant_t *js, ant_value_t obj, ant_value_t key, ant_value_t *out) {
+  return sv_get_elem_string(js, obj, key, out);
 }
 
 uint64_t jit_helper_revalidate_add(ant_t *js, const jit_add_cell_t *add, const char *interned) {
