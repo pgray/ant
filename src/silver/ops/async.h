@@ -1,13 +1,11 @@
 #ifndef SV_ASYNC_H
 #define SV_ASYNC_H
 
-#include "ant.h"
 #include "sugar.h"
 #include "gc.h"
 #include "gc/roots.h"
 #include "interrupt.h"
 #include "silver/engine.h"
-#include "modules/timer.h"
 #include "modules/promise.h"
 
 typedef enum {
@@ -49,11 +47,6 @@ static inline void sv_async_unlink_activation(ant_t *js, coroutine_t *coro) {
   coro->active_parent = NULL;
   coro->active_prev = NULL;
   coroutine_unhold(coro, CORO_HOLD_ACTIVE);
-}
-
-// TODO: flatten
-static inline coroutine_t *sv_async_active_coro(ant_t *js) {
-  return js ? js->active_async_coro : NULL;
 }
 
 static inline void sv_async_init_activation(
@@ -183,7 +176,7 @@ static inline sv_await_result_t sv_await_register(
     .value = js_mkundef(),
   };
 
-  coroutine_t *coro = sv_async_active_coro(js);
+  coroutine_t *coro = js->active_async_coro;
   ant_value_type_t value_type = vtype(value);
   
   if (value_type != kTypePromise && sv_await_type_is_primitive(value_type)) {
