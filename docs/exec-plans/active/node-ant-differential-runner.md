@@ -1,7 +1,7 @@
 # Node–Ant Differential Runner
 
 Status: active
-Last reviewed: 2026-08-29
+Last reviewed: 2026-10-30
 Owner: theMackabu
 
 ## Goal
@@ -26,8 +26,11 @@ surface omissions must still be classified.
 - Generate probes from a seed so every finding is reproducible.
 - Compare status, signal, timeout, stdout, and stderr rather than stdout alone.
 - Canonically encode values that ordinary JSON cannot preserve.
-- Minimize structured scenario arrays instead of rewriting arbitrary JavaScript
-  text, keeping reduced repros syntactically valid and understandable.
+- Shrink structured params instead of rewriting arbitrary JavaScript text,
+  keeping reduced repros syntactically valid and understandable. Since
+  2026-10-30 the runner is TypeScript on Node with fast-check, which shrinks
+  every param (strings, numbers, expression trees), not just scenario arrays;
+  see [fuzz-and-property-testing.md](fuzz-and-property-testing.md).
 - Keep stream probes atomic so the known own-key divergence does not force
   every randomly generated property case to fail.
 - Keep orchestration Node-hosted so a broken Ant behavior cannot compromise the
@@ -44,6 +47,9 @@ surface omissions must still be classified.
 
 ## Validation status
 
+- 2026-10-30: `node tests/differential/runner.test.ts` and
+  `npx tsc -p tests/differential` pass; earlier entries below refer to the
+  replaced `.mjs` implementation.
 - `node tests/differential/test.mjs`: passed, including deterministic
   generation, CLI parsing, minimization, child-process capture, and a complete
   Node-versus-Node comparison through the runner.

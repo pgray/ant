@@ -84,6 +84,24 @@ This guide keeps validation proportional to the change while still protecting ru
 - If the right validation is expensive or unavailable, document the gap in the
   associated [execution plan](../exec-plans/index.md).
 
+## Fuzz and property tests
+
+- Parsers and codecs have libFuzzer targets in `tests/fuzz/` that check
+  properties (split-invariance, round-trips, oracle agreement), not just
+  crashes. `meson test -C build --suite fuzz` replays their corpora with a
+  fixed set of mutations under any compiler; run it after touching
+  `src/http/`, `src/numbers.cc`, `src/base64.c`, `src/escape.c`,
+  `src/utf8.c`, `src/modules/url/`, the RegExp translator, or the Silver
+  parser and compiler. `maid fuzz_setup` and `maid fuzz <target> [seconds]`
+  fuzz with clang, ASan and UBSan. See [tests/fuzz](../../tests/fuzz/README.md).
+- `node tests/differential/runner.ts --family <name> --cases N --minimize`
+  (after `npm install`) compares fast-check generated JavaScript probes
+  against Node and shrinks mismatches to minimal repros. The `jit` family also
+  runs each probe under the interpreter and every `ANT_DEBUG=opt:` mode, so
+  use it after JIT or optimizing-tier changes. A mismatch is a finding to
+  classify, not automatically a bug. See
+  [tests/differential](../../tests/differential/README.md).
+
 ## Verifying operand-stack depth
 
 The bytecode compiler computes each function's maximum operand depth from

@@ -156,6 +156,8 @@ scheduled.
   - Issue: Remaining node-differential divergences, all pre-existing on the installed release: (1) exec-result `groups` is an accessor property where node has a plain writable/enumerable/configurable data property (affects `Object.getOwnPropertyDescriptor` shape on `exec`/`d`-flag results); (2) legacy statics `RegExp.leftContext`/`rightContext` are undefined after matches (`$1..$9`/`lastMatch` work); (3) no match can start between the two halves of a surrogate pair, because PCRE2 matches the UTF-8 (WTF-8) bytes and that position has no byte offset: a non-`u` empty-match advance over an astral character, or a user-assigned `lastIndex` pointing at a low surrogate, rounds up to the next code point (`'😀'.matchAll(/(?:)/g)` gives indices `[0,2]`, node `[0,1,2]`; `'😀'.replace(/(?:)/g, '-')` gives `-😀-`). Fixed 2026-10-22 in 929a7f82: `lastIndex`, `index` and `d`-flag `indices` are UTF-16 code units (`tests/test_regexp_utf16_offsets.cjs`). Also fixed 2026-10-22: `$<name>` substitution, the replacer's trailing `groups` argument, and `lastIndex` ToLength coercion (`tests/test_regexp_replace_named_groups.cjs`, `tests/test_regexp_lastindex_coercion.cjs`); `source` normalization, own/subclass `flags`/`exec` dispatch and `lastIndex` accessor redefinition already matched node by then.
   - Impact: Silent wrong values for code relying on legacy statics, `groups` descriptor shape, or non-`u` empty matches and `lastIndex` positions inside astral characters.
   - Proposed fix: `groups`-as-data-property is a result-shape change (canonical shape already exists — add the slot); leftContext/rightContext extend `update_regexp_statics`. (3) needs matching that can start inside a surrogate pair: either a UTF-16 subject for non-`u` patterns that can match a lone surrogate or the empty string, or a PCRE2 16-bit code path; decide only if a real workload hits it.
+  - Found by `tests/fuzz/fuzz_regexp.c` (2026-10-30), patterns the syntax check accepts but PCRE2 rejects, so `new RegExp` succeeds and the pattern never matches: (4) lone surrogate escapes (`/\uD83D/u`, also raw lone surrogates), since PCRE2's UTF mode has no surrogate code points (same root cause as (3)); (5) `v`-flag set operations whose operand is itself a class (`/[\p{L}--[a--z]]/v`), because `v_translate_part_append` copies nested operands untranslated; (6) group names containing `$` or `\u` escapes (`/(?<a$>x)/`, `/(?<\u0061b>x)/`), which PCRE2 names cannot spell. Also, because of (1), `console.log` of an exec result prints `groups: undefined`. The fuzz target skips (4) to (6) as known gaps.
+  - Proposed fix for (5) and (6): translate set-operation operands recursively; map group names PCRE2 cannot spell to generated names (decoding escapes first) and map them back where group names are collected, in `\k<...>` backreferences and in `$<name>` substitution.
   - Owner: theMackabu
   - Status: backlog
 
@@ -252,3 +254,31 @@ scheduled.
   - Validation: the upstream node-compat HTTP/2 family run for real (not just the stub-shaped API tests), undici `fetch` with `allowH2` against an h2-only server, a `grpc-js` unary and streaming call, and an h2load/HTTP-1.1 throughput comparison against Node.
   - Owner: theMackabu
   - Status: backlog (2026-10-24; repro verified on 79b7bce0)
+
+- Area: isolate teardown (`js_destroy`, `ant_create` realm setup in `src/ant.c`, `src/errors.c`)
+  - Issue: `js_destroy` does not free property and slot storage that `ant_create` allocates while setting up the realm (`js_obj_ensure_prop_capacity` and `obj_extra_reserve` from `realm_init_core` and `make_error_value`), about 7 KB per isolate. Error objects that are garbage but uncollected at teardown leak their stack records too.
+  - Impact: Embedders that create and destroy many isolates leak a few kilobytes each; LeakSanitizer reports it, and it cannot check `tests/fuzz/fuzz_js.c` (which also runs without leak detection because LeakSanitizer does not scan the GC heap).
+  - Proposed fix: free out-of-line property and slot storage of every heap object during `js_destroy` (or finalize the whole heap before releasing arenas), then re-enable leak detection for an isolate create/destroy test under ASan.
+  - Owner: theMackabu
+  - Status: backlog (2026-10-30; found under ASan by tests/fuzz)
+
+- Area: WHATWG URL host parsing (`vendor/ada.wrap`, ada 4.0.0)
+  - Issue: `new URL('http://xn--/')` and `new URL('http://xn--a/')` parse in Ant; Node 22 (ada 2.9.2) throws `TypeError` for the invalid Punycode labels. The ada versions differ the other way too: `new URL('//example.com', 'about:blank')` throws in Ant, as the URL Standard's no-scheme state requires for an opaque-path base, while Node 22 returns `about://example.com`.
+  - Impact: Node 22 is not a reliable oracle for URL parsing, so the differential `url` family reports version differences as well as Ant bugs. Whether Ant should accept `xn--` labels needs checking against the standard.
+  - Proposed fix: check the WPT `url` tests for `xn--` labels against ada 4.0.0, and either follow the spec or report upstream. Classify before changing Ant.
+  - Owner: theMackabu
+  - Status: backlog (2026-10-30; found by the differential url family)
+
+- Area: vendored libbase64 (`vendor/aklomp-base64.wrap`, `lib/codec_choose.c`)
+  - Issue: CPU feature detection shifts 1 into the sign bit of an `int` (`1 << 31`), which UBSan reports at startup of anything that base64-decodes.
+  - Impact: Benign in practice, but noise in sanitizer runs; suppressed in `tests/fuzz/ubsan.supp`.
+  - Proposed fix: carry a one-line patch (`1u << 31`) in `vendor/packagefiles` or take a fixed upstream release, then drop the suppression.
+  - Owner: theMackabu
+  - Status: backlog (2026-10-30)
+
+- Area: C tests failing in a clang 19, non-LTO, non-PGO Linux build (`tests/test_gc_uv_segments.c`, `tests/test_isolate_code_arenas.c`)
+  - Issue: `gc-uv-segments` fails `assert(!run(js, marked_callback))`: the object it expects the scan to skip survives. `isolate-code-arenas` fails `sum(100) == 4950 + 100 * seed`. Both fail the same way on unmodified 18ecc93. The JavaScript in `isolate-code-arenas` gives the right answer through the CLI in every JIT mode, so the failure is specific to the test's two-isolate setup.
+  - Impact: `meson test` is red in that configuration; whether the release configuration passes is unverified.
+  - Proposed fix: run both under the release toolchain first. `gc-uv-segments` depends on what a conservative scan finds in scrubbed frames, so check whether clang 19's frame layout leaves the pointer in a scanned region. For `isolate-code-arenas`, print the actual sum and check whether it relates to the [optimizing-tier literal miscompile](active/opt-tier-object-literal-miscompile.md) (`point` returns an object literal).
+  - Owner: theMackabu
+  - Status: backlog (2026-10-30)
