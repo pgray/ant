@@ -1228,70 +1228,63 @@ static ant_value_t js_response_clone(ant_params_t) {
   return obj;
 }
 
-ant_value_t response_create_fetched(
-  ant_t *js,
-  int status,
-  const char *status_text,
-  const char *url,
-  int url_list_size,
-  ant_value_t headers_obj,
-  const uint8_t *body,
-  size_t body_len,
-  ant_value_t body_stream,
-  const char *body_type
-) {
+ant_value_t response_create_fetched(ant_t *js, const response_fetched_init_t *init) {
   ant_value_t obj = response_new(js, true);
   ant_value_t headers = 0;
+  
   response_data_t *resp = NULL;
   url_state_t parsed = {0};
 
   if (is_err(obj)) return obj;
+  
   resp = response_get_data(obj);
-
-  resp->status = status;
+  resp->status = init->status;
+  
   free(resp->status_text);
-  resp->status_text = strdup(status_text ? status_text : "");
+  resp->status_text = strdup(init->status_text ? init->status_text : "");
+  
   if (!resp->status_text) {
     response_clear_and_free(obj, resp);
     return Ant_Error_CreateOutOfMemory(js);
   }
 
-  if (url && parse_url_to_state(url, NULL, &parsed) == 0) {
+  if (init->url && parse_url_to_state(init->url, NULL, &parsed) == 0) {
     url_state_clear(&resp->url);
     resp->url = parsed;
     resp->has_url = true;
-    resp->url_list_size = url_list_size > 0 ? url_list_size : 1;
+    resp->url_list_size = init->url_list_size > 0 ? init->url_list_size : 1;
   } else url_state_clear(&parsed);
 
-  if (rs_is_stream(body_stream)) {
+  if (rs_is_stream(init->body_stream)) {
     resp->body_is_stream = true;
     resp->has_body = true;
-    js_set_slot_wb(js, obj, SLOT_RESPONSE_BODY_STREAM, body_stream);
+    js_set_slot_wb(js, obj, SLOT_RESPONSE_BODY_STREAM, init->body_stream);
   } else {
-    if (body_len > 0) {
-      resp->body_data = malloc(body_len);
+    if (init->body_len > 0) {
+      resp->body_data = malloc(init->body_len);
       if (!resp->body_data) {
         response_clear_and_free(obj, resp);
         return Ant_Error_CreateOutOfMemory(js);
       }
-      memcpy(resp->body_data, body, body_len);
+      memcpy(resp->body_data, init->body, init->body_len);
     }
-    resp->body_size = body_len;
+    resp->body_size = init->body_len;
     resp->body_is_stream = false;
-    resp->has_body = body || body_len > 0;
+    resp->has_body = init->body || init->body_len > 0;
   }
 
-  resp->body_type = body_type ? strdup(body_type) : NULL;
+  resp->body_type = init->body_type ? strdup(init->body_type) : NULL;
   resp->body_storage = (resp->body_data || resp->body_type)
     ? RESPONSE_BODY_STORAGE_OWNED
     : RESPONSE_BODY_STORAGE_NONE;
-  if (body_type && !resp->body_type) {
+  
+  if (init->body_type && !resp->body_type) {
     response_clear_and_free(obj, resp);
     return Ant_Error_CreateOutOfMemory(js);
   }
 
-  if (is_object_type(headers_obj)) {
-    headers = headers_obj;
+  if (is_object_type(init->headers)) {
+    headers = init->headers;
     headers_set_immutable(headers, true);
     js_set_slot_wb(js, obj, SLOT_RESPONSE_HEADERS, headers);
   }

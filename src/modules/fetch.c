@@ -495,10 +495,14 @@ static void fetch_http_on_response(ant_http_request_t *http_req, const ant_http_
   }
 
   url = fetch_build_request_url(request_get_data(req->request_obj));
-  response = response_create_fetched(
-    js, resp->status, resp->status_text, url, 
-    req->redirect_count + 1, headers, NULL, 0, stream, NULL
-  );
+  response = response_create_fetched(js, &(response_fetched_init_t){
+    .status = resp->status,
+    .status_text = resp->status_text,
+    .url = url,
+    .url_list_size = req->redirect_count + 1,
+    .headers = headers,
+    .body_stream = stream,
+  });
   
   free(url);
 
@@ -596,10 +600,16 @@ static bool fetch_handle_data_url(fetch_request_t *req) {
   }
 
   headers_set_literal(headers, "content-type", content_type);
-  response = response_create_fetched(
-    js, 200, "OK", url, 1, headers, 
-    (const uint8_t *)body, len, js_mkundef(), content_type
-  );
+  response = response_create_fetched(js, &(response_fetched_init_t){
+    .status = 200,
+    .status_text = "OK",
+    .url = url,
+    .url_list_size = 1,
+    .headers = headers,
+    .body = (const uint8_t *)body,
+    .body_len = len,
+    .body_type = content_type,
+  });
 
   free(url);
   free(body);
@@ -637,10 +647,16 @@ static bool fetch_handle_blob_url(fetch_request_t *req) {
   const char *content_type = data->type && *data->type ? data->type : NULL;
   if (content_type) headers_set_literal(headers, "content-type", content_type);
   
-  ant_value_t response = response_create_fetched(
-    js, 200, "OK", url, 1, headers,
-    data->data, data->size, js_mkundef(), content_type
-  );
+  ant_value_t response = response_create_fetched(js, &(response_fetched_init_t){
+    .status = 200,
+    .status_text = "OK",
+    .url = url,
+    .url_list_size = 1,
+    .headers = headers,
+    .body = data->data,
+    .body_len = data->size,
+    .body_type = content_type,
+  });
   free(url);
 
   if (is_err(response)) fetch_reject(req, response);

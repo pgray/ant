@@ -32,6 +32,18 @@ typedef struct {
   bool headers_immutable;
 } response_data_t;
 
+typedef struct {
+  int status;
+  const char *status_text;
+  const char *url;
+  int url_list_size;
+  ant_value_t headers;
+  const uint8_t *body;
+  size_t body_len;
+  ant_value_t body_stream;
+  const char *body_type;
+} response_fetched_init_t;
+
 void init_response_module(ant_t *js);
 void response_set_websocket(ant_value_t obj, ant_value_t websocket);
 uint8_t *body_concat_uint8_chunks(ant_t *js, ant_value_t chunks, size_t *out_size, ant_value_t *err_out);
@@ -41,19 +53,6 @@ const headers_data_t *response_get_header_data(ant_value_t obj);
 
 ant_value_t response_get_websocket(ant_value_t obj);
 ant_value_t response_materialize_headers(ant_t *js, ant_value_t obj);
-
-// TODO: struct
-ant_value_t response_create_fetched(
-  ant_t *js,
-  int status,
-  const char *status_text,
-  const char *url,
-  int url_list_size,
-  ant_value_t headers_obj,
-  const uint8_t *body,
-  size_t body_len,
-  ant_value_t body_stream,
-  const char *body_type
-);
+ant_value_t response_create_fetched(ant_t *js, const response_fetched_init_t *init);
 
 #endif

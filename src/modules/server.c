@@ -672,8 +672,18 @@ static ant_value_t server_event_source(ant_params_t) {
   headers_append_literal(js, headers, "Cache-Control", "no-cache");
   headers_append_literal(js, headers, "Connection", "keep-alive");
 
-  response = response_create_fetched(js, 200, "OK", NULL, 0, headers, NULL, 0, stream, "text/event-stream");
-  if (is_err(response)) { free(state); return response; }
+  response = response_create_fetched(js, &(response_fetched_init_t){
+    .status = 200,
+    .status_text = "OK",
+    .headers = headers,
+    .body_stream = stream,
+    .body_type = "text/event-stream",
+  });
+  
+  if (is_err(response)) { 
+    free(state); 
+    return response; 
+  }
 
   obj = Ant_Object_CreateBare(js);
   state->obj = obj;
@@ -786,7 +796,12 @@ static ant_value_t server_upgrade_websocket(ant_params_t) {
   free(accept);
   free(protocol);
 
-  response = response_create_fetched(js, 101, "Switching Protocols", NULL, 0, response_headers, NULL, 0, js_mkundef(), NULL);
+  response = response_create_fetched(js, &(response_fetched_init_t){
+    .status = 101,
+    .status_text = "Switching Protocols",
+    .headers = response_headers,
+  });
+  
   if (is_err(response)) return response;
   response_set_websocket(response, socket);
 
