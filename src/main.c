@@ -200,7 +200,7 @@ static int run_in_runtime(ant_t *js, const ant_cli_t *cli, run_plan_t *plan, boo
 
 static int run_runtime(const ant_cli_t *cli, run_plan_t *plan, bool crash_report, ant_watch_t *watch) {
   volatile char stack_base;
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   
   if (!js) {
     crfprintf(stderr, msg.ant_allocation_fatal);
@@ -232,7 +232,7 @@ static int run_runtime(const ant_cli_t *cli, run_plan_t *plan, bool crash_report
   }
 
   js->process_exiting = true;
-  js_destroy(js);
+  Ant_Destroy(js);
   free(proc.argv);
   
   return code;

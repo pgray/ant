@@ -59,7 +59,7 @@ static void CheckMessageAccessors(ant_t *js) {
 
 int main(void) {
   char stack_base;
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   js_setstackbase(js, &stack_base);
   GC_ROOT_SAVE(mark, js);
@@ -87,6 +87,6 @@ int main(void) {
 
   CheckMessageAccessors(js);
   GC_ROOT_RESTORE(js, mark);
-  js_destroy(js);
+  Ant_Destroy(js);
   puts("PASS desktop exception record diagnostics");
 }

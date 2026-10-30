@@ -24,7 +24,7 @@ static void run(ant_t *js, const char *source) {
 int main(void) {
   char stack_base;
   sv_debug_enable(SV_DEBUG_OPT_OFF);
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   js_setstackbase(js, &stack_base);
   init_symbol_module(js);
@@ -63,6 +63,6 @@ int main(void) {
   // most of what the scenario added is gone again
   assert(after - before < (during - before) / 2);
 
-  js_destroy(js);
+  Ant_Destroy(js);
   puts("PASS a major releases the shapes stale polymorphic cases held");
 }

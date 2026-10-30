@@ -84,10 +84,10 @@ static ant_value_t ImportModule(const char *specifier) {
 
 bool ant_renderer_runtime_initialize(void) {
   if (renderer_runtime) return true;
-  renderer_runtime = ant_create(nullptr);
+  renderer_runtime = Ant_Create(nullptr);
   if (!renderer_runtime) return false;
   if (!renderer_stack_base) {
-    js_destroy(renderer_runtime);
+    Ant_Destroy(renderer_runtime);
     renderer_runtime = NULL;
     return false;
   }
@@ -96,7 +96,7 @@ bool ant_renderer_runtime_initialize(void) {
   ant_runtime_init(renderer_runtime, 1, argv, NULL);
   ant_value_t initialized = AntInitializeRuntimeModules(renderer_runtime);
   if (is_err(initialized)) {
-    js_destroy(renderer_runtime);
+    Ant_Destroy(renderer_runtime);
     renderer_runtime = NULL;
     return false;
   }
@@ -180,6 +180,6 @@ void ant_renderer_runtime_free(char *value) {
 
 void ant_renderer_runtime_shutdown(void) {
   if (!renderer_runtime) return;
-  js_destroy(renderer_runtime);
+  Ant_Destroy(renderer_runtime);
   renderer_runtime = NULL;
 }

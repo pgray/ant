@@ -9,7 +9,7 @@
 #include <stdio.h>
 
 int main(void) {
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   js_setstackbase(js, NULL);
   assert(ant_object_flag_masks_match_layout());
@@ -49,6 +49,6 @@ int main(void) {
     assert(js_get_slot(args, SLOT_ARGUMENTS_OBJECT) == js_true);
     GC_ROOT_RESTORE(js, roots);
   }
-  js_destroy(js);
+  Ant_Destroy(js);
   puts("PASS compact arguments capacity, growth and inline strict marker");
 }

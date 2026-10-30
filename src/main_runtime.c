@@ -170,7 +170,7 @@ static int ant_runtime_main(int argc, char *argv[]) {
   ant_t *js;
   volatile char stack_base;
 
-  if (!(js = ant_create(nullptr))) {
+  if (!(js = Ant_Create(nullptr))) {
     fprintf(stderr, "ant-runtime: failed to allocate runtime\n");
     free(proc_argv);
     ant_bundle_close(&bundle);
@@ -185,7 +185,7 @@ static int ant_runtime_main(int argc, char *argv[]) {
 
   if (!js_esm_bundle_activate(js, &bundle)) {
     fprintf(stderr, "ant-runtime: failed to load embedded program\n");
-    js_destroy(js);
+    Ant_Destroy(js);
     ant_bundle_close(&bundle);
     free(proc_argv);
     return EXIT_FAILURE;
@@ -205,7 +205,7 @@ static int ant_runtime_main(int argc, char *argv[]) {
   }
 
   js->process_exiting = true;
-  js_destroy(js);
+  Ant_Destroy(js);
   
   ant_bundle_close(&bundle);
   free(proc_argv);

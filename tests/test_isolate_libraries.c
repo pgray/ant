@@ -21,7 +21,7 @@ static void CheckRoot(ant_t *js, ant_value_t value) {
 static char *argv0[] = { "test-isolate-libraries", NULL };
 
 static ant_t *Create(void) {
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   js_setstackbase(js, NULL);
   ant_runtime_init(js, 1, argv0, NULL);
@@ -67,11 +67,11 @@ int main(void) {
 
     ant_t *survivor = destroy_first ? second : first;
     ant_value_t kept = destroy_first ? b : a;
-    js_destroy(destroy_first ? first : second);
+    Ant_Destroy(destroy_first ? first : second);
     gc_run(survivor);
     gc_run(survivor);
     assert(Load(survivor) == kept);
-    js_destroy(survivor);
+    Ant_Destroy(survivor);
   }
 
   puts("PASS registered library namespaces are per isolate");

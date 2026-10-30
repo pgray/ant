@@ -38,7 +38,7 @@ static void check_budget(ant_t *js) {
 
 int main(void) {
   char stack_base;
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   js_setstackbase(js, &stack_base);
   GC_ROOT_SAVE(roots, js);
@@ -119,6 +119,6 @@ int main(void) {
   // Leave an entry for runtime teardown to release.
   b = parse_record(js, 128, 100);
   GC_ROOT_RESTORE(js, roots);
-  js_destroy(js);
+  Ant_Destroy(js);
   puts("PASS JSON layout identity, collision checks, mutation, budgets, eviction and GC");
 }

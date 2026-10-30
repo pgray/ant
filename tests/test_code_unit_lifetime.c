@@ -32,7 +32,7 @@ int main(void) {
   char stack_base;
   // compiled code would make the units immortal (sv_code_unit_make_immortal)
   sv_debug_enable(SV_DEBUG_JITLESS);
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   js_setstackbase(js, &stack_base);
 
@@ -100,6 +100,6 @@ int main(void) {
   collect(js);
   assert(js->code_units.unit_count == units);
 
-  js_destroy(js);
+  Ant_Destroy(js);
   puts("PASS errors keep their code units alive only while they live; oversized blocks and ICs do not");
 }

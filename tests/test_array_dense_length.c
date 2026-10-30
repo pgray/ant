@@ -6,7 +6,7 @@
 
 int main(void) {
   char stack_base;
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   js_setstackbase(js, &stack_base);
   assert(ant_object_flag_masks_match_layout());
@@ -31,6 +31,6 @@ int main(void) {
   assert(obj->flags.dense_length_fits);
   assert(vtype(js_arr_get(js, array, 999)) == kTypeUndefined);
   GC_ROOT_RESTORE(js, roots);
-  js_destroy(js);
+  Ant_Destroy(js);
   puts("PASS dense length flag survives growth, sparse length and truncation");
 }

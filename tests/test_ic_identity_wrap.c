@@ -31,7 +31,7 @@ static double global_number(ant_t *js, const char *name) {
 
 int main(void) {
   char stack_base;
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   js_setstackbase(js, &stack_base);
 
@@ -68,6 +68,6 @@ int main(void) {
   assert(global_number(js, "hits") == 1);
   assert(global_number(js, "ownZ") == 0);
 
-  js_destroy(js);
+  Ant_Destroy(js);
   puts("PASS prototype identities stay unique among live objects when the counter wraps");
 }

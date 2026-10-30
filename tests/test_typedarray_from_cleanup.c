@@ -94,7 +94,7 @@ static void CheckCleanup(ant_t *js, int failure, int close_kind) {
 }
 
 int main(void) {
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   init_symbol_module(js);
   init_intrinsic_symbols(js);
@@ -116,6 +116,6 @@ int main(void) {
   }
 
   GC_ROOT_RESTORE(js, mark);
-  js_destroy(js);
+  Ant_Destroy(js);
   puts("PASS TypedArray.from closes only on abrupt completions and preserves them");
 }

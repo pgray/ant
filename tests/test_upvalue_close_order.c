@@ -97,7 +97,7 @@ static void activation_order(void) {
 }
 
 static void close_barrier(void) {
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   ant_value_t value = Ant_Object_CreateBare(js);
   sv_upvalue_t *uv = js_upvalue_alloc(js);
@@ -108,7 +108,7 @@ static void close_barrier(void) {
   sv_close_upvalues_from_slot(&vm, &value);
   assert(!vm.open_upvalues && uv->location == &uv->closed && uv->closed == value);
   assert(uv->in_remember_set);
-  js_destroy(js);
+  Ant_Destroy(js);
 }
 
 int main(void) {

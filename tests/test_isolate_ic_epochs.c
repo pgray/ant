@@ -28,8 +28,8 @@ static double num(ant_t *js, const char *expr) {
 
 int main(void) {
   char stack_base;
-  ant_t *a = ant_create(nullptr);
-  ant_t *b = ant_create(nullptr);
+  ant_t *a = Ant_Create(nullptr);
+  ant_t *b = Ant_Create(nullptr);
   assert(a && b);
   js_setstackbase(a, &stack_base);
   js_setstackbase(b, &stack_base);
@@ -84,7 +84,7 @@ int main(void) {
   assert(num(b, "kept.s.length") == 5 + 6 * 64);
   assert(num(b, "Number(kept.n % 1000003n)") == num(b, "Number((2n ** 200n) % 1000003n)"));
 
-  js_destroy(a);
-  js_destroy(b);
+  Ant_Destroy(a);
+  Ant_Destroy(b);
   puts("PASS each isolate owns its IC epochs and string and bigint marks");
 }

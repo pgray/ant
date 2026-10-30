@@ -372,7 +372,7 @@ int ant_cmd_compile(int argc, char **argv) {
   }
 
   volatile char stack_base;
-  if (!(js = ant_create(nullptr))) {
+  if (!(js = Ant_Create(nullptr))) {
     crfprintf(stderr, "{error}: failed to allocate runtime\n");
     goto cleanup;
   }
@@ -526,7 +526,7 @@ int ant_cmd_compile(int argc, char **argv) {
 cleanup:
   if (tmp_path[0]) remove(tmp_path);
   if (traced) ant_esm_trace_free(&trace);
-  if (js) js_destroy(js);
+  if (js) Ant_Destroy(js);
   
   free(entry_abs);
   free(resolved_entry);

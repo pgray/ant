@@ -7,7 +7,7 @@
 
 int main(void) {
   char stack_base;
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   js_setstackbase(js, &stack_base);
 
@@ -35,6 +35,6 @@ int main(void) {
       GC_ROOT_RESTORE(js, roots);
     }
   }
-  js_destroy(js);
+  Ant_Destroy(js);
   puts("PASS numeric and symbol stores use keyed shape policy in VM and JIT helpers");
 }

@@ -78,7 +78,7 @@ static const scenario_t scenarios[] = {
 static char *argv0[] = { "test-isolate-teardown", NULL };
 
 static ant_t *create(void *stack_base) {
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   js_setstackbase(js, stack_base);
   js_setstacklimit(js, STACK_SIZE * 3 / 4);
@@ -121,7 +121,7 @@ static void *run_scenario(void *arg) {
   }
   pump(js, 25);
   report_handles(sc->name, js->loop);
-  js_destroy(js);
+  Ant_Destroy(js);
   ant_thread_cleanup();
   return NULL;
 }
@@ -144,6 +144,6 @@ int main(int argc, char **argv) {
     fflush(stdout);
   }
 
-  js_destroy(main_js);
+  Ant_Destroy(main_js);
   puts("PASS isolate teardown with pending handles");
 }

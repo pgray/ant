@@ -122,7 +122,7 @@ static void own_thread_main(void *arg) {
   ant_guest_t *g = arg;
   volatile char stack_base;
 
-  ant_t *child = ant_create(&(ant_isolate_options_t){ .object_arena_bytes = g->arena_bytes });
+  ant_t *child = Ant_Create(&(ant_isolate_options_t){ .object_arena_bytes = g->arena_bytes });
   bool ok = child != NULL;
 
   if (ok) {
@@ -157,7 +157,7 @@ static void own_thread_main(void *arg) {
     child->guest = NULL;
     child->terminating = false;
     atomic_store_explicit(&child->interrupt_pending, 0, memory_order_relaxed);
-    js_destroy(child);
+    Ant_Destroy(child);
     ant_thread_cleanup();
   }
   

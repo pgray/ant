@@ -26,7 +26,7 @@ static void print_header(int num, const char *title) {
 }
 
 static ant_t *create_js_runtime(void *stack_base) {
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   if (!js) {
     fprintf(stderr, "Failed to create JS runtime\n");
     return NULL;
@@ -58,7 +58,7 @@ static void example_basic_eval(void) {
     printf("  Error: %s\n", js_str(js, result));
   }
 
-  js_destroy(js);
+  Ant_Destroy(js);
 }
 
 static ant_value_t my_add(ant_params_t) {
@@ -124,7 +124,7 @@ static void example_c_functions(void) {
   ant_value_t r3 = js_eval_bytecode_eval(js, code3, strlen(code3));
   printf("  distance² = %g\n", Ant_Value_AsNumberUnchecked(r3));
 
-  js_destroy(js);
+  Ant_Destroy(js);
 }
 
 static void example_objects_arrays(void) {
@@ -159,7 +159,7 @@ static void example_objects_arrays(void) {
   ant_value_t debug_val = js_get(js, config, "debug");
   printf("  config.debug: %s\n", js_str(js, debug_val));
 
-  js_destroy(js);
+  Ant_Destroy(js);
 }
 
 static void example_error_handling(void) {
@@ -192,7 +192,7 @@ static void example_error_handling(void) {
     printf("  Type error:      %s\n", js_str(js, r3));
   }
 
-  js_destroy(js);
+  Ant_Destroy(js);
 }
 
 static void example_call_js_from_c(void) {
@@ -219,7 +219,7 @@ static void example_call_js_from_c(void) {
   
   if (vtype(eval_result) == kTypeError) {
     printf("  Error: %s\n", js_str(js, eval_result));
-    js_destroy(js);
+    Ant_Destroy(js);
     return;
   }
 
@@ -238,7 +238,7 @@ static void example_call_js_from_c(void) {
   ant_value_t result2 = sv_vm_call(js->vm, js, format_fn, js_mkundef(), args2, 2, NULL, js_mkundef());
   printf("  formatName('John', 'Doe') = %s\n", js_str(js, result2));
 
-  js_destroy(js);
+  Ant_Destroy(js);
 }
 
 static void example_iterate_properties(void) {
@@ -262,7 +262,7 @@ static void example_iterate_properties(void) {
   }
   js_prop_iter_end(&iter);
 
-  js_destroy(js);
+  Ant_Destroy(js);
 }
 
 static ant_value_t method_get_full_name(ant_params_t) {
@@ -303,7 +303,7 @@ static void example_this_context(void) {
   ant_value_t result = js_eval_bytecode_eval(js, code, strlen(code));
   printf("  person.getFullName() = %s\n", js_str(js, result));
 
-  js_destroy(js);
+  Ant_Destroy(js);
 }
 
 static void example_stateful_session(void) {
@@ -326,7 +326,7 @@ static void example_stateful_session(void) {
   );
   if (vtype(eval_result) == kTypeError) {
     printf("  Error: %s\n", js_str(js, eval_result));
-    js_destroy(js);
+    Ant_Destroy(js);
     return;
   }
 
@@ -335,7 +335,7 @@ static void example_stateful_session(void) {
     ant_value_t call_result = sv_vm_call(js->vm, js, increment, js_mkundef(), NULL, 0, NULL, js_mkundef());
     if (vtype(call_result) == kTypeError) {
       printf("  Error in increment %d: %s\n", i + 1, js_str(js, call_result));
-      js_destroy(js);
+      Ant_Destroy(js);
       return;
     }
   }
@@ -344,7 +344,7 @@ static void example_stateful_session(void) {
   ant_value_t result = sv_vm_call(js->vm, js, get_count, js_mkundef(), NULL, 0, NULL, js_mkundef());
   printf("  Final count: %g\n", Ant_Value_AsNumberUnchecked(result));
 
-  js_destroy(js);
+  Ant_Destroy(js);
 }
 
 static void example_async_event_loop(void) {
@@ -387,7 +387,7 @@ static void example_async_event_loop(void) {
   );
   if (vtype(result) == kTypeError) {
     printf("  Error: %s\n", js_str(js, result));
-    js_destroy(js);
+    Ant_Destroy(js);
     return;
   }
 
@@ -402,7 +402,7 @@ static void example_async_event_loop(void) {
     printf("    %llu. %s\n", (unsigned long long)i + 1, js_str(js, item));
   }
 
-  js_destroy(js);
+  Ant_Destroy(js);
 }
 
 static void example_console_logging(void) {
@@ -428,7 +428,7 @@ static void example_console_logging(void) {
     printf("  Error: %s\n", js_str(js, result));
   }
 
-  js_destroy(js);
+  Ant_Destroy(js);
 }
 
 static void example_global_this(void) {
@@ -475,7 +475,7 @@ static void example_global_this(void) {
   ant_value_t added = js_get(js, global, "addedFromJS");
   printf("\n  Read from C: addedFromJS = %s\n", js_str(js, added));
 
-  js_destroy(js);
+  Ant_Destroy(js);
 }
 
 int main(void) {

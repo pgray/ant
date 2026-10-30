@@ -34,7 +34,7 @@ static void check_prefix_copy(ant_t *js) {
 }
 
 int main(void) {
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   check_prefix_copy(js);
   // Only explicit roots keep these objects alive. Conservative C-stack copies
@@ -77,6 +77,6 @@ int main(void) {
   gc_run_minor(js);
   assert(gc_obj_is_marked(js, js_obj_ptr(young)));
   GC_ROOT_RESTORE(js, roots);
-  js_destroy(js);
+  Ant_Destroy(js);
   puts("PASS GC preserves ordinary values, descriptor references and copied prefixes");
 }

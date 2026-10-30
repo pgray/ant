@@ -96,7 +96,7 @@ __attribute__((noinline)) static bool enter_with_object_in_registers(ant_t *js, 
 }
 
 int main(void) {
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   js_setstackbase(js, __builtin_frame_address(0));
   g_js = js;

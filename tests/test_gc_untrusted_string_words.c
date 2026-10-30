@@ -54,7 +54,7 @@ int main(void) {
   static_assert(STR_HEAP_TAG_UNUSED != STR_HEAP_TAG_ROPE);
   static_assert(STR_HEAP_TAG_UNUSED != STR_HEAP_TAG_BUILDER);
 
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
 
   fill_words(words);
@@ -66,7 +66,7 @@ int main(void) {
   collect_with_words_on_stack(js);
   js_setstackbase(js, NULL);
 
-  js_destroy(js);
+  Ant_Destroy(js);
   puts("PASS untrusted string words of every heap tag are never dereferenced");
   return 0;
 }

@@ -137,7 +137,7 @@ static void current_destroy(ant_guest_t *g) {
   child->terminating = false;
   atomic_store_explicit(&child->interrupt_pending, 0, memory_order_relaxed);
   g->child = NULL;
-  js_destroy(child);
+  Ant_Destroy(child);
 
   g->transport = NULL;
   bool closing = false;
@@ -163,7 +163,7 @@ ant_value_t guest_current_start(ant_t *js, ant_guest_t *g) {
   g->complete = current_complete;
   g->call_host = current_call_host;
 
-  ant_t *child = ant_create(&(ant_isolate_options_t){ .object_arena_bytes = g->arena_bytes });
+  ant_t *child = Ant_Create(&(ant_isolate_options_t){ .object_arena_bytes = g->arena_bytes });
   if (!child) {
     g->transport = NULL;
     guest_release(g);

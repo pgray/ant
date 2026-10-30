@@ -13,7 +13,7 @@ static void test_finalizer(ant_t *js, ant_object_t *obj) {
 
 int main(void) {
   char stack_base;
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   js_setstackbase(js, &stack_base);
 
@@ -47,6 +47,6 @@ int main(void) {
     assert(js->obj_arena.live_count == before_live - 1);
     assert(finalized == before_finalized + (variant == 1));
   }
-  js_destroy(js);
+  Ant_Destroy(js);
   puts("PASS array reclamation releases dense storage and preserves stateful cleanup");
 }

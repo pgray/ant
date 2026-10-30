@@ -182,7 +182,7 @@ static void check_shape_metadata_writes_need_one_owner(ant_t *js) {
 
 int main(void) {
   char stack_base;
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   js_setstackbase(js, &stack_base);
   check_shape_metadata_writes_need_one_owner(js);
@@ -214,5 +214,5 @@ int main(void) {
   check_partial_transition(js, old_shape, shape);
   puts("PASS failed shape registration preserves reads/writes without publishing mismatched IC metadata");
   GC_ROOT_RESTORE(js, roots);
-  js_destroy(js);
+  Ant_Destroy(js);
 }

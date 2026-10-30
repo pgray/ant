@@ -59,7 +59,7 @@ static ant_object_t *old_array(ant_t *js, const char *name, unsigned length) {
 
 int main(void) {
   char stack_base;
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   js_setstackbase(js, &stack_base);
 
@@ -120,6 +120,6 @@ int main(void) {
   gc_run_minor(js);
   check_tag(js, "small", 3, 10);
 
-  js_destroy(js);
+  Ant_Destroy(js);
   puts("PASS old arrays remember young stores by card and fall back to full scans");
 }

@@ -17,7 +17,7 @@ static void CheckRoot(ant_t *js, ant_value_t value) {
 }
 
 static ant_t *Create(void) {
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   js_setstackbase(js, NULL);
   init_symbol_module(js);
@@ -109,16 +109,16 @@ int main(void) {
     CheckArray(first);
     CheckArray(second);
     ant_t *survivor = destroy_first ? second : first;
-    js_destroy(destroy_first ? first : second);
+    Ant_Destroy(destroy_first ? first : second);
     gc_run(survivor);
     CheckArray(survivor);
     CheckGrowth(survivor);
-    js_destroy(survivor);
+    Ant_Destroy(survivor);
   }
   for (int i = 0; i < 12; i++) {
     ant_t *js = Create();
     CheckArray(js);
-    js_destroy(js);
+    Ant_Destroy(js);
   }
   puts("PASS symbol and iterator isolate ownership, teardown, roots, and registry growth");
 }

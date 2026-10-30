@@ -673,7 +673,7 @@ static void CheckLongErrorMessages(ant_t *js) {
 
 int main(void) {
   char stack_base;
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   Ant_Exception_Set(js, js_true);
   assert(!Ant_Exception_Pending(js) && Ant_Exception_Peek(js) == js_mkundef());
@@ -848,6 +848,6 @@ int main(void) {
   CheckFunctionAllocationFailure(js);
   CheckOnceAttachmentCleanup(js);
   GC_ROOT_RESTORE(js, root_mark);
-  js_destroy(js);
+  Ant_Destroy(js);
   puts("PASS error handoffs preserve values and exception ownership");
 }

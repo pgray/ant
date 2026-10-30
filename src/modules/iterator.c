@@ -6,7 +6,6 @@
 #include "gc/roots.h"
 #include "gc/modules.h"
 
-#include "ant.h"
 #include "cfunc.h"
 #include "errors.h"
 #include "internal.h"
@@ -1965,7 +1964,7 @@ ant_value_t js_iter_foreach(ant_t *js, ant_value_t iterable, iter_callback_t cb,
 }
 
 typedef struct {
-  bool (*callback)(ant_t *js, ant_value_t value, void *udata);
+  js_iter_fn callback;
   void *udata;
 } js_iter_ctx_t;
 
@@ -1974,7 +1973,7 @@ static iter_action_t js_iter_cb(ant_t *js, ant_value_t value, void *ctx, ant_val
   return ictx->callback(js, value, ictx->udata) ? ITER_CONTINUE : ITER_BREAK;
 }
 
-bool js_iter(ant_t *js, ant_value_t iterable, bool (*callback)(ant_t *js, ant_value_t value, void *udata), void *udata) {
+bool js_iter(ant_t *js, ant_value_t iterable, js_iter_fn callback, void *udata) {
   js_iter_ctx_t ctx = { .callback = callback, .udata = udata };
   ant_value_t result = iter_foreach(js, iterable, js_iter_cb, &ctx);
   return !is_err(result);

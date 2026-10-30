@@ -13,7 +13,7 @@ static void mark_conservative_words(ant_t *js) {
 }
 
 int main(void) {
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   // Exact heap edges must retain children without help from C-stack copies.
   js_setstackbase(js, NULL);
@@ -56,6 +56,6 @@ int main(void) {
   conservative_words[0] = conservative_words[1] = 0;
 
   GC_ROOT_RESTORE(js, roots);
-  js_destroy(js);
+  Ant_Destroy(js);
   puts("PASS exact object/array edges, remembered children and conservative roots");
 }

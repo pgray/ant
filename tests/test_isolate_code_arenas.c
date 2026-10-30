@@ -50,8 +50,8 @@ int main(void) {
   char stack_base;
 
   for (int destroy_first = 0; destroy_first < 2; destroy_first++) {
-    ant_t *a = ant_create(nullptr);
-    ant_t *b = ant_create(nullptr);
+    ant_t *a = Ant_Create(nullptr);
+    ant_t *b = Ant_Create(nullptr);
     assert(a && b);
     js_setstackbase(a, &stack_base);
     js_setstackbase(b, &stack_base);
@@ -63,14 +63,14 @@ int main(void) {
 
     ant_t *gone = destroy_first ? a : b;
     ant_t *kept = destroy_first ? b : a;
-    js_destroy(gone);
+    Ant_Destroy(gone);
 
     // the survivor's existing code still runs, and it can compile more
     check(kept, destroy_first ? 2 : 1);
     load(kept, 3);
     gc_run(kept);
     check(kept, 3);
-    js_destroy(kept);
+    Ant_Destroy(kept);
   }
 
   puts("PASS each isolate owns its code and parse arenas");

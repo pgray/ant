@@ -18,7 +18,7 @@ static void run(ant_t *js, const char *source) {
 
 int main(void) {
   char stack_base;
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   js_setstackbase(js, &stack_base);
 
@@ -45,6 +45,6 @@ int main(void) {
   assert(js->code_units.unit_count == 0);
   assert(js->ic.shape_ref_len < registered + 32);
 
-  js_destroy(js);
+  Ant_Destroy(js);
   puts("PASS freed code units drop their constructor prototype caches");
 }

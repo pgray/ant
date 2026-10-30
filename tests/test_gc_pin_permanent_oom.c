@@ -14,7 +14,7 @@
 #include <stdio.h>
 
 int main(void) {
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   js_setstackbase(js, NULL);
 
@@ -54,7 +54,7 @@ int main(void) {
   gc_run(js);
   assert(gc_obj_is_marked(js, js_obj_ptr(child)));
 
-  js_destroy(js);
+  Ant_Destroy(js);
   puts("PASS a failed permanent-root grow leaves the object unpinned and retryable");
   return 0;
 }

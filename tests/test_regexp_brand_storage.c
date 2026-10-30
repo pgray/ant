@@ -7,7 +7,7 @@
 static_assert(sizeof(ant_object_flags_t) == 2, "object flags grew");
 
 int main(void) {
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   js_setstackbase(js, NULL);
   assert(ant_object_flag_masks_match_layout());
@@ -33,7 +33,7 @@ int main(void) {
   js_set_slot(object, SLOT_DATA, Ant_Value_FromNumber(9));
   assert(ptr->flags.regexp_brand);
   GC_ROOT_RESTORE(js, roots);
-  js_destroy(js);
+  Ant_Destroy(js);
   puts("PASS RegExp brand storage and native slot overwrites");
   return 0;
 }

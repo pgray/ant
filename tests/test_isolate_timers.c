@@ -62,8 +62,8 @@ static bool b_has_timers(void) { return has_pending_timers(b); }
 
 int main(void) {
   char stack_base;
-  a = ant_create(nullptr);
-  b = ant_create(nullptr);
+  a = Ant_Create(nullptr);
+  b = Ant_Create(nullptr);
   assert(a && b);
   js_setstackbase(a, &stack_base);
   js_setstackbase(b, &stack_base);
@@ -98,7 +98,7 @@ int main(void) {
   schedule(b, "setTimeout", Ant_Function_Create(on_b), 5);
   queue_microtask(a, Ant_Function_Create(on_a));
   assert(active_timers(a->loop) == 1 && active_timers(b->loop) == 1);
-  js_destroy(a);
+  Ant_Destroy(a);
   a = NULL;
   assert(Ant_Loop_Isolate(uv_default_loop()) == NULL);
   run_loops_while(b_has_timers);
@@ -106,7 +106,7 @@ int main(void) {
   assert(a_calls == 2 && b_calls == 3);
   assert(active_timers(uv_default_loop()) == 0);
 
-  js_destroy(b);
+  Ant_Destroy(b);
   b = NULL;
   puts("PASS timers and jobs belong to their isolate and close with it");
 }

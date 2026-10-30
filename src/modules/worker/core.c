@@ -355,7 +355,7 @@ static void worker_thread_main(void *arg) {
   ant_worker_t *w = arg;
   volatile char stack_base;
 
-  ant_t *js = ant_create(&(ant_isolate_options_t){
+  ant_t *js = Ant_Create(&(ant_isolate_options_t){
     .object_arena_bytes = (size_t)(w->limits[WORKER_LIMIT_OLD] * 1024 * 1024),
   });
 
@@ -379,7 +379,7 @@ static void worker_thread_main(void *arg) {
 
   js->terminating = false;
   atomic_store_explicit(&js->interrupt_pending, 0, memory_order_relaxed);
-  js_destroy(js);
+  Ant_Destroy(js);
   ant_output_set_thread_writer(NULL, NULL);
   ant_thread_cleanup();
 

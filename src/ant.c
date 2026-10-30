@@ -18,7 +18,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "ant.h"
 #include "ptr.h"
 #include "cfunc.h"
 #include "debug.h"
@@ -227,7 +226,7 @@ static ant_t *isolate_init(void *buf, size_t len, const ant_isolate_options_t *o
   return js;
 }
 
-ant_t *ant_create(const ant_isolate_options_t *options) {
+ant_t *Ant_Create(const ant_isolate_options_t *options) {
   ant_t *js = (ant_t *)calloc(1, sizeof(*js));
   if (js == NULL) return NULL;
   
@@ -240,7 +239,7 @@ ant_t *ant_create(const ant_isolate_options_t *options) {
   js->vm = sv_vm_create(js);
 
   if (!js->vm) {
-    js_destroy(js);
+    Ant_Destroy(js);
     return NULL;
   }
 
@@ -250,13 +249,13 @@ ant_t *ant_create(const ant_isolate_options_t *options) {
   );
 
   if (is_err(oom)) {
-    js_destroy(js);
+    Ant_Destroy(js);
     return NULL;
   }
 
   js->exception_oom = Ant_Exception_CreateRecord(js, oom, js_mkundef());
   if (!is_err(js->exception_oom) || vdata(js->exception_oom) < 2) {
-    js_destroy(js);
+    Ant_Destroy(js);
     return NULL;
   }
 
@@ -269,7 +268,7 @@ void ant_thread_cleanup(void) {
   ts_strip_thread_cleanup();
 }
 
-void js_destroy(ant_t *js) {
+void Ant_Destroy(ant_t *js) {
   if (js == NULL) return;
   js->destroying = true;
   
@@ -778,7 +777,7 @@ void js_check_unhandled_rejections(ant_t *js) {
       print_uncaught_throw(js);
       int status = process_run_exit_handlers(js, EXIT_FAILURE);
       js->process_exiting = true;
-      js_destroy(js); exit(status);
+      Ant_Destroy(js); exit(status);
     }
 
     if (js_is_termination(pd->value)) continue;

@@ -674,7 +674,7 @@ ant_wasm_runtime_t *ant_wasm_create(void) {
   ant_wasm_runtime_t *runtime = calloc(1, sizeof(*runtime));
   if (!runtime) return NULL;
 
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   if (!js) {
     free(runtime);
     return NULL;
@@ -703,7 +703,7 @@ void ant_wasm_destroy(ant_wasm_runtime_t *runtime) {
   if (!runtime) return;
   ant_wasm_microtasks_reset(runtime->js);
   if (active_runtime == runtime) active_runtime = NULL;
-  js_destroy(runtime->js);
+  Ant_Destroy(runtime->js);
   clear_last_result(runtime);
   free(runtime);
 }

@@ -68,7 +68,7 @@ static void collect_without_rope_table(ant_t *js) {
 }
 
 int main(void) {
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   js_setstackbase(js, NULL);
   init_symbol_module(js);
@@ -112,7 +112,7 @@ int main(void) {
   assert(js->rope_gc.mark_cap > 0);
   assert(js_truthy(js, eval(js, check)));
 
-  js_destroy(js);
+  Ant_Destroy(js);
   puts("PASS a major collection without a rope mark table keeps ropes and their flat leaves");
   return 0;
 }

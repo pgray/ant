@@ -48,7 +48,7 @@ static char *argv0[] = { "test-isolate-threads", NULL };
 
 static double run_once(void) {
   volatile char stack_base;
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   js_setstackbase(js, (void *)&stack_base);
   js_setstacklimit(js, STACK_SIZE * 3 / 4);
@@ -62,7 +62,7 @@ static double run_once(void) {
   ant_value_t result = js_get(js, js_glob(js), "result");
   assert(vtype(result) == kTypeNumber);
   double value = Ant_Value_AsNumberUnchecked(result);
-  js_destroy(js);
+  Ant_Destroy(js);
   return value;
 }
 

@@ -91,7 +91,7 @@ static void check_index_guard(void) {
 
 // Exercise the emitted dense-read guards independently of feedback/warmup.
 static void check_dense_read_guard(void) {
-  ant_t *js = ant_create(nullptr);
+  ant_t *js = Ant_Create(nullptr);
   assert(js);
   MIR_context_t ctx = MIR_init();
   MIR_gen_init(ctx);
@@ -134,7 +134,7 @@ static void check_dense_read_guard(void) {
   array->flags.dense_length_fits = 0;
   assert(read(boxed, 0) == js_mkundef());
   array->flags.dense_length_fits = 1;
-  js_destroy(js);
+  Ant_Destroy(js);
   MIR_gen_finish(ctx); MIR_finish(ctx);
 }
 

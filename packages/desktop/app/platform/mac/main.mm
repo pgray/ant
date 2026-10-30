@@ -117,7 +117,7 @@ int main(int argc, char **argv) {
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
 
     volatile char stack_base;
-    ant_t *js = ant_create(NULL);
+    ant_t *js = Ant_Create(NULL);
     if (!js) {
       fputs("failed to create Ant runtime\n", stderr);
       ant_desktop_cef_shutdown();
@@ -130,7 +130,7 @@ int main(int argc, char **argv) {
     ant_value_t initialized = AntInitializeRuntimeModules(js);
     if (is_err(initialized)) {
       fprintf(stderr, "desktop runtime initialization failed: %s\n", RuntimeErrorDetail(js, initialized));
-      js_destroy(js);
+      Ant_Destroy(js);
       ant_desktop_cef_shutdown();
       free(owned_runtime_argv);
       RemoveTemporaryApplication(temporary_root);
@@ -144,7 +144,7 @@ int main(int argc, char **argv) {
     ant_value_t imported = AntImportModule(js, entry_path);
     if (is_err(imported)) {
       fprintf(stderr, "desktop entry import failed (%s): %s\n", entry_path, RuntimeErrorDetail(js, imported));
-      js_destroy(js);
+      Ant_Destroy(js);
       ant_desktop_cef_shutdown();
       free(owned_runtime_argv);
       RemoveTemporaryApplication(temporary_root);
@@ -158,7 +158,7 @@ int main(int argc, char **argv) {
     ant_desktop_cef_shutdown();
     development_reload = nil;
     pump = nil;
-    js_destroy(js);
+    Ant_Destroy(js);
     free(owned_runtime_argv);
     RemoveTemporaryApplication(temporary_root);
   }

@@ -31,8 +31,8 @@ static void check_child(ant_t *js, double tag) {
 
 int main(void) {
   char stack_base;
-  ant_t *a = ant_create(nullptr);
-  ant_t *b = ant_create(nullptr);
+  ant_t *a = Ant_Create(nullptr);
+  ant_t *b = Ant_Create(nullptr);
   assert(a && b);
   js_setstackbase(a, &stack_base);
   js_setstackbase(b, &stack_base);
@@ -53,7 +53,7 @@ int main(void) {
     check_child(b, gap);
   }
 
-  js_destroy(a);
-  js_destroy(b);
+  Ant_Destroy(a);
+  Ant_Destroy(b);
   puts("PASS collections in one isolate leave another isolate's marks alone");
 }
