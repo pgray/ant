@@ -88,13 +88,6 @@ typedef struct {
 } opt_exit_frame_t;
 
 typedef struct {
-  uint32_t ret_off;
-  int32_t bc_off;
-  uint32_t depth;
-  sv_jit_frame_t frames[SV_JIT_INLINE_FRAMES_MAX];
-} opt_call_site_t;
-
-typedef struct {
   uint32_t offset;
   uint8_t len;
   uint8_t bytes[11];
@@ -109,7 +102,7 @@ typedef struct opt_code {
   opt_exit_chunk_t *chunks;
   uint32_t *refs;
   opt_site_frame_t *frames;
-  opt_call_site_t *call_sites;
+  sv_jit_call_site_t *call_sites;
   uint32_t call_site_count;
   uint32_t exit_ret_off;
   uint32_t param_count, local_count, stack_count;

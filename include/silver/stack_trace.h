@@ -21,6 +21,13 @@ typedef struct {
 } sv_jit_frame_t;
 
 typedef struct {
+  uint32_t ret_off;
+  int32_t bc_off;
+  uint32_t depth;
+  sv_jit_frame_t frames[SV_JIT_INLINE_FRAMES_MAX];
+} sv_jit_call_site_t;
+
+typedef struct {
   sv_func_t *func;
   ant_value_t callee;
   uintptr_t pc;

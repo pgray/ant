@@ -166,7 +166,7 @@ typedef struct {
   OPT_VEC(opt_site_frame_t) site_frames;
   opt_map_t site_index;
   opt_map_t frames_index;
-  OPT_VEC(opt_call_site_t) call_sites;
+  OPT_VEC(sv_jit_call_site_t) call_sites;
   uint32_t exit_ret_off;
   bool failed;
   const char *failure;
@@ -484,7 +484,7 @@ static asm_label_t opt_cg_throw_target(opt_cg_t *cg, ir_node_id_t node, asm_labe
 }
 
 static void opt_cg_record_call(opt_cg_t *cg, ir_frame_state_id_t position, int32_t bc_off) {
-  opt_call_site_t site = {.ret_off = (uint32_t)masm_offset(&cg->masm), .bc_off = bc_off};
+  sv_jit_call_site_t site = {.ret_off = (uint32_t)masm_offset(&cg->masm), .bc_off = bc_off};
   if (position != IR_NONE) {
     ir_node_vec_t chain = {0};
     ir_frame_state_chain(cg->graph, position, &cg->arena, &chain);

@@ -55,13 +55,20 @@ void opt_tier_destroy(sv_jit_ctx_t *jc);
 void opt_tier_gc_mark_roots(ant_t *js);
 void opt_tier_drop_closure_pinned(sv_func_t *func);
 bool opt_tier_has_catch_entry(ant_t *js, sv_func_t *func, uint32_t catch_off);
-struct jit_call_site_info;
 
-void jit_code_register(
-  sv_jit_ctx_t *jc, sv_func_t *func, const void *code, size_t code_len, uint32_t fp_cfa_off,
-  const struct jit_call_site_info *infos, const uint32_t *ret_offs, uint32_t n_sites,
-  const uint32_t *resume_offs, uint32_t n_resume
-);
+typedef struct {
+  sv_func_t *func;
+  const void *code;
+  size_t code_len;
+  uint32_t fp_cfa_off;
+  const sv_jit_call_site_t *sites;
+  uint32_t n_sites;
+  const uint32_t *resume_offs;
+  uint32_t n_resume;
+  bool opt;
+} jit_code_desc_t;
+
+bool jit_code_add(sv_jit_ctx_t *jc, const jit_code_desc_t *desc);
 
 void jit_code_info(
   void *data, MIR_item_t func_item, void *code, size_t code_len,
@@ -97,6 +104,7 @@ typedef struct {
   MIR_item_t item;
   sv_func_t *func;
   const jit_call_tagging_t *tagging;
+  bool failed;
 } jit_code_info_ctx_t;
 
 extern _Thread_local jit_call_tagging_t *jit_call_tagging;

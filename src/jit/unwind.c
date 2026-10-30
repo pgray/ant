@@ -36,7 +36,6 @@ typedef struct {
 } jit_call_site_t;
 
 static constexpr uint32_t JIT_SITE_CHECKPOINT = 32;
-static constexpr int JIT_RESUME_CALLS_MAX = 3;
 
 typedef struct {
   jit_call_site_t site;
@@ -48,9 +47,9 @@ typedef struct jit_code_range {
   uintptr_t start, end;
   sv_func_t *func;
   uint8_t *sites;
+  const uint32_t *resume_ret;
   uint32_t n_sites;
-  uint32_t resume_ret[JIT_RESUME_CALLS_MAX];
-  uint8_t n_resume;
+  uint32_t n_resume;
 #if JIT_UNWIND_REGISTER
   uint32_t fp_cfa_off;
   uint8_t *eh_frame;
@@ -315,69 +314,56 @@ static bool jit_code_range_site(const jit_code_range_t *r, uintptr_t ret, jit_ca
   return true;
 }
 
-static int jit_mir_site_cmp(const void *a, const void *b) {
-  uint32_t x = ((const MIR_call_site_t *)a)->ret_off, y = ((const MIR_call_site_t *)b)->ret_off;
+static int jit_site_cmp(const void *a, const void *b) {
+  uint32_t x = ((const sv_jit_call_site_t *)a)->ret_off, y = ((const sv_jit_call_site_t *)b)->ret_off;
   return x < y ? -1 : x > y;
 }
 
-static uint8_t *jit_encode_sites(
-  const MIR_call_site_t *sites, size_t n, const jit_call_tagging_t *t, uint32_t *out_n
-) {
-  MIR_call_site_t *sorted = malloc(n * sizeof(*sorted));
-  if (!sorted) return NULL;
+static uint8_t *jit_encode_sites(const jit_code_desc_t *desc, const uint32_t **out_resume) {
+  const sv_jit_call_site_t *sites = desc->sites;
+  uint32_t count = desc->n_sites;
+  uint32_t n_inline = 0;
+  size_t stream = 0;
 
-  uint32_t count = 0, n_inline = 0;
-  for (size_t i = 0; i < n; i++) {
-    if (sites[i].tag - 1 >= t->n_sites) continue;
-    sorted[count++] = sites[i];
-    n_inline += (uint32_t)t->sites[sites[i].tag - 1].inl.depth;
+  for (uint32_t i = 0; i < count; i++) {
+    n_inline += sites[i].depth;
+    if (i == 0) continue;
+    ANT_ASSERT(sites[i].ret_off >= sites[i - 1].ret_off, "jit call sites must be sorted by return offset");
+    if (i % JIT_SITE_CHECKPOINT == 0) continue;
+    stream += jit_uleb_size(sites[i].ret_off - sites[i - 1].ret_off);
+    stream += jit_uleb_size(jit_zigzag(sites[i].bc_off - sites[i - 1].bc_off));
+    stream += jit_uleb_size(sites[i].depth);
   }
-  
-  qsort(sorted, count, sizeof(*sorted), jit_mir_site_cmp);
 
   size_t head = jit_site_inline_offset(count) + n_inline * sizeof(sv_jit_frame_t);
-  size_t stream = 0;
-  
-  for (uint32_t i = 1; i < count; i++) {
-    if (i % JIT_SITE_CHECKPOINT == 0) continue;
-    const jit_call_site_info_t *info = &t->sites[sorted[i].tag - 1];
-    stream += jit_uleb_size(sorted[i].ret_off - sorted[i - 1].ret_off);
-    stream += jit_uleb_size(jit_zigzag(info->bc_off - t->sites[sorted[i - 1].tag - 1].bc_off));
-    stream += jit_uleb_size((uint32_t)info->inl.depth);
-  }
-  
-  uint8_t *block = count ? malloc(head + stream) : NULL;
-  if (!block) {
-    free(sorted);
-    return NULL;
-  }
+  size_t resume_at = (head + stream + _Alignof(uint32_t) - 1) / _Alignof(uint32_t) * _Alignof(uint32_t);
+  uint8_t *block = malloc(resume_at + desc->n_resume * sizeof(uint32_t));
+  if (!block) return NULL;
 
   jit_site_checkpoint_t *ckpt = (jit_site_checkpoint_t *)block;
   sv_jit_frame_t *frames = (sv_jit_frame_t *)(block + jit_site_inline_offset(count));
   
   uint8_t *p = block + head;
   uint32_t inline_at = 0;
-  int32_t prev_bc_off = 0;
 
   for (uint32_t i = 0; i < count; i++) {
-    const jit_call_site_info_t *info = &t->sites[sorted[i].tag - 1];
-    jit_call_site_t site = { sorted[i].ret_off, info->bc_off, inline_at, (uint32_t)info->inl.depth };
-    memcpy(frames + inline_at, info->inl.frames, (size_t)site.inline_depth * sizeof(*frames));
+    jit_call_site_t site = { sites[i].ret_off, sites[i].bc_off, inline_at, sites[i].depth };
+    memcpy(frames + inline_at, sites[i].frames, (size_t)site.inline_depth * sizeof(*frames));
 
     if (i % JIT_SITE_CHECKPOINT == 0) {
       ckpt[i / JIT_SITE_CHECKPOINT] = (jit_site_checkpoint_t){ site, (uint32_t)(p - block) };
     } else {
-      jit_put_uleb(&p, site.ret_off - sorted[i - 1].ret_off);
-      jit_put_uleb(&p, jit_zigzag(site.bc_off - prev_bc_off));
+      jit_put_uleb(&p, site.ret_off - sites[i - 1].ret_off);
+      jit_put_uleb(&p, jit_zigzag(site.bc_off - sites[i - 1].bc_off));
       jit_put_uleb(&p, site.inline_depth);
     }
     
-    prev_bc_off = site.bc_off;
     inline_at += site.inline_depth;
   }
 
-  free(sorted);
-  *out_n = count;
+  uint32_t *resume = (uint32_t *)(block + resume_at);
+  if (desc->n_resume) memcpy(resume, desc->resume_offs, desc->n_resume * sizeof(*resume));
+  *out_resume = resume;
   
   return block;
 }
@@ -403,52 +389,39 @@ static void jit_perf_map_note(sv_func_t *func, bool opt, const void *code, size_
   fflush(jit_perf_map);
 }
 
-void jit_code_info(
-  void *data, MIR_item_t func_item, void *code, size_t code_len,
-  uint32_t fp_cfa_off, const MIR_call_site_t *sites, size_t n_sites
-) {
-  sv_jit_ctx_t *jc = data;
-  if (!jc || !code || !code_len) return;
+bool jit_code_add(sv_jit_ctx_t *jc, const jit_code_desc_t *desc) {
+  if (!jc || !desc->code || !desc->code_len) return false;
 
   struct jit_code_registry *reg = jc->code_registry;
   if (!reg) {
     reg = jc->code_registry = calloc(1, sizeof(*reg));
-    if (!reg) return;
+    if (!reg) return false;
   }
-
-  const jit_code_info_ctx_t *info = &jit_code_info_ctx;
-  bool body = info->item && func_item == info->item;
-  
-  if (body && info->func && sv_debug_unlikely(SV_DEBUG_PERF_MAP))
-    jit_perf_map_note(info->func, func_item == (MIR_item_t)(uintptr_t)1, code, code_len);
-  
-  if (!body && !JIT_UNWIND_REGISTER) return;
 
   if (reg->len == reg->cap) {
     size_t cap = reg->cap ? reg->cap + reg->cap / 2 : 64;
     jit_code_range_t *grown = realloc(reg->ranges, cap * sizeof(*grown));
-    if (!grown) return;
+    if (!grown) return false;
     reg->ranges = grown;
     reg->cap = cap;
   }
 
   jit_code_range_t r = {
-    .start = (uintptr_t)code,
-    .end = (uintptr_t)code + code_len,
-    .func = body ? info->func : NULL,
+    .start = (uintptr_t)desc->code,
+    .end = (uintptr_t)desc->code + desc->code_len,
+    .func = desc->func,
   };
 
-  if (body && n_sites) r.sites = jit_encode_sites(sites, n_sites, info->tagging, &r.n_sites);
-  for (size_t i = 0; body && i < n_sites && r.n_resume < JIT_RESUME_CALLS_MAX; i++) {
-    uint32_t idx = sites[i].tag - 1;
-    if (idx < info->tagging->n_sites && info->tagging->sites[idx].resume) r.resume_ret[r.n_resume++] = sites[i].ret_off;
+  if (desc->n_sites || desc->n_resume) {
+    r.sites = jit_encode_sites(desc, &r.resume_ret);
+    if (!r.sites) return false;
+    r.n_sites = desc->n_sites;
+    r.n_resume = desc->n_resume;
   }
 
 #if JIT_UNWIND_REGISTER
-  if (fp_cfa_off >= 16 && fp_cfa_off % 8 == 0) r.fp_cfa_off = fp_cfa_off;
+  if (desc->fp_cfa_off >= 16 && desc->fp_cfa_off % 8 == 0) r.fp_cfa_off = desc->fp_cfa_off;
   if (reg->registering && r.fp_cfa_off) jit_register_unwind(&r);
-#else
-  (void)fp_cfa_off;
 #endif
 
   size_t at = reg->len;
@@ -460,37 +433,62 @@ void jit_code_info(
   
   if (!reg->lo || r.start < reg->lo) reg->lo = r.start;
   if (r.end > reg->hi) reg->hi = r.end;
+  
+  if (desc->func && sv_debug_unlikely(SV_DEBUG_PERF_MAP))
+    jit_perf_map_note(desc->func, desc->opt, desc->code, desc->code_len);
+  
+  return true;
 }
 
-void jit_code_register(
-  sv_jit_ctx_t *jc, sv_func_t *func, const void *code, size_t code_len, uint32_t fp_cfa_off,
-  const jit_call_site_info_t *infos, const uint32_t *ret_offs, uint32_t n_sites,
-  const uint32_t *resume_offs, uint32_t n_resume
+void jit_code_info(
+  void *data, MIR_item_t func_item, void *code, size_t code_len,
+  uint32_t fp_cfa_off, const MIR_call_site_t *sites, size_t n_sites
 ) {
-  MIR_call_site_t *sites = n_sites ? malloc(n_sites * sizeof *sites) : NULL;
-  if (n_sites && !sites) return;
-  for (uint32_t i = 0; i < n_sites; i++) sites[i] = (MIR_call_site_t){.tag = i + 1, .ret_off = ret_offs[i]};
-  
-  jit_call_tagging_t tagging = {.sites = (jit_call_site_info_t *)infos, .n_sites = n_sites, .cap_sites = n_sites};
-  jit_code_info_ctx_t saved = jit_code_info_ctx;
-  
-  jit_code_info_ctx = (jit_code_info_ctx_t){.item = (MIR_item_t)(uintptr_t)1, .func = func, .tagging = &tagging};
-  size_t before = jc->code_registry ? jc->code_registry->len : 0;
-  
-  jit_code_info(jc, (MIR_item_t)(uintptr_t)1, (void *)code, code_len, fp_cfa_off, sites, n_sites);
-  jit_code_info_ctx = saved;
-  free(sites);
-  
-  struct jit_code_registry *reg = jc->code_registry;
-  if (!reg || reg->len == before) return;
-  
-  for (size_t i = 0; i < reg->len; i++) {
-    jit_code_range_t *r = &reg->ranges[i];
-    if (r->start != (uintptr_t)code) continue;
-    for (uint32_t j = 0; j < n_resume && r->n_resume < JIT_RESUME_CALLS_MAX; j++) 
-      r->resume_ret[r->n_resume++] = resume_offs[j];
-    break;
+  sv_jit_ctx_t *jc = data;
+  jit_code_info_ctx_t *info = &jit_code_info_ctx;
+  bool body = info->item && func_item == info->item;
+  if (!body && !JIT_UNWIND_REGISTER) return;
+
+  jit_code_desc_t desc = {
+    .func = body ? info->func : NULL,
+    .code = code,
+    .code_len = code_len,
+    .fp_cfa_off = fp_cfa_off,
+  };
+
+  if (!body || !n_sites) {
+    if (!jit_code_add(jc, &desc) && body) info->failed = true;
+    return;
   }
+
+  sv_jit_call_site_t *list = malloc(n_sites * (sizeof(*list) + sizeof(uint32_t)));
+  if (!list) {
+    info->failed = true;
+    return;
+  }
+
+  const jit_call_tagging_t *t = info->tagging;
+  uint32_t *resume = (uint32_t *)(list + n_sites);
+  uint32_t count = 0, n_resume = 0;
+
+  for (size_t i = 0; i < n_sites; i++) {
+    uint32_t idx = sites[i].tag - 1;
+    if (idx >= t->n_sites) continue;
+    const jit_call_site_info_t *site = &t->sites[idx];
+    sv_jit_call_site_t *out = &list[count++];
+    *out = (sv_jit_call_site_t){ .ret_off = sites[i].ret_off, .bc_off = site->bc_off, .depth = (uint32_t)site->inl.depth };
+    memcpy(out->frames, site->inl.frames, out->depth * sizeof(*out->frames));
+    if (site->resume) resume[n_resume++] = sites[i].ret_off;
+  }
+
+  qsort(list, count, sizeof(*list), jit_site_cmp);
+  desc.sites = list;
+  desc.n_sites = count;
+  desc.resume_offs = resume;
+  desc.n_resume = n_resume;
+  
+  if (!jit_code_add(jc, &desc)) info->failed = true;
+  free(list);
 }
 
 void jit_code_unregister(sv_jit_ctx_t *jc, const void *code) {
@@ -683,7 +681,7 @@ static bool jit_walk_visit(jit_walk_t *w, uintptr_t pc, uintptr_t frame_addr) {
   w->in_run = true;
 
   bool resumed = false;
-  for (int i = 0; i < r->n_resume; i++) resumed |= pc - r->start == r->resume_ret[i];
+  for (uint32_t i = 0; i < r->n_resume && !resumed; i++) resumed = pc - r->start == r->resume_ret[i];
   
   sv_jit_activation_t a = { 
     .func = resumed ? NULL : r->func, 

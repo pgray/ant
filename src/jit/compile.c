@@ -844,6 +844,7 @@ static sv_jit_func_t jit_compile_tier(ant_t *js, sv_func_t *func, sv_closure_t *
   MIR_link(c->ctx, MIR_set_gen_interface, NULL);
 
   sv_jit_func_t generated = MIR_gen(c->ctx, c->jit_func);
+  bool unregistered = jit_code_info_ctx.failed;
   c->func->jit_compiling = false;
   jit_code_info_ctx = (jit_code_info_ctx_t){0};
   free(c->call_tagging.sites);
@@ -861,7 +862,12 @@ static sv_jit_func_t jit_compile_tier(ant_t *js, sv_func_t *func, sv_closure_t *
     (int64_t)(compile_t1.tv_sec - compile_t0.tv_sec) * 1000000000LL +
     (compile_t1.tv_nsec - compile_t0.tv_nsec);
 
-  if (!generated) {
+  if (!generated || unregistered) {
+    if (unregistered && sv_jit_warn_unlikely) fprintf(
+      stderr, "jit: compile-failed func=%s reason=unregistered\n",
+      c->func->debug->name ? c->func->debug->name : "<anonymous>"
+    );
+    
     c->func->jit_compile_failed = true;
     return NULL;
   }

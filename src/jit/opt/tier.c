@@ -1313,27 +1313,24 @@ void opt_rt_shape_transition(sv_vm_t *vm, ant_object_t *object, ant_shape_t *to_
   jit_helper_shape_transition(vm->js, object, to_shape);
 }
 
-static void opt_register_code(sv_jit_ctx_t *jc, opt_code_t *code) {
-  uint32_t count = code->call_site_count;
-  jit_call_site_info_t *infos = calloc(count + 1, sizeof *infos);
-  uint32_t *returns = calloc(count + 1, sizeof *returns);
-  if (infos && returns) {
-    for (uint32_t i = 0; i < count; i++) {
-      const opt_call_site_t *site = &code->call_sites[i];
-      infos[i].bc_off = site->bc_off;
-      infos[i].inl.depth = (int)site->depth;
-      for (uint32_t d = 0; d < site->depth; d++) infos[i].inl.frames[d] = site->frames[d];
-      returns[i] = site->ret_off;
-    }
-    uint32_t resume = code->exit_ret_off;
-    jit_code_register(jc, code->func, (const void *)code->entry, code->code_bytes, 16, infos, returns, count,
-      &resume, resume != UINT32_MAX);
-  }
-  free(infos);
-  free(returns);
+static bool opt_register_code(sv_jit_ctx_t *jc, opt_code_t *code) {
+  uint32_t resume = code->exit_ret_off;
+  jit_code_desc_t desc = {
+    .func = code->func,
+    .code = (const void *)code->entry,
+    .code_len = code->code_bytes,
+    .fp_cfa_off = 16,
+    .sites = code->call_sites,
+    .n_sites = code->call_site_count,
+    .resume_offs = &resume,
+    .n_resume = resume != UINT32_MAX,
+    .opt = true,
+  };
+  bool registered = jit_code_add(jc, &desc);
   free(code->call_sites);
   code->call_sites = NULL;
   code->call_site_count = 0;
+  return registered;
 }
 
 static uint64_t opt_ns_since(const struct timespec *t0) {
@@ -1433,7 +1430,7 @@ sv_jit_func_t opt_tier_compile(ant_t *js, sv_func_t *func, sv_closure_t *closure
   }
   if (code && !func->unit)
     for (uint32_t i = 0; i < graph.retained_funcs.len; i++) sv_code_depend(js, func, graph.retained_funcs.items[i]);
-  if (code && !opt_hold_roots(code, &graph)) {
+  if (code && (!opt_hold_roots(code, &graph) || !opt_register_code(jc, code))) {
     opt_code_free(code);
     code = NULL;
     codegen_failure = "out-of-memory";
@@ -1449,7 +1446,6 @@ sv_jit_func_t opt_tier_compile(ant_t *js, sv_func_t *func, sv_closure_t *closure
     return NULL;
   }
 
-  opt_register_code(jc, code);
   code->closure_pinned = build_stats.closure_pinned;
   if (code->closure_pinned) func->opt_closure_pinned = true;
   code->func_next = state->codes;
