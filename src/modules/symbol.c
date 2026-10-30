@@ -1,4 +1,5 @@
 #include <string.h>
+#include <stdlib.h>
 
 #include "ant.h"
 #include "cfunc.h"
@@ -158,4 +159,163 @@ void init_symbol_ctor(ant_t *js) {
 void gc_mark_symbols(ant_t *js, gc_mark_fn mark) {
   #define ANT_SYMBOL(name, _desc) mark(js, js->sym.name##_sym);
   #include "symbol_list.h"
+}
+
+typedef struct {
+  uint64_t gc_epoch;
+  const char *key;
+  uint32_t flags;
+  uint32_t desc_len;
+  char desc[];
+} ant_symbol_heap_t;
+
+enum {
+  SYM_FLAG_GLOBAL     = 1u,
+  SYM_FLAG_WELL_KNOWN = 2u,
+  SYM_FLAG_HAS_DESC   = 4u,
+  SYM_FLAG_DESC_ASCII = 8u,
+};
+
+static inline ant_symbol_heap_t *sym_ptr(ant_value_t v);
+
+ant_value_t js_mksym(ant_t *js, const char *desc) {
+  bool has_desc = desc != NULL;
+  
+  size_t desc_len = has_desc ? strlen(desc) : 0;
+  size_t total = offsetof(ant_symbol_heap_t, desc) +
+    (has_desc ? desc_len + 1 : 0);
+  
+  ant_symbol_heap_t *sym_ptr = (ant_symbol_heap_t *)js_type_alloc(
+    js, ANT_ALLOC_SYMBOL, total, 
+    _Alignof(ant_symbol_heap_t)
+  ); if (!sym_ptr) return js_mkerr(js, "oom");
+
+  sym_ptr->gc_epoch = 0;
+  sym_ptr->key = NULL;
+  sym_ptr->flags = has_desc ? SYM_FLAG_HAS_DESC : 0;
+
+  if (has_desc && str_detect_ascii_bytes(desc, desc_len) == STR_ASCII_YES)
+    sym_ptr->flags |= SYM_FLAG_DESC_ASCII;
+  sym_ptr->desc_len = (uint32_t)desc_len;
+  
+  if (has_desc) {
+    memcpy(sym_ptr->desc, desc, desc_len);
+    sym_ptr->desc[desc_len] = '\0';
+  }
+
+  return mkref(kTypeSymbol, sym_ptr);
+}
+
+ant_value_t js_mksym_well_known(ant_t *js, const char *desc) {
+  ant_value_t sym = js_mksym(js, desc);
+  if (is_err(sym)) return sym;
+  ant_symbol_heap_t *ptr = (ant_symbol_heap_t *)vptr(sym);
+  if (ptr) ptr->flags |= SYM_FLAG_WELL_KNOWN;
+  return sym;
+}
+
+static inline ant_symbol_heap_t *sym_ptr(ant_value_t v) {
+  return (ant_symbol_heap_t *)vptr(v);
+}
+
+static inline uint32_t sym_get_flags(ant_value_t v) {
+  ant_symbol_heap_t *ptr = sym_ptr(v);
+  return ptr ? ptr->flags : 0;
+}
+
+static inline uintptr_t sym_get_key_ptr(ant_value_t v) {
+  ant_symbol_heap_t *ptr = sym_ptr(v);
+  return ptr ? (uintptr_t)ptr->key : 0;
+}
+
+const inline char *js_sym_desc(ant_value_t sym) {
+  ant_symbol_heap_t *ptr = sym_ptr(sym);
+  if (!ptr || !(ptr->flags & SYM_FLAG_HAS_DESC)) return NULL;
+  return ptr->desc;
+}
+
+ant_value_t js_symbol_description_value(ant_t *js, ant_value_t symbol) {
+  ant_symbol_heap_t *ptr = sym_ptr(symbol);
+  if (!ptr || !(ptr->flags & SYM_FLAG_HAS_DESC)) return js_mkundef();
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, symbol);
+  ant_value_t result = mkstr_with_ascii(
+    js, ptr->desc, ptr->desc_len, (ptr->flags & SYM_FLAG_DESC_ASCII) != 0);
+  GC_ROOT_RESTORE(js, mark);
+  return result;
+}
+
+ant_value_t js_mksym_for(ant_t *js, const char *key) {
+  const char *interned = intern_string(js, key, strlen(key));
+
+  sym_registry_entry_t *reg = js->sym.registry;
+  sym_registry_entry_t *found = NULL;
+  HASH_FIND_PTR(reg, &interned, found);
+  if (found) return found->sym;
+
+  ant_value_t sym = js_mksym(js, key);
+  if (is_err(sym)) return sym;
+
+  ant_symbol_heap_t *ptr = sym_ptr(sym);
+  if (!ptr) return js_mkerr(js, "oom");
+  ptr->flags |= SYM_FLAG_GLOBAL;
+  ptr->key = interned;
+
+  sym_registry_entry_t *entry = calloc(1, sizeof(sym_registry_entry_t));
+  if (entry) {
+    entry->key = interned;
+    entry->sym = sym;
+    HASH_ADD_PTR(reg, key, entry);
+    js->sym.registry = reg;
+  }
+
+  return sym;
+}
+
+const char *js_sym_key(ant_value_t sym) {
+  if (vtype(sym) != kTypeSymbol) return NULL;
+  uint32_t flags = sym_get_flags(sym);
+  if (!(flags & SYM_FLAG_GLOBAL) || (flags & SYM_FLAG_WELL_KNOWN)) return NULL;
+  return (const char *)sym_get_key_ptr(sym);
+}
+
+bool js_symbol_gc_mark(ant_value_t sym, uint64_t epoch) {
+  if (vtype(sym) != kTypeSymbol) return false;
+  ant_symbol_heap_t *ptr = sym_ptr(sym);
+  if (!ptr || ptr->gc_epoch == epoch) return false;
+  ptr->gc_epoch = epoch;
+  return true;
+}
+
+bool js_symbol_gc_is_marked(ant_value_t sym, uint64_t epoch) {
+  if (vtype(sym) != kTypeSymbol) return false;
+  ant_symbol_heap_t *ptr = sym_ptr(sym);
+  return ptr && ptr->gc_epoch == epoch;
+}
+
+bool js_symbol_gc_is_permanent(ant_value_t sym) {
+  if (vtype(sym) != kTypeSymbol) return false;
+  uint32_t flags = sym_get_flags(sym);
+  return (flags & (SYM_FLAG_GLOBAL | SYM_FLAG_WELL_KNOWN)) != 0;
+}
+
+ant_value_t js_symbol_to_string(ant_t *js, ant_value_t sym) {
+  const char *desc = js_sym_desc(sym);
+  if (!desc) return js_mkstr(js, "Symbol()", 8);
+  
+  size_t desc_len = strlen(desc);
+  size_t total = 7 + desc_len + 1;
+  
+  char stack_buf[128];
+  char *buf = (total + 1 <= sizeof(stack_buf)) ? stack_buf : malloc(total + 1);
+  if (!buf) return Ant_Error_CreateOutOfMemory(js);
+  
+  memcpy(buf, "Symbol(", 7);
+  memcpy(buf + 7, desc, desc_len);
+  buf[7 + desc_len] = ')';
+  buf[total] = '\0';
+  
+  ant_value_t result = js_mkstr(js, buf, total);
+  if (buf != stack_buf) free(buf);
+  return result;
 }

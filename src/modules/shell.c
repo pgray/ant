@@ -124,7 +124,7 @@ static ant_value_t sh_result(
 
   js_set(js, result, "stdout", stdout_value);
   js_set(js, result, "stderr", stderr_value);
-  js_set(js, result, "exitCode", js_mknum((double)exit_code));
+  js_set(js, result, "exitCode", Ant_Value_FromNumber((double)exit_code));
   js_set(js, result, "signalCode", js_mknull());
   js_set(js, result, "exited", js_false);
   GC_ROOT_RESTORE(js, root_mark);
@@ -375,7 +375,7 @@ static bool sh_process_builder_append(
 
 static bool sh_number_index(ant_value_t value, size_t *index) {
   if (vtype(value) != kTypeNumber) return false;
-  double number = js_getnum(value);
+  double number = Ant_Value_AsNumberUnchecked(value);
   if (number != number || number < 0 || number > (double)SIZE_MAX) return false;
   size_t converted = (size_t)number;
   if ((double)converted != number) return false;
@@ -528,7 +528,7 @@ static ant_value_t sh_process_builder_add_builtin(
   ) && vtype(exit_value) == kTypeNumber;
   if (!valid || !ant_process_plan_add_native_stage(
     &builder->plan, (const char *)stdout_bytes, stdout_len,
-    (const char *)stderr_bytes, stderr_len, (int)js_getnum(exit_value)
+    (const char *)stderr_bytes, stderr_len, (int)Ant_Value_AsNumberUnchecked(exit_value)
   )) {
     GC_ROOT_RESTORE(js, root_mark);
     return Ant_Error_CreateOutOfMemory(js);
@@ -699,9 +699,9 @@ static ant_value_t sh_runtime_finish(ant_params_t) {
 
   ant_value_t last = nargs > 1 ? args[1] : js_mkundef();
   ant_value_t exit_code_value = is_special_object(last)
-    ? js_get(js, last, "exitCode") : js_mknum(0);
+    ? js_get(js, last, "exitCode") : Ant_Value_FromNumber(0);
   int exit_code = vtype(exit_code_value) == kTypeNumber
-    ? (int)js_getnum(exit_code_value) : 0;
+    ? (int)Ant_Value_AsNumberUnchecked(exit_code_value) : 0;
   ant_value_t result = sh_result(
     js,
     accumulator->stdout_bytes.data ? accumulator->stdout_bytes.data : "",

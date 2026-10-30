@@ -53,7 +53,7 @@ bool tty_ctrl_write_stream(FILE *stream, const char *data, size_t len, bool flus
 
 bool tty_ctrl_parse_int_value(ant_value_t value, int *out) {
   if (vtype(value) != kTypeNumber) return false;
-  double d = js_getnum(value);
+  double d = Ant_Value_AsNumberUnchecked(value);
   if (!isfinite(d)) return false;
   if (d < (double)INT_MIN || d > (double)INT_MAX) return false;
   int i = (int)d;

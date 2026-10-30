@@ -39,7 +39,7 @@ static inline ant_value_t sv_abstract_eq(ant_t *js, ant_value_t l, ant_value_t r
     return mkval(kTypeBool, strict_eq_values(js, l, r));
 
   if ((lt == kTypeBigInt && rty == kTypeNumber) || (lt == kTypeNumber && rty == kTypeBigInt)) {
-    double num_val = lt == kTypeNumber ? tod(l) : tod(r);
+    double num_val = lt == kTypeNumber ? Ant_Value_AsNumberUnchecked(l) : Ant_Value_AsNumberUnchecked(r);
     ant_value_t bigint_val = lt == kTypeBigInt ? l : r;
     
     if (isfinite(num_val) && num_val == trunc(num_val)) {
@@ -56,8 +56,8 @@ static inline ant_value_t sv_abstract_eq(ant_t *js, ant_value_t l, ant_value_t r
     return mkval(kTypeBool, 0);
   }
 
-  if (lt == kTypeBool) return sv_abstract_eq(js, tov(vdata(l) ? 1.0 : 0.0), r);
-  if (rty == kTypeBool) return sv_abstract_eq(js, l, tov(vdata(r) ? 1.0 : 0.0));
+  if (lt == kTypeBool) return sv_abstract_eq(js, Ant_Value_FromNumber(vdata(l) ? 1.0 : 0.0), r);
+  if (rty == kTypeBool) return sv_abstract_eq(js, l, Ant_Value_FromNumber(vdata(r) ? 1.0 : 0.0));
 
   if ((lt == kTypeNumber && rty == kTypeString) || (lt == kTypeString && rty == kTypeNumber))
     return mkval(kTypeBool, js_to_number(js, l) == js_to_number(js, r));
@@ -199,8 +199,8 @@ static inline ant_value_t sv_push_bigint_relational(
     bool ordered = false;
     
     ant_value_t status = left_is_bigint
-      ? sv_bigint_compare_number(js, l, tod(r), &ordered, &cmp)
-      : sv_bigint_compare_number(js, r, tod(l), &ordered, &cmp);
+      ? sv_bigint_compare_number(js, l, Ant_Value_AsNumberUnchecked(r), &ordered, &cmp)
+      : sv_bigint_compare_number(js, r, Ant_Value_AsNumberUnchecked(l), &ordered, &cmp);
     
     if (is_err(status)) { vm->sp -= 2; return status; }
     result = ordered && sv_rel_from_bigint_cmp(cmp, left_is_bigint, op);
@@ -236,7 +236,7 @@ static inline ant_value_t sv_push_bigint_relational(
   vm->sp -= 2;
   vm->stack[vm->sp++] = mkval(kTypeBool, result);
   
-  return tov(0);
+  return Ant_Value_FromNumber(0);
 }
 
 static inline ant_value_t sv_op_lt(sv_vm_t *vm, ant_t *js) {
@@ -251,8 +251,8 @@ static inline ant_value_t sv_op_lt(sv_vm_t *vm, ant_t *js) {
   uint8_t lt = vtype(l), rty = vtype(r);
   if (lt == kTypeNumber && rty == kTypeNumber) {
     vm->sp -= 2;
-    vm->stack[vm->sp++] = mkval(kTypeBool, tod(l) < tod(r));
-    return tov(0);
+    vm->stack[vm->sp++] = mkval(kTypeBool, Ant_Value_AsNumberUnchecked(l) < Ant_Value_AsNumberUnchecked(r));
+    return Ant_Value_FromNumber(0);
   }
   
   if (lt == kTypeBigInt || rty == kTypeBigInt)
@@ -265,7 +265,7 @@ static inline ant_value_t sv_op_lt(sv_vm_t *vm, ant_t *js) {
   vm->sp -= 2;
   vm->stack[vm->sp++] = mkval(kTypeBool, res);
 
-  return tov(0);
+  return Ant_Value_FromNumber(0);
 }
 
 static inline ant_value_t sv_op_le(sv_vm_t *vm, ant_t *js) {
@@ -280,8 +280,8 @@ static inline ant_value_t sv_op_le(sv_vm_t *vm, ant_t *js) {
   uint8_t lt = vtype(l), rty = vtype(r);
   if (lt == kTypeNumber && rty == kTypeNumber) {
     vm->sp -= 2;
-    vm->stack[vm->sp++] = mkval(kTypeBool, tod(l) <= tod(r));
-    return tov(0);
+    vm->stack[vm->sp++] = mkval(kTypeBool, Ant_Value_AsNumberUnchecked(l) <= Ant_Value_AsNumberUnchecked(r));
+    return Ant_Value_FromNumber(0);
   }
   
   if (lt == kTypeBigInt || rty == kTypeBigInt)
@@ -294,7 +294,7 @@ static inline ant_value_t sv_op_le(sv_vm_t *vm, ant_t *js) {
   vm->sp -= 2;
   vm->stack[vm->sp++] = mkval(kTypeBool, res);
   
-  return tov(0);
+  return Ant_Value_FromNumber(0);
 }
 
 static inline ant_value_t sv_op_gt(sv_vm_t *vm, ant_t *js) {
@@ -309,8 +309,8 @@ static inline ant_value_t sv_op_gt(sv_vm_t *vm, ant_t *js) {
   uint8_t lt = vtype(l), rty = vtype(r);
   if (lt == kTypeNumber && rty == kTypeNumber) {
     vm->sp -= 2;
-    vm->stack[vm->sp++] = mkval(kTypeBool, tod(l) > tod(r));
-    return tov(0);
+    vm->stack[vm->sp++] = mkval(kTypeBool, Ant_Value_AsNumberUnchecked(l) > Ant_Value_AsNumberUnchecked(r));
+    return Ant_Value_FromNumber(0);
   }
   
   if (lt == kTypeBigInt || rty == kTypeBigInt)
@@ -323,7 +323,7 @@ static inline ant_value_t sv_op_gt(sv_vm_t *vm, ant_t *js) {
   vm->sp -= 2;
   vm->stack[vm->sp++] = mkval(kTypeBool, res);
 
-  return tov(0);
+  return Ant_Value_FromNumber(0);
 }
 
 static inline ant_value_t sv_op_ge(sv_vm_t *vm, ant_t *js) {
@@ -338,8 +338,8 @@ static inline ant_value_t sv_op_ge(sv_vm_t *vm, ant_t *js) {
   uint8_t lt = vtype(l), rty = vtype(r);
   if (lt == kTypeNumber && rty == kTypeNumber) {
     vm->sp -= 2;
-    vm->stack[vm->sp++] = mkval(kTypeBool, tod(l) >= tod(r));
-    return tov(0);
+    vm->stack[vm->sp++] = mkval(kTypeBool, Ant_Value_AsNumberUnchecked(l) >= Ant_Value_AsNumberUnchecked(r));
+    return Ant_Value_FromNumber(0);
   }
   
   if (lt == kTypeBigInt || rty == kTypeBigInt)
@@ -352,7 +352,7 @@ static inline ant_value_t sv_op_ge(sv_vm_t *vm, ant_t *js) {
   vm->sp -= 2;
   vm->stack[vm->sp++] = mkval(kTypeBool, res);
 
-  return tov(0);
+  return Ant_Value_FromNumber(0);
 }
 
 static inline sv_ic_entry_t *sv_instanceof_ic_slot(sv_func_t *func, uint8_t *ip) {

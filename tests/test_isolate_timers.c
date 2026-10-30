@@ -34,7 +34,7 @@ static ant_value_t on_b(ant_params_t) {
 }
 
 static void schedule(ant_t *js, const char *name, ant_value_t callback, int delay) {
-  ant_value_t args[] = { callback, js_mknum(delay) };
+  ant_value_t args[] = { callback, Ant_Value_FromNumber(delay) };
   ant_value_t fn = js_get(js, js_glob(js), name);
   ant_value_t result = sv_vm_call(js->vm, js, fn, js_mkundef(), args, 2, NULL, js_mkundef());
   assert(!is_err(result));

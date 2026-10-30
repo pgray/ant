@@ -138,7 +138,7 @@ static bool assert_is_object_value(ant_value_t value) {
 }
 
 static bool assert_is_zero(ant_value_t value) {
-  return vtype(value) == kTypeNumber && js_getnum(value) == 0;
+  return vtype(value) == kTypeNumber && Ant_Value_AsNumberUnchecked(value) == 0;
 }
 
 static const char *assert_readable_operator(const char *op) {
@@ -603,7 +603,7 @@ static bool deep_is_object(ant_value_t value) {
 }
 
 static bool deep_is_nan(ant_value_t value) {
-  return vtype(value) == kTypeNumber && isnan(tod(value));
+  return vtype(value) == kTypeNumber && isnan(Ant_Value_AsNumberUnchecked(value));
 }
 
 static bool deep_truthy(ant_t *js, ant_value_t value) {
@@ -692,7 +692,7 @@ static bool deep_float_view_equal(deep_equal_t *ctx, ant_value_t a, ant_value_t 
   for (size_t i = 0; i < ta->length; i++) {
     ant_value_t x, y;
     if (!buffer_typedarray_data_read_index(ctx->js, ta, i, &x) || !buffer_typedarray_data_read_index(ctx->js, tb, i, &y)) return false;
-    if (tod(x) != tod(y)) return false;
+    if (Ant_Value_AsNumberUnchecked(x) != Ant_Value_AsNumberUnchecked(y)) return false;
   }
   
   return true;
@@ -719,8 +719,8 @@ static bool deep_array_elements(deep_equal_t *ctx, ant_value_t a, ant_value_t b)
   
   for (ant_offset_t i = 0; i < len; i++) {
     ant_value_t x = js_arr_get(js, a, i), y = js_arr_get(js, b, i);
-    bool hx = vtype(x) != kTypeUndefined || deep_truthy(js, Ant_Object_HasOwn(js, a, tov((double)i)));
-    bool hy = vtype(y) != kTypeUndefined || deep_truthy(js, Ant_Object_HasOwn(js, b, tov((double)i)));
+    bool hx = vtype(x) != kTypeUndefined || deep_truthy(js, Ant_Object_HasOwn(js, a, Ant_Value_FromNumber((double)i)));
+    bool hy = vtype(y) != kTypeUndefined || deep_truthy(js, Ant_Object_HasOwn(js, b, Ant_Value_FromNumber((double)i)));
     if (hx != hy || (hx && !deep_equal_values(ctx, x, y))) return false;
   }
   
@@ -885,7 +885,7 @@ static bool deep_objects_equal(deep_equal_t *ctx, ant_value_t a, ant_value_t b) 
   if (is_date_instance(a)) {
     if (!is_date_instance(b)) return false;
     ant_value_t ta = js_get_slot(js_as_obj(a), SLOT_DATA), tb = js_get_slot(js_as_obj(b), SLOT_DATA);
-    if (vtype(ta) != kTypeNumber || vtype(tb) != kTypeNumber || tod(ta) != tod(tb)) return false;
+    if (vtype(ta) != kTypeNumber || vtype(tb) != kTypeNumber || Ant_Value_AsNumberUnchecked(ta) != Ant_Value_AsNumberUnchecked(tb)) return false;
   } else if (pa && pa->flags.regexp_brand) {
     static const char *const names[] = { "source", "flags", "lastIndex" };
     if (!pb || !pb->flags.regexp_brand || !deep_props_equal(js, a, b, names, 3)) return false;

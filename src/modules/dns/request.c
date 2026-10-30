@@ -93,7 +93,7 @@ ant_value_t dns_error(ant_t *js, const char *syscall, const char *code, int errn
   ant_value_t props = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, props);
 
-  js_set(js, props, "errno", has_errno ? js_mknum((double)errno_value) : js_mkundef());
+  js_set(js, props, "errno", has_errno ? Ant_Value_FromNumber((double)errno_value) : js_mkundef());
   js_set(js, props, "code", js_mkstr(js, code, strlen(code)));
   js_set(js, props, "syscall", js_mkstr(js, syscall, strlen(syscall)));
   if (hostname) js_set(js, props, "hostname", js_mkstr(js, hostname, strlen(hostname)));

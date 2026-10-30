@@ -206,8 +206,7 @@ static ant_value_t create_subscription_observer(ant_t *js, ant_value_t subscript
 }
 
 static ant_value_t js_cleanup_fn(ant_params_t) {
-  (void)args; (void)nargs;
-  ant_value_t F = js_getcurrentfunc(js);
+  ant_value_t F = js->current_func;
   ant_value_t subscription = js_get_slot(F, SLOT_DATA);
   
   if (!is_special_object(subscription)) return js_mkundef();
@@ -328,7 +327,7 @@ static ant_value_t js_observable_constructor(ant_params_t) {
 }
 
 static ant_value_t js_of_subscriber(ant_params_t) {
-  ant_value_t F = js_getcurrentfunc(js);
+  ant_value_t F = js->current_func;
   ant_value_t items = js_get_slot(F, SLOT_DATA);
   
   if (nargs < 1) return js_mkundef();
@@ -337,7 +336,7 @@ static ant_value_t js_of_subscriber(ant_params_t) {
   ant_value_t subscription = js_get_slot(observer, SLOT_DATA);
   
   ant_value_t length_val = js_get(js, items, "length");
-  int length = (vtype(length_val) == kTypeNumber) ? (int)js_getnum(length_val) : 0;
+  int length = (vtype(length_val) == kTypeNumber) ? (int)Ant_Value_AsNumberUnchecked(length_val) : 0;
   
   for (int i = 0; i < length; i++) {
     char key[16];
@@ -370,8 +369,7 @@ static ant_value_t js_observable_of(ant_params_t) {
 }
 
 static ant_value_t js_from_delegating(ant_params_t) {
-  ant_value_t F = js_getcurrentfunc(js);
-  
+  ant_value_t F = js->current_func;
   ant_value_t observable = js_get_slot(F, SLOT_DATA);
   if (!is_special_object(observable)) return js_mkundef();
   
@@ -384,7 +382,7 @@ static ant_value_t js_from_delegating(ant_params_t) {
 }
 
 static ant_value_t js_from_iteration(ant_params_t) {
-  ant_value_t F = js_getcurrentfunc(js);
+  ant_value_t F = js->current_func;
   ant_value_t data = js_get_slot(F, SLOT_DATA);
   
   ant_value_t iterable = js_get(js, data, "iterable");

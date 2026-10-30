@@ -305,7 +305,7 @@ static unsigned int option_uint(ant_t *js, ant_value_t options, const char *key,
   if (vtype(options) != kTypeObject) return fallback;
   ant_value_t val = js_get(js, options, key);
   if (vtype(val) != kTypeNumber) return fallback;
-  double n = js_getnum(val);
+  double n = Ant_Value_AsNumberUnchecked(val);
   if (n < 0.0) return fallback;
   return (unsigned int)n;
 }
@@ -314,7 +314,7 @@ static size_t option_size(ant_t *js, ant_value_t options, const char *key, size_
   if (vtype(options) != kTypeObject) return fallback;
   ant_value_t val = js_get(js, options, key);
   if (vtype(val) != kTypeNumber) return fallback;
-  double n = js_getnum(val);
+  double n = Ant_Value_AsNumberUnchecked(val);
   if (n < 0.0) return fallback;
   return (size_t)n;
 }
@@ -610,12 +610,12 @@ static ant_value_t lmdb_env_stat_method(ant_params_t) {
   if (rc != 0) return js_mkerr(js, "lmdb_stat failed: %s", mdb_strerror(rc));
 
   ant_value_t out = Ant_Object_CreateBare(js);
-  js_set(js, out, "psize", js_mknum((double)stat.ms_psize));
-  js_set(js, out, "depth", js_mknum((double)stat.ms_depth));
-  js_set(js, out, "branchPages", js_mknum((double)stat.ms_branch_pages));
-  js_set(js, out, "leafPages", js_mknum((double)stat.ms_leaf_pages));
-  js_set(js, out, "overflowPages", js_mknum((double)stat.ms_overflow_pages));
-  js_set(js, out, "entries", js_mknum((double)stat.ms_entries));
+  js_set(js, out, "psize", Ant_Value_FromNumber((double)stat.ms_psize));
+  js_set(js, out, "depth", Ant_Value_FromNumber((double)stat.ms_depth));
+  js_set(js, out, "branchPages", Ant_Value_FromNumber((double)stat.ms_branch_pages));
+  js_set(js, out, "leafPages", Ant_Value_FromNumber((double)stat.ms_leaf_pages));
+  js_set(js, out, "overflowPages", Ant_Value_FromNumber((double)stat.ms_overflow_pages));
+  js_set(js, out, "entries", Ant_Value_FromNumber((double)stat.ms_entries));
   
   return out;
 }
@@ -629,11 +629,11 @@ static ant_value_t lmdb_env_info_method(ant_params_t) {
   if (rc != 0) return js_mkerr(js, "lmdb_env_info failed: %s", mdb_strerror(rc));
 
   ant_value_t out = Ant_Object_CreateBare(js);
-  js_set(js, out, "mapSize", js_mknum((double)info.me_mapsize));
-  js_set(js, out, "lastPgNo", js_mknum((double)info.me_last_pgno));
-  js_set(js, out, "lastTxnId", js_mknum((double)info.me_last_txnid));
-  js_set(js, out, "maxReaders", js_mknum((double)info.me_maxreaders));
-  js_set(js, out, "numReaders", js_mknum((double)info.me_numreaders));
+  js_set(js, out, "mapSize", Ant_Value_FromNumber((double)info.me_mapsize));
+  js_set(js, out, "lastPgNo", Ant_Value_FromNumber((double)info.me_last_pgno));
+  js_set(js, out, "lastTxnId", Ant_Value_FromNumber((double)info.me_last_txnid));
+  js_set(js, out, "maxReaders", Ant_Value_FromNumber((double)info.me_maxreaders));
+  js_set(js, out, "numReaders", Ant_Value_FromNumber((double)info.me_numreaders));
   
   return out;
 }
@@ -975,7 +975,7 @@ static ant_value_t lmdb_strerror_fn(ant_params_t) {
   if (nargs < 1 || vtype(args[0]) != kTypeNumber) {
     return js_mkerr(js, "lmdb.strerror(code) requires a numeric code");
   }
-  int code = (int)js_getnum(args[0]);
+  int code = (int)Ant_Value_AsNumberUnchecked(args[0]);
   const char *err = mdb_strerror(code);
   return js_mkstr(js, err, strlen(err));
 }
@@ -1098,24 +1098,24 @@ ant_value_t lmdb_library(ant_t *js) {
   const char *version = mdb_version(&major, &minor, &patch);
 
   js_set(js, lib, "version", js_mkstr(js, version, strlen(version)));
-  js_set(js, lib, "versionMajor", js_mknum((double)major));
-  js_set(js, lib, "versionMinor", js_mknum((double)minor));
-  js_set(js, lib, "versionPatch", js_mknum((double)patch));
+  js_set(js, lib, "versionMajor", Ant_Value_FromNumber((double)major));
+  js_set(js, lib, "versionMinor", Ant_Value_FromNumber((double)minor));
+  js_set(js, lib, "versionPatch", Ant_Value_FromNumber((double)patch));
 
   ant_value_t constants = Ant_Object_CreateBare(js);
-  js_set(js, constants, "NOOVERWRITE", js_mknum((double)MDB_NOOVERWRITE));
-  js_set(js, constants, "NODUPDATA", js_mknum((double)MDB_NODUPDATA));
-  js_set(js, constants, "APPEND", js_mknum((double)MDB_APPEND));
-  js_set(js, constants, "APPENDDUP", js_mknum((double)MDB_APPENDDUP));
-  js_set(js, constants, "NOSUBDIR", js_mknum((double)MDB_NOSUBDIR));
-  js_set(js, constants, "NOSYNC", js_mknum((double)MDB_NOSYNC));
-  js_set(js, constants, "NOMETASYNC", js_mknum((double)MDB_NOMETASYNC));
-  js_set(js, constants, "WRITEMAP", js_mknum((double)MDB_WRITEMAP));
-  js_set(js, constants, "MAPASYNC", js_mknum((double)MDB_MAPASYNC));
-  js_set(js, constants, "NOTLS", js_mknum((double)MDB_NOTLS));
-  js_set(js, constants, "NOLOCK", js_mknum((double)MDB_NOLOCK));
-  js_set(js, constants, "NORDAHEAD", js_mknum((double)MDB_NORDAHEAD));
-  js_set(js, constants, "NOMEMINIT", js_mknum((double)MDB_NOMEMINIT));
+  js_set(js, constants, "NOOVERWRITE", Ant_Value_FromNumber((double)MDB_NOOVERWRITE));
+  js_set(js, constants, "NODUPDATA", Ant_Value_FromNumber((double)MDB_NODUPDATA));
+  js_set(js, constants, "APPEND", Ant_Value_FromNumber((double)MDB_APPEND));
+  js_set(js, constants, "APPENDDUP", Ant_Value_FromNumber((double)MDB_APPENDDUP));
+  js_set(js, constants, "NOSUBDIR", Ant_Value_FromNumber((double)MDB_NOSUBDIR));
+  js_set(js, constants, "NOSYNC", Ant_Value_FromNumber((double)MDB_NOSYNC));
+  js_set(js, constants, "NOMETASYNC", Ant_Value_FromNumber((double)MDB_NOMETASYNC));
+  js_set(js, constants, "WRITEMAP", Ant_Value_FromNumber((double)MDB_WRITEMAP));
+  js_set(js, constants, "MAPASYNC", Ant_Value_FromNumber((double)MDB_MAPASYNC));
+  js_set(js, constants, "NOTLS", Ant_Value_FromNumber((double)MDB_NOTLS));
+  js_set(js, constants, "NOLOCK", Ant_Value_FromNumber((double)MDB_NOLOCK));
+  js_set(js, constants, "NORDAHEAD", Ant_Value_FromNumber((double)MDB_NORDAHEAD));
+  js_set(js, constants, "NOMEMINIT", Ant_Value_FromNumber((double)MDB_NOMEMINIT));
   js_set(js, lib, "constants", constants);
 
   js_set_tostringtag(js, lib, js_mkstr(js, "lmdb", 4));

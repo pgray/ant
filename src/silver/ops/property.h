@@ -608,13 +608,13 @@ static inline bool sv_try_get_data_prop_no_effect_interned(
   uint8_t t = vtype(obj);
   if (is_length_key(interned, len)) {
     if (t == kTypeString) {
-      *out = tov((double)str_utf16_len(js, obj));
+      *out = Ant_Value_FromNumber((double)str_utf16_len(js, obj));
       return true;
     }
     if (t == kTypeObject) {
       ant_value_t primitive = js_get_slot(obj, SLOT_PRIMITIVE);
       if (vtype(primitive) == kTypeString) {
-        *out = tov((double)str_utf16_len(js, primitive));
+        *out = Ant_Value_FromNumber((double)str_utf16_len(js, primitive));
         return true;
       }
     }
@@ -622,7 +622,7 @@ static inline bool sv_try_get_data_prop_no_effect_interned(
       ant_object_t *ptr = js_obj_ptr(js_as_obj(obj));
       if (!ptr || ptr->flags.is_exotic) return false;
       if (!ptr->flags.arguments_object) {
-        *out = tov((double)js_arr_len(js, js_as_obj(obj)));
+        *out = Ant_Value_FromNumber((double)js_arr_len(js, js_as_obj(obj)));
         return true;
       }
     }
@@ -885,12 +885,12 @@ static inline ant_value_t sv_prop_get_at(
   }
 
   if (vtype(str_prim) == kTypeString && is_length_key(interned, len)) {
-    return tov((double)str_utf16_len(js, str_prim));
+    return Ant_Value_FromNumber((double)str_utf16_len(js, str_prim));
   }
 
   if (is_length_key(interned, len)) {
     ant_object_t *arr_ptr = sv_array_obj_ptr(obj);
-    if (ant_object_is_array(arr_ptr)) return tov((double)js_arr_len(js, js_as_obj(obj)));
+    if (ant_object_is_array(arr_ptr)) return Ant_Value_FromNumber((double)js_arr_len(js, js_as_obj(obj)));
   }
 
   if (t == kTypeObject || t == kTypeArray || t == kTypeFunction || t == kTypePromise) {
@@ -915,7 +915,7 @@ static inline ant_value_t sv_prop_get_at(
 
 static inline bool sv_number_key_index(ant_value_t key, uint32_t *idx) {
   if (vtype(key) != kTypeNumber) return false;
-  double d = tod(key);
+  double d = Ant_Value_AsNumberUnchecked(key);
   
   if (!(d >= 0 && d < (double)UINT32_MAX)) return false;
   *idx = (uint32_t)d;
@@ -925,7 +925,7 @@ static inline bool sv_number_key_index(ant_value_t key, uint32_t *idx) {
 
 static inline bool sv_parse_string_index_key(ant_t *js, ant_value_t key, size_t *out_idx) {
   if (vtype(key) == kTypeNumber) {
-    double d = tod(key);
+    double d = Ant_Value_AsNumberUnchecked(key);
     if (!isfinite(d) || d < 0.0) return false;
     double di = floor(d);
     if (di != d || di > (double)SIZE_MAX) return false;
@@ -1952,7 +1952,7 @@ static ant_value_t sv_get_length_numeric_exotic(ant_t *js, ant_value_t obj, ant_
   if (sv_gf_mega_find(js, ptr, js->intern.length, &out, &getter)) {
     double length = 0;
     if (vtype(getter) == kTypeUndefined) return out;
-    if (buffer_fast_length_getter(getter, obj, &length)) return tov(length);
+    if (buffer_fast_length_getter(getter, obj, &length)) return Ant_Value_FromNumber(length);
     return js_call_getter(js, obj, getter);
   }
   
@@ -1967,11 +1967,11 @@ static ant_value_t sv_get_length_numeric_exotic(ant_t *js, ant_value_t obj, ant_
 static inline ant_value_t sv_get_length_value(ant_t *js, ant_value_t obj) {
   if (vtype(obj) == kTypeArray) {
     ant_value_t out;
-    if (!js_obj_ptr(obj)->flags.arguments_object) return tov((double)(uint32_t)js_arr_len(js, obj));
+    if (!js_obj_ptr(obj)->flags.arguments_object) return Ant_Value_FromNumber((double)(uint32_t)js_arr_len(js, obj));
     if (sv_try_get_data_prop_no_effect_interned(js, obj, js->intern.length, 6, &out)) return out;
   }
   
-  if (vtype(obj) == kTypeString) return tov((double)str_utf16_len(js, obj));
+  if (vtype(obj) == kTypeString) return Ant_Value_FromNumber((double)str_utf16_len(js, obj));
   
   if (vtype(obj) == kTypeNull || vtype(obj) == kTypeUndefined) return js_mkerr_typed(
     js, JS_ERR_TYPE, "Cannot read properties of %s (reading 'length')",
@@ -1981,7 +1981,7 @@ static inline ant_value_t sv_get_length_value(ant_t *js, ant_value_t obj) {
   ant_object_t *ptr = vtype(obj) == kTypeObject ? js_obj_ptr(obj) : NULL;
   double ta_length = 0;
   
-  if (ptr && buffer_typedarray_length_fast(js, ptr, &ta_length)) return tov(ta_length);
+  if (ptr && buffer_typedarray_length_fast(js, ptr, &ta_length)) return Ant_Value_FromNumber(ta_length);
   if (ptr && ptr->shape && ptr->type_tag == kTypeObject && sv_ic_numeric_exotic(ptr))
     return sv_get_length_numeric_exotic(js, obj, ptr);
   
@@ -1995,7 +1995,7 @@ static inline ant_value_t sv_get_length_at(ant_t *js, ant_value_t obj, sv_func_t
   }
   
   double ta_length = 0;
-  if (vtype(obj) == kTypeObject && buffer_typedarray_length_fast(js, js_obj_ptr(obj), &ta_length)) return tov(ta_length);
+  if (vtype(obj) == kTypeObject && buffer_typedarray_length_fast(js, js_obj_ptr(obj), &ta_length)) return Ant_Value_FromNumber(ta_length);
 
   sv_atom_t length = sv_length_atom(js);
   sv_ic_entry_t *ic = sv_ic_slot_at(func, sv_get_u16(ip + 1));

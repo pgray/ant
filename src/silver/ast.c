@@ -767,7 +767,7 @@ static sv_ast_t *parse_primary(P) {
 
   l_number: {
     CONSUME();
-    return mk_num(p, tod(TVAL));
+    return mk_num(p, Ant_Value_AsNumberUnchecked(TVAL));
   }
 
   l_string: {
@@ -1211,7 +1211,7 @@ static sv_ast_t *parse_object(P) {
         prop->flags |= FN_COMPUTED;
       } else if (TOK == TOK_NUMBER) {
         CONSUME();
-        prop->left = mk_num(p, tod(TVAL));
+        prop->left = mk_num(p, Ant_Value_AsNumberUnchecked(TVAL));
       } else if (TOK == TOK_STRING) {
         prop->left = mk(N_STRING);
         sv_ast_set_string(prop->left, sv_lexer_str_literal(&p->lx));
@@ -1247,7 +1247,7 @@ static sv_ast_t *parse_object(P) {
           prop->flags |= FN_COMPUTED;
         } else if (TOK == TOK_NUMBER) {
           CONSUME();
-          prop->left = mk_num(p, tod(TVAL));
+          prop->left = mk_num(p, Ant_Value_AsNumberUnchecked(TVAL));
         } else if (TOK == TOK_STRING) {
           prop->left = mk(N_STRING);
           sv_ast_set_string(prop->left, sv_lexer_str_literal(&p->lx));
@@ -1289,7 +1289,7 @@ static sv_ast_t *parse_object(P) {
           prop->flags |= FN_COMPUTED;
         } else if (TOK == TOK_NUMBER) {
           CONSUME();
-          prop->left = mk_num(p, tod(TVAL));
+          prop->left = mk_num(p, Ant_Value_AsNumberUnchecked(TVAL));
         } else if (TOK == TOK_STRING) {
           prop->left = mk(N_STRING);
           sv_ast_set_string(prop->left, sv_lexer_str_literal(&p->lx));
@@ -1314,7 +1314,7 @@ static sv_ast_t *parse_object(P) {
     }
     else if (TOK == TOK_NUMBER) {
       CONSUME();
-      prop->left = mk_num(p, tod(TVAL));
+      prop->left = mk_num(p, Ant_Value_AsNumberUnchecked(TVAL));
     }
     else if (TOK == TOK_STRING) {
       prop->left = mk(N_STRING);

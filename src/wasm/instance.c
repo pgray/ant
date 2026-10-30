@@ -27,7 +27,7 @@ static void wasm_delete_owned_imports(
 static ant_value_t wasm_wrap_instance(ant_t *js, wasm_instance_handle_t *handle, ant_value_t module_ref) {
   ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_proto_init(obj, js->builtins.wasm_instance_proto);
-  js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_WASM_INSTANCE));
+  js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_WASM_INSTANCE));
   js_set_native(obj, handle, WASM_INSTANCE_NATIVE_TAG);
   js_set_slot_wb(js, obj, SLOT_CTOR, module_ref);
   return obj;

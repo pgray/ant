@@ -244,24 +244,24 @@ static ant_value_t os_endianness(ant_params_t) {
 static ant_value_t os_uptime(ant_params_t) {
   (void)args; (void)nargs;
 #ifdef _WIN32
-  return js_mknum((double)GetTickCount64() / 1000.0);
+  return Ant_Value_FromNumber((double)GetTickCount64() / 1000.0);
 #elif defined(__APPLE__)
   struct timeval boottime;
   size_t len = sizeof(boottime);
   int mib[2] = { CTL_KERN, KERN_BOOTTIME };
   if (sysctl(mib, 2, &boottime, &len, NULL, 0) == 0) {
     time_t now = time(NULL);
-    return js_mknum((double)(now - boottime.tv_sec));
+    return Ant_Value_FromNumber((double)(now - boottime.tv_sec));
   }
-  return js_mknum(0);
+  return Ant_Value_FromNumber(0);
 #elif defined(__linux__)
   struct sysinfo info;
   if (sysinfo(&info) == 0) {
-    return js_mknum((double)info.uptime);
+    return Ant_Value_FromNumber((double)info.uptime);
   }
-  return js_mknum(0);
+  return Ant_Value_FromNumber(0);
 #else
-  return js_mknum(0);
+  return Ant_Value_FromNumber(0);
 #endif
 }
 
@@ -271,24 +271,24 @@ static ant_value_t os_totalmem(ant_params_t) {
   MEMORYSTATUSEX memInfo;
   memInfo.dwLength = sizeof(MEMORYSTATUSEX);
   if (GlobalMemoryStatusEx(&memInfo)) {
-    return js_mknum((double)memInfo.ullTotalPhys);
+    return Ant_Value_FromNumber((double)memInfo.ullTotalPhys);
   }
-  return js_mknum(0);
+  return Ant_Value_FromNumber(0);
 #elif defined(__APPLE__)
   int64_t memsize;
   size_t len = sizeof(memsize);
   if (sysctlbyname("hw.memsize", &memsize, &len, NULL, 0) == 0) {
-    return js_mknum((double)memsize);
+    return Ant_Value_FromNumber((double)memsize);
   }
-  return js_mknum(0);
+  return Ant_Value_FromNumber(0);
 #elif defined(__linux__)
   struct sysinfo info;
   if (sysinfo(&info) == 0) {
-    return js_mknum((double)info.totalram * info.mem_unit);
+    return Ant_Value_FromNumber((double)info.totalram * info.mem_unit);
   }
-  return js_mknum(0);
+  return Ant_Value_FromNumber(0);
 #else
-  return js_mknum(0);
+  return Ant_Value_FromNumber(0);
 #endif
 }
 
@@ -298,9 +298,9 @@ static ant_value_t os_freemem(ant_params_t) {
   MEMORYSTATUSEX memInfo;
   memInfo.dwLength = sizeof(MEMORYSTATUSEX);
   if (GlobalMemoryStatusEx(&memInfo)) {
-    return js_mknum((double)memInfo.ullAvailPhys);
+    return Ant_Value_FromNumber((double)memInfo.ullAvailPhys);
   }
-  return js_mknum(0);
+  return Ant_Value_FromNumber(0);
 #elif defined(__APPLE__)
   vm_size_t page_size;
   mach_port_t mach_port = mach_host_self();
@@ -309,17 +309,17 @@ static ant_value_t os_freemem(ant_params_t) {
   
   if (host_page_size(mach_port, &page_size) == KERN_SUCCESS &&
       host_statistics64(mach_port, HOST_VM_INFO64, (host_info64_t)&vm_stats, &count) == KERN_SUCCESS) {
-    return js_mknum((double)vm_stats.free_count * (double)page_size);
+    return Ant_Value_FromNumber((double)vm_stats.free_count * (double)page_size);
   }
-  return js_mknum(0);
+  return Ant_Value_FromNumber(0);
 #elif defined(__linux__)
   struct sysinfo info;
   if (sysinfo(&info) == 0) {
-    return js_mknum((double)info.freeram * info.mem_unit);
+    return Ant_Value_FromNumber((double)info.freeram * info.mem_unit);
   }
-  return js_mknum(0);
+  return Ant_Value_FromNumber(0);
 #else
-  return js_mknum(0);
+  return Ant_Value_FromNumber(0);
 #endif
 }
 
@@ -328,19 +328,19 @@ static ant_value_t os_availableParallelism(ant_params_t) {
 #ifdef _WIN32
   SYSTEM_INFO sysinfo;
   GetSystemInfo(&sysinfo);
-  return js_mknum((double)sysinfo.dwNumberOfProcessors);
+  return Ant_Value_FromNumber((double)sysinfo.dwNumberOfProcessors);
 #elif defined(__APPLE__)
   int count;
   size_t size = sizeof(count);
   if (sysctlbyname("hw.ncpu", &count, &size, NULL, 0) == 0) {
-    return js_mknum((double)count);
+    return Ant_Value_FromNumber((double)count);
   }
-  return js_mknum(1);
+  return Ant_Value_FromNumber(1);
 #elif defined(__linux__)
   long count = sysconf(_SC_NPROCESSORS_ONLN);
-  return js_mknum(count > 0 ? (double)count : 1);
+  return Ant_Value_FromNumber(count > 0 ? (double)count : 1);
 #else
-  return js_mknum(1);
+  return Ant_Value_FromNumber(1);
 #endif
 }
 
@@ -400,11 +400,11 @@ static ant_value_t push_cpu_entry(ant_t *js, ant_value_t arr, const char *model,
   GC_ROOT_PIN(js, t);
   
   ant_object_t *timing = js_obj_ptr(t);
-  ant_object_prop_set_unchecked(timing, CPU_TIME_USER, js_mknum(times->user));
-  ant_object_prop_set_unchecked(timing, CPU_TIME_NICE, js_mknum(times->nice));
-  ant_object_prop_set_unchecked(timing, CPU_TIME_SYS, js_mknum(times->sys));
-  ant_object_prop_set_unchecked(timing, CPU_TIME_IDLE, js_mknum(times->idle));
-  ant_object_prop_set_unchecked(timing, CPU_TIME_IRQ, js_mknum(times->irq));
+  ant_object_prop_set_unchecked(timing, CPU_TIME_USER, Ant_Value_FromNumber(times->user));
+  ant_object_prop_set_unchecked(timing, CPU_TIME_NICE, Ant_Value_FromNumber(times->nice));
+  ant_object_prop_set_unchecked(timing, CPU_TIME_SYS, Ant_Value_FromNumber(times->sys));
+  ant_object_prop_set_unchecked(timing, CPU_TIME_IDLE, Ant_Value_FromNumber(times->idle));
+  ant_object_prop_set_unchecked(timing, CPU_TIME_IRQ, Ant_Value_FromNumber(times->irq));
 
   ant_value_t name = js_mkstr(js, model, strlen(model));
   if (is_err(name)) { GC_ROOT_RESTORE(js, mark); return name; }
@@ -412,7 +412,7 @@ static ant_value_t push_cpu_entry(ant_t *js, ant_value_t arr, const char *model,
   ant_object_t *obj = js_obj_ptr(cpu);
   ant_object_prop_set_unchecked(obj, CPU_MODEL, name);
   gc_write_barrier(js, obj, name);
-  ant_object_prop_set_unchecked(obj, CPU_SPEED, js_mknum(speed));
+  ant_object_prop_set_unchecked(obj, CPU_SPEED, Ant_Value_FromNumber(speed));
   ant_object_prop_set_unchecked(obj, CPU_TIMES, t);
   
   gc_write_barrier(js, obj, t);
@@ -549,18 +549,18 @@ static ant_value_t os_loadavg(ant_params_t) {
 #if defined(__APPLE__) || defined(__linux__)
   double loadavg[3];
   if (getloadavg(loadavg, 3) == 3) {
-    js_arr_push(js, arr, js_mknum(loadavg[0]));
-    js_arr_push(js, arr, js_mknum(loadavg[1]));
-    js_arr_push(js, arr, js_mknum(loadavg[2]));
+    js_arr_push(js, arr, Ant_Value_FromNumber(loadavg[0]));
+    js_arr_push(js, arr, Ant_Value_FromNumber(loadavg[1]));
+    js_arr_push(js, arr, Ant_Value_FromNumber(loadavg[2]));
   } else {
-    js_arr_push(js, arr, js_mknum(0));
-    js_arr_push(js, arr, js_mknum(0));
-    js_arr_push(js, arr, js_mknum(0));
+    js_arr_push(js, arr, Ant_Value_FromNumber(0));
+    js_arr_push(js, arr, Ant_Value_FromNumber(0));
+    js_arr_push(js, arr, Ant_Value_FromNumber(0));
   }
 #else
-  js_arr_push(js, arr, js_mknum(0));
-  js_arr_push(js, arr, js_mknum(0));
-  js_arr_push(js, arr, js_mknum(0));
+  js_arr_push(js, arr, Ant_Value_FromNumber(0));
+  js_arr_push(js, arr, Ant_Value_FromNumber(0));
+  js_arr_push(js, arr, Ant_Value_FromNumber(0));
 #endif
   
   return arr;
@@ -631,7 +631,7 @@ static ant_value_t os_networkInterfaces(ant_params_t) {
         js_set(js, entry, "address", js_mkstr(js, addr_str, strlen(addr_str)));
         js_set(js, entry, "family", js_mkstr(js, "IPv6", 4));
         js_set(js, entry, "netmask", js_mkstr(js, "", 0));
-        js_set(js, entry, "scopeid", js_mknum((double)sa6->sin6_scope_id));
+        js_set(js, entry, "scopeid", Ant_Value_FromNumber((double)sa6->sin6_scope_id));
         js_set(js, entry, "cidr", js_mkstr(js, addr_str, strlen(addr_str)));
       } else {
         continue;
@@ -649,8 +649,8 @@ static ant_value_t os_userInfo(ant_params_t) {
   (void)args; (void)nargs;
   ant_value_t info = Ant_Object_CreateBare(js);
   
-  js_set(js, info, "uid", js_mknum(-1));
-  js_set(js, info, "gid", js_mknum(-1));
+  js_set(js, info, "uid", Ant_Value_FromNumber(-1));
+  js_set(js, info, "gid", Ant_Value_FromNumber(-1));
   
   char username[UNLEN + 1];
   DWORD username_len = sizeof(username);
@@ -674,7 +674,7 @@ static ant_value_t os_userInfo(ant_params_t) {
 
 static ant_value_t os_getPriority(ant_params_t) {
   (void)args; (void)nargs;
-  return js_mknum(0);
+  return Ant_Value_FromNumber(0);
 }
 
 static ant_value_t os_setPriority(ant_params_t) {
@@ -743,7 +743,7 @@ static void add_iface_entry(ant_t *js, ant_value_t iface_arr, struct ifaddrs *if
     js_set(js, entry, "address", js_mkstr(js, addr_str, strlen(addr_str)));
     js_set(js, entry, "netmask", js_mkstr(js, netmask_str, strlen(netmask_str)));
     js_set(js, entry, "family", js_mkstr(js, "IPv6", 4));
-    js_set(js, entry, "scopeid", js_mknum((double)sa6->sin6_scope_id));
+    js_set(js, entry, "scopeid", Ant_Value_FromNumber((double)sa6->sin6_scope_id));
     js_set(js, entry, "cidr", js_mkstr(js, cidr, strlen(cidr)));
     goto push;
   }
@@ -776,7 +776,7 @@ static void apply_mac_to_iface(ant_t *js, ant_value_t result, const char *name, 
   if (!is_special_object(iface_arr)) return;
   
   ant_value_t len_val = js_get(js, iface_arr, "length");
-  int len = (vtype(len_val) == kTypeNumber) ? (int)js_getnum(len_val) : 0;
+  int len = (vtype(len_val) == kTypeNumber) ? (int)Ant_Value_AsNumberUnchecked(len_val) : 0;
   
   for (int i = 0; i < len; i++) {
     char idx[16];
@@ -830,8 +830,8 @@ static ant_value_t os_userInfo(ant_params_t) {
   gid_t gid = getgid();
   struct passwd *pw = getpwuid(uid);
   
-  js_set(js, info, "uid", js_mknum((double)uid));
-  js_set(js, info, "gid", js_mknum((double)gid));
+  js_set(js, info, "uid", Ant_Value_FromNumber((double)uid));
+  js_set(js, info, "gid", Ant_Value_FromNumber((double)gid));
   
   if (pw) {
     if (pw->pw_name) js_set(js, info, "username", js_mkstr(js, pw->pw_name, strlen(pw->pw_name)));
@@ -854,7 +854,7 @@ static ant_value_t os_userInfo(ant_params_t) {
 static ant_value_t os_getPriority(ant_params_t) {
   int pid = 0;
   if (nargs > 0 && vtype(args[0]) == kTypeNumber) {
-    pid = (int)js_getnum(args[0]);
+    pid = (int)Ant_Value_AsNumberUnchecked(args[0]);
   }
   
   errno = 0;
@@ -862,7 +862,7 @@ static ant_value_t os_getPriority(ant_params_t) {
   if (errno != 0) {
     return js_mkerr(js, "Failed to get priority: %s", strerror(errno));
   }
-  return js_mknum((double)priority);
+  return Ant_Value_FromNumber((double)priority);
 }
 
 static ant_value_t os_setPriority(ant_params_t) {
@@ -873,13 +873,13 @@ static ant_value_t os_setPriority(ant_params_t) {
     if (vtype(args[0]) != kTypeNumber) {
       return js_mkerr_typed(js, JS_ERR_TYPE, "priority must be a number");
     }
-    priority = (int)js_getnum(args[0]);
+    priority = (int)Ant_Value_AsNumberUnchecked(args[0]);
   } else if (nargs >= 2) {
     if (vtype(args[0]) != kTypeNumber || vtype(args[1]) != kTypeNumber) {
       return js_mkerr_typed(js, JS_ERR_TYPE, "pid and priority must be numbers");
     }
-    pid = (int)js_getnum(args[0]);
-    priority = (int)js_getnum(args[1]);
+    pid = (int)Ant_Value_AsNumberUnchecked(args[0]);
+    priority = (int)Ant_Value_AsNumberUnchecked(args[1]);
   } else {
     return js_mkerr_typed(js, JS_ERR_TYPE, "setPriority requires at least 1 argument");
   }
@@ -894,190 +894,190 @@ static ant_value_t os_setPriority(ant_params_t) {
 
 static void add_signal_constants(ant_t *js, ant_value_t signals) {
 #ifdef SIGHUP
-  js_set(js, signals, "SIGHUP", js_mknum(SIGHUP));
+  js_set(js, signals, "SIGHUP", Ant_Value_FromNumber(SIGHUP));
 #endif
 #ifdef SIGINT
-  js_set(js, signals, "SIGINT", js_mknum(SIGINT));
+  js_set(js, signals, "SIGINT", Ant_Value_FromNumber(SIGINT));
 #endif
 #ifdef SIGQUIT
-  js_set(js, signals, "SIGQUIT", js_mknum(SIGQUIT));
+  js_set(js, signals, "SIGQUIT", Ant_Value_FromNumber(SIGQUIT));
 #endif
 #ifdef SIGILL
-  js_set(js, signals, "SIGILL", js_mknum(SIGILL));
+  js_set(js, signals, "SIGILL", Ant_Value_FromNumber(SIGILL));
 #endif
 #ifdef SIGTRAP
-  js_set(js, signals, "SIGTRAP", js_mknum(SIGTRAP));
+  js_set(js, signals, "SIGTRAP", Ant_Value_FromNumber(SIGTRAP));
 #endif
 #ifdef SIGABRT
-  js_set(js, signals, "SIGABRT", js_mknum(SIGABRT));
+  js_set(js, signals, "SIGABRT", Ant_Value_FromNumber(SIGABRT));
 #endif
 #ifdef SIGIOT
-  js_set(js, signals, "SIGIOT", js_mknum(SIGIOT));
+  js_set(js, signals, "SIGIOT", Ant_Value_FromNumber(SIGIOT));
 #endif
 #ifdef SIGBUS
-  js_set(js, signals, "SIGBUS", js_mknum(SIGBUS));
+  js_set(js, signals, "SIGBUS", Ant_Value_FromNumber(SIGBUS));
 #endif
 #ifdef SIGFPE
-  js_set(js, signals, "SIGFPE", js_mknum(SIGFPE));
+  js_set(js, signals, "SIGFPE", Ant_Value_FromNumber(SIGFPE));
 #endif
 #ifdef SIGKILL
-  js_set(js, signals, "SIGKILL", js_mknum(SIGKILL));
+  js_set(js, signals, "SIGKILL", Ant_Value_FromNumber(SIGKILL));
 #endif
 #ifdef SIGUSR1
-  js_set(js, signals, "SIGUSR1", js_mknum(SIGUSR1));
+  js_set(js, signals, "SIGUSR1", Ant_Value_FromNumber(SIGUSR1));
 #endif
 #ifdef SIGUSR2
-  js_set(js, signals, "SIGUSR2", js_mknum(SIGUSR2));
+  js_set(js, signals, "SIGUSR2", Ant_Value_FromNumber(SIGUSR2));
 #endif
 #ifdef SIGSEGV
-  js_set(js, signals, "SIGSEGV", js_mknum(SIGSEGV));
+  js_set(js, signals, "SIGSEGV", Ant_Value_FromNumber(SIGSEGV));
 #endif
 #ifdef SIGPIPE
-  js_set(js, signals, "SIGPIPE", js_mknum(SIGPIPE));
+  js_set(js, signals, "SIGPIPE", Ant_Value_FromNumber(SIGPIPE));
 #endif
 #ifdef SIGALRM
-  js_set(js, signals, "SIGALRM", js_mknum(SIGALRM));
+  js_set(js, signals, "SIGALRM", Ant_Value_FromNumber(SIGALRM));
 #endif
 #ifdef SIGTERM
-  js_set(js, signals, "SIGTERM", js_mknum(SIGTERM));
+  js_set(js, signals, "SIGTERM", Ant_Value_FromNumber(SIGTERM));
 #endif
 #ifdef SIGCHLD
-  js_set(js, signals, "SIGCHLD", js_mknum(SIGCHLD));
+  js_set(js, signals, "SIGCHLD", Ant_Value_FromNumber(SIGCHLD));
 #endif
 #ifdef SIGCONT
-  js_set(js, signals, "SIGCONT", js_mknum(SIGCONT));
+  js_set(js, signals, "SIGCONT", Ant_Value_FromNumber(SIGCONT));
 #endif
 #ifdef SIGSTOP
-  js_set(js, signals, "SIGSTOP", js_mknum(SIGSTOP));
+  js_set(js, signals, "SIGSTOP", Ant_Value_FromNumber(SIGSTOP));
 #endif
 #ifdef SIGTSTP
-  js_set(js, signals, "SIGTSTP", js_mknum(SIGTSTP));
+  js_set(js, signals, "SIGTSTP", Ant_Value_FromNumber(SIGTSTP));
 #endif
 #ifdef SIGTTIN
-  js_set(js, signals, "SIGTTIN", js_mknum(SIGTTIN));
+  js_set(js, signals, "SIGTTIN", Ant_Value_FromNumber(SIGTTIN));
 #endif
 #ifdef SIGTTOU
-  js_set(js, signals, "SIGTTOU", js_mknum(SIGTTOU));
+  js_set(js, signals, "SIGTTOU", Ant_Value_FromNumber(SIGTTOU));
 #endif
 #ifdef SIGURG
-  js_set(js, signals, "SIGURG", js_mknum(SIGURG));
+  js_set(js, signals, "SIGURG", Ant_Value_FromNumber(SIGURG));
 #endif
 #ifdef SIGXCPU
-  js_set(js, signals, "SIGXCPU", js_mknum(SIGXCPU));
+  js_set(js, signals, "SIGXCPU", Ant_Value_FromNumber(SIGXCPU));
 #endif
 #ifdef SIGXFSZ
-  js_set(js, signals, "SIGXFSZ", js_mknum(SIGXFSZ));
+  js_set(js, signals, "SIGXFSZ", Ant_Value_FromNumber(SIGXFSZ));
 #endif
 #ifdef SIGVTALRM
-  js_set(js, signals, "SIGVTALRM", js_mknum(SIGVTALRM));
+  js_set(js, signals, "SIGVTALRM", Ant_Value_FromNumber(SIGVTALRM));
 #endif
 #ifdef SIGPROF
-  js_set(js, signals, "SIGPROF", js_mknum(SIGPROF));
+  js_set(js, signals, "SIGPROF", Ant_Value_FromNumber(SIGPROF));
 #endif
 #ifdef SIGWINCH
-  js_set(js, signals, "SIGWINCH", js_mknum(SIGWINCH));
+  js_set(js, signals, "SIGWINCH", Ant_Value_FromNumber(SIGWINCH));
 #endif
 #ifdef SIGIO
-  js_set(js, signals, "SIGIO", js_mknum(SIGIO));
+  js_set(js, signals, "SIGIO", Ant_Value_FromNumber(SIGIO));
 #endif
 #ifdef SIGSYS
-  js_set(js, signals, "SIGSYS", js_mknum(SIGSYS));
+  js_set(js, signals, "SIGSYS", Ant_Value_FromNumber(SIGSYS));
 #endif
 }
 
 static void add_errno_constants(ant_t *js, ant_value_t errn) {
-  js_set(js, errn, "E2BIG", js_mknum(E2BIG));
-  js_set(js, errn, "EACCES", js_mknum(EACCES));
-  js_set(js, errn, "EADDRINUSE", js_mknum(EADDRINUSE));
-  js_set(js, errn, "EADDRNOTAVAIL", js_mknum(EADDRNOTAVAIL));
-  js_set(js, errn, "EAFNOSUPPORT", js_mknum(EAFNOSUPPORT));
-  js_set(js, errn, "EAGAIN", js_mknum(EAGAIN));
-  js_set(js, errn, "EALREADY", js_mknum(EALREADY));
-  js_set(js, errn, "EBADF", js_mknum(EBADF));
-  js_set(js, errn, "EBUSY", js_mknum(EBUSY));
-  js_set(js, errn, "ECANCELED", js_mknum(ECANCELED));
-  js_set(js, errn, "ECHILD", js_mknum(ECHILD));
-  js_set(js, errn, "ECONNABORTED", js_mknum(ECONNABORTED));
-  js_set(js, errn, "ECONNREFUSED", js_mknum(ECONNREFUSED));
-  js_set(js, errn, "ECONNRESET", js_mknum(ECONNRESET));
-  js_set(js, errn, "EDEADLK", js_mknum(EDEADLK));
-  js_set(js, errn, "EDESTADDRREQ", js_mknum(EDESTADDRREQ));
-  js_set(js, errn, "EDOM", js_mknum(EDOM));
-  js_set(js, errn, "EEXIST", js_mknum(EEXIST));
-  js_set(js, errn, "EFAULT", js_mknum(EFAULT));
-  js_set(js, errn, "EFBIG", js_mknum(EFBIG));
-  js_set(js, errn, "EHOSTUNREACH", js_mknum(EHOSTUNREACH));
-  js_set(js, errn, "EINPROGRESS", js_mknum(EINPROGRESS));
-  js_set(js, errn, "EINTR", js_mknum(EINTR));
-  js_set(js, errn, "EINVAL", js_mknum(EINVAL));
-  js_set(js, errn, "EIO", js_mknum(EIO));
-  js_set(js, errn, "EISCONN", js_mknum(EISCONN));
-  js_set(js, errn, "EISDIR", js_mknum(EISDIR));
-  js_set(js, errn, "ELOOP", js_mknum(ELOOP));
-  js_set(js, errn, "EMFILE", js_mknum(EMFILE));
-  js_set(js, errn, "EMLINK", js_mknum(EMLINK));
-  js_set(js, errn, "EMSGSIZE", js_mknum(EMSGSIZE));
-  js_set(js, errn, "ENAMETOOLONG", js_mknum(ENAMETOOLONG));
-  js_set(js, errn, "ENETDOWN", js_mknum(ENETDOWN));
-  js_set(js, errn, "ENETRESET", js_mknum(ENETRESET));
-  js_set(js, errn, "ENETUNREACH", js_mknum(ENETUNREACH));
-  js_set(js, errn, "ENFILE", js_mknum(ENFILE));
-  js_set(js, errn, "ENOBUFS", js_mknum(ENOBUFS));
-  js_set(js, errn, "ENODEV", js_mknum(ENODEV));
-  js_set(js, errn, "ENOENT", js_mknum(ENOENT));
-  js_set(js, errn, "ENOEXEC", js_mknum(ENOEXEC));
-  js_set(js, errn, "ENOLCK", js_mknum(ENOLCK));
-  js_set(js, errn, "ENOMEM", js_mknum(ENOMEM));
-  js_set(js, errn, "ENOPROTOOPT", js_mknum(ENOPROTOOPT));
-  js_set(js, errn, "ENOSPC", js_mknum(ENOSPC));
-  js_set(js, errn, "ENOSYS", js_mknum(ENOSYS));
-  js_set(js, errn, "ENOTCONN", js_mknum(ENOTCONN));
-  js_set(js, errn, "ENOTDIR", js_mknum(ENOTDIR));
-  js_set(js, errn, "ENOTEMPTY", js_mknum(ENOTEMPTY));
-  js_set(js, errn, "ENOTSOCK", js_mknum(ENOTSOCK));
-  js_set(js, errn, "ENOTSUP", js_mknum(ENOTSUP));
-  js_set(js, errn, "ENOTTY", js_mknum(ENOTTY));
-  js_set(js, errn, "ENXIO", js_mknum(ENXIO));
-  js_set(js, errn, "EOPNOTSUPP", js_mknum(EOPNOTSUPP));
-  js_set(js, errn, "EOVERFLOW", js_mknum(EOVERFLOW));
-  js_set(js, errn, "EPERM", js_mknum(EPERM));
-  js_set(js, errn, "EPIPE", js_mknum(EPIPE));
-  js_set(js, errn, "EPROTONOSUPPORT", js_mknum(EPROTONOSUPPORT));
-  js_set(js, errn, "EPROTOTYPE", js_mknum(EPROTOTYPE));
-  js_set(js, errn, "ERANGE", js_mknum(ERANGE));
-  js_set(js, errn, "EROFS", js_mknum(EROFS));
-  js_set(js, errn, "ESPIPE", js_mknum(ESPIPE));
-  js_set(js, errn, "ESRCH", js_mknum(ESRCH));
-  js_set(js, errn, "ETIMEDOUT", js_mknum(ETIMEDOUT));
-  js_set(js, errn, "ETXTBSY", js_mknum(ETXTBSY));
-  js_set(js, errn, "EWOULDBLOCK", js_mknum(EWOULDBLOCK));
-  js_set(js, errn, "EXDEV", js_mknum(EXDEV));
+  js_set(js, errn, "E2BIG", Ant_Value_FromNumber(E2BIG));
+  js_set(js, errn, "EACCES", Ant_Value_FromNumber(EACCES));
+  js_set(js, errn, "EADDRINUSE", Ant_Value_FromNumber(EADDRINUSE));
+  js_set(js, errn, "EADDRNOTAVAIL", Ant_Value_FromNumber(EADDRNOTAVAIL));
+  js_set(js, errn, "EAFNOSUPPORT", Ant_Value_FromNumber(EAFNOSUPPORT));
+  js_set(js, errn, "EAGAIN", Ant_Value_FromNumber(EAGAIN));
+  js_set(js, errn, "EALREADY", Ant_Value_FromNumber(EALREADY));
+  js_set(js, errn, "EBADF", Ant_Value_FromNumber(EBADF));
+  js_set(js, errn, "EBUSY", Ant_Value_FromNumber(EBUSY));
+  js_set(js, errn, "ECANCELED", Ant_Value_FromNumber(ECANCELED));
+  js_set(js, errn, "ECHILD", Ant_Value_FromNumber(ECHILD));
+  js_set(js, errn, "ECONNABORTED", Ant_Value_FromNumber(ECONNABORTED));
+  js_set(js, errn, "ECONNREFUSED", Ant_Value_FromNumber(ECONNREFUSED));
+  js_set(js, errn, "ECONNRESET", Ant_Value_FromNumber(ECONNRESET));
+  js_set(js, errn, "EDEADLK", Ant_Value_FromNumber(EDEADLK));
+  js_set(js, errn, "EDESTADDRREQ", Ant_Value_FromNumber(EDESTADDRREQ));
+  js_set(js, errn, "EDOM", Ant_Value_FromNumber(EDOM));
+  js_set(js, errn, "EEXIST", Ant_Value_FromNumber(EEXIST));
+  js_set(js, errn, "EFAULT", Ant_Value_FromNumber(EFAULT));
+  js_set(js, errn, "EFBIG", Ant_Value_FromNumber(EFBIG));
+  js_set(js, errn, "EHOSTUNREACH", Ant_Value_FromNumber(EHOSTUNREACH));
+  js_set(js, errn, "EINPROGRESS", Ant_Value_FromNumber(EINPROGRESS));
+  js_set(js, errn, "EINTR", Ant_Value_FromNumber(EINTR));
+  js_set(js, errn, "EINVAL", Ant_Value_FromNumber(EINVAL));
+  js_set(js, errn, "EIO", Ant_Value_FromNumber(EIO));
+  js_set(js, errn, "EISCONN", Ant_Value_FromNumber(EISCONN));
+  js_set(js, errn, "EISDIR", Ant_Value_FromNumber(EISDIR));
+  js_set(js, errn, "ELOOP", Ant_Value_FromNumber(ELOOP));
+  js_set(js, errn, "EMFILE", Ant_Value_FromNumber(EMFILE));
+  js_set(js, errn, "EMLINK", Ant_Value_FromNumber(EMLINK));
+  js_set(js, errn, "EMSGSIZE", Ant_Value_FromNumber(EMSGSIZE));
+  js_set(js, errn, "ENAMETOOLONG", Ant_Value_FromNumber(ENAMETOOLONG));
+  js_set(js, errn, "ENETDOWN", Ant_Value_FromNumber(ENETDOWN));
+  js_set(js, errn, "ENETRESET", Ant_Value_FromNumber(ENETRESET));
+  js_set(js, errn, "ENETUNREACH", Ant_Value_FromNumber(ENETUNREACH));
+  js_set(js, errn, "ENFILE", Ant_Value_FromNumber(ENFILE));
+  js_set(js, errn, "ENOBUFS", Ant_Value_FromNumber(ENOBUFS));
+  js_set(js, errn, "ENODEV", Ant_Value_FromNumber(ENODEV));
+  js_set(js, errn, "ENOENT", Ant_Value_FromNumber(ENOENT));
+  js_set(js, errn, "ENOEXEC", Ant_Value_FromNumber(ENOEXEC));
+  js_set(js, errn, "ENOLCK", Ant_Value_FromNumber(ENOLCK));
+  js_set(js, errn, "ENOMEM", Ant_Value_FromNumber(ENOMEM));
+  js_set(js, errn, "ENOPROTOOPT", Ant_Value_FromNumber(ENOPROTOOPT));
+  js_set(js, errn, "ENOSPC", Ant_Value_FromNumber(ENOSPC));
+  js_set(js, errn, "ENOSYS", Ant_Value_FromNumber(ENOSYS));
+  js_set(js, errn, "ENOTCONN", Ant_Value_FromNumber(ENOTCONN));
+  js_set(js, errn, "ENOTDIR", Ant_Value_FromNumber(ENOTDIR));
+  js_set(js, errn, "ENOTEMPTY", Ant_Value_FromNumber(ENOTEMPTY));
+  js_set(js, errn, "ENOTSOCK", Ant_Value_FromNumber(ENOTSOCK));
+  js_set(js, errn, "ENOTSUP", Ant_Value_FromNumber(ENOTSUP));
+  js_set(js, errn, "ENOTTY", Ant_Value_FromNumber(ENOTTY));
+  js_set(js, errn, "ENXIO", Ant_Value_FromNumber(ENXIO));
+  js_set(js, errn, "EOPNOTSUPP", Ant_Value_FromNumber(EOPNOTSUPP));
+  js_set(js, errn, "EOVERFLOW", Ant_Value_FromNumber(EOVERFLOW));
+  js_set(js, errn, "EPERM", Ant_Value_FromNumber(EPERM));
+  js_set(js, errn, "EPIPE", Ant_Value_FromNumber(EPIPE));
+  js_set(js, errn, "EPROTONOSUPPORT", Ant_Value_FromNumber(EPROTONOSUPPORT));
+  js_set(js, errn, "EPROTOTYPE", Ant_Value_FromNumber(EPROTOTYPE));
+  js_set(js, errn, "ERANGE", Ant_Value_FromNumber(ERANGE));
+  js_set(js, errn, "EROFS", Ant_Value_FromNumber(EROFS));
+  js_set(js, errn, "ESPIPE", Ant_Value_FromNumber(ESPIPE));
+  js_set(js, errn, "ESRCH", Ant_Value_FromNumber(ESRCH));
+  js_set(js, errn, "ETIMEDOUT", Ant_Value_FromNumber(ETIMEDOUT));
+  js_set(js, errn, "ETXTBSY", Ant_Value_FromNumber(ETXTBSY));
+  js_set(js, errn, "EWOULDBLOCK", Ant_Value_FromNumber(EWOULDBLOCK));
+  js_set(js, errn, "EXDEV", Ant_Value_FromNumber(EXDEV));
 }
 
 static void add_priority_constants(ant_t *js, ant_value_t priority) {
-  js_set(js, priority, "PRIORITY_LOW", js_mknum(19));
-  js_set(js, priority, "PRIORITY_BELOW_NORMAL", js_mknum(10));
-  js_set(js, priority, "PRIORITY_NORMAL", js_mknum(0));
-  js_set(js, priority, "PRIORITY_ABOVE_NORMAL", js_mknum(-7));
-  js_set(js, priority, "PRIORITY_HIGH", js_mknum(-14));
-  js_set(js, priority, "PRIORITY_HIGHEST", js_mknum(-20));
+  js_set(js, priority, "PRIORITY_LOW", Ant_Value_FromNumber(19));
+  js_set(js, priority, "PRIORITY_BELOW_NORMAL", Ant_Value_FromNumber(10));
+  js_set(js, priority, "PRIORITY_NORMAL", Ant_Value_FromNumber(0));
+  js_set(js, priority, "PRIORITY_ABOVE_NORMAL", Ant_Value_FromNumber(-7));
+  js_set(js, priority, "PRIORITY_HIGH", Ant_Value_FromNumber(-14));
+  js_set(js, priority, "PRIORITY_HIGHEST", Ant_Value_FromNumber(-20));
 }
 
 static void add_dlopen_constants(ant_t *js, ant_value_t dlopen_obj) {
 #ifdef RTLD_LAZY
-  js_set(js, dlopen_obj, "RTLD_LAZY", js_mknum(RTLD_LAZY));
+  js_set(js, dlopen_obj, "RTLD_LAZY", Ant_Value_FromNumber(RTLD_LAZY));
 #endif
 #ifdef RTLD_NOW
-  js_set(js, dlopen_obj, "RTLD_NOW", js_mknum(RTLD_NOW));
+  js_set(js, dlopen_obj, "RTLD_NOW", Ant_Value_FromNumber(RTLD_NOW));
 #endif
 #ifdef RTLD_GLOBAL
-  js_set(js, dlopen_obj, "RTLD_GLOBAL", js_mknum(RTLD_GLOBAL));
+  js_set(js, dlopen_obj, "RTLD_GLOBAL", Ant_Value_FromNumber(RTLD_GLOBAL));
 #endif
 #ifdef RTLD_LOCAL
-  js_set(js, dlopen_obj, "RTLD_LOCAL", js_mknum(RTLD_LOCAL));
+  js_set(js, dlopen_obj, "RTLD_LOCAL", Ant_Value_FromNumber(RTLD_LOCAL));
 #endif
 #ifdef RTLD_DEEPBIND
-  js_set(js, dlopen_obj, "RTLD_DEEPBIND", js_mknum(RTLD_DEEPBIND));
+  js_set(js, dlopen_obj, "RTLD_DEEPBIND", Ant_Value_FromNumber(RTLD_DEEPBIND));
 #endif
 }
 
@@ -1123,7 +1123,7 @@ ant_value_t os_library(ant_t *js) {
   js_set(js, constants, "errno", errn);
   js_set(js, constants, "priority", priority);
   js_set(js, constants, "dlopen", dlopen_obj);
-  js_set(js, constants, "UV_UDP_REUSEADDR", js_mknum(4));
+  js_set(js, constants, "UV_UDP_REUSEADDR", Ant_Value_FromNumber(4));
   js_set(js, lib, "constants", constants);
   js_set_tostringtag(js, lib, js_mkstr(js, "os", 2));
 

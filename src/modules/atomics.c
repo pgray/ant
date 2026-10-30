@@ -353,7 +353,7 @@ static inline __attribute__((always_inline)) ant_value_t atomics_dispatch(
 ) {
   switch (type) {
     #define ATOMICS_CASE_INT(name, ctype, load) case TYPED_ARRAY_##name: \
-      return js_mknum(atomics_apply_##name(ptr, index, op, operand, swap));
+      return Ant_Value_FromNumber(atomics_apply_##name(ptr, index, op, operand, swap));
     #define ATOMICS_CASE_FLOAT(name, ctype, load)
     #define ATOMICS_CASE_BIGINT(name, ctype, load) case TYPED_ARRAY_##name: { \
       ctype result = atomics_apply_##name(ptr, index, op, operand, swap);    \
@@ -399,13 +399,13 @@ static ant_value_t atomics_coerce(ant_t *js, const TypedArrayData *ta, ant_value
   if (vtype(value) == kTypeBigInt) 
     return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert a BigInt value to a number");
 
-  double number = vtype(value) == kTypeNumber ? tod(value) : js_to_number(js, value);
+  double number = vtype(value) == kTypeNumber ? Ant_Value_AsNumberUnchecked(value) : js_to_number(js, value);
   if (Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
   
   number = atomics_integer(number);
   *bits = (uint32_t)atomics_int32(number);
   
-  return tov(number);
+  return Ant_Value_FromNumber(number);
 }
 
 static ant_value_t atomics_bytes(ant_t *js, const TypedArrayData *ta, size_t index, uint8_t **out) {
@@ -453,16 +453,16 @@ ant_value_t atomics_run(ant_native_params_t, atomics_op_t op, int arity) {
   uint8_t *ptr;
   if (__builtin_expect(!get_atomic_array_data(js, args[0], &ta_data, &ptr), 0)) goto slow;
 
-  double index = tod(args[1]);
+  double index = Ant_Value_AsNumberUnchecked(args[1]);
   if (__builtin_expect(!(index > -1 && index < (double)ta_data->length), 0)) goto slow;
   if (__builtin_expect(atomics_kind(ta_data->type) != ATOMICS_KIND_INT, 0)) goto slow;
 
-  double value = arity > 2 ? tod(args[2]) : 0;
+  double value = arity > 2 ? Ant_Value_AsNumberUnchecked(args[2]) : 0;
   uint32_t operand = arity > 2 ? (uint32_t)atomics_int32(value) : 0;
-  uint32_t swap = arity > 3 ? (uint32_t)atomics_int32(tod(args[3])) : 0;
+  uint32_t swap = arity > 3 ? (uint32_t)atomics_int32(Ant_Value_AsNumberUnchecked(args[3])) : 0;
 
   ant_value_t result = atomics_dispatch(js, ta_data->type, ptr, (size_t)index, op, operand, swap);
-  return op == ATOMICS_STORE ? js_mknum(atomics_integer(value)) : result;
+  return op == ATOMICS_STORE ? Ant_Value_FromNumber(atomics_integer(value)) : result;
 
 slow:
   return atomics_run_slow(js, args, nargs, op, arity);
@@ -480,7 +480,7 @@ static ant_value_t js_atomics_isLockFree(ant_params_t) {
     return js_mkerr(js, "Atomics.isLockFree requires 1 argument");
   }
   
-  int size = (int)js_getnum(args[0]);
+  int size = (int)Ant_Value_AsNumberUnchecked(args[0]);
   bool is_lock_free = false;
   
   switch (size) {
@@ -521,16 +521,16 @@ static ant_value_t js_atomics_wait(ant_params_t) {
     return js_mkerr(js, "Atomics.wait only works with Int32Array");
   }
   
-  size_t index = (size_t)js_getnum(args[1]);
+  size_t index = (size_t)Ant_Value_AsNumberUnchecked(args[1]);
   if (index >= ta_data->length) {
     return js_mkerr(js, "Index out of bounds");
   }
   
-  int32_t expected_value = (int32_t)js_getnum(args[2]);
+  int32_t expected_value = (int32_t)Ant_Value_AsNumberUnchecked(args[2]);
   int64_t timeout_ms = -1;
   
   if (nargs > 3 && vtype(args[3]) == kTypeNumber) {
-    timeout_ms = (int64_t)js_getnum(args[3]);
+    timeout_ms = (int64_t)Ant_Value_AsNumberUnchecked(args[3]);
   }
   
   _Atomic int32_t *atomic_ptr = (_Atomic int32_t *)(ptr + index * 4);
@@ -604,20 +604,20 @@ static ant_value_t js_atomics_notify(ant_params_t) {
     return js_mkerr(js, "Atomics.notify only works with Int32Array");
   }
   
-  size_t index = (size_t)js_getnum(args[1]);
+  size_t index = (size_t)Ant_Value_AsNumberUnchecked(args[1]);
   if (index >= ta_data->length) {
     return js_mkerr(js, "Index out of bounds");
   }
   
   int count = -1;
   if (nargs > 2 && vtype(args[2]) == kTypeNumber) {
-    count = (int)js_getnum(args[2]);
+    count = (int)Ant_Value_AsNumberUnchecked(args[2]);
   }
   
   int32_t *address = (int32_t *)(ptr + index * 4);
   int notified = wait_queue_notify(&global_wait_queue, address, count);
   
-  return js_mknum((double)notified);
+  return Ant_Value_FromNumber((double)notified);
 }
 
 // Atomics.waitAsync(typedArray, index, value, timeout)
@@ -636,18 +636,18 @@ static ant_value_t js_atomics_waitAsync(ant_params_t) {
     return js_mkerr(js, "Atomics.waitAsync only works with Int32Array");
   }
   
-  size_t index = (size_t)js_getnum(args[1]);
+  size_t index = (size_t)Ant_Value_AsNumberUnchecked(args[1]);
   if (index >= ta_data->length) {
     return js_mkerr(js, "Index out of bounds");
   }
   
-  int32_t expected_value = (int32_t)js_getnum(args[2]);
+  int32_t expected_value = (int32_t)Ant_Value_AsNumberUnchecked(args[2]);
   _Atomic int32_t *atomic_ptr = (_Atomic int32_t *)(ptr + index * 4);
   int32_t current_value = atomic_load(atomic_ptr);
   double timeout_ms = HUGE_VAL;
 
   if (nargs > 3 && vtype(args[3]) == kTypeNumber) {
-    timeout_ms = js_getnum(args[3]);
+    timeout_ms = Ant_Value_AsNumberUnchecked(args[3]);
     if (isnan(timeout_ms)) timeout_ms = HUGE_VAL;
     else if (timeout_ms < 0) timeout_ms = 0;
   }

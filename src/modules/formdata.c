@@ -134,7 +134,7 @@ ant_value_t formdata_create_empty(ant_t *js) {
 
   ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_proto_init(obj, js->builtins.formdata_proto);
-  js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_FORMDATA));
+  js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_FORMDATA));
   js_set_native(obj, d, FORMDATA_NATIVE_TAG);
   
   ant_value_t vals = js_mkarr(js);
@@ -448,7 +448,7 @@ static ant_value_t js_formdata_ctor(ant_params_t) {
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.formdata_proto, call_new_target);
   
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
-  js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_FORMDATA));
+  js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_FORMDATA));
   js_set_native(obj, d, FORMDATA_NATIVE_TAG);
   
   ant_value_t vals = js_mkarr(js);

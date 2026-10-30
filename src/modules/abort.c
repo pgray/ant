@@ -240,7 +240,7 @@ static void abort_timeout_fire_cb(uv_timer_t *handle) {
 static ant_value_t abort_signal_static_timeout(ant_params_t) {
   if (nargs < 1) return js_mkerr(js, "AbortSignal.timeout: milliseconds argument required");
 
-  double ms = js_getnum(args[0]);
+  double ms = Ant_Value_AsNumberUnchecked(args[0]);
   if (ms < 0) return js_mkerr(js, "AbortSignal.timeout: milliseconds must be non-negative");
 
   ant_value_t signal = make_new_signal(js);

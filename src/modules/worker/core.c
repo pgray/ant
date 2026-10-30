@@ -443,7 +443,7 @@ static void worker_finish(ant_t *js, ant_worker_t *w, int code) {
   worker_stdio_end(js, w);
   w->ops->exit(js, w, code);
 
-  if (vtype(promise) == kTypePromise) js_resolve_promise(js, promise, js_mknum(code));
+  if (vtype(promise) == kTypePromise) js_resolve_promise(js, promise, Ant_Value_FromNumber(code));
   w->exit_promise = js_mkundef();
   GC_ROOT_RESTORE(js, mark);
 }
@@ -665,7 +665,7 @@ static ant_value_t worker_read_limits(ant_t *js, ant_worker_t *w, ant_value_t li
     ant_value_t v = js_get(js, limits, worker_limit_names[i]);
     if (vtype(v) == kTypeUndefined) continue;
     if (vtype(v) != kTypeNumber) return js_mkerr_typed(js, JS_ERR_TYPE, "The \"options.resourceLimits.%s\" property must be of type number", worker_limit_names[i]);
-    if (js_getnum(v) > 0) w->limits[i] = w->requested_limits[i] = js_getnum(v);
+    if (Ant_Value_AsNumberUnchecked(v) > 0) w->limits[i] = w->requested_limits[i] = Ant_Value_AsNumberUnchecked(v);
   }
 
   double old_min = (double)(ANT_ARENA_MIN >> 20), old_max = (double)(ANT_ARENA_MAX >> 20);
@@ -678,7 +678,7 @@ static ant_value_t worker_read_limits(ant_t *js, ant_worker_t *w, ant_value_t li
 ant_value_t worker_limits_object(ant_t *js, const double limits[WORKER_LIMIT_COUNT], double unset) {
   ant_value_t obj = Ant_Object_Create(js);
   for (int i = 0; i < WORKER_LIMIT_COUNT; i++)
-    js_set(js, obj, worker_limit_names[i], js_mknum(limits[i] > 0 ? limits[i] : unset));
+    js_set(js, obj, worker_limit_names[i], Ant_Value_FromNumber(limits[i] > 0 ? limits[i] : unset));
   return obj;
 }
 

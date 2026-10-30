@@ -3631,7 +3631,7 @@ static sv_jit_finally_t *opt_cg_site_finally(const opt_code_t *code, const opt_s
       if (entry->kind != SV_COMPLETION_JUMP) entry->value = boxed;
       continue;
     }
-    uint32_t kind = vtype(boxed) == kTypeNumber ? (uint32_t)js_getnum(boxed) : 0;
+    uint32_t kind = vtype(boxed) == kTypeNumber ? (uint32_t)Ant_Value_AsNumberUnchecked(boxed) : 0;
     if (kind == OPT_PENDING_RETURN) entry->kind = SV_COMPLETION_RETURN;
     else if (kind >= OPT_PENDING_JUMP && kind - OPT_PENDING_JUMP < (uint32_t)func->code_len) {
       entry->kind = SV_COMPLETION_JUMP;

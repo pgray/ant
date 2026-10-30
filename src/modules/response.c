@@ -517,7 +517,7 @@ static ant_value_t stream_body_read(ant_params_t) {
   ant_value_t promise = js_get(js, state, "promise");
   ant_value_t reader = js_get(js, state, "reader");
   ant_value_t chunks = js_get(js, state, "chunks");
-  int mode = (int)js_getnum(js_get(js, state, "mode"));
+  int mode = (int)Ant_Value_AsNumberUnchecked(js_get(js, state, "mode"));
 
   ant_value_t done_val = js_get(js, result, "done");
   ant_value_t value = js_get(js, result, "value");
@@ -559,7 +559,7 @@ static ant_value_t consume_body_from_stream(
   js_set(js, state, "promise", promise);
   js_set(js, state, "reader", reader);
   js_set(js, state, "chunks", js_mkarr(js));
-  js_set(js, state, "mode", js_mknum(mode));
+  js_set(js, state, "mode", Ant_Value_FromNumber(mode));
   js_set(js, state, "type", body_type ? js_mkstr(js, body_type, strlen(body_type)) : js_mkundef());
 
   stream_schedule_next_read(js, state, reader);
@@ -675,7 +675,7 @@ static ant_value_t response_init_status(ant_t *js, ant_value_t init, response_da
 
   if (is_err(status_v)) return status_v;
   if (vtype(status_v) != kTypeUndefined) {
-    status_num = (vtype(status_v) == kTypeNumber) ? js_getnum(status_v) : js_to_number(js, status_v);
+    status_num = (vtype(status_v) == kTypeNumber) ? Ant_Value_AsNumberUnchecked(status_v) : js_to_number(js, status_v);
   }
 
   if (status_num < 200 || status_num > 599 || status_num != (int)status_num) {
@@ -876,7 +876,7 @@ static ant_value_t response_init_object(
   js_reserve_slots(obj, 3);
   resp->headers_immutable = immutable_headers;
 
-  js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_RESPONSE));
+  js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_RESPONSE));
   js_set_native(obj, resp, RESPONSE_NATIVE_TAG);
   js_set_finalizer(obj, response_finalize);
 
@@ -949,7 +949,7 @@ static ant_value_t js_response_error(ant_params_t) {
 
 static ant_value_t js_response_redirect(ant_params_t) {
   ant_value_t url_v = (nargs >= 1) ? args[0] : js_mkundef();
-  ant_value_t status_v = (nargs >= 2) ? args[1] : js_mknum(302);
+  ant_value_t status_v = (nargs >= 2) ? args[1] : Ant_Value_FromNumber(302);
   ant_value_t obj = 0;
   ant_value_t headers = 0;
   const char *url_str = NULL;
@@ -962,7 +962,7 @@ static ant_value_t js_response_redirect(ant_params_t) {
     if (is_err(url_v)) return url_v;
   }
 
-  status = (vtype(status_v) == kTypeNumber) ? (int)js_getnum(status_v) : (int)js_to_number(js, status_v);
+  status = (vtype(status_v) == kTypeNumber) ? (int)Ant_Value_AsNumberUnchecked(status_v) : (int)js_to_number(js, status_v);
   if (!is_redirect_status(status)) {
     return js_mkerr_typed(js, JS_ERR_RANGE, "Response.redirect status must be 301, 302, 303, 307, or 308");
   }
@@ -1086,7 +1086,7 @@ RES_GETTER_START(redirected)
 RES_GETTER_END
 
 RES_GETTER_START(status)
-  return js_mknum(d->status);
+  return Ant_Value_FromNumber(d->status);
 RES_GETTER_END
 
 RES_GETTER_START(ok)
@@ -1208,7 +1208,7 @@ static ant_value_t js_response_clone(ant_params_t) {
   obj = Ant_Object_CreateBare(js);
   js_reserve_slots(obj, 3);
   js_set_proto_init(obj, js->builtins.response_proto);
-  js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_RESPONSE));
+  js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_RESPONSE));
   js_set_native(obj, nd, RESPONSE_NATIVE_TAG);
   js_set_finalizer(obj, response_finalize);
   js_set_slot_wb(js, obj, SLOT_RESPONSE_HEADERS, new_headers);

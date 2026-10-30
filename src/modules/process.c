@@ -771,7 +771,7 @@ static ant_value_t stdin_uv_error(ant_t *js, int status, const char *syscall) {
   const char *code = uv_err_name(status);
   ant_value_t props = Ant_Object_CreateBare(js);
   js_set(js, props, "code", js_mkstr(js, code, strlen(code)));
-  js_set(js, props, "errno", js_mknum(status));
+  js_set(js, props, "errno", Ant_Value_FromNumber(status));
   js_set(js, props, "syscall", js_mkstr(js, syscall, strlen(syscall)));
   return js_take_thrown(js, js_mkerr_props(js, JS_ERR_GENERIC, props, "%s %s", syscall, code));
 }
@@ -1216,8 +1216,8 @@ static ant_value_t js_stdout_get_window_size(ant_params_t) {
   int rows = 0, cols = 0;
   get_tty_size(js, STDOUT_FILENO, &rows, &cols);
   ant_value_t arr = js_mkarr(js);
-  js_arr_push(js, arr, js_mknum(cols));
-  js_arr_push(js, arr, js_mknum(rows));
+  js_arr_push(js, arr, Ant_Value_FromNumber(cols));
+  js_arr_push(js, arr, Ant_Value_FromNumber(rows));
   return arr;
 }
 
@@ -1225,13 +1225,13 @@ static ant_value_t js_stdout_rows_getter(ant_params_t) {
   (void)args; (void)nargs;
   int rows = 0, cols = 0;
   get_tty_size(js, STDOUT_FILENO, &rows, &cols);
-  return js_mknum(rows);
+  return Ant_Value_FromNumber(rows);
 }
 
 static ant_value_t js_stdout_columns_getter(ant_params_t) {
   int rows = 0, cols = 0;
   get_tty_size(js, STDOUT_FILENO, &rows, &cols);
-  return js_mknum(cols);
+  return Ant_Value_FromNumber(cols);
 }
 
 static ant_value_t js_stderr_write(ant_params_t) {
@@ -1244,7 +1244,7 @@ static ant_value_t process_uptime(ant_params_t) {
   if (!ps) return Ant_Error_CreateOutOfMemory(js);
   uint64_t now = uv_hrtime();
   double seconds = (double)(now - ps->process_start_time) / 1e9;
-  return js_mknum(seconds);
+  return Ant_Value_FromNumber(seconds);
 }
 
 static ant_value_t process_hrtime(ant_params_t) {
@@ -1262,7 +1262,7 @@ static ant_value_t process_hrtime(ant_params_t) {
     ant_value_t time_len = js_get(js, args[0], "length");
     if (is_err(time_len)) return time_len;
     
-    if (vtype(time_len) != kTypeNumber || js_getnum(time_len) != 2) {
+    if (vtype(time_len) != kTypeNumber || Ant_Value_AsNumberUnchecked(time_len) != 2) {
       char message[96];
       snprintf(message, sizeof(message), "The value of \"time\" is out of range. It must be 2. Received %s", js_str(js, time_len));
       return js_mkerr_code(js, JS_ERR_RANGE, "ERR_OUT_OF_RANGE", message);
@@ -1272,7 +1272,7 @@ static ant_value_t process_hrtime(ant_params_t) {
     ant_value_t prev_nsec = js_get(js, args[0], "1");
     
     if (vtype(prev_sec) == kTypeNumber && vtype(prev_nsec) == kTypeNumber) {
-      uint64_t prev = (uint64_t)js_getnum(prev_sec) * 1000000000ULL + (uint64_t)js_getnum(prev_nsec);
+      uint64_t prev = (uint64_t)Ant_Value_AsNumberUnchecked(prev_sec) * 1000000000ULL + (uint64_t)Ant_Value_AsNumberUnchecked(prev_nsec);
       now = now - prev;
     }
   }
@@ -1282,8 +1282,8 @@ static ant_value_t process_hrtime(ant_params_t) {
   uint64_t secs = now / 1000000000ULL;
   uint64_t nsecs = now % 1000000000ULL;
   
-  js_arr_push(js, arr, js_mknum((double)secs));
-  js_arr_push(js, arr, js_mknum((double)nsecs));
+  js_arr_push(js, arr, Ant_Value_FromNumber((double)secs));
+  js_arr_push(js, arr, Ant_Value_FromNumber((double)nsecs));
   
   return arr;
 }
@@ -1302,30 +1302,30 @@ static ant_value_t process_memory_usage(ant_params_t) {
   
   size_t rss = 0;
   uv_resident_set_memory(&rss);
-  js_set(js, obj, "rss", js_mknum((double)rss));
+  js_set(js, obj, "rss", Ant_Value_FromNumber((double)rss));
   
 #ifdef _WIN32
   PROCESS_MEMORY_COUNTERS_EX pmc;
   if (GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc))) {
-    js_set(js, obj, "heapTotal", js_mknum((double)pmc.WorkingSetSize));
-    js_set(js, obj, "heapUsed", js_mknum((double)pmc.PrivateUsage));
+    js_set(js, obj, "heapTotal", Ant_Value_FromNumber((double)pmc.WorkingSetSize));
+    js_set(js, obj, "heapUsed", Ant_Value_FromNumber((double)pmc.PrivateUsage));
   } else {
-    js_set(js, obj, "heapTotal", js_mknum(0));
-    js_set(js, obj, "heapUsed", js_mknum(0));
+    js_set(js, obj, "heapTotal", Ant_Value_FromNumber(0));
+    js_set(js, obj, "heapUsed", Ant_Value_FromNumber(0));
   }
 #else
   struct rusage usage;
   if (getrusage(RUSAGE_SELF, &usage) == 0) {
-    js_set(js, obj, "heapTotal", js_mknum((double)rss));
-    js_set(js, obj, "heapUsed", js_mknum((double)rss));
+    js_set(js, obj, "heapTotal", Ant_Value_FromNumber((double)rss));
+    js_set(js, obj, "heapUsed", Ant_Value_FromNumber((double)rss));
   } else {
-    js_set(js, obj, "heapTotal", js_mknum(0));
-    js_set(js, obj, "heapUsed", js_mknum(0));
+    js_set(js, obj, "heapTotal", Ant_Value_FromNumber(0));
+    js_set(js, obj, "heapUsed", Ant_Value_FromNumber(0));
   }
 #endif
   
-  js_set(js, obj, "external", js_mknum(0));
-  js_set(js, obj, "arrayBuffers", js_mknum(0));
+  js_set(js, obj, "external", Ant_Value_FromNumber(0));
+  js_set(js, obj, "arrayBuffers", Ant_Value_FromNumber(0));
   
   return obj;
 }
@@ -1334,7 +1334,7 @@ static ant_value_t process_memory_usage_rss(ant_params_t) {
   (void)args; (void)nargs;
   size_t rss = 0;
   uv_resident_set_memory(&rss);
-  return js_mknum((double)rss);
+  return Ant_Value_FromNumber((double)rss);
 }
 
 static ant_value_t process_cpu_usage(ant_params_t) {
@@ -1348,15 +1348,15 @@ static ant_value_t process_cpu_usage(ant_params_t) {
     if (nargs > 0 && is_special_object(args[0])) {
       ant_value_t prev_user = js_get(js, args[0], "user");
       ant_value_t prev_system = js_get(js, args[0], "system");
-      if (vtype(prev_user) == kTypeNumber) user_usec -= (int64_t)js_getnum(prev_user);
-      if (vtype(prev_system) == kTypeNumber) sys_usec -= (int64_t)js_getnum(prev_system);
+      if (vtype(prev_user) == kTypeNumber) user_usec -= (int64_t)Ant_Value_AsNumberUnchecked(prev_user);
+      if (vtype(prev_system) == kTypeNumber) sys_usec -= (int64_t)Ant_Value_AsNumberUnchecked(prev_system);
     }
     
-    js_set(js, obj, "user", js_mknum((double)user_usec));
-    js_set(js, obj, "system", js_mknum((double)sys_usec));
+    js_set(js, obj, "user", Ant_Value_FromNumber((double)user_usec));
+    js_set(js, obj, "system", Ant_Value_FromNumber((double)sys_usec));
   } else {
-    js_set(js, obj, "user", js_mknum(0));
-    js_set(js, obj, "system", js_mknum(0));
+    js_set(js, obj, "user", Ant_Value_FromNumber(0));
+    js_set(js, obj, "system", Ant_Value_FromNumber(0));
   }
   
   return obj;
@@ -1388,7 +1388,7 @@ static ant_value_t process_resource_usage(ant_params_t) {
 
   ant_value_t obj = Ant_Object_Create(js);
   for (size_t i = 0; i < sizeof(fields) / sizeof(fields[0]); i++)
-    js_set(js, obj, fields[i].name, js_mknum(fields[i].value));
+    js_set(js, obj, fields[i].name, Ant_Value_FromNumber(fields[i].value));
   
   return obj;
 }
@@ -1397,12 +1397,12 @@ static ant_value_t process_kill(ant_params_t) {
   if (nargs < 1) return js_mkerr(js, "process.kill requires at least 1 argument");
   if (vtype(args[0]) != kTypeNumber) return js_mkerr(js, "pid must be a number");
   
-  int pid = (int)js_getnum(args[0]);
+  int pid = (int)Ant_Value_AsNumberUnchecked(args[0]);
   int sig = SIGTERM;
   
   if (nargs > 1) {
     if (vtype(args[1]) == kTypeNumber) {
-      sig = (int)js_getnum(args[1]);
+      sig = (int)Ant_Value_AsNumberUnchecked(args[1]);
     } else if (vtype(args[1]) == kTypeString) {
       char *sig_name = js_getstr(js, args[1], NULL);
       if (sig_name) {
@@ -1418,7 +1418,7 @@ static ant_value_t process_kill(ant_params_t) {
     const char *code = uv_err_name(result);
     ant_value_t props = Ant_Object_CreateBare(js);
     js_set(js, props, "code", js_mkstr(js, code, strlen(code)));
-    js_set(js, props, "errno", js_mknum(result));
+    js_set(js, props, "errno", Ant_Value_FromNumber(result));
     js_set(js, props, "syscall", js_mkstr(js, "kill", 4));
     return js_mkerr_props(js, JS_ERR_GENERIC, props, "kill %s", code);
   }
@@ -1447,38 +1447,38 @@ static ant_value_t process_chdir(ant_params_t) {
 static ant_value_t process_umask(ant_params_t) {
 #ifdef _WIN32
   (void)args; (void)nargs;
-  return js_mknum(0);
+  return Ant_Value_FromNumber(0);
 #else
   if (nargs > 0 && vtype(args[0]) == kTypeNumber) {
-    int new_mask = (int)js_getnum(args[0]);
+    int new_mask = (int)Ant_Value_AsNumberUnchecked(args[0]);
     int old_mask = umask((mode_t)new_mask);
-    return js_mknum(old_mask);
+    return Ant_Value_FromNumber(old_mask);
   }
   int cur = umask(0);
   umask((mode_t)cur);
-  return js_mknum(cur);
+  return Ant_Value_FromNumber(cur);
 #endif
 }
 
 #ifndef _WIN32
 static ant_value_t process_getuid(ant_params_t) {
   (void)args; (void)nargs;
-  return js_mknum((double)getuid());
+  return Ant_Value_FromNumber((double)getuid());
 }
 
 static ant_value_t process_geteuid(ant_params_t) {
   (void)args; (void)nargs;
-  return js_mknum((double)geteuid());
+  return Ant_Value_FromNumber((double)geteuid());
 }
 
 static ant_value_t process_getgid(ant_params_t) {
   (void)args; (void)nargs;
-  return js_mknum((double)getgid());
+  return Ant_Value_FromNumber((double)getgid());
 }
 
 static ant_value_t process_getegid(ant_params_t) {
   (void)args; (void)nargs;
-  return js_mknum((double)getegid());
+  return Ant_Value_FromNumber((double)getegid());
 }
 
 static ant_value_t process_getgroups(ant_params_t) {
@@ -1492,7 +1492,7 @@ static ant_value_t process_getgroups(ant_params_t) {
   ngroups = getgroups(ngroups, groups);
   ant_value_t arr = js_mkarr(js);
   for (int i = 0; i < ngroups; i++) {
-    js_arr_push(js, arr, js_mknum((double)groups[i]));
+    js_arr_push(js, arr, Ant_Value_FromNumber((double)groups[i]));
   }
   free(groups);
   return arr;
@@ -1503,7 +1503,7 @@ static ant_value_t process_setuid(ant_params_t) {
   
   uid_t uid;
   if (vtype(args[0]) == kTypeNumber) {
-    uid = (uid_t)js_getnum(args[0]);
+    uid = (uid_t)Ant_Value_AsNumberUnchecked(args[0]);
   } else if (vtype(args[0]) == kTypeString) {
     char *name = js_getstr(js, args[0], NULL);
     struct passwd *pwd = getpwnam(name);
@@ -1522,7 +1522,7 @@ static ant_value_t process_setgid(ant_params_t) {
   
   gid_t gid;
   if (vtype(args[0]) == kTypeNumber) {
-    gid = (gid_t)js_getnum(args[0]);
+    gid = (gid_t)Ant_Value_AsNumberUnchecked(args[0]);
   } else if (vtype(args[0]) == kTypeString) {
     char *name = js_getstr(js, args[0], NULL);
     struct group *grp = getgrnam(name);
@@ -1541,7 +1541,7 @@ static ant_value_t process_seteuid(ant_params_t) {
   
   uid_t uid;
   if (vtype(args[0]) == kTypeNumber) {
-    uid = (uid_t)js_getnum(args[0]);
+    uid = (uid_t)Ant_Value_AsNumberUnchecked(args[0]);
   } else if (vtype(args[0]) == kTypeString) {
     char *name = js_getstr(js, args[0], NULL);
     struct passwd *pwd = getpwnam(name);
@@ -1560,7 +1560,7 @@ static ant_value_t process_setegid(ant_params_t) {
   
   gid_t gid;
   if (vtype(args[0]) == kTypeNumber) {
-    gid = (gid_t)js_getnum(args[0]);
+    gid = (gid_t)Ant_Value_AsNumberUnchecked(args[0]);
   } else if (vtype(args[0]) == kTypeString) {
     char *name = js_getstr(js, args[0], NULL);
     struct group *grp = getgrnam(name);
@@ -1580,7 +1580,7 @@ static ant_value_t process_setgroups(ant_params_t) {
   }
   
   ant_value_t len_val = js_get(js, args[0], "length");
-  int len = (int)js_getnum(len_val);
+  int len = (int)Ant_Value_AsNumberUnchecked(len_val);
   
   gid_t *groups = malloc(sizeof(gid_t) * (size_t)len);
   if (!groups) return js_mkerr(js, "allocation failed");
@@ -1590,7 +1590,7 @@ static ant_value_t process_setgroups(ant_params_t) {
     snprintf(idx, sizeof(idx), "%d", i);
     ant_value_t val = js_get(js, args[0], idx);
     if (vtype(val) == kTypeNumber) {
-      groups[i] = (gid_t)js_getnum(val);
+      groups[i] = (gid_t)Ant_Value_AsNumberUnchecked(val);
     } else if (vtype(val) == kTypeString) {
       char *name = js_getstr(js, val, NULL);
       struct group *grp = getgrnam(name);
@@ -1618,7 +1618,7 @@ static ant_value_t process_initgroups(ant_params_t) {
   
   gid_t gid;
   if (vtype(args[1]) == kTypeNumber) {
-    gid = (gid_t)js_getnum(args[1]);
+    gid = (gid_t)Ant_Value_AsNumberUnchecked(args[1]);
   } else if (vtype(args[1]) == kTypeString) {
     char *name = js_getstr(js, args[1], NULL);
     struct group *grp = getgrnam(name);
@@ -1868,15 +1868,15 @@ static ant_value_t process_set_exit_code(ant_t *js, ant_process_state_t *ps, ant
   if (type == kTypeString) js_getstr(js, code, &len);
   
   double n = type == kTypeNumber 
-    ? js_getnum(code) : len > 0 
-    ? tod(js_to_numeric(js, code)) : JS_NAN;
+    ? Ant_Value_AsNumberUnchecked(code) : len > 0 
+    ? Ant_Value_AsNumberUnchecked(js_to_numeric(js, code)) : JS_NAN;
   
   if (isnan(n) && type != kTypeNumber) 
     return Ant_Error_CreateInvalidArgType(js, "code", "of type number", code);
 
   if (!isfinite(n) || n != trunc(n) || fabs(n) > 9007199254740991.0) {
     char buf[64], message[160];
-    js_cstr_t received = js_to_cstr(js, js_mknum(n), buf, sizeof(buf));
+    js_cstr_t received = js_to_cstr(js, Ant_Value_FromNumber(n), buf, sizeof(buf));
     snprintf(
       message, sizeof(message), "The value of \"code\" is out of range. It must be %s. Received %s",
       isfinite(n) && n == trunc(n) ? ">= -9007199254740991 && <= 9007199254740991" : "an integer", received.ptr
@@ -1894,7 +1894,7 @@ static ant_value_t process_set_exit_code(ant_t *js, ant_process_state_t *ps, ant
 
 static ant_value_t process_exit_code_getter(ant_params_t) {
   ant_process_state_t *ps = process_state(js);
-  return ps && ps->has_exit_code ? js_mknum(ps->exit_code) : js_mkundef();
+  return ps && ps->has_exit_code ? Ant_Value_FromNumber(ps->exit_code) : js_mkundef();
 }
 
 static ant_value_t process_exit_code_setter(ant_params_t) {
@@ -1921,7 +1921,7 @@ int process_run_exit_handlers(ant_t *js, int status) {
   ps->exiting = true;
   js_set(js, ps->process_obj, "_exiting", js_true);
 
-  ant_value_t code = js_mknum(process_exit_code(js));
+  ant_value_t code = Ant_Value_FromNumber(process_exit_code(js));
   emit_process_event(js, "exit", &code, 1);
   
   if (print_uncaught_throw(js) && !ps->has_exit_code) {
@@ -2106,7 +2106,7 @@ static ant_value_t process_cwd(ant_params_t) {
     const char *code = uv_err_name(status);
     ant_value_t props = Ant_Object_CreateBare(js);
     js_set(js, props, "code", js_mkstr(js, code, strlen(code)));
-    js_set(js, props, "errno", js_mknum(status));
+    js_set(js, props, "errno", Ant_Value_FromNumber(status));
     js_set(js, props, "syscall", js_mkstr(js, "uv_cwd", 6));
     result = js_mkerr_props(js, JS_ERR_GENERIC, props, "%s: %s, uv_cwd", code, uv_strerror(status));
   }
@@ -2396,8 +2396,8 @@ void init_process_module(ant_t *js) {
   );
   
   js_set(js, process_obj, "execPath", process_exec_path(js));
-  js_set(js, process_obj, "pid", js_mknum((double)getpid()));
-  js_set(js, process_obj, "ppid", js_mknum((double)getppid()));
+  js_set(js, process_obj, "pid", Ant_Value_FromNumber((double)getpid()));
+  js_set(js, process_obj, "ppid", Ant_Value_FromNumber((double)getppid()));
 
   ant_value_t features_obj = Ant_Object_Create(js);
   js_set(js, features_obj, "uv", js_true);

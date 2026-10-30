@@ -8,7 +8,7 @@
 #include "streams/queuing.h"
 
 static ant_value_t js_count_size(ant_params_t) {
-  return js_mknum(1);
+  return Ant_Value_FromNumber(1);
 }
 
 static ant_value_t js_bytelength_size(ant_params_t) {
@@ -55,7 +55,7 @@ static ant_value_t qs_ctor(ant_native_params_t, ant_value_t new_target, ant_valu
   ant_value_t resolved = js_instance_proto_from_new_target(js, proto, new_target);
   
   if (is_object_type(resolved)) js_set_proto_init(obj, resolved);
-  js_set_slot(obj, SLOT_DATA, js_mknum(hwm));
+  js_set_slot(obj, SLOT_DATA, Ant_Value_FromNumber(hwm));
 
   return obj;
 }
@@ -73,7 +73,7 @@ static ant_value_t make_size_fn(ant_t *js, ant_cfunc_t cfunc, int length) {
   
   js_set_slot(obj, SLOT_CFUNC, js_mkfun_dyn(cfunc));
   js_set_function_name(js, obj, "size", sizeof("size") - 1);
-  js_mkprop_fast(js, obj, "length", 6, js_mknum(length));
+  js_mkprop_fast(js, obj, "length", 6, Ant_Value_FromNumber(length));
   js_set_descriptor(js, obj, "length", 6, 0);
   
   return js_obj_to_func(js, obj);

@@ -76,9 +76,9 @@ ant_value_t DesktopBrowserWindowCtor(ant_params_t) {
 
   if (nargs > 0 && is_object_type(args[0])) {
     ant_value_t value = js_get(js, args[0], "width");
-    if (vtype(value) == kTypeNumber && js_getnum(value) > 0) width = js_getnum(value);
+    if (vtype(value) == kTypeNumber && Ant_Value_AsNumberUnchecked(value) > 0) width = Ant_Value_AsNumberUnchecked(value);
     value = js_get(js, args[0], "height");
-    if (vtype(value) == kTypeNumber && js_getnum(value) > 0) height = js_getnum(value);
+    if (vtype(value) == kTypeNumber && Ant_Value_AsNumberUnchecked(value) > 0) height = Ant_Value_AsNumberUnchecked(value);
     value = js_get(js, args[0], "title");
     if (vtype(value) == kTypeString) {
       size_t length = 0;
@@ -233,10 +233,10 @@ ant_value_t DesktopBrowserWindowCtor(ant_params_t) {
   if (!is_object_type(object)) object = Ant_Object_Create(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, desktop->browser_window_proto, call_new_target);
   if (is_object_type(proto)) js_set_proto_init(object, proto);
-  js_set(js, object, "_nativeId", js_mknum((double)identifier));
+  js_set(js, object, "_nativeId", Ant_Value_FromNumber((double)identifier));
   js_set(js, object, "_events", Ant_Object_CreateBare(js));
   ant_value_t web_contents = Ant_Object_CreateBare(js);
-  js_set(js, web_contents, "_nativeId", js_mknum((double)identifier));
+  js_set(js, web_contents, "_nativeId", Ant_Value_FromNumber((double)identifier));
   js_set(js, web_contents, "openDevTools", Ant_Function_Create(DesktopWebContentsOpenDevTools));
   js_set(js, web_contents, "closeDevTools", Ant_Function_Create(DesktopWebContentsCloseDevTools));
   js_set(js, web_contents, "toggleDevTools", Ant_Function_Create(DesktopWebContentsToggleDevTools));

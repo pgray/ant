@@ -748,7 +748,7 @@ ant_value_t ws_writer_write(ant_t *js, ant_value_t writer_obj, ant_value_t chunk
       ant_value_t err = Ant_Exception_Pending(js) ? js_take_thrown(js, size_result) : size_result;
       return ws_reject_size_error(js, ctrl_obj, err);
     }
-    if (vtype(size_result) == kTypeNumber) chunk_size = js_getnum(size_result);
+    if (vtype(size_result) == kTypeNumber) chunk_size = Ant_Value_AsNumberUnchecked(size_result);
     else chunk_size = js_to_number(js, size_result);
   }
 
@@ -816,11 +816,11 @@ static ant_value_t js_ws_writer_get_desired_size(ant_params_t) {
   ws_stream_t *stream = ws_get_stream(stream_obj);
   if (!stream) return js_mknull();
   if (stream->state == WS_STATE_ERRORED || stream->state == WS_STATE_ERRORING) return js_mknull();
-  if (stream->state == WS_STATE_CLOSED) return js_mknum(0);
+  if (stream->state == WS_STATE_CLOSED) return Ant_Value_FromNumber(0);
   ant_value_t ctrl_obj = ws_stream_controller(stream_obj);
   ws_controller_t *ctrl = ws_get_controller(ctrl_obj);
   if (!ctrl) return js_mknull();
-  return js_mknum(ws_default_controller_get_desired_size(ctrl));
+  return Ant_Value_FromNumber(ws_default_controller_get_desired_size(ctrl));
 }
 
 static ant_value_t js_ws_writer_abort(ant_params_t) {
@@ -895,7 +895,7 @@ ant_value_t ws_writer_create(ant_t *js, ant_value_t stream_obj, ant_value_t new_
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.ws_writer_proto, new_target);
   
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
-  js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_WRITABLE_STREAM_WRITER));
+  js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_WRITABLE_STREAM_WRITER));
 
   ant_value_t closed = js_mkpromise(js);
   ant_value_t ready = js_mkpromise(js);
@@ -989,7 +989,7 @@ static ant_value_t setup_ws_default_controller(
 
   ant_value_t ctrl_obj = Ant_Object_CreateBare(js);
   js_set_proto_init(ctrl_obj, js->builtins.ws_controller_proto);
-  js_set_slot(ctrl_obj, SLOT_BRAND, js_mknum(BRAND_WRITABLE_STREAM_CONTROLLER));
+  js_set_slot(ctrl_obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_WRITABLE_STREAM_CONTROLLER));
   js_set_native(ctrl_obj, ctrl, WS_CONTROLLER_NATIVE_TAG);
   js_set_slot(ctrl_obj, SLOT_ENTRIES, stream_obj);
   js_set_slot(ctrl_obj, SLOT_WS_WRITE, write_fn);
@@ -1068,7 +1068,7 @@ static ant_value_t js_ws_ctor(ant_params_t) {
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.ws_proto, call_new_target);
   
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
-  js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_WRITABLE_STREAM));
+  js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_WRITABLE_STREAM));
   js_set_native(obj, st, WS_STREAM_NATIVE_TAG);
   js_set_slot(obj, SLOT_SETTLED, js_mkarr(js));
   js_set_finalizer(obj, ws_stream_finalize);

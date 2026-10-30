@@ -1663,7 +1663,7 @@ ant_value_t bigint_from_value(ant_t *js, ant_value_t arg) {
   if (is_err(prim)) return prim;
   if (vtype(prim) != kTypeNumber) return bigint_from_primitive(js, prim);
 
-  double d = tod(prim);
+  double d = Ant_Value_AsNumberUnchecked(prim);
   if (!isfinite(d) || d != trunc(d))
     return js_mkerr_typed(js, JS_ERR_RANGE, "Cannot convert a non-integer Number to a BigInt");
   return bigint_from_integral_double(js, d);

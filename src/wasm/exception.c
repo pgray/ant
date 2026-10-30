@@ -16,7 +16,7 @@ ant_value_t wasm_make_tag(ant_t *js, ant_value_t proto, ant_value_t kinds, bool 
   ant_value_t tag = Ant_Object_CreateBare(js);
   if (is_err(tag)) return tag;
   js_set_proto_init(tag, proto);
-  js_set_slot(tag, SLOT_BRAND, js_mknum(BRAND_WASM_TAG));
+  js_set_slot(tag, SLOT_BRAND, Ant_Value_FromNumber(BRAND_WASM_TAG));
   js_set_slot_wb(js, tag, SLOT_DATA, kinds);
   if (js_tag) js_set_slot(tag, SLOT_AUX, js_true);
   return tag;
@@ -51,7 +51,7 @@ ant_value_t js_wasm_tag_ctor(ant_params_t) {
       GC_ROOT_RESTORE(js, mark);
       return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Tag(): Argument 0 parameter type at index #%u must be a value type", (unsigned)i);
     }
-    js_arr_push(js, kinds, js_mknum((double)kind));
+    js_arr_push(js, kinds, Ant_Value_FromNumber((double)kind));
   }
 
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.wasm_tag_proto, call_new_target);
@@ -65,7 +65,7 @@ static ant_value_t wasm_exception_value(ant_t *js, wasm_valkind_t kind, ant_valu
   switch (kind) {
     case WASM_I32: {
       double d = js_to_number(js, value);
-      return js_mknum((double)js_to_int32(d));
+      return Ant_Value_FromNumber((double)js_to_int32(d));
     }
     case WASM_I64: {
       int64_t out = 0;
@@ -77,8 +77,8 @@ static ant_value_t wasm_exception_value(ant_t *js, wasm_valkind_t kind, ant_valu
       }
       return wasm_value_from_i64(js, out);
     }
-    case WASM_F32: return js_mknum((double)(float)js_to_number(js, value));
-    case WASM_F64: return js_mknum(js_to_number(js, value));
+    case WASM_F32: return Ant_Value_FromNumber((double)(float)js_to_number(js, value));
+    case WASM_F64: return Ant_Value_FromNumber(js_to_number(js, value));
     case WASM_FUNCREF: {
       wasm_val_t tmp;
       if (!js_value_to_wasm(js, value, WASM_FUNCREF, &tmp))
@@ -112,7 +112,7 @@ ant_value_t js_wasm_exception_ctor(ant_params_t) {
   ant_value_t payload = js_mkarr(js);
   GC_ROOT_PIN(js, payload);
   for (ant_offset_t i = 0; i < count; i++) {
-    wasm_valkind_t kind = (wasm_valkind_t)js_getnum(js_arr_get(js, kinds, i));
+    wasm_valkind_t kind = (wasm_valkind_t)Ant_Value_AsNumberUnchecked(js_arr_get(js, kinds, i));
     ant_value_t value = wasm_exception_value(js, kind, js_arr_get(js, list, i));
     if (is_err(value)) { GC_ROOT_RESTORE(js, mark); return value; }
     js_arr_push(js, payload, value);
@@ -135,7 +135,7 @@ ant_value_t js_wasm_exception_ctor(ant_params_t) {
   ant_value_t exception = Ant_Object_CreateBare(js);
   if (!is_err(exception)) {
     js_set_proto_init(exception, proto);
-    js_set_slot(exception, SLOT_BRAND, js_mknum(BRAND_WASM_EXCEPTION));
+    js_set_slot(exception, SLOT_BRAND, Ant_Value_FromNumber(BRAND_WASM_EXCEPTION));
     js_set_slot_wb(js, exception, SLOT_DATA, args[0]);
     js_set_slot_wb(js, exception, SLOT_AUX, payload);
     js_set_slot_wb(js, exception, SLOT_ENTRIES, stack);

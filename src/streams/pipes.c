@@ -567,7 +567,7 @@ static void tee_enqueue_branch(ant_t *js, ant_value_t branch_stream, ant_value_t
     ant_value_t sa[1] = { value };
     ant_value_t sr = sv_vm_call(js->vm, js, size_fn, js_mkundef(), sa, 1, NULL, js_mkundef());
     if (!is_err(sr))
-      chunk_size = vtype(sr) == kTypeNumber ? js_getnum(sr) : js_to_number(js, sr);
+      chunk_size = vtype(sr) == kTypeNumber ? Ant_Value_AsNumberUnchecked(sr) : js_to_number(js, sr);
   }
 
   rs_ctrl_queue_push(js, ctrl, value);
@@ -676,7 +676,7 @@ static ant_value_t tee_branch_cancel(ant_params_t) {
   ant_value_t wrapper = js_get_slot(js->current_func, SLOT_DATA);
   ant_value_t state = js_get_slot(wrapper, SLOT_DATA);
   
-  int branch = (int)js_getnum(js_get_slot(wrapper, SLOT_ENTRIES));
+  int branch = (int)Ant_Value_AsNumberUnchecked(js_get_slot(wrapper, SLOT_ENTRIES));
   ant_value_t reason = (nargs > 0) ? args[0] : js_mkundef();
   tee_state_t *st = tee_get_state(state);
   if (!st) return js_mkundef();
@@ -748,12 +748,12 @@ static ant_value_t js_rs_tee(ant_params_t) {
 
   ant_value_t cancel1_wrap = Ant_Object_CreateBare(js);
   js_set_slot(cancel1_wrap, SLOT_DATA, state);
-  js_set_slot(cancel1_wrap, SLOT_ENTRIES, js_mknum(1));
+  js_set_slot(cancel1_wrap, SLOT_ENTRIES, Ant_Value_FromNumber(1));
   ant_value_t cancel1 = js_heavy_mkfun(js, tee_branch_cancel, cancel1_wrap);
 
   ant_value_t cancel2_wrap = Ant_Object_CreateBare(js);
   js_set_slot(cancel2_wrap, SLOT_DATA, state);
-  js_set_slot(cancel2_wrap, SLOT_ENTRIES, js_mknum(2));
+  js_set_slot(cancel2_wrap, SLOT_ENTRIES, Ant_Value_FromNumber(2));
   ant_value_t cancel2 = js_heavy_mkfun(js, tee_branch_cancel, cancel2_wrap);
 
   ant_value_t branch1 = rs_create_stream(js, pull1, cancel1, 1);

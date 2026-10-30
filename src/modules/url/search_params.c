@@ -198,7 +198,7 @@ void url_sync_usp(ant_t *js, ant_value_t url_obj, const char *query) {
 static ant_value_t usp_new(ant_t *js, ant_value_t url_obj, ant_value_t entries) {
   ant_value_t usp = Ant_Object_CreateBare(js);
   js_set_proto_init(usp, js->builtins.usp_proto);
-  js_set_slot(usp, SLOT_BRAND, js_mknum(BRAND_URLSEARCHPARAMS));
+  js_set_slot(usp, SLOT_BRAND, Ant_Value_FromNumber(BRAND_URLSEARCHPARAMS));
   js_set_slot_wb(js, usp, SLOT_DATA, url_obj);
   js_set_slot(usp, SLOT_ENTRIES, entries);
   return usp;
@@ -380,7 +380,7 @@ static ant_value_t usp_forEach(ant_params_t) {
 }
 
 static ant_value_t usp_size_get(ant_params_t) {
-  return js_mknum((double)usp_entry_count(js, usp_entries(js->this_val)));
+  return Ant_Value_FromNumber((double)usp_entry_count(js, usp_entries(js->this_val)));
 }
 
 static void usp_sort_entries(ant_t *js, ant_value_t *items, ant_offset_t len) {
@@ -431,14 +431,14 @@ static ant_value_t usp_iter_next(ant_params_t) {
   ant_value_t state_v = js_get_slot(js->this_val, SLOT_ITER_STATE);
   if (vtype(state_v) != kTypeNumber) return js_iter_result(js, false, js_mkundef());
 
-  uint32_t state = (uint32_t)js_getnum(state_v);
+  uint32_t state = (uint32_t)Ant_Value_AsNumberUnchecked(state_v);
   uint32_t kind = iter_state_kind(state);
   uint32_t idx = iter_state_index(state);
 
   ant_value_t entries = usp_entries(js_get_slot(js->this_val, SLOT_DATA));
   if ((ant_offset_t)idx >= usp_entry_count(js, entries)) return js_iter_result(js, false, js_mkundef());
 
-  js_set_slot(js->this_val, SLOT_ITER_STATE, js_mknum((double)iter_state_pack(kind, idx + 1)));
+  js_set_slot(js->this_val, SLOT_ITER_STATE, Ant_Value_FromNumber((double)iter_state_pack(kind, idx + 1)));
   return js_iter_result(js, true, usp_iter_value(js, kind, js_arr_get(js, entries, (ant_offset_t)idx)));
 }
 
@@ -446,7 +446,7 @@ static ant_value_t make_usp_iter(ant_t *js, ant_value_t usp, int kind) {
   ant_value_t iter = Ant_Object_CreateBare(js);
   js_set_proto_init(iter, js->builtins.usp_iter_proto);
   js_set_slot_wb(js, iter, SLOT_DATA, usp);
-  js_set_slot(iter, SLOT_ITER_STATE, js_mknum((double)iter_state_pack(kind, 0)));
+  js_set_slot(iter, SLOT_ITER_STATE, Ant_Value_FromNumber((double)iter_state_pack(kind, 0)));
   return iter;
 }
 

@@ -1,10 +1,15 @@
-// TODO: move other symbol related stuff out of ant.c
-
 #ifndef SYMBOL_H
 #define SYMBOL_H
 
 #include <stdbool.h>
+#include <uthash.h>
 #include "internal.h" // IWYU pragma: keep
+
+typedef struct sym_registry_entry {
+  const char *key;
+  ant_value_t sym;
+  UT_hash_handle hh;
+} sym_registry_entry_t;
 
 void init_symbol_module(ant_t *js);
 void init_symbol_ctor(ant_t *js);

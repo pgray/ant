@@ -78,7 +78,7 @@ ant_value_t jit_helper_normalize_sloppy_this(ant_t *js, ant_value_t value) {
 }
 
 ant_value_t jit_helper_add(sv_vm_t *vm, ant_t *js, ant_value_t l, ant_value_t r) {
-  if (vtype(l) == kTypeNumber && vtype(r) == kTypeNumber) return tov(tod(l) + tod(r));
+  if (vtype(l) == kTypeNumber && vtype(r) == kTypeNumber) return Ant_Value_FromNumber(Ant_Value_AsNumberUnchecked(l) + Ant_Value_AsNumberUnchecked(r));
   
   if (vtype(l) == kTypeString && vtype(r) == kTypeString) {
     GC_ROOT_SAVE(root_mark, js);
@@ -103,7 +103,7 @@ ant_value_t jit_helper_add(sv_vm_t *vm, ant_t *js, ant_value_t l, ant_value_t r)
 }
 
 ant_value_t jit_helper_concat(ant_t *js, ant_value_t l, ant_value_t r) {
-  if (vtype(l) == kTypeNumber && vtype(r) == kTypeNumber) return tov(tod(l) + tod(r));
+  if (vtype(l) == kTypeNumber && vtype(r) == kTypeNumber) return Ant_Value_FromNumber(Ant_Value_AsNumberUnchecked(l) + Ant_Value_AsNumberUnchecked(r));
   if (vtype(l) == kTypeString && vtype(r) == kTypeNumber) return do_string_num_concat(js, l, r, false);
   if (vtype(l) == kTypeNumber && vtype(r) == kTypeString) return do_string_num_concat(js, r, l, true);
   
@@ -216,14 +216,14 @@ static inline bool jit_rel_plain(ant_value_t v) {
 }
 
 ant_value_t jit_helper_lt(sv_vm_t *vm, ant_t *js, ant_value_t l, ant_value_t r) {
-  if (vtype(l) == kTypeNumber && vtype(r) == kTypeNumber) return js_bool(tod(l) < tod(r));
+  if (vtype(l) == kTypeNumber && vtype(r) == kTypeNumber) return js_bool(Ant_Value_AsNumberUnchecked(l) < Ant_Value_AsNumberUnchecked(r));
   if (vtype(l) == kTypeString && vtype(r) == kTypeString) return js_bool(sv_strcmp(js, l, r) < 0);
   if (jit_rel_plain(l) && jit_rel_plain(r)) return js_bool(js_to_number(js, l) < js_to_number(js, r));
   return SV_JIT_BAILOUT;
 }
 
 ant_value_t jit_helper_le(sv_vm_t *vm, ant_t *js, ant_value_t l, ant_value_t r) {
-  if (vtype(l) == kTypeNumber && vtype(r) == kTypeNumber) return js_bool(tod(l) <= tod(r));
+  if (vtype(l) == kTypeNumber && vtype(r) == kTypeNumber) return js_bool(Ant_Value_AsNumberUnchecked(l) <= Ant_Value_AsNumberUnchecked(r));
   if (vtype(l) == kTypeString && vtype(r) == kTypeString) return js_bool(sv_strcmp(js, l, r) <= 0);
   if (jit_rel_plain(l) && jit_rel_plain(r)) return js_bool(js_to_number(js, l) <= js_to_number(js, r));
   return SV_JIT_BAILOUT;
@@ -532,9 +532,9 @@ static ant_value_t jit_iter_advance_from_buf(
 ) {
   ant_value_t state[3] = { iter_buf[0], iter_buf[1], iter_buf[2] };
   ant_value_t cursor = sv_iter_advance_values(vm, js, state, out_value, out_done);
-  if (is_err(cursor) || *out_done) iter_buf[2] = tov(SV_ITER_DONE);
+  if (is_err(cursor) || *out_done) iter_buf[2] = Ant_Value_FromNumber(SV_ITER_DONE);
   else iter_buf[1] = cursor;
-  return is_err(cursor) ? cursor : tov(0);
+  return is_err(cursor) ? cursor : Ant_Value_FromNumber(0);
 }
 
 ant_value_t jit_helper_destructure_close(
@@ -617,7 +617,7 @@ ant_value_t jit_helper_destructure_rest(
   GC_ROOT_RESTORE(js, root_mark);
   iter_buf[3] = rest;
   
-  return tov(0);
+  return Ant_Value_FromNumber(0);
 }
 
 ant_value_t jit_helper_seq(sv_vm_t *vm, ant_t *js, ant_value_t l, ant_value_t r) {
@@ -970,7 +970,7 @@ __attribute__((noinline)) int64_t jit_helper_is_truthy(ant_t *js, ant_value_t v)
   if (type == kTypeBool) return vdata(v) != 0;
   
   if (type == kTypeNumber) {
-    double number = tod(v);
+    double number = Ant_Value_AsNumberUnchecked(v);
     return number != 0.0 && !isnan(number);
   }
   
@@ -1459,8 +1459,8 @@ ant_value_t jit_helper_get_length_at(ant_t *js, ant_value_t obj, sv_func_t *func
 }
 
 ant_value_t jit_helper_get_length_inline(ant_t *js, ant_value_t obj) {
-  if (js_is_array(obj)) return tov((double)(uint32_t)js_arr_len(js, obj));
-  if (vtype(obj) == kTypeString) return tov((double)str_utf16_len(js, obj));
+  if (js_is_array(obj)) return Ant_Value_FromNumber((double)(uint32_t)js_arr_len(js, obj));
+  if (vtype(obj) == kTypeString) return Ant_Value_FromNumber((double)str_utf16_len(js, obj));
 
   ant_value_t out = js_mkundef();
   if (js->intern.length &&
@@ -1843,14 +1843,14 @@ ant_value_t jit_helper_bnot(sv_vm_t *vm, ant_t *js, ant_value_t v) {
 }
 
 ant_value_t jit_helper_gt(sv_vm_t *vm, ant_t *js, ant_value_t l, ant_value_t r) {
-  if (vtype(l) == kTypeNumber && vtype(r) == kTypeNumber) return js_bool(tod(l) > tod(r));
+  if (vtype(l) == kTypeNumber && vtype(r) == kTypeNumber) return js_bool(Ant_Value_AsNumberUnchecked(l) > Ant_Value_AsNumberUnchecked(r));
   if (vtype(l) == kTypeString && vtype(r) == kTypeString) return js_bool(sv_strcmp(js, l, r) > 0);
   if (jit_rel_plain(l) && jit_rel_plain(r)) return js_bool(js_to_number(js, l) > js_to_number(js, r));
   return SV_JIT_BAILOUT;
 }
 
 ant_value_t jit_helper_ge(sv_vm_t *vm, ant_t *js, ant_value_t l, ant_value_t r) {
-  if (vtype(l) == kTypeNumber && vtype(r) == kTypeNumber) return js_bool(tod(l) >= tod(r));
+  if (vtype(l) == kTypeNumber && vtype(r) == kTypeNumber) return js_bool(Ant_Value_AsNumberUnchecked(l) >= Ant_Value_AsNumberUnchecked(r));
   if (vtype(l) == kTypeString && vtype(r) == kTypeString) return js_bool(sv_strcmp(js, l, r) >= 0);
   if (jit_rel_plain(l) && jit_rel_plain(r)) return js_bool(js_to_number(js, l) >= js_to_number(js, r));
   return SV_JIT_BAILOUT;

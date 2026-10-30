@@ -9,7 +9,7 @@ BOOL OptionBool(ant_t *js, ant_value_t options, const char *name, BOOL fallback)
 double OptionNumber(ant_t *js, ant_value_t options, const char *name, double fallback) {
   if (!is_object_type(options)) return fallback;
   ant_value_t value = js_get(js, options, name);
-  return vtype(value) == kTypeNumber ? js_getnum(value) : fallback;
+  return vtype(value) == kTypeNumber ? Ant_Value_AsNumberUnchecked(value) : fallback;
 }
 
 NSString *OptionString(ant_t *js, ant_value_t options, const char *name) {

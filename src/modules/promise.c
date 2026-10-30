@@ -391,10 +391,10 @@ static void promise_all_settle_element(
   }
 
   ant_value_t results = js_get_slot(tracker, SLOT_ENTRIES);
-  js_arr_set_index(js, results, (ant_offset_t)tod(index), value);
+  js_arr_set_index(js, results, (ant_offset_t)Ant_Value_AsNumberUnchecked(index), value);
   
-  int remaining = (int)tod(js_get_slot(tracker, SLOT_MAP)) - 1;
-  js_set_slot(tracker, SLOT_MAP, tov((double)remaining));
+  int remaining = (int)Ant_Value_AsNumberUnchecked(js_get_slot(tracker, SLOT_MAP)) - 1;
+  js_set_slot(tracker, SLOT_MAP, Ant_Value_FromNumber((double)remaining));
   if (remaining == 0) js_resolve_promise(js, result, mkval(kTypeArray, vdata(results)));
   
   GC_ROOT_RESTORE(js, root_mark);
@@ -1284,15 +1284,15 @@ static ant_value_t builtin_Promise_all_resolve_handler(ant_params_t) {
   ant_value_t tracker = js_get_slot(me, SLOT_DATA);
   ant_value_t index_val = js_get_slot(me, SLOT_AUX);
   
-  int index = (int)tod(index_val);
+  int index = (int)Ant_Value_AsNumberUnchecked(index_val);
   ant_value_t value = nargs > 0 ? args[0] : js_mkundef();
   
   ant_value_t results = js_get_slot(tracker, SLOT_ENTRIES);
   js_arr_set_index(js, results, (ant_offset_t)index, value);
   
   ant_value_t remaining_val = js_get_slot(tracker, SLOT_MAP);
-  int remaining = (int)tod(remaining_val) - 1;
-  js_set_slot(tracker, SLOT_MAP, tov((double)remaining));
+  int remaining = (int)Ant_Value_AsNumberUnchecked(remaining_val) - 1;
+  js_set_slot(tracker, SLOT_MAP, Ant_Value_FromNumber((double)remaining));
   
   if (remaining == 0) {
     return promise_call_one(
@@ -1352,8 +1352,8 @@ static ant_value_t promise_all_settled_store_result(
   js_arr_set_index(js, results, (ant_offset_t)index, result);
 
   remaining_val = js_get_slot(tracker, SLOT_MAP);
-  remaining = (int)tod(remaining_val) - 1;
-  js_set_slot(tracker, SLOT_MAP, tov((double)remaining));
+  remaining = (int)Ant_Value_AsNumberUnchecked(remaining_val) - 1;
+  js_set_slot(tracker, SLOT_MAP, Ant_Value_FromNumber((double)remaining));
 
   if (remaining == 0) {
     return promise_call_one(
@@ -1374,7 +1374,7 @@ static ant_value_t builtin_Promise_allSettled_resolve_handler(ant_params_t) {
 
   ant_value_t tracker = js_get_slot(me, SLOT_DATA);
   ant_value_t index_val = js_get_slot(me, SLOT_AUX);
-  int index = (int)tod(index_val);
+  int index = (int)Ant_Value_AsNumberUnchecked(index_val);
   ant_value_t value = nargs > 0 ? args[0] : js_mkundef();
 
   return promise_all_settled_store_result(js, tracker, index, true, value);
@@ -1387,7 +1387,7 @@ static ant_value_t builtin_Promise_allSettled_reject_handler(ant_params_t) {
 
   ant_value_t tracker = js_get_slot(resolve_fn, SLOT_DATA);
   ant_value_t index_val = js_get_slot(resolve_fn, SLOT_AUX);
-  int index = (int)tod(index_val);
+  int index = (int)Ant_Value_AsNumberUnchecked(index_val);
   ant_value_t reason = nargs > 0 ? args[0] : js_mkundef();
 
   return promise_all_settled_store_result(js, tracker, index, false, reason);
@@ -1456,7 +1456,7 @@ static iter_action_t promise_all_iter_cb(ant_t *js, ant_value_t value, void *ctx
   js_obj_extra_reserve(js_obj_ptr(resolve_obj), 4);
   js_set_slot(resolve_obj, SLOT_CFUNC, Ant_Function_Create(builtin_Promise_all_resolve_handler));
   js_set_slot(resolve_obj, SLOT_DATA, pctx->tracker);
-  js_set_slot(resolve_obj, SLOT_AUX, tov((double)pctx->index));
+  js_set_slot(resolve_obj, SLOT_AUX, Ant_Value_FromNumber((double)pctx->index));
   
   ant_value_t resolve_fn = js_obj_to_func(js, resolve_obj);
   GC_ROOT_PIN(js, resolve_fn);
@@ -1476,8 +1476,8 @@ static iter_action_t promise_all_iter_cb(ant_t *js, ant_value_t value, void *ctx
   ant_value_t reject_fn = js_obj_to_func(js, reject_obj);
   GC_ROOT_PIN(js, reject_fn);
 
-  int remaining = (int)tod(js_get_slot(pctx->tracker, SLOT_MAP)) + 1;
-  js_set_slot(pctx->tracker, SLOT_MAP, tov((double)remaining));
+  int remaining = (int)Ant_Value_AsNumberUnchecked(js_get_slot(pctx->tracker, SLOT_MAP)) + 1;
+  js_set_slot(pctx->tracker, SLOT_MAP, Ant_Value_FromNumber((double)remaining));
 
   ant_value_t then_result = promise_invoke_then(js, item, resolve_fn, reject_fn);
   if (is_err(then_result)) {
@@ -1519,7 +1519,7 @@ static iter_action_t promise_all_settled_iter_cb(ant_t *js, ant_value_t value, v
   
   js_set_slot(resolve_obj, SLOT_CFUNC, Ant_Function_Create(builtin_Promise_allSettled_resolve_handler));
   js_set_slot(resolve_obj, SLOT_DATA, pctx->tracker);
-  js_set_slot(resolve_obj, SLOT_AUX, tov((double)pctx->index));
+  js_set_slot(resolve_obj, SLOT_AUX, Ant_Value_FromNumber((double)pctx->index));
   
   ant_value_t resolve_fn = js_obj_to_func(js, resolve_obj);
   GC_ROOT_PIN(js, resolve_fn);
@@ -1540,8 +1540,8 @@ static iter_action_t promise_all_settled_iter_cb(ant_t *js, ant_value_t value, v
   ant_value_t reject_fn = js_obj_to_func(js, reject_obj);
   GC_ROOT_PIN(js, reject_fn);
 
-  int remaining = (int)tod(js_get_slot(pctx->tracker, SLOT_MAP)) + 1;
-  js_set_slot(pctx->tracker, SLOT_MAP, tov((double)remaining));
+  int remaining = (int)Ant_Value_AsNumberUnchecked(js_get_slot(pctx->tracker, SLOT_MAP)) + 1;
+  js_set_slot(pctx->tracker, SLOT_MAP, Ant_Value_FromNumber((double)remaining));
 
   ant_value_t then_result = promise_invoke_then(js, item, resolve_fn, reject_fn);
   if (is_err(then_result)) {
@@ -1607,7 +1607,7 @@ static ant_value_t promise_all_fast(ant_t *js, ant_value_t iterable) {
   js_obj_extra_reserve(js_obj_ptr(tracker), 3);
   js_set_slot_wb(js, tracker, SLOT_DATA, result);
   js_set_slot_wb(js, tracker, SLOT_ENTRIES, results);
-  js_set_slot(tracker, SLOT_MAP, tov((double)len));
+  js_set_slot(tracker, SLOT_MAP, Ant_Value_FromNumber((double)len));
 
   if (len == 0) {
     js_resolve_promise(js, result, mkval(kTypeArray, vdata(results)));
@@ -1631,7 +1631,7 @@ static ant_value_t promise_all_fast(ant_t *js, ant_value_t iterable) {
     }
 
     ant_promise_state_t *pd = js_promise_data(js, item, false);
-    promise_handler_t handler = { tracker, tov((double)i), PROMISE_ALL_ELEMENT, NULL };
+    promise_handler_t handler = { tracker, Ant_Value_FromNumber((double)i), PROMISE_ALL_ELEMENT, NULL };
     if (!pd || !promise_handler_append(pd, &handler)) {
       GC_ROOT_RESTORE(js, root_mark);
       return Ant_Error_CreateOutOfMemory(js);
@@ -1694,7 +1694,7 @@ static ant_value_t builtin_Promise_all(ant_params_t) {
   js_set_slot_wb(js, tracker, SLOT_DATA, result_resolve);
   js_set_slot_wb(js, tracker, SLOT_AUX, result_reject);
   js_set_slot_wb(js, tracker, SLOT_ENTRIES, results);
-  js_set_slot(tracker, SLOT_MAP, tov(1.0));
+  js_set_slot(tracker, SLOT_MAP, Ant_Value_FromNumber(1.0));
 
   promise_all_iter_ctx_t ctx = {
     .tracker = tracker,
@@ -1716,8 +1716,8 @@ static ant_value_t builtin_Promise_all(ant_params_t) {
   int len = ctx.index;
   js_arr_set_dense_length(js, results, (ant_offset_t)len);
 
-  int remaining = (int)tod(js_get_slot(tracker, SLOT_MAP)) - 1;
-  js_set_slot(tracker, SLOT_MAP, tov((double)remaining));
+  int remaining = (int)Ant_Value_AsNumberUnchecked(js_get_slot(tracker, SLOT_MAP)) - 1;
+  js_set_slot(tracker, SLOT_MAP, Ant_Value_FromNumber((double)remaining));
   if (remaining == 0) {
     ant_value_t resolve_result = promise_call_one(
       js, result_resolve, js_mkundef(), 
@@ -1781,7 +1781,7 @@ static ant_value_t builtin_Promise_allSettled(ant_params_t) {
   js_set_slot_wb(js, tracker, SLOT_DATA, result_resolve);
   js_set_slot_wb(js, tracker, SLOT_AUX, result_reject);
   js_set_slot_wb(js, tracker, SLOT_ENTRIES, results);
-  js_set_slot(tracker, SLOT_MAP, tov(1.0));
+  js_set_slot(tracker, SLOT_MAP, Ant_Value_FromNumber(1.0));
 
   promise_all_iter_ctx_t ctx = {
     .tracker = tracker,
@@ -1802,8 +1802,8 @@ static ant_value_t builtin_Promise_allSettled(ant_params_t) {
   int len = ctx.index;
   js_arr_set_dense_length(js, results, (ant_offset_t)len);
 
-  int remaining = (int)tod(js_get_slot(tracker, SLOT_MAP)) - 1;
-  js_set_slot(tracker, SLOT_MAP, tov((double)remaining));
+  int remaining = (int)Ant_Value_AsNumberUnchecked(js_get_slot(tracker, SLOT_MAP)) - 1;
+  js_set_slot(tracker, SLOT_MAP, Ant_Value_FromNumber((double)remaining));
   if (remaining == 0) {
     ant_value_t resolve_result = promise_call_one(
       js, result_resolve, js_mkundef(), 
@@ -1943,8 +1943,8 @@ static ant_value_t promise_any_record_rejection(
   ant_value_t errors = js_get_slot(tracker, SLOT_ENTRIES);
   js_arr_set_index(js, errors, (ant_offset_t)index, reason);
   
-  int remaining = (int)tod(js_get_slot(tracker, SLOT_MAP)) - 1;
-  js_set_slot(tracker, SLOT_MAP, tov((double)remaining));
+  int remaining = (int)Ant_Value_AsNumberUnchecked(js_get_slot(tracker, SLOT_MAP)) - 1;
+  js_set_slot(tracker, SLOT_MAP, Ant_Value_FromNumber((double)remaining));
   
   if (remaining != 0) return js_mkundef();
   js_set_slot(tracker, SLOT_SETTLED, js_true);
@@ -1975,7 +1975,7 @@ static ant_value_t builtin_Promise_any_reject_handler(ant_params_t) {
   ant_value_t tracker = js_get_slot(resolve_fn, SLOT_DATA);
   if (js_get_slot(tracker, SLOT_SETTLED) == js_true) return js_mkundef();
   
-  int index = (int)tod(js_get_slot(resolve_fn, SLOT_AUX));
+  int index = (int)Ant_Value_AsNumberUnchecked(js_get_slot(resolve_fn, SLOT_AUX));
   return promise_any_record_rejection(
     js, tracker, index, nargs > 0 ? args[0] : js_mkundef()
   );
@@ -2016,7 +2016,7 @@ static iter_action_t promise_any_iter_cb(
   js_set_slot(resolve_obj, SLOT_CFUNC, Ant_Function_Create(builtin_Promise_any_resolve_handler));
   js_set_slot(resolve_obj, SLOT_SETTLED, js_false);
   js_set_slot(resolve_obj, SLOT_DATA, pctx->tracker);
-  js_set_slot(resolve_obj, SLOT_AUX, tov((double)pctx->index));
+  js_set_slot(resolve_obj, SLOT_AUX, Ant_Value_FromNumber((double)pctx->index));
 
   ant_value_t resolve_fn = js_obj_to_func(js, resolve_obj);
   GC_ROOT_PIN(js, resolve_fn);
@@ -2035,8 +2035,8 @@ static iter_action_t promise_any_iter_cb(
   ant_value_t reject_fn = js_obj_to_func(js, reject_obj);
   GC_ROOT_PIN(js, reject_fn);
 
-  int remaining = (int)tod(js_get_slot(pctx->tracker, SLOT_MAP)) + 1;
-  js_set_slot(pctx->tracker, SLOT_MAP, tov((double)remaining));
+  int remaining = (int)Ant_Value_AsNumberUnchecked(js_get_slot(pctx->tracker, SLOT_MAP)) + 1;
+  js_set_slot(pctx->tracker, SLOT_MAP, Ant_Value_FromNumber((double)remaining));
 
   ant_value_t then_result = promise_invoke_then(
     js, item, resolve_fn, reject_fn
@@ -2097,7 +2097,7 @@ static ant_value_t builtin_Promise_any(ant_params_t) {
   js_set_slot_wb(js, tracker, SLOT_DATA, result_resolve);
   js_set_slot_wb(js, tracker, SLOT_AUX, result_reject);
   js_set_slot_wb(js, tracker, SLOT_ENTRIES, errors);
-  js_set_slot(tracker, SLOT_MAP, tov(1.0));
+  js_set_slot(tracker, SLOT_MAP, Ant_Value_FromNumber(1.0));
   js_set_slot(tracker, SLOT_SETTLED, js_false);
 
   promise_any_iter_ctx_t ctx = {
@@ -2123,8 +2123,8 @@ static ant_value_t builtin_Promise_any(ant_params_t) {
   int len = ctx.index;
   js_arr_set_dense_length(js, errors, (ant_offset_t)len);
 
-  int remaining = (int)tod(js_get_slot(tracker, SLOT_MAP)) - 1;
-  js_set_slot(tracker, SLOT_MAP, tov((double)remaining));
+  int remaining = (int)Ant_Value_AsNumberUnchecked(js_get_slot(tracker, SLOT_MAP)) - 1;
+  js_set_slot(tracker, SLOT_MAP, Ant_Value_FromNumber((double)remaining));
 
   if (remaining == 0) {
     js_set_slot(tracker, SLOT_SETTLED, js_true);

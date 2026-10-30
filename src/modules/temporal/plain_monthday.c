@@ -80,7 +80,7 @@ static ant_value_t temporal_plain_monthday_get_calendar_id(ant_params_t) {
 static ant_value_t temporal_plain_monthday_get_day(ant_params_t) {
   (void)args; (void)nargs; ant_value_t err = js_mkundef();
   PlainMonthDay *self = temporal_plain_monthday_this(js, "Temporal.PlainMonthDay.prototype.day", &err);
-  return self ? js_mknum(temporal_rs_PlainMonthDay_day(self)) : err;
+  return self ? Ant_Value_FromNumber(temporal_rs_PlainMonthDay_day(self)) : err;
 }
 
 static ant_value_t temporal_plain_monthday_get_month_code(ant_params_t) {

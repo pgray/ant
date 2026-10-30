@@ -190,7 +190,7 @@ static bool wire_encode_value(
       );
       break;
     case kTypeNumber: {
-      double number = js_getnum(value);
+      double number = Ant_Value_AsNumberUnchecked(value);
       ok = wire_writer_u8(writer, ANT_WASM_WIRE_NUMBER) &&
         wire_writer_bytes(writer, &number, sizeof(number));
       break;
@@ -314,7 +314,7 @@ static bool wire_decode_value(
     case ANT_WASM_WIRE_NUMBER: {
       double number = 0;
       if (!wire_reader_bytes(reader, &number, sizeof(number))) return false;
-      *output = js_mknum(number);
+      *output = Ant_Value_FromNumber(number);
       return true;
     }
     case ANT_WASM_WIRE_STRING: {
@@ -579,7 +579,7 @@ static ant_value_t host_function_call(ant_params_t) {
   if (!runtime || runtime->js != js)
     return js_mkerr_typed(js, JS_ERR_INTERNAL, "Host bridge is unavailable");
 
-  ant_value_t current = js_getcurrentfunc(js);
+  ant_value_t current = js->current_func;
   ant_value_t data = js_get_slot(js_as_obj(current), SLOT_DATA);
   if (vtype(data) != kTypeNumber)
     return js_mkerr_typed(js, JS_ERR_INTERNAL, "Invalid host function");
@@ -607,7 +607,7 @@ static ant_value_t host_function_call(ant_params_t) {
 
   uint32_t response_length = 0;
   uint32_t response_pointer = ant_wasm_host_call(
-    (int32_t)js_getnum(data), (const char *)writer.data,
+    (int32_t)Ant_Value_AsNumberUnchecked(data), (const char *)writer.data,
     (uint32_t)writer.length, &response_length
   );
   free(writer.data);
@@ -736,7 +736,7 @@ const uint8_t *ant_wasm_set_global(
   ant_value_t value = js_mkundef();
   GC_ROOT_PIN(js, value);
   if (function_id >= 0) {
-    value = js_heavy_mkfun(js, host_function_call, js_mknum((double)function_id));
+    value = js_heavy_mkfun(js, host_function_call, Ant_Value_FromNumber((double)function_id));
   } else if (!wire_value || !wire_decode(js, wire_value, wire_length, &value)) {
     js_take_thrown(js, js_mkundef());
     const uint8_t *response = serialize_transfer_error(runtime);

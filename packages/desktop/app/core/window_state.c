@@ -55,7 +55,7 @@ ant_desktop_window_state_t *ant_desktop_window_find(ant_desktop_window_id_t iden
 ant_desktop_window_state_t *ant_desktop_window_from_value(ant_t *js, ant_value_t value) {
   if (!is_object_type(value)) return NULL;
   ant_value_t identifier = js_get(js, value, "_nativeId");
-  return vtype(identifier) == kTypeNumber ? ant_desktop_window_find((ant_desktop_window_id_t)js_getnum(identifier)) : NULL;
+  return vtype(identifier) == kTypeNumber ? ant_desktop_window_find((ant_desktop_window_id_t)Ant_Value_AsNumberUnchecked(identifier)) : NULL;
 }
 
 size_t ant_desktop_window_count(void) {
@@ -93,7 +93,7 @@ ant_value_t ant_desktop_emit_window_event(ant_desktop_window_state_t *window, co
   ant_value_t event = Ant_Object_CreateBare(window->js);
   js_set(window->js, event, "type", js_mkstr(window->js, type, strlen(type)));
   if (detail && detail_length) { js_set(window->js, event, "detail", js_mkstr(window->js, detail, detail_length)); }
-  js_set(window->js, event, "code", js_mknum((double)code));
+  js_set(window->js, event, "code", Ant_Value_FromNumber((double)code));
 
   ant_value_t result = js_mkundef();
   ant_offset_t count = js_arr_len(window->js, listeners);
@@ -116,7 +116,7 @@ void ant_desktop_dispatch_renderer_ipc(ant_desktop_window_state_t *window, int o
     return;
   }
   ant_value_t args[] = {
-    js_mknum((double)window->identifier),  js_mknum((double)operation),           js_mknum((double)request_id),
+    Ant_Value_FromNumber((double)window->identifier),  Ant_Value_FromNumber((double)operation),           Ant_Value_FromNumber((double)request_id),
     js_mkstr(js, channel, channel_length), js_mkstr(js, payload, payload_length),
   };
   ant_value_t result = ant_desktop_call_function(js, dispatch, js_mkundef(), args, 5);

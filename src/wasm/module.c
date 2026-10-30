@@ -13,7 +13,7 @@ static ant_value_t wasm_wrap_module(ant_t *js, wasm_store_t *store, wasm_module_
 
   ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_proto_init(obj, js->builtins.wasm_module_proto);
-  js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_WASM_MODULE));
+  js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_WASM_MODULE));
   js_set_native(obj, handle, WASM_MODULE_NATIVE_TAG);
   return obj;
 }

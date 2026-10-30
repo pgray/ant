@@ -335,7 +335,7 @@ static const char *zlib_code_name(int code) {
 static ant_value_t zlib_error(ant_t *js, const char *message, const char *code, int errnum) {
   ant_value_t props = Ant_Object_CreateBare(js);
   js_set(js, props, "code", js_mkstr(js, code, strlen(code)));
-  js_set(js, props, "errno", js_mknum((double)errnum));
+  js_set(js, props, "errno", Ant_Value_FromNumber((double)errnum));
   return js_mkerr_props(js, JS_ERR_GENERIC, props, "%s", message);
 }
 
@@ -503,7 +503,7 @@ static ant_value_t js_zlib_process_chunk(ant_params_t) {
 
   int flush_flag = Z_NO_FLUSH;
   if (nargs >= 2 && vtype(args[1]) == kTypeNumber)
-    flush_flag = (int)js_getnum(args[1]);
+    flush_flag = (int)Ant_Value_AsNumberUnchecked(args[1]);
 
   return zlib_process_chunk_sync(js, st, input, input_len, flush_flag);
 }
@@ -570,7 +570,7 @@ static ant_value_t js_zlib_flush(ant_params_t) {
   ant_value_t cb = js_mkundef();
   if (nargs > 0 && is_callable(args[0])) cb = args[0];
   else {
-    if (nargs > 0 && vtype(args[0]) == kTypeNumber) flush = (int)js_getnum(args[0]);
+    if (nargs > 0 && vtype(args[0]) == kTypeNumber) flush = (int)Ant_Value_AsNumberUnchecked(args[0]);
     if (nargs > 1 && is_callable(args[1])) cb = args[1];
   }
 
@@ -689,8 +689,8 @@ static ant_value_t js_zlib__destroy(ant_params_t) {
 
 static ant_value_t js_zlib_get_bytes_written(ant_params_t) {
   zlib_stream_t *st = zlib_stream_ptr(js_getthis(js));
-  if (!st) return js_mknum(0);
-  return js_mknum((double)st->bytes_written);
+  if (!st) return Ant_Value_FromNumber(0);
+  return Ant_Value_FromNumber((double)st->bytes_written);
 }
 
 static ant_value_t zlib_create_stream(ant_t *js, zlib_kind_t kind, ant_value_t opts_val) {
@@ -1045,17 +1045,17 @@ static ant_value_t js_zlib_crc32(ant_params_t) {
   uLong init_val = 0;
 
   if (nargs >= 2 && vtype(args[1]) == kTypeNumber)
-    init_val = (uLong)js_getnum(args[1]);
+    init_val = (uLong)Ant_Value_AsNumberUnchecked(args[1]);
 
   ant_value_t input = get_input_bytes(js, args[0], &bytes, &len);
   if (is_err(input)) return input;
 
   uLong crc = crc32(init_val, bytes, (uInt)len);
-  return js_mknum((double)(uint32_t)crc);
+  return Ant_Value_FromNumber((double)(uint32_t)crc);
 }
 
 static inline void zlib_set_num(ant_t *js, ant_value_t obj, const char *name, double value) {
-  js_set(js, obj, name, js_mknum(value));
+  js_set(js, obj, name, Ant_Value_FromNumber(value));
 }
 
 static void zlib_install_constants(ant_t *js, ant_value_t c) {

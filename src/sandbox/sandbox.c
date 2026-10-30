@@ -407,7 +407,7 @@ uint8_t *ant_sandbox_build_result_payload(ant_t *js, ant_value_t value, size_t *
       break;
     case kTypeNumber: {
       type = ANT_SANDBOX_VALUE_NUMBER;
-      double number = js_getnum(value);
+      double number = Ant_Value_AsNumberUnchecked(value);
       memcpy(&number_bits, &number, sizeof(number_bits));
       break;
     }
@@ -553,7 +553,7 @@ bool ant_sandbox_decode_result_value(
       if (!sandbox_read_u64(&r, &bits)) return false;
       double number = 0;
       memcpy(&number, &bits, sizeof(number));
-      *out = js_mknum(number);
+      *out = Ant_Value_FromNumber(number);
       break;
     }
     case ANT_SANDBOX_VALUE_STRING: {
@@ -673,7 +673,7 @@ int ant_sandbox_eval_module(ant_t *js, const char *script, size_t len) {
   const char *tag = "[sandbox eval].mjs";
   ant_value_t ns = Ant_Object_CreateBare(js);
 
-  js_set_slot(ns, SLOT_BRAND, js_mknum(BRAND_MODULE_NAMESPACE));
+  js_set_slot(ns, SLOT_BRAND, Ant_Value_FromNumber(BRAND_MODULE_NAMESPACE));
   js_set_slot(ns, SLOT_MODULE_LOADING, js_true);
   js_set_filename(js, tag);
 

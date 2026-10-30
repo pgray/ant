@@ -24,10 +24,10 @@ int main(void) {
         char name[24];
         int len = snprintf(name, sizeof(name), "%u", 50000 + i);
         key = symbols ? js_mksym(js, name)
-          : jit ? js_mknum(50000 + i) : js_mkstr(js, name, len);
+          : jit ? Ant_Value_FromNumber(50000 + i) : js_mkstr(js, name, len);
         ant_value_t result = jit
-          ? jit_helper_put_elem(js->vm, js, obj, key, js_mknum(i))
-          : js_setprop_keyed(js, obj, key, js_mknum(i));
+          ? jit_helper_put_elem(js->vm, js, obj, key, Ant_Value_FromNumber(i))
+          : js_setprop_keyed(js, obj, key, Ant_Value_FromNumber(i));
         assert(vtype(result) != kTypeError);
       }
       assert(ant_shape_count(js_obj_ptr(obj)->shape) == 65);

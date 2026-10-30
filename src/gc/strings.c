@@ -2,10 +2,13 @@
 #include "gc/verify.h"
 #include "gc/strings.h"
 #include "utils.h"
+#include "utf8.h"
+#include "numbers.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 typedef struct {
   uint8_t *bits;
@@ -390,4 +393,526 @@ void gc_strings_destroy(ant_t *js) {
   js->gc.large_string_marks = NULL;
   js->gc.string_mark_len = js->gc.string_mark_cap = 0;
   js->gc.large_string_mark_len = js->gc.large_string_mark_cap = 0;
+}
+
+typedef struct interned_string {
+  uint64_t hash;
+  ant_value_t value;
+  char *str;
+  size_t len;
+} interned_string_t;
+
+typedef struct intern_chunk {
+  struct intern_chunk *next;
+  size_t used;
+  size_t cap;
+  alignas(max_align_t) unsigned char data[];
+} intern_chunk_t;
+
+struct ant_intern_table {
+  size_t mask;
+  size_t count;
+  size_t bytes;
+  intern_chunk_t *chunks;
+  interned_string_t *slots[];
+};
+
+static constexpr size_t INTERN_TABLE_MIN = 2048;
+static constexpr size_t INTERN_CHUNK_SIZE = 64 * 1024;
+
+static ant_intern_table_t *intern_table_alloc(size_t cap) {
+  ant_intern_table_t *t = calloc(1, sizeof(*t) + cap * sizeof(t->slots[0]));
+  if (t) t->mask = cap - 1;
+  return t;
+}
+
+static void intern_table_place(ant_intern_table_t *t, interned_string_t *entry) {
+  size_t i = (size_t)entry->hash & t->mask;
+  while (t->slots[i]) i = (i + 1) & t->mask;
+  t->slots[i] = entry;
+}
+
+static interned_string_t *intern_table_probe(const ant_intern_table_t *t, uint64_t h, const char *str, size_t len) {
+  for (size_t i = (size_t)h & t->mask;; i = (i + 1) & t->mask) {
+    interned_string_t *e = t->slots[i];
+    if (!e) return NULL;
+    if (e->hash == h && e->len == len && memcmp(e->str, str, len) == 0) return e;
+  }
+}
+
+static ant_intern_table_t *intern_table_reserve(ant_t *js) {
+  ant_intern_table_t *t = js->intern.table;
+  if (t && (t->count + 1) * 2 < t->mask + 1) return t;
+
+  ant_intern_table_t *next = intern_table_alloc(t ? (t->mask + 1) * 2 : INTERN_TABLE_MIN);
+  if (!next) return t && t->count < t->mask ? t : NULL;
+
+  if (t) {
+    for (size_t i = 0; i <= t->mask; i++) if (t->slots[i]) intern_table_place(next, t->slots[i]);
+    next->count = t->count;
+    next->bytes = t->bytes;
+    next->chunks = t->chunks;
+    free(t);
+  }
+  js->intern.table = next;
+  return next;
+}
+
+static interned_string_t *intern_entry_alloc(ant_intern_table_t *t, size_t size) {
+  size = (size + alignof(interned_string_t) - 1) & ~(alignof(interned_string_t) - 1);
+  intern_chunk_t *chunk = t->chunks;
+  if (!chunk || chunk->cap - chunk->used < size) {
+    size_t cap = size > INTERN_CHUNK_SIZE ? size : INTERN_CHUNK_SIZE;
+    if (!(chunk = malloc(sizeof(*chunk) + cap))) return NULL;
+    chunk->next = t->chunks;
+    chunk->used = 0;
+    chunk->cap = cap;
+    t->chunks = chunk;
+  }
+  interned_string_t *entry = (interned_string_t *)(chunk->data + chunk->used);
+  chunk->used += size;
+  return entry;
+}
+
+void intern_table_free(ant_t *js) {
+  ant_intern_table_t *t = js->intern.table;
+  if (!t) return;
+  for (intern_chunk_t *chunk = t->chunks, *next; chunk; chunk = next) {
+    next = chunk->next;
+    free(chunk);
+  }
+  free(t);
+  js->intern.table = NULL;
+}
+
+ant_offset_t vstrlen(ant_t *js, ant_value_t v) { 
+  if (str_is_heap_rope(v)) {
+    ant_rope_heap_t *rope = ant_str_rope_ptr(v);
+    return rope ? rope->len : 0;
+  }
+  if (str_is_heap_builder(v)) {
+    ant_string_builder_t *builder = ant_str_builder_ptr(v);
+    return builder ? builder->len : 0;
+  }
+  ant_flat_string_t *flat = ant_str_flat_ptr(v);
+  return flat ? flat->len : 0;
+}
+
+ant_value_t str_materialize(ant_t *js, ant_value_t value) {
+  if (vtype(value) != kTypeString) return value;
+  if (str_is_heap_rope(value)) return rope_flatten(js, value);
+  if (str_is_heap_builder(value)) return builder_flatten(js, value);
+  return value;
+}
+
+ant_offset_t vstr(ant_t *js, ant_value_t value, ant_offset_t *len) {
+  if (str_is_heap_rope(value) || str_is_heap_builder(value)) {
+    ant_value_t flat = str_materialize(js, value);
+    assert(!is_err(flat));
+    value = flat;
+  }
+  
+  const char *ptr = NULL;
+  ant_offset_t slen = assert_flat_string_len(value, &ptr);
+  if (len) *len = slen;
+  return (ant_offset_t)(uintptr_t)ptr;
+}
+
+const char *intern_find(ant_t *js, const char *str, size_t len) {
+  ant_intern_table_t *t = js->intern.table;
+  if (!t) return NULL;
+  interned_string_t *e = intern_table_probe(t, hash_key(str, len), str, len);
+  return e ? e->str : NULL;
+}
+
+const char *intern_string(ant_t *js, const char *str, size_t len) {
+  uint64_t h = hash_key(str, len);
+  ant_intern_table_t *t = js->intern.table;
+  interned_string_t *e = t ? intern_table_probe(t, h, str, len) : NULL;
+  
+  if (e) return e->str;
+  if (!(t = intern_table_reserve(js))) return NULL;
+
+  size_t alloc_size = sizeof(interned_string_t) + len + 1;
+  if (!(e = intern_entry_alloc(t, alloc_size))) return NULL;
+
+  e->str = (char *)(e + 1);
+  memcpy(e->str, str, len);
+  e->str[len] = '\0';
+  e->len = len;
+  e->hash = h;
+  e->value = 0;
+  intern_table_place(t, e);
+
+  t->count++;
+  t->bytes += alloc_size;
+  
+  return e->str;
+}
+
+const char *intern_find_flat(ant_t *js, const char *bytes, size_t len) {
+  ant_intern_memo_entry_t *entry = &js->intern_memo[((uintptr_t)bytes >> 4) & (INTERN_MEMO_SIZE - 1)];
+  if (entry->bytes == bytes) return entry->interned;
+
+  const char *interned = intern_find(js, bytes, len);
+  if (interned) *entry = (ant_intern_memo_entry_t){ bytes, interned };
+  
+  return interned;
+}
+
+size_t intern_length(const char *interned) {
+  return ((const interned_string_t *)(const void *)interned)[-1].len;
+}
+
+ant_value_t intern_value(ant_t *js, const char *interned) {
+  interned_string_t *entry = &((interned_string_t *)(void *)interned)[-1];
+  if (entry->value) return entry->value;
+  ant_value_t value = js_mkstr_permanent(js, interned, entry->len);
+  if (!is_err(value)) entry->value = value;
+  return value;
+}
+
+js_intern_stats_t js_intern_stats(ant_t *js) {
+  const ant_intern_table_t *t = js->intern.table;
+  return (js_intern_stats_t){ .count = t ? t->count : 0, .bytes = t ? t->bytes : 0 };
+}
+
+ant_value_t mkstr_with_ascii(ant_t *js, const void *ptr, size_t len, bool known_ascii) {
+  ant_flat_string_t *flat = (ant_flat_string_t *)js_type_alloc(
+    js, ANT_ALLOC_STRING, sizeof(*flat) + len + 1, 
+    _Alignof(ant_flat_string_t)
+  );
+  
+  if (!flat) return js_mkerr(js, "oom");
+  flat->len = (ant_offset_t)len;
+  
+  if (ptr && len > 0) memcpy(flat->bytes, ptr, len);
+  flat->bytes[len] = '\0';
+  
+  uint8_t ascii = known_ascii ? STR_ASCII_YES : ((ptr || len == 0)
+    ? str_detect_ascii_bytes(flat->bytes, len)
+    : STR_ASCII_UNKNOWN);
+  
+  if (ptr) str_flat_finish(flat, ascii);
+  else str_flat_init_meta(flat, ascii);
+
+  return mkref(kTypeString, flat);
+}
+
+ant_value_t js_empty_string(ant_t *js) {
+  if (js->empty_str) return js->empty_str;
+  ant_value_t empty = js_mkstr_permanent(js, "", 0);
+  if (!is_err(empty)) js->empty_str = empty;
+  return empty;
+}
+
+ant_value_t js_mkstr(ant_t *js, const void *ptr, size_t len) {
+  if (len == 0 && ptr) return js_empty_string(js);
+  return mkstr_with_ascii(js, ptr, len, false);
+}
+
+ant_value_t js_mkstr_ascii(ant_t *js, const void *ptr, size_t len) {
+  return mkstr_with_ascii(js, ptr, len, true);
+}
+
+static ant_value_t mkstr_utf8_finish(ant_value_t str, bool ascii) {
+  ant_flat_string_t *flat = ant_str_flat_ptr(str);
+  str_flat_init_meta(flat, ascii ? STR_ASCII_YES : STR_ASCII_NO);
+  if (!ascii) str_flat_set_utf_valid_state(flat, STR_UTF_VALID);
+  return str;
+}
+
+ant_value_t js_mkstr_utf8_reserve(ant_t *js, size_t len, char **out_bytes) {
+  ant_value_t str = mkstr_with_ascii(js, NULL, len, false);
+  *out_bytes = is_err(str) ? NULL : ant_str_flat_ptr(str)->bytes;
+  return str;
+}
+
+ant_value_t js_mkstr_utf8_valid(ant_t *js, const void *ptr, size_t len, bool ascii) {
+  if (len == 0) return js_empty_string(js);
+
+  char *bytes;
+  ant_value_t str = js_mkstr_utf8_reserve(js, len, &bytes);
+  if (is_err(str)) return str;
+  
+  memcpy(bytes, ptr, len);
+  return mkstr_utf8_finish(str, ascii);
+}
+
+static ant_value_t mkstr_utf8_replaced(ant_t *js, const char *ptr, size_t len, size_t valid) {
+  size_t out_len;
+  char *out = utf8_replace_invalid(ptr, len, valid, &out_len);
+  if (!out) return js_mkerr(js, "oom");
+
+  ant_value_t result = js_mkstr_utf8_valid(js, out, out_len, false);
+  free(out);
+
+  return result;
+}
+
+ant_value_t js_mkstr_utf8_try(ant_t *js, const void *ptr, size_t len, size_t *out_valid) {
+  *out_valid = len;
+  if (len == 0) return js_empty_string(js);
+
+  char *bytes;
+  ant_value_t str = js_mkstr_utf8_reserve(js, len, &bytes);
+  if (is_err(str)) return str;
+
+  bool ascii;
+  *out_valid = utf8_copy_valid_prefix(bytes, (const char *)ptr, len, &ascii);
+  return *out_valid == len ? mkstr_utf8_finish(str, ascii) : js_mkundef();
+}
+
+ant_value_t js_mkstr_utf8(ant_t *js, const void *ptr, size_t len) {
+  size_t valid;
+  ant_value_t str = js_mkstr_utf8_try(js, ptr, len, &valid);
+  if (vtype(str) != kTypeUndefined) return str;
+  return mkstr_utf8_replaced(js, (const char *)ptr, len, valid);
+}
+
+ant_value_t js_mkstr_utf8_commit(ant_t *js, ant_value_t str) {
+  ant_flat_string_t *flat = ant_str_flat_ptr(str);
+  size_t len = (size_t)flat->len;
+  if (len == 0) return js_empty_string(js);
+
+  bool ascii;
+  size_t valid = utf8_valid_prefix(flat->bytes, len, &ascii);
+  if (valid < len) return mkstr_utf8_replaced(js, flat->bytes, len, valid);
+  return mkstr_utf8_finish(str, ascii);
+}
+
+ant_value_t js_mkstr_wtf8_lossy(ant_t *js, const void *ptr, size_t len) {
+  size_t clean_len = 0;
+  char *clean = wtf8_replace_invalid((const char *)ptr, len, &clean_len);
+  if (!clean) return js_mkstr(js, ptr, len);
+
+  ant_value_t result = js_mkstr(js, clean, clean_len);
+  free(clean);
+  return result;
+}
+
+ant_value_t js_mkstr_utf8_strip_bom(ant_t *js, const void *ptr, size_t len) {
+  const uint8_t *bytes = (const uint8_t *)ptr;
+  if (len >= 3 && bytes[0] == 0xef && bytes[1] == 0xbb && bytes[2] == 0xbf) {
+    bytes += 3;
+    len -= 3;
+  }
+  return js_mkstr_utf8(js, bytes, len);
+}
+
+ant_value_t js_mkstr_int32(ant_t *js, int32_t value) {
+  size_t len = ant_int32_chars_len(value);
+  ant_value_t str = mkstr_with_ascii(js, NULL, len, true);
+  if (!is_err(str)) ant_int32_write(ant_str_flat_ptr(str)->bytes, len, value);
+  return str;
+}
+
+ant_value_t js_mkstr_byte_range(ant_t *js, const char *parent, size_t start, size_t len) {
+  bool known_ascii = str_flat_ascii_state(str_flat_from_bytes(parent)) == STR_ASCII_YES;
+  return mkstr_with_ascii(js, parent + start, len, known_ascii);
+}
+
+void *js_permanent_alloc(ant_t *js, size_t size, size_t align) {
+  if (js->pool.permanent.block_size == 0) js->pool.permanent.block_size = ANT_POOL_STRING_BLOCK_SIZE;
+  return pool_alloc_chain(&js->pool.permanent.head, NULL, js->pool.permanent.block_size, size, align);
+}
+
+ant_value_t js_mkstr_permanent(ant_t *js, const void *ptr, size_t len) {
+  size_t size = sizeof(ant_flat_string_t) + len + 1;
+  ant_flat_string_t *flat = js_permanent_alloc(js, size, _Alignof(ant_flat_string_t));
+  
+  if (!flat) return js_mkerr(js, "oom");
+  flat->len = (ant_offset_t)len;
+  
+  if (ptr && len > 0) memcpy(flat->bytes, ptr, len);
+  flat->bytes[len] = '\0';
+  
+  str_flat_init_meta(flat, (ptr || len == 0)
+    ? str_detect_ascii_bytes(flat->bytes, len)
+    : STR_ASCII_UNKNOWN
+  );
+  
+  flat->meta |= STR_META_PERMANENT;
+  return mkref(kTypeString, flat);
+}
+
+static bool rope_part_ascii(ant_value_t part) {
+  if (str_is_heap_rope(part)) return (ant_str_rope_ptr(part)->flags & ANT_ROPE_FLAG_ASCII) != 0;
+  if (str_is_heap_builder(part)) return false;
+  
+  ant_flat_string_t *flat = ant_str_flat_ptr(part);
+  return flat && str_flat_ascii_state(flat) == STR_ASCII_YES;
+}
+
+ant_value_t js_mkrope(ant_t *js, ant_value_t left, ant_value_t right, ant_offset_t total_len, uint16_t depth) {
+  if (js->rope_gc.young_alloc >= GC_ROPE_NURSERY_THRESHOLD) {
+    GC_ROOT_SAVE(root_mark, js);
+    GC_ROOT_PIN(js, left);
+    GC_ROOT_PIN(js, right);
+    gc_pressure(js);
+    GC_ROOT_RESTORE(js, root_mark);
+  }
+
+  ant_rope_heap_t *rope = js_rope_alloc(js);
+  if (!rope) return js_mkerr(js, "oom");
+  
+  rope->len = total_len;
+  rope->depth = depth;
+  rope->flags = ANT_ROPE_FLAG_YOUNG | (rope_part_ascii(left) && rope_part_ascii(right) ? ANT_ROPE_FLAG_ASCII : 0);
+  rope->mark_epoch = 0;
+  rope->left = left;
+  rope->right = right;
+  rope->cached = js_mkundef();
+  
+  return ant_mkrope_value(rope);
+}
+
+ant_offset_t str_len_fast(ant_t *js, ant_value_t str) {
+  if (vtype(str) != kTypeString) return 0;
+  if (str_is_heap_rope(str)) return rope_len(str);
+  if (str_is_heap_builder(str)) return builder_len(str);
+  return assert_flat_string_len(str, NULL);
+}
+
+static ant_offset_t flat_utf16_len(ant_flat_string_t *flat) {
+  if (!flat) return 0;
+
+  uint8_t ascii_state = str_flat_ascii_state(flat);
+  if (ascii_state == STR_ASCII_UNKNOWN) {
+    ascii_state = str_detect_ascii_bytes(flat->bytes, (size_t)flat->len);
+    str_flat_set_ascii_state(flat, ascii_state);
+  }
+  
+  if (ascii_state == STR_ASCII_YES) return flat->len;
+  ant_offset_t cached = str_flat_cached_utf16_len(flat);
+  
+  if (cached == STR_UTF16_LEN_UNKNOWN) {
+    cached = (ant_offset_t)(str_flat_utf_valid_state(flat) == STR_UTF_VALID
+      ? utf16_strlen_valid_utf8(flat->bytes, (size_t)flat->len)
+      : utf16_strlen(flat->bytes, (size_t)flat->len));
+    str_flat_set_utf16_len(flat, cached);
+  }
+  
+  return cached;
+}
+
+static ant_offset_t builder_utf16_len_lazy(ant_t *js, ant_value_t value) {
+  ant_string_builder_t *builder = assert_builder_ptr(value);
+  ant_value_t cached = builder->cached;
+
+  if (vtype(cached) == kTypeNumber) return (ant_offset_t)Ant_Value_AsNumberUnchecked(cached);
+  if (vtype(cached) == kTypeString) return str_utf16_len(js, cached);
+
+  ant_offset_t total = 0;
+  if (builder->ascii_state == STR_ASCII_YES) total = builder->len;
+  else {
+    if (vtype(builder->snapshot) == kTypeString)
+      total += str_utf16_len(js, builder->snapshot);
+    for (ant_builder_chunk_t *chunk = builder->head; chunk; chunk = chunk->next)
+      total += str_utf16_len(js, chunk->value);
+    total += (ant_offset_t)utf16_strlen(builder->tail, builder->tail_len);
+  }
+
+  builder->cached = Ant_Value_FromNumber((double)total);
+  return total;
+}
+
+typedef struct {
+  ant_rope_heap_t *rope;
+  ant_offset_t left_len;
+} rope_utf16_frame_t;
+
+// TODO: make cleaner
+static ant_offset_t rope_utf16_len_lazy(ant_t *js, ant_value_t root) {
+  if (rope_depth(root) == ANT_ROPE_DEPTH_SATURATED) {
+    ant_value_t flat = rope_flatten(js, root);
+    return is_err(flat) ? 0 : flat_utf16_len(ant_str_flat_ptr(flat));
+  }
+
+  enum { ROPE_UTF16_LOCAL_FRAMES = 64 };
+  rope_utf16_frame_t local_frames[ROPE_UTF16_LOCAL_FRAMES];
+  rope_utf16_frame_t *frames = local_frames;
+  
+  size_t frame_cap = ROPE_UTF16_LOCAL_FRAMES;
+  size_t sp = 0;
+  
+  ant_value_t current = root;
+  ant_offset_t result = 0;
+
+  for (;;) {
+  if (!str_is_heap_rope(current)) result = str_utf16_len(js, current); else {
+    ant_rope_heap_t *rope = assert_rope_ptr(current);
+    ant_value_t cached = rope->cached;
+    
+    if (rope->flags & ANT_ROPE_FLAG_ASCII) result = rope->len;
+    else if (vtype(cached) == kTypeNumber) result = (ant_offset_t)Ant_Value_AsNumberUnchecked(cached);
+    else if (vtype(cached) == kTypeString) result = str_utf16_len(js, cached);
+    
+    else {
+      if (sp == frame_cap) {
+        size_t next_cap = frame_cap * 2u;
+        rope_utf16_frame_t *expanded = frames == local_frames
+          ? (rope_utf16_frame_t *)malloc(next_cap * sizeof(*expanded))
+          : (rope_utf16_frame_t *)realloc(frames, next_cap * sizeof(*expanded));
+        if (!expanded) {
+          ant_value_t flat = rope_flatten(js, root);
+          if (is_err(flat)) return 0;
+          return flat_utf16_len(ant_str_flat_ptr(flat));
+        }
+        if (frames == local_frames)
+          memcpy(expanded, frames, sp * sizeof(*expanded));
+        frames = expanded;
+        frame_cap = next_cap;
+      }
+      frames[sp++] = (rope_utf16_frame_t){
+        .rope = rope,
+        .left_len = STR_UTF16_LEN_UNKNOWN,
+      };
+      current = rope->left;
+      continue;
+    }}
+
+    while (sp > 0) {
+      rope_utf16_frame_t *frame = &frames[sp - 1u];
+      if (frame->left_len == STR_UTF16_LEN_UNKNOWN) {
+        frame->left_len = result;
+        current = frame->rope->right;
+        break;
+      }
+
+      result += frame->left_len;
+      frame->rope->cached = Ant_Value_FromNumber((double)result);
+      sp--;
+    }
+
+    if (sp == 0) {
+      if (frames != local_frames) free(frames);
+      return result;
+    }
+  }
+}
+
+ant_offset_t str_utf16_len(ant_t *js, ant_value_t str) {
+  if (vtype(str) != kTypeString) return 0;
+  
+  if (str_is_heap_rope(str)) {
+    ant_rope_heap_t *rope = ant_str_rope_ptr(str);
+    if (rope->flags & ANT_ROPE_FLAG_ASCII) return rope->len;
+    
+    ant_value_t cached = rope_cached_flat(str);
+    if (vtype(cached) == kTypeNumber) return (ant_offset_t)Ant_Value_AsNumberUnchecked(cached);
+    if (vtype(cached) == kTypeString) return str_utf16_len(js, cached);
+    
+    return rope_utf16_len_lazy(js, str);
+  }
+  
+  if (str_is_heap_builder(str)) return builder_utf16_len_lazy(js, str);
+  return flat_utf16_len(ant_str_flat_ptr(str));
+}
+
+char *js_getstr(ant_t *js, ant_value_t value, size_t *len) {
+  if (vtype(value) != kTypeString) return NULL;
+  ant_offset_t n, off = vstr(js, value, &n);
+  if (len != NULL) *len = n;
+  return (char *)(uintptr_t)off;
 }

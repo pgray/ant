@@ -215,7 +215,7 @@ static ant_value_t guest_child_decode(ant_t *js, ant_guest_t *g, guest_value_t *
     if (!guest_handle_valid(g, v->id)) return js_mkerr_typed(js, JS_ERR_TYPE, "Reference has been released");
     return g->handles[v->id];
   case GUEST_VALUE_CALLBACK:
-    return js_heavy_mkfun(js, guest_child_callback_fn, js_mknum((double)v->id));
+    return js_heavy_mkfun(js, guest_child_callback_fn, Ant_Value_FromNumber((double)v->id));
   default:
     return js_mkundef();
   }
@@ -240,7 +240,7 @@ static ant_value_t guest_child_callback_fn(ant_params_t) {
     return Ant_Error_CreateOutOfMemory(js);
   }
 
-  call->callback = (uint32_t)js_getnum(js_func_data(js->current_func));
+  call->callback = (uint32_t)Ant_Value_AsNumberUnchecked(js_func_data(js->current_func));
   call->args = encoded;
   call->argc = (uint32_t)nargs;
   call->promise = js_mkundef();
@@ -397,12 +397,12 @@ static ant_value_t guest_promise_settled(ant_t *js, guest_call_t *call, ant_valu
 }
 
 static ant_value_t guest_promise_fulfilled(ant_params_t) {
-  guest_call_t *call = js_get_native(js_getcurrentfunc(js), GUEST_CALL_NATIVE_TAG);
+  guest_call_t *call = js_get_native(js->current_func, GUEST_CALL_NATIVE_TAG);
   return call ? guest_promise_settled(js, call, nargs ? args[0] : js_mkundef(), true) : js_mkundef();
 }
 
 static ant_value_t guest_promise_rejected(ant_params_t) {
-  guest_call_t *call = js_get_native(js_getcurrentfunc(js), GUEST_CALL_NATIVE_TAG);
+  guest_call_t *call = js_get_native(js->current_func, GUEST_CALL_NATIVE_TAG);
   return call ? guest_promise_settled(js, call, nargs ? args[0] : js_mkundef(), false) : js_mkundef();
 }
 

@@ -107,6 +107,7 @@ static bool sandbox_parse_memory_size(const char *input, unsigned long long *out
 
   char *end = NULL;
   errno = 0;
+  
   double value = strtod(input, &end);
   if (errno != 0 || end == input || !isfinite(value) || value <= 0) return false;
 
@@ -454,7 +455,7 @@ static ant_value_t sandbox_allow_host_value(ant_t *js, sandbox_state_t *state, a
   const char *ports = NULL;
 
   if (vtype(value) == kTypeNumber) {
-    snprintf(text, sizeof(text), "%.0f", js_getnum(value));
+    snprintf(text, sizeof(text), "%.0f", Ant_Value_AsNumberUnchecked(value));
     ports = text;
   } else if (vtype(value) == kTypeString) {
     ports = js_getstr(js, value, NULL);
@@ -561,7 +562,7 @@ static ant_value_t sandbox_apply_options(ant_t *js, sandbox_state_t *state, ant_
   
   if (vtype(timeout) != kTypeUndefined && vtype(timeout) != kTypeNull) {
     if (vtype(timeout) != kTypeNumber) return js_mkerr_typed(js, JS_ERR_TYPE, "timeoutMs must be a number");
-    double n = js_getnum(timeout);
+    double n = Ant_Value_AsNumberUnchecked(timeout);
     if (n < 0 || n > UINT_MAX) return js_mkerr_typed(js, JS_ERR_RANGE, "timeoutMs is out of range");
     state->timeout_ms = (unsigned int)n;
   }
@@ -573,7 +574,7 @@ static ant_value_t sandbox_apply_options(ant_t *js, sandbox_state_t *state, ant_
   
   if (vtype(boot_timeout) != kTypeUndefined && vtype(boot_timeout) != kTypeNull) {
     if (vtype(boot_timeout) != kTypeNumber) return js_mkerr_typed(js, JS_ERR_TYPE, "bootTimeoutMs must be a number");
-    double n = js_getnum(boot_timeout);
+    double n = Ant_Value_AsNumberUnchecked(boot_timeout);
     
     if (n < 0 || n > UINT_MAX) return js_mkerr_typed(js, JS_ERR_RANGE, "bootTimeoutMs is out of range");
     state->boot_timeout_ms = (unsigned int)n;
@@ -583,7 +584,7 @@ static ant_value_t sandbox_apply_options(ant_t *js, sandbox_state_t *state, ant_
   if (vtype(cpu_time) != kTypeUndefined && vtype(cpu_time) != kTypeNull) {
     if (vtype(cpu_time) != kTypeNumber)
       return js_mkerr_typed(js, JS_ERR_TYPE, "cpuTimeMs must be a number");
-    double n = js_getnum(cpu_time);
+    double n = Ant_Value_AsNumberUnchecked(cpu_time);
     if (!isfinite(n) || n < 0 || n > UINT_MAX)
       return js_mkerr_typed(js, JS_ERR_RANGE, "cpuTimeMs is out of range");
     state->cpu_time_ms = (unsigned int)n;
@@ -593,14 +594,14 @@ static ant_value_t sandbox_apply_options(ant_t *js, sandbox_state_t *state, ant_
   ant_value_t memory = js_get(js, opts, "memory");
   if (vtype(memory_mb) != kTypeUndefined && vtype(memory_mb) != kTypeNull) {
     if (vtype(memory_mb) != kTypeNumber) return js_mkerr_typed(js, JS_ERR_TYPE, "memoryMb must be a number");
-    double n = js_getnum(memory_mb);
+    double n = Ant_Value_AsNumberUnchecked(memory_mb);
     long double bytes = (long double)n * 1024.0L * 1024.0L;
     if (!isfinite(n) || n <= 0 || bytes > (long double)ULLONG_MAX)
       return js_mkerr_typed(js, JS_ERR_RANGE, "memoryMb is out of range");
     state->memory_size = (unsigned long long)bytes;
   } else if (vtype(memory) != kTypeUndefined && vtype(memory) != kTypeNull) {
     if (vtype(memory) == kTypeNumber) {
-      double n = js_getnum(memory);
+      double n = Ant_Value_AsNumberUnchecked(memory);
       if (!isfinite(n) || n <= 0 || (long double)n > (long double)ULLONG_MAX)
         return js_mkerr_typed(js, JS_ERR_RANGE, "memory is out of range");
       state->memory_size = (unsigned long long)n;
@@ -622,7 +623,7 @@ static ant_value_t sandbox_apply_options(ant_t *js, sandbox_state_t *state, ant_
   ant_value_t rows = js_get(js, opts, "ttyRows");
   if (vtype(rows) != kTypeUndefined && vtype(rows) != kTypeNull) {
     if (vtype(rows) != kTypeNumber) return js_mkerr_typed(js, JS_ERR_TYPE, "ttyRows must be a number");
-    double n = js_getnum(rows);
+    double n = Ant_Value_AsNumberUnchecked(rows);
     
     if (n < 1 || n > UINT16_MAX) return js_mkerr_typed(js, JS_ERR_RANGE, "ttyRows is out of range");
     state->tty_rows = (uint16_t)n;
@@ -631,7 +632,7 @@ static ant_value_t sandbox_apply_options(ant_t *js, sandbox_state_t *state, ant_
   ant_value_t cols = js_get(js, opts, "ttyCols");
   if (vtype(cols) != kTypeUndefined && vtype(cols) != kTypeNull) {
     if (vtype(cols) != kTypeNumber) return js_mkerr_typed(js, JS_ERR_TYPE, "ttyCols must be a number");
-    double n = js_getnum(cols);
+    double n = Ant_Value_AsNumberUnchecked(cols);
     
     if (n < 1 || n > UINT16_MAX) return js_mkerr_typed(js, JS_ERR_RANGE, "ttyCols is out of range");
     state->tty_cols = (uint16_t)n;
@@ -849,7 +850,7 @@ static ant_value_t sandbox_vm_result_error(ant_t *js, const ant_sandbox_vm_resul
   GC_ROOT_PIN(js, err);
   
   js_set(js, err, "name", js_mkstr(js, name, strlen(name)));
-  js_set(js, err, "code", js_mknum((double)result->code));
+  js_set(js, err, "code", Ant_Value_FromNumber((double)result->code));
   GC_ROOT_RESTORE(js, root_mark);
   
   return err;
@@ -932,7 +933,7 @@ static ant_value_t sandbox_execute_request(
     js_reject_promise(js, promise, sandbox_vm_result_error(js, &vm_result, rc));
   else if (expect_result)
     js_resolve_promise(js, promise, capture.has_result ? capture.result : js_mkundef());
-  else js_resolve_promise(js, promise, js_mknum(0));
+  else js_resolve_promise(js, promise, Ant_Value_FromNumber(0));
     
   GC_ROOT_RESTORE(js, root_mark);
   return promise;
@@ -1087,7 +1088,7 @@ static void sandbox_async_cb(uv_async_t *handle) {
   if (state->has_run_promise) {
     if (ant_sandbox_vm_result_is_infrastructure_failure(&state->run_result) || state->run_rc != 0)
       js_reject_promise(js, state->run_promise, sandbox_vm_result_error(js, &state->run_result, state->run_rc));
-    else js_resolve_promise(js, state->run_promise, js_mknum(0));
+    else js_resolve_promise(js, state->run_promise, Ant_Value_FromNumber(0));
     state->has_run_promise = false;
     state->run_promise = js_mkundef();
   }
@@ -1422,10 +1423,10 @@ static ant_value_t sandbox_stats(ant_params_t) {
   }
 
   ant_value_t result = Ant_Object_CreateBare(js);
-  js_set(js, result, "cpuTimeMs", js_mknum((double)stats.cpu_time_ns / 1000000.0));
-  js_set(js, result, "wallTimeMs", js_mknum((double)stats.wall_time_ns / 1000000.0));
+  js_set(js, result, "cpuTimeMs", Ant_Value_FromNumber((double)stats.cpu_time_ns / 1000000.0));
+  js_set(js, result, "wallTimeMs", Ant_Value_FromNumber((double)stats.wall_time_ns / 1000000.0));
   if (stats.resident_memory_available)
-    js_set(js, result, "residentMemory", js_mknum((double)stats.resident_memory_bytes));
+    js_set(js, result, "residentMemory", Ant_Value_FromNumber((double)stats.resident_memory_bytes));
   return result;
 }
 

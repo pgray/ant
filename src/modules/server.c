@@ -219,7 +219,7 @@ static ant_value_t server_mk_listen_error(ant_t *js, int status, const server_ru
   if (!message) message = "unknown error";
 
   js_set(js, props, "code", js_mkstr(js, code, strlen(code)));
-  js_set(js, props, "errno", js_mknum((double)status));
+  js_set(js, props, "errno", Ant_Value_FromNumber((double)status));
   js_set(js, props, "syscall", js_mkstr(js, "listen", 6));
 
   if (server && server->unix_path) {
@@ -233,7 +233,7 @@ static ant_value_t server_mk_listen_error(ant_t *js, int status, const server_ru
 
   if (server && server->hostname) {
     js_set(js, props, "address", js_mkstr(js, server->hostname, strlen(server->hostname)));
-    js_set(js, props, "port", js_mknum((double)server->port));
+    js_set(js, props, "port", Ant_Value_FromNumber((double)server->port));
     return js_mkerr_props(
       js, JS_ERR_GENERIC, props,
       "%s: %s, listen %s:%d",
@@ -1448,7 +1448,7 @@ static ant_value_t server_request_ip(ant_params_t) {
 
   out = Ant_Object_CreateBare(js);
   js_set(js, out, "address", js_mkstr(js, ant_conn_remote_addr(req->conn), strlen(ant_conn_remote_addr(req->conn))));
-  js_set(js, out, "port", js_mknum(ant_conn_remote_port(req->conn)));
+  js_set(js, out, "port", Ant_Value_FromNumber(ant_conn_remote_port(req->conn)));
   return out;
 }
 
@@ -1461,7 +1461,7 @@ static ant_value_t server_timeout(ant_params_t) {
   req = server_find_request(server, args[0]);
   if (!req || !req->conn) return js_mkundef();
 
-  timeout = (int)js_getnum(args[1]);
+  timeout = (int)Ant_Value_AsNumberUnchecked(args[1]);
   ant_conn_set_timeout_ms(req->conn, (uint64_t)timeout * 1000ULL);
   
   return js_mkundef();
@@ -1930,7 +1930,7 @@ ant_value_t server_start_from_export(ant_t *js, ant_value_t default_export) {
       free(server);
       return js_mkerr_typed(js, JS_ERR_TYPE, "server port must be a number");
     }
-    server->port = (int)js_getnum(port_v);
+    server->port = (int)Ant_Value_AsNumberUnchecked(port_v);
     if (server->port < 0 || server->port > 65535) {
       free(server->unix_path);
       free(server->hostname);
@@ -1966,7 +1966,7 @@ ant_value_t server_start_from_export(ant_t *js, ant_value_t default_export) {
       free(server);
       return js_mkerr_typed(js, JS_ERR_TYPE, "server idleTimeout must be a number");
     }
-    timeout = js_getnum(idle_timeout_v);
+    timeout = Ant_Value_AsNumberUnchecked(idle_timeout_v);
     if (timeout < 0) {
       free(server->unix_path);
       free(server->hostname);
@@ -1985,7 +1985,7 @@ ant_value_t server_start_from_export(ant_t *js, ant_value_t default_export) {
       return js_mkerr_typed(js, JS_ERR_TYPE, "server requestTimeout must be a number");
     }
     
-    timeout = js_getnum(request_timeout_v);
+    timeout = Ant_Value_AsNumberUnchecked(request_timeout_v);
     if (timeout < 0) {
       free(server->unix_path);
       free(server->hostname);
@@ -1996,7 +1996,7 @@ ant_value_t server_start_from_export(ant_t *js, ant_value_t default_export) {
   }
 
   if (vtype(max_body_v) != kTypeUndefined && vtype(max_body_v) != kTypeNull) {
-    double max_body = vtype(max_body_v) == kTypeNumber ? js_getnum(max_body_v) : 0;
+    double max_body = vtype(max_body_v) == kTypeNumber ? Ant_Value_AsNumberUnchecked(max_body_v) : 0;
     if (!(max_body >= 1)) {
       free(server->unix_path);
       free(server->hostname);
@@ -2030,7 +2030,7 @@ ant_value_t server_start_from_export(ant_t *js, ant_value_t default_export) {
         free(server);
         return js_mkerr_typed(js, JS_ERR_TYPE, "server websocket.idleTimeout must be a number");
       }
-      timeout = js_getnum(ws_idle_timeout_v);
+      timeout = Ant_Value_AsNumberUnchecked(ws_idle_timeout_v);
       if (!isfinite(timeout) || timeout < 0) {
         free(server->unix_path);
         free(server->hostname);
@@ -2048,7 +2048,7 @@ ant_value_t server_start_from_export(ant_t *js, ant_value_t default_export) {
         free(server);
         return js_mkerr_typed(js, JS_ERR_TYPE, "server websocket.maxPayloadLength must be a number");
       }
-      max_payload = js_getnum(ws_max_payload_v);
+      max_payload = Ant_Value_AsNumberUnchecked(ws_max_payload_v);
       if (!isfinite(max_payload) || max_payload < 1 || max_payload > (double)SIZE_MAX) {
         free(server->unix_path);
         free(server->hostname);
@@ -2134,7 +2134,7 @@ ant_value_t server_start_from_export(ant_t *js, ant_value_t default_export) {
     js_mkstr(js, server->hostname, strlen(server->hostname))
   );
   
-  js_set(js, server->server_ctx, "port", js_mknum((double)server->port));
+  js_set(js, server->server_ctx, "port", Ant_Value_FromNumber((double)server->port));
   if (server->unix_path) js_set(
     js, server->server_ctx, "unix",
     js_mkstr(js, server->unix_path, strlen(server->unix_path))

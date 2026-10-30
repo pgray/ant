@@ -184,7 +184,7 @@ static inline int32_t ffi_to_int32(double number) {
 
 static inline ant_value_t ffi_to_number(ant_t *js, ant_value_t value, double *out) {
   if (vtype(value) == kTypeNumber) {
-    *out = js_getnum(value);
+    *out = Ant_Value_AsNumberUnchecked(value);
     return js_mkundef();
   }
 
@@ -210,7 +210,7 @@ static ffi_value_type_id_t ffi_type_from_value(ant_t *js, ant_value_t value) {
 static ffi_value_type_id_t ffi_infer_variadic_type(ant_value_t value) {
   switch (vtype(value)) {
     case kTypeNumber: {
-      double number = js_getnum(value);
+      double number = Ant_Value_AsNumberUnchecked(value);
       return number == ffi_to_int32(number) ? FFI_VALUE_INT : FFI_VALUE_DOUBLE;
     }
     case kTypeBool:   return FFI_VALUE_INT;
@@ -259,7 +259,7 @@ static ant_value_t ffi_parse_signature(ant_t *js, ant_value_t value, bool for_ca
   out->returns = returns;
 
   ant_value_t len_val = js_get(js, args_val, "length");
-  double len = vtype(len_val) == kTypeNumber ? js_getnum(len_val) : 0;
+  double len = vtype(len_val) == kTypeNumber ? Ant_Value_AsNumberUnchecked(len_val) : 0;
   
   if (!(len >= 0 && len <= (double)FFI_MAX_ARGS))
     return FFI_ERR_RANGE("FFI signatures support at most %zu arguments", FFI_MAX_ARGS);
@@ -500,7 +500,7 @@ static ant_value_t ffi_value_to_c(ant_t *js, ant_value_t value, ffi_value_type_i
 
 #define FFI_LOAD(ctype) ctype v_; memcpy(&v_, src, sizeof(v_))
 
-#define FFI_FROM_C_INT(id, ctype)  case FFI_VALUE_##id: { FFI_LOAD(ctype); return js_mknum((double)v_); }
+#define FFI_FROM_C_INT(id, ctype)  case FFI_VALUE_##id: { FFI_LOAD(ctype); return Ant_Value_FromNumber((double)v_); }
 #define FFI_FROM_C_WIDE            FFI_FROM_C_INT
 #define FFI_FROM_C_REAL            FFI_FROM_C_INT
 #define FFI_FROM_C_PTR(id, ctype)  case FFI_VALUE_##id: { FFI_LOAD(ctype); return ffi_make_pointer_or_null(js, v_); }
@@ -875,13 +875,13 @@ ant_value_t ffi_library_call(ant_params_t) {
 
 ant_value_t ffi_function_address(ant_params_t) {
   FFI_RECEIVER(function, function);
-  return js_mknum((double)(uintptr_t)function->func_ptr);
+  return Ant_Value_FromNumber((double)(uintptr_t)function->func_ptr);
 }
 
 static ant_value_t ffi_alloc_memory(ant_params_t) {
   if (nargs < 1 || vtype(args[0]) != kTypeNumber) return FFI_ERR_TYPE("alloc(size) requires a numeric size");
 
-  double size = js_getnum(args[0]);
+  double size = Ant_Value_AsNumberUnchecked(args[0]);
   if (!(size >= 1 && size <= (double)PTRDIFF_MAX)) return FFI_ERR_RANGE("alloc(size) requires a positive size");
 
   size_t bytes = (size_t)size;
@@ -920,7 +920,7 @@ static ant_value_t ffi_pointer_value(ant_params_t) {
 
 ant_value_t ffi_pointer_address(ant_params_t) {
   FFI_POINTER_RECEIVER(handle);
-  return js_mknum((double)(uintptr_t)ffi_pointer_address_raw(handle));
+  return Ant_Value_FromNumber((double)(uintptr_t)ffi_pointer_address_raw(handle));
 }
 
 ant_value_t ffi_pointer_is_null(ant_params_t) {
@@ -957,7 +957,7 @@ ant_value_t ffi_pointer_offset(ant_params_t) {
   if (nargs < 1 || vtype(args[0]) != kTypeNumber)
     return FFI_ERR_TYPE("FFIPointer.offset(bytes) requires a numeric byte offset");
 
-  double bytes = js_getnum(args[0]);
+  double bytes = Ant_Value_AsNumberUnchecked(args[0]);
   if (!(bytes >= 0)) return FFI_ERR_RANGE("FFIPointer.offset() requires a non-negative offset");
 
   ffi_pointer_region_t *region = handle->region;
@@ -1020,7 +1020,7 @@ static ant_value_t ffi_create_callback(ant_params_t) {
 
 ant_value_t ffi_callback_address(ant_params_t) {
   FFI_RECEIVER(callback, callback);
-  return js_mknum((double)(uintptr_t)callback->code_ptr);
+  return Ant_Value_FromNumber((double)(uintptr_t)callback->code_ptr);
 }
 
 ant_value_t ffi_callback_close(ant_params_t) {

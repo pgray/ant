@@ -53,7 +53,7 @@ static void example_basic_eval(void) {
   ant_value_t result = js_eval_bytecode_eval(js, code, strlen(code));
 
   if (vtype(result) == kTypeNumber) {
-    printf("  Result: %g\n", js_getnum(result));
+    printf("  Result: %g\n", Ant_Value_AsNumberUnchecked(result));
   } else if (vtype(result) == kTypeError) {
     printf("  Error: %s\n", js_str(js, result));
   }
@@ -66,10 +66,10 @@ static ant_value_t my_add(ant_params_t) {
     return js_mkerr(js, "add() expects two numbers");
   }
 
-  double a = js_getnum(args[0]);
-  double b = js_getnum(args[1]);
+  double a = Ant_Value_AsNumberUnchecked(args[0]);
+  double b = Ant_Value_AsNumberUnchecked(args[1]);
 
-  return js_mknum(a + b);
+  return Ant_Value_FromNumber(a + b);
 }
 
 static ant_value_t my_greet(ant_params_t) {
@@ -114,7 +114,7 @@ static void example_c_functions(void) {
 
   const char *code1 = "add(10, 32)";
   ant_value_t r1 = js_eval_bytecode_eval(js, code1, strlen(code1));
-  printf("  add(10, 32) = %g\n", js_getnum(r1));
+  printf("  add(10, 32) = %g\n", Ant_Value_AsNumberUnchecked(r1));
 
   const char *code2 = "greet('World')";
   ant_value_t r2 = js_eval_bytecode_eval(js, code2, strlen(code2));
@@ -122,7 +122,7 @@ static void example_c_functions(void) {
 
   const char *code3 = "let p = createPoint(3, 4); p.x * p.x + p.y * p.y";
   ant_value_t r3 = js_eval_bytecode_eval(js, code3, strlen(code3));
-  printf("  distance² = %g\n", js_getnum(r3));
+  printf("  distance² = %g\n", Ant_Value_AsNumberUnchecked(r3));
 
   js_destroy(js);
 }
@@ -139,14 +139,14 @@ static void example_objects_arrays(void) {
 
   ant_value_t config = Ant_Object_CreateBare(js);
   js_set(js, config, "debug", js_true);
-  js_set(js, config, "version", js_mknum(1.0));
+  js_set(js, config, "version", Ant_Value_FromNumber(1.0));
   js_set(js, config, "name", js_mkstr(js, "MyApp", 5));
   js_set(js, global, "config", config);
 
   ant_value_t arr = js_mkarr(js);
-  js_arr_push(js, arr, js_mknum(10));
-  js_arr_push(js, arr, js_mknum(20));
-  js_arr_push(js, arr, js_mknum(30));
+  js_arr_push(js, arr, Ant_Value_FromNumber(10));
+  js_arr_push(js, arr, Ant_Value_FromNumber(20));
+  js_arr_push(js, arr, Ant_Value_FromNumber(30));
   js_set(js, global, "numbers", arr);
 
   const char *code = "config.name + ' v' + config.version + ' - sum: ' + numbers.reduce((a,b) => a+b, 0)";
@@ -226,9 +226,9 @@ static void example_call_js_from_c(void) {
   ant_value_t multiply_fn = js_get(js, ns, "multiply");
   ant_value_t format_fn = js_get(js, ns, "formatName");
 
-  ant_value_t args1[] = { js_mknum(6), js_mknum(7) };
+  ant_value_t args1[] = { Ant_Value_FromNumber(6), Ant_Value_FromNumber(7) };
   ant_value_t result1 = sv_vm_call(js->vm, js, multiply_fn, js_mkundef(), args1, 2, NULL, js_mkundef());
-  printf("  multiply(6, 7) = %g\n", js_getnum(result1));
+  printf("  multiply(6, 7) = %g\n", Ant_Value_AsNumberUnchecked(result1));
 
   ant_value_t args2[] = {
     js_mkstr(js, "John", 4),
@@ -342,7 +342,7 @@ static void example_stateful_session(void) {
 
   ant_value_t get_count = js_get(js, ns, "getCount");
   ant_value_t result = sv_vm_call(js->vm, js, get_count, js_mkundef(), NULL, 0, NULL, js_mkundef());
-  printf("  Final count: %g\n", js_getnum(result));
+  printf("  Final count: %g\n", Ant_Value_AsNumberUnchecked(result));
 
   js_destroy(js);
 }
@@ -441,13 +441,13 @@ static void example_global_this(void) {
   init_console_module(js);
 
   ant_value_t global = js_glob(js);
-  js_set(js, global, "myNumber", js_mknum(42));
+  js_set(js, global, "myNumber", Ant_Value_FromNumber(42));
   js_set(js, global, "myString", js_mkstr(js, "hello from C", 12));
   js_set(js, global, "myBool", js_true);
 
   ant_value_t myObj = Ant_Object_CreateBare(js);
-  js_set(js, myObj, "a", js_mknum(1));
-  js_set(js, myObj, "b", js_mknum(2));
+  js_set(js, myObj, "a", Ant_Value_FromNumber(1));
+  js_set(js, myObj, "b", Ant_Value_FromNumber(2));
   js_set(js, global, "myObject", myObj);
 
   const char *code =

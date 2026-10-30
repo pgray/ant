@@ -30,7 +30,7 @@ static bool inspector_safe_get_prop(
   uint8_t type = vtype(obj);
   if (type == kTypeString) {
     if (key_len == 6 && memcmp(key, "length", 6) == 0) {
-      *out = tov((double)str_utf16_len(js, obj));
+      *out = Ant_Value_FromNumber((double)str_utf16_len(js, obj));
       return true;
     }
     obj = js_primitive_prototype(js, type);
@@ -237,7 +237,7 @@ static bool inspector_static_property_key(
     return true;
   }
   if (node->type == N_NUMBER) {
-    ant_value_t key_value = tov(node->num);
+    ant_value_t key_value = Ant_Value_FromNumber(node->num);
     return inspector_value_to_key(js, key_value, buf, buf_len, out_key, out_key_len);
   }
   return false;
@@ -254,32 +254,32 @@ static bool inspector_safe_binary_numeric(
   double l = js_to_number(js, left);
   double r = js_to_number(js, right);
   switch (op) {
-    case TOK_MINUS: *out = tov(l - r); return true;
-    case TOK_MUL: *out = tov(l * r); return true;
-    case TOK_DIV: *out = tov(l / r); return true;
-    case TOK_REM: *out = tov(fmod(l, r)); return true;
-    case TOK_EXP: *out = tov(ant_math_js_pow(l, r)); return true;
+    case TOK_MINUS: *out = Ant_Value_FromNumber(l - r); return true;
+    case TOK_MUL: *out = Ant_Value_FromNumber(l * r); return true;
+    case TOK_DIV: *out = Ant_Value_FromNumber(l / r); return true;
+    case TOK_REM: *out = Ant_Value_FromNumber(fmod(l, r)); return true;
+    case TOK_EXP: *out = Ant_Value_FromNumber(ant_math_js_pow(l, r)); return true;
     case TOK_LT: *out = js_bool(l < r); return true;
     case TOK_LE: *out = js_bool(l <= r); return true;
     case TOK_GT: *out = js_bool(l > r); return true;
     case TOK_GE: *out = js_bool(l >= r); return true;
     case TOK_SHL:
-      *out = tov((double)(js_to_int32(l) << (js_to_uint32(r) & 31)));
+      *out = Ant_Value_FromNumber((double)(js_to_int32(l) << (js_to_uint32(r) & 31)));
       return true;
     case TOK_SHR:
-      *out = tov((double)(js_to_int32(l) >> (js_to_uint32(r) & 31)));
+      *out = Ant_Value_FromNumber((double)(js_to_int32(l) >> (js_to_uint32(r) & 31)));
       return true;
     case TOK_ZSHR:
-      *out = tov((double)(js_to_uint32(l) >> (js_to_uint32(r) & 31)));
+      *out = Ant_Value_FromNumber((double)(js_to_uint32(l) >> (js_to_uint32(r) & 31)));
       return true;
     case TOK_AND:
-      *out = tov((double)(js_to_int32(l) & js_to_int32(r)));
+      *out = Ant_Value_FromNumber((double)(js_to_int32(l) & js_to_int32(r)));
       return true;
     case TOK_OR:
-      *out = tov((double)(js_to_int32(l) | js_to_int32(r)));
+      *out = Ant_Value_FromNumber((double)(js_to_int32(l) | js_to_int32(r)));
       return true;
     case TOK_XOR:
-      *out = tov((double)(js_to_int32(l) ^ js_to_int32(r)));
+      *out = Ant_Value_FromNumber((double)(js_to_int32(l) ^ js_to_int32(r)));
       return true;
     default:
       return false;
@@ -304,11 +304,11 @@ static bool inspector_safe_abstract_eq(
     return true;
   }
   if (lt == kTypeBool) {
-    left = tov(vdata(left) ? 1.0 : 0.0);
+    left = Ant_Value_FromNumber(vdata(left) ? 1.0 : 0.0);
     lt = kTypeNumber;
   }
   if (rtype == kTypeBool) {
-    right = tov(vdata(right) ? 1.0 : 0.0);
+    right = Ant_Value_FromNumber(vdata(right) ? 1.0 : 0.0);
     rtype = kTypeNumber;
   }
   if ((lt == kTypeNumber && rtype == kTypeString) || (lt == kTypeString && rtype == kTypeNumber)) {
@@ -326,7 +326,7 @@ static bool inspector_safe_eval_ast(ant_t *js, sv_ast_t *node, ant_value_t *out)
 
   switch (node->type) {
     case N_NUMBER:
-      *out = tov(node->num);
+      *out = Ant_Value_FromNumber(node->num);
       return true;
     case N_STRING:
       *out = js_mkstr(js, node->str ? node->str : "", node->len);
@@ -353,9 +353,9 @@ static bool inspector_safe_eval_ast(ant_t *js, sv_ast_t *node, ant_value_t *out)
       if (is_object_type(value)) return false;
       switch (node->op) {
         case TOK_NOT: *out = js_bool(!js_truthy(js, value)); return true;
-        case TOK_TILDA: *out = tov((double)(~js_to_int32(js_to_number(js, value)))); return true;
-        case TOK_UPLUS: *out = tov(js_to_number(js, value)); return true;
-        case TOK_UMINUS: *out = tov(-js_to_number(js, value)); return true;
+        case TOK_TILDA: *out = Ant_Value_FromNumber((double)(~js_to_int32(js_to_number(js, value)))); return true;
+        case TOK_UPLUS: *out = Ant_Value_FromNumber(js_to_number(js, value)); return true;
+        case TOK_UMINUS: *out = Ant_Value_FromNumber(-js_to_number(js, value)); return true;
         default: return false;
       }
     }
@@ -406,7 +406,7 @@ static bool inspector_safe_eval_ast(ant_t *js, sv_ast_t *node, ant_value_t *out)
             *out = do_string_op(js, TOK_PLUS, l_str, r_str);
             return !is_err(*out);
           }
-          *out = tov(js_to_number(js, left) + js_to_number(js, right));
+          *out = Ant_Value_FromNumber(js_to_number(js, left) + js_to_number(js, right));
           return true;
         case TOK_EQ:
         case TOK_NE: {

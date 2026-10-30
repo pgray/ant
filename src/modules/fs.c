@@ -160,20 +160,20 @@ static fs_io_args_t fs_io_args_init(void) {
 }
 
 static double fs_number_or_nan(ant_value_t value) {
-  return vtype(value) == kTypeNumber ? js_getnum(value) : (double)NAN;
+  return vtype(value) == kTypeNumber ? Ant_Value_AsNumberUnchecked(value) : (double)NAN;
 }
 
 static void fs_io_args_from_options(ant_t *js, ant_value_t options, fs_io_args_t *io) {
   io->offset = fs_number_or_nan(js_get(js, options, "offset"));
   io->length = fs_number_or_nan(js_get(js, options, "length"));
   ant_value_t position = js_get(js, options, "position");
-  if (vtype(position) == kTypeNumber) io->position = (int64_t)js_getnum(position);
+  if (vtype(position) == kTypeNumber) io->position = (int64_t)Ant_Value_AsNumberUnchecked(position);
 }
 
 static void fs_io_args_from_list(ant_args_t, int first, fs_io_args_t *io) {
   if (nargs > first) io->offset = fs_number_or_nan(args[first]);
   if (nargs > first + 1) io->length = fs_number_or_nan(args[first + 1]);
-  if (nargs > first + 2 && vtype(args[first + 2]) == kTypeNumber) io->position = (int64_t)js_getnum(args[first + 2]);
+  if (nargs > first + 2 && vtype(args[first + 2]) == kTypeNumber) io->position = (int64_t)Ant_Value_AsNumberUnchecked(args[first + 2]);
 }
 
 static fs_io_window_t fs_io_window(const fs_io_args_t *io, size_t buf_len, size_t *offset, size_t *length) {
@@ -309,7 +309,7 @@ static ant_value_t fs_mk_uv_error(
 
 static bool fs_parse_mode(ant_t *js, ant_value_t arg, mode_t *out) {
   if (vtype(arg) == kTypeNumber) {
-    double mode = js_getnum(arg);
+    double mode = Ant_Value_AsNumberUnchecked(arg);
     if (!(mode >= 0 && mode <= 0xFFFFFFFF) || mode != (double)(uint32_t)mode) return false;
     *out = (mode_t)mode;
     return true;
@@ -337,7 +337,7 @@ static bool fs_parse_mode(ant_t *js, ant_value_t arg, mode_t *out) {
 
 static bool fs_fd_arg(ant_value_t arg, uv_file *out) {
   if (vtype(arg) != kTypeNumber) return false;
-  double fd = js_getnum(arg);
+  double fd = Ant_Value_AsNumberUnchecked(arg);
   if (!(fd >= 0 && fd <= INT32_MAX) || fd != (double)(int32_t)fd) return false;
   *out = (uv_file)fd;
   return true;
@@ -345,7 +345,7 @@ static bool fs_fd_arg(ant_value_t arg, uv_file *out) {
 
 static void fs_filehandle_mark_closed(ant_t *js, ant_value_t handle_obj) {
   js_set_slot(handle_obj, SLOT_DATA, js_mkundef());
-  js_set(js, handle_obj, "fd", js_mknum(-1));
+  js_set(js, handle_obj, "fd", Ant_Value_FromNumber(-1));
 }
 
 static ant_value_t fs_stream_error(ant_t *js, ant_value_t stream_obj, const char *op, int uv_code) {
@@ -414,7 +414,7 @@ static void fs_stream_on_open(uv_fs_t *uv_req) {
   if (result < 0)
     fs_stream_callback(js, callback, fs_stream_error(js, stream_obj, "open", result));
   else {
-    ant_value_t fd = js_mknum((double)result);
+    ant_value_t fd = Ant_Value_FromNumber((double)result);
     js_set(js, stream_obj, "fd", fd);
     eventemitter_emit_args(js, stream_obj, "open", &fd, 1);
     eventemitter_emit_args(js, stream_obj, "ready", NULL, 0);
@@ -445,8 +445,8 @@ static ant_value_t fs_stream_construct(ant_params_t) {
     return fs_stream_callback(js, callback, fs_stream_error(js, stream_obj, "open", UV_ENOMEM));
   }
 
-  int flags = vtype(flags_val) == kTypeNumber ? (int)js_getnum(flags_val) : O_RDONLY;
-  int mode = vtype(mode_val) == kTypeNumber ? (int)js_getnum(mode_val) : 0666;
+  int flags = vtype(flags_val) == kTypeNumber ? (int)Ant_Value_AsNumberUnchecked(flags_val) : O_RDONLY;
+  int mode = vtype(mode_val) == kTypeNumber ? (int)Ant_Value_AsNumberUnchecked(mode_val) : 0666;
   int rc = uv_fs_open(js->loop, &req->uv_req, req->path, flags, mode, fs_stream_on_open);
   
   if (rc < 0) {
@@ -459,7 +459,7 @@ static ant_value_t fs_stream_construct(ant_params_t) {
 
 static int fs_stream_fd(ant_t *js, ant_value_t stream_obj) {
   ant_value_t fd_val = js_get(js, stream_obj, "fd");
-  return vtype(fd_val) == kTypeNumber ? (int)js_getnum(fd_val) : UV_EBADF;
+  return vtype(fd_val) == kTypeNumber ? (int)Ant_Value_AsNumberUnchecked(fd_val) : UV_EBADF;
 }
 
 static fs_request_t *fs_stream_pending_read(ant_t *js, ant_value_t stream_obj) {
@@ -504,13 +504,13 @@ static ant_value_t fs_stream_close_fd(ant_t *js, ant_value_t stream_obj, ant_val
   if (vtype(fd_val) != kTypeNumber) return fs_stream_close_done(js, stream_obj, err, callback, 0);
 
   ant_value_t handle = js_get_slot(stream_obj, SLOT_DATA);
-  int fd = (int)js_getnum(fd_val);
+  int fd = (int)Ant_Value_AsNumberUnchecked(fd_val);
   js_set(js, stream_obj, "fd", js_mknull());
 
   if (js_check_native_tag(handle, FS_FILEHANDLE_NATIVE_TAG)) {
     ant_value_t handle_fd = js_get_slot(handle, SLOT_DATA);
     if (vtype(handle_fd) != kTypeNumber) return fs_stream_close_done(js, stream_obj, err, callback, 0);
-    fd = (int)js_getnum(handle_fd);
+    fd = (int)Ant_Value_AsNumberUnchecked(handle_fd);
   } else if (fd == 0) return fs_stream_close_done(js, stream_obj, err, callback, 0);
 
   fs_request_t *req = fs_stream_request(js, stream_obj, FS_OP_STREAM_CLOSE, callback);
@@ -622,14 +622,14 @@ static void fs_readstream_push(ant_t *js, ant_value_t stream_obj, ant_value_t ch
   bool reached_end = false;
 
   if (vtype(pos_val) == kTypeNumber) {
-    double next_pos = js_getnum(pos_val) + (double)len;
-    js_set(js, stream_obj, "pos", js_mknum(next_pos));
-    if (vtype(end_val) == kTypeNumber && next_pos > js_getnum(end_val)) reached_end = true;
+    double next_pos = Ant_Value_AsNumberUnchecked(pos_val) + (double)len;
+    js_set(js, stream_obj, "pos", Ant_Value_FromNumber(next_pos));
+    if (vtype(end_val) == kTypeNumber && next_pos > Ant_Value_AsNumberUnchecked(end_val)) reached_end = true;
   }
 
-  js_set(js, stream_obj, "bytesRead", js_mknum(
+  js_set(js, stream_obj, "bytesRead", Ant_Value_FromNumber(
     (vtype(bytes_read_val) == kTypeNumber
-    ? js_getnum(bytes_read_val) : 0.0) + (double)len
+    ? Ant_Value_AsNumberUnchecked(bytes_read_val) : 0.0) + (double)len
   ));
 
   fs_stream_push_chunk(js, stream_obj, chunk);
@@ -649,7 +649,7 @@ static bool fs_readstream_issue(ant_t *js, ant_value_t stream_obj, fs_readstream
   }
 
   double left = st->positioned && vtype(end_val) == kTypeNumber
-    ? js_getnum(end_val) - (double)st->offset + 1 : (double)INFINITY;
+    ? Ant_Value_AsNumberUnchecked(end_val) - (double)st->offset + 1 : (double)INFINITY;
   if (left <= 0) return false;
 
   double span = want > FS_READSTREAM_BLOCK ? (double)want : (double)FS_READSTREAM_BLOCK;
@@ -812,7 +812,7 @@ static ant_value_t fs_readstream_take_tick(ant_params_t) {
   fs_readstream_state_t *st = fs_readstream_state(stream_obj);
   if (!st || stream_is_destroyed(js, stream_obj)) return js_mkundef();
 
-  fs_readstream_take(js, stream_obj, st, nargs > 1 ? (size_t)js_getnum(args[1]) : 0);
+  fs_readstream_take(js, stream_obj, st, nargs > 1 ? (size_t)Ant_Value_AsNumberUnchecked(args[1]) : 0);
   return js_mkundef();
 }
 
@@ -832,17 +832,17 @@ static ant_value_t fs_readstream__read(ant_params_t) {
     return js_mkundef();
   }
 
-  if (nargs > 0 && vtype(args[0]) == kTypeNumber && js_getnum(args[0]) > 0) want = js_getnum(args[0]);
+  if (nargs > 0 && vtype(args[0]) == kTypeNumber && Ant_Value_AsNumberUnchecked(args[0]) > 0) want = Ant_Value_AsNumberUnchecked(args[0]);
 
   if (vtype(pos_val) == kTypeNumber && vtype(end_val) == kTypeNumber) {
-    double left = js_getnum(end_val) - js_getnum(pos_val) + 1;
+    double left = Ant_Value_AsNumberUnchecked(end_val) - Ant_Value_AsNumberUnchecked(pos_val) + 1;
     if (left <= 0) return fs_stream_push_chunk(js, stream_obj, js_mknull());
     if (want > left) want = left;
   }
 
   ant_value_t queue = fs_readstream_queue(js, stream_obj);
   if (js_arr_len(js, queue) > 0 && !is_undefined(js_arr_get(js, queue, 0))) {
-    ant_value_t tick_args[2] = { stream_obj, js_mknum(want) };
+    ant_value_t tick_args[2] = { stream_obj, Ant_Value_FromNumber(want) };
     queue_next_tick_with_args(js, Ant_Function_Create(fs_readstream_take_tick), tick_args, 2);
     return js_mkundef();
   }
@@ -861,7 +861,7 @@ static ant_value_t fs_writestream__write(ant_params_t) {
   size_t len = 0;
   
   int fd = fs_stream_fd(js, stream_obj);
-  int64_t pos = (vtype(pos_val) == kTypeNumber) ? (int64_t)js_getnum(pos_val) : -1;
+  int64_t pos = (vtype(pos_val) == kTypeNumber) ? (int64_t)Ant_Value_AsNumberUnchecked(pos_val) : -1;
   size_t offset = 0;
 
   if (fd < 0) return fs_stream_callback(js, callback, fs_stream_error(js, stream_obj, "write", fd));
@@ -885,10 +885,10 @@ static ant_value_t fs_writestream__write(ant_params_t) {
     if (pos >= 0) pos += result;
   }
 
-  if (pos >= 0) js_set(js, stream_obj, "pos", js_mknum((double)pos));
-  js_set(js, stream_obj, "bytesWritten", js_mknum(
+  if (pos >= 0) js_set(js, stream_obj, "pos", Ant_Value_FromNumber((double)pos));
+  js_set(js, stream_obj, "bytesWritten", Ant_Value_FromNumber(
     (vtype(bytes_written_val) == kTypeNumber
-    ? js_getnum(bytes_written_val) : 0.0) + (double)offset
+    ? Ant_Value_AsNumberUnchecked(bytes_written_val) : 0.0) + (double)offset
   ));
   
   return fs_stream_callback(js, callback, js_mknull());
@@ -911,7 +911,7 @@ static ant_value_t fs_stream_validate_position(ant_t *js, const char *name, ant_
   if (is_undefined(value)) return value;
   if (vtype(value) != kTypeNumber) return Ant_Error_CreateInvalidArgType(js, name, "of type number", value);
 
-  double num = js_getnum(value);
+  double num = Ant_Value_AsNumberUnchecked(value);
   if (num != floor(num) || isinf(num)) return Ant_Error_CreateOutOfRange(js, name, "an integer", value);
   if (num < 0 || num > 9007199254740991.0) return Ant_Error_CreateOutOfRange(js, name, ">= 0 && <= 9007199254740991", value);
 
@@ -965,7 +965,7 @@ static ant_value_t fs_stream_setup(ant_t *js, ant_value_t path_arg, ant_value_t 
   ant_value_t auto_close = js_get(js, options, "autoClose");
   ant_value_t emit_close = js_get(js, options, "emitClose");
 
-  if (vtype(hwm) == kTypeNumber && js_getnum(hwm) >= 0) js_set(js, stream_options, "highWaterMark", hwm);
+  if (vtype(hwm) == kTypeNumber && Ant_Value_AsNumberUnchecked(hwm) >= 0) js_set(js, stream_options, "highWaterMark", hwm);
   if (vtype(encoding) == kTypeString) js_set(js, stream_options, "encoding", encoding);
   
   js_set(js, stream_options, "autoDestroy", js_bool(is_undefined(auto_close) || js_truthy(js, auto_close)));
@@ -991,9 +991,9 @@ static void fs_stream_apply_common(
   if (!has_fd) js_set(js, stream_obj, "path", setup->path);
   
   js_set(js, stream_obj, "flags", is_undefined(flags_raw) ? js_mkstr(js, default_flags, strlen(default_flags)) : flags_raw);
-  js_set(js, stream_obj, "mode", vtype(mode_val) == kTypeNumber ? mode_val : js_mknum(0666));
+  js_set(js, stream_obj, "mode", vtype(mode_val) == kTypeNumber ? mode_val : Ant_Value_FromNumber(0666));
   js_set(js, stream_obj, "fd", has_fd ? setup->fd : js_mknull());
-  js_set_slot(stream_obj, SLOT_FS_FLAGS, js_mknum((double)flags));
+  js_set_slot(stream_obj, SLOT_FS_FLAGS, Ant_Value_FromNumber((double)flags));
   
   if (!is_undefined(setup->handle)) js_set_slot(stream_obj, SLOT_DATA, setup->handle);
   if (!has_fd) stream_begin_construct(js, stream_obj);
@@ -1011,30 +1011,30 @@ static ant_value_t fs_create_readstream_impl(ant_t *js, ant_value_t path_arg, an
   ant_value_t end_val = fs_stream_validate_position(js, "end", js_get(js, setup.options, "end"));
   if (is_err(end_val)) return end_val;
 
-  if (!is_undefined(start_val) && !is_undefined(end_val) && js_getnum(start_val) > js_getnum(end_val)) {
+  if (!is_undefined(start_val) && !is_undefined(end_val) && Ant_Value_AsNumberUnchecked(start_val) > Ant_Value_AsNumberUnchecked(end_val)) {
     char range[96];
-    snprintf(range, sizeof(range), "<= \"end\" (here: %lld)", (long long)js_getnum(end_val));
+    snprintf(range, sizeof(range), "<= \"end\" (here: %lld)", (long long)Ant_Value_AsNumberUnchecked(end_val));
     return Ant_Error_CreateOutOfRange(js, "start", range, start_val);
   }
 
   ant_value_t flags_raw = js_get(js, setup.options, "flags");
   int flags = parse_open_flags(js, is_undefined(flags_raw) ? js_mkstr(js, "r", 1) : flags_raw);
   if (is_undefined(js_get(js, setup.stream_options, "highWaterMark")))
-    js_set(js, setup.stream_options, "highWaterMark", js_mknum(65536));
+    js_set(js, setup.stream_options, "highWaterMark", Ant_Value_FromNumber(65536));
 
   ant_value_t stream_obj = stream_construct_readable(js, proto, setup.stream_options, new_target);
   if (is_err(stream_obj)) return stream_obj;
 
-  js_set(js, stream_obj, "bytesRead", js_mknum(0));
+  js_set(js, stream_obj, "bytesRead", Ant_Value_FromNumber(0));
   js_set(js, stream_obj, "start", start_val);
-  js_set(js, stream_obj, "end", is_undefined(end_val) ? js_mknum((double)INFINITY) : end_val);
+  js_set(js, stream_obj, "end", is_undefined(end_val) ? Ant_Value_FromNumber((double)INFINITY) : end_val);
   js_set(js, stream_obj, "pos", start_val);
   fs_stream_apply_common(js, stream_obj, &setup, "r", flags);
 
   fs_readstream_state_t *st = fs_readstream_state(stream_obj);
   if (st) {
     st->positioned = !is_undefined(start_val) || is_undefined(setup.fd);
-    st->offset = is_undefined(start_val) ? 0 : (int64_t)js_getnum(start_val);
+    st->offset = is_undefined(start_val) ? 0 : (int64_t)Ant_Value_AsNumberUnchecked(start_val);
   }
 
   return stream_obj;
@@ -1054,7 +1054,7 @@ static ant_value_t fs_create_writestream_impl(ant_t *js, ant_value_t path_arg, a
   ant_value_t stream_obj = stream_construct_writable(js, proto, setup.stream_options, new_target);
   if (is_err(stream_obj)) return stream_obj;
 
-  js_set(js, stream_obj, "bytesWritten", js_mknum(0));
+  js_set(js, stream_obj, "bytesWritten", Ant_Value_FromNumber(0));
   js_set(js, stream_obj, "start", start_val);
   js_set(js, stream_obj, "pos", start_val);
   fs_stream_apply_common(js, stream_obj, &setup, "w", flags);
@@ -1197,8 +1197,8 @@ static ant_value_t fs_new_io_result(ant_t *js, bool written, double bytes, ant_v
     if (is_err(seed)) { GC_ROOT_RESTORE(js, mark); return seed; }
     
     GC_ROOT_PIN(js, seed);
-    if (written) js_mkprop_fast(js, seed, "bytesWritten", 12, js_mknum(0));
-    else js_mkprop_fast(js, seed, "bytesRead", 9, js_mknum(0));
+    if (written) js_mkprop_fast(js, seed, "bytesWritten", 12, Ant_Value_FromNumber(0));
+    else js_mkprop_fast(js, seed, "bytesRead", 9, Ant_Value_FromNumber(0));
     
     js_mkprop_fast(js, seed, "buffer", 6, js_mkundef());
     if (Ant_Exception_Pending(js)) { GC_ROOT_RESTORE(js, mark); return Ant_Exception_Current(js); }
@@ -1208,7 +1208,7 @@ static ant_value_t fs_new_io_result(ant_t *js, bool written, double bytes, ant_v
   ant_value_t result = js_mkobj_from_template(js, seed);
   if (!is_err(result)) {
     ant_object_t *obj = js_obj_ptr(result);
-    ant_object_prop_set_unchecked(obj, FS_IO_BYTES, js_mknum(bytes));
+    ant_object_prop_set_unchecked(obj, FS_IO_BYTES, Ant_Value_FromNumber(bytes));
     ant_object_prop_set_unchecked(obj, FS_IO_BUFFER, buffer);
     gc_write_barrier(js, obj, buffer);
   }
@@ -1237,23 +1237,23 @@ static ant_value_t fs_stats_object_new(ant_t *js, const fs_stat_fields_t *f) {
   
   js_set_proto_init(stat_obj, js->builtins.stats_proto);
 
-  js_set_slot(stat_obj, SLOT_DATA, js_mknum((double)f->mode));
+  js_set_slot(stat_obj, SLOT_DATA, Ant_Value_FromNumber((double)f->mode));
   ant_object_t *obj = js_obj_ptr(stat_obj);
   
-  ant_object_prop_set_unchecked(obj, FS_STATS_DEV, js_mknum(f->dev));
-  ant_object_prop_set_unchecked(obj, FS_STATS_INO, js_mknum(f->ino));
-  ant_object_prop_set_unchecked(obj, FS_STATS_SIZE, js_mknum(f->size));
-  ant_object_prop_set_unchecked(obj, FS_STATS_MODE, js_mknum((double)f->mode));
-  ant_object_prop_set_unchecked(obj, FS_STATS_NLINK, js_mknum(f->nlink));
-  ant_object_prop_set_unchecked(obj, FS_STATS_UID, js_mknum(f->uid));
-  ant_object_prop_set_unchecked(obj, FS_STATS_GID, js_mknum(f->gid));
-  ant_object_prop_set_unchecked(obj, FS_STATS_RDEV, js_mknum(f->rdev));
-  ant_object_prop_set_unchecked(obj, FS_STATS_BLKSIZE, js_mknum(f->blksize));
-  ant_object_prop_set_unchecked(obj, FS_STATS_BLOCKS, js_mknum(f->blocks));
-  ant_object_prop_set_unchecked(obj, FS_STATS_ATIME_MS, js_mknum(f->atime_ms));
-  ant_object_prop_set_unchecked(obj, FS_STATS_MTIME_MS, js_mknum(f->mtime_ms));
-  ant_object_prop_set_unchecked(obj, FS_STATS_CTIME_MS, js_mknum(f->ctime_ms));
-  ant_object_prop_set_unchecked(obj, FS_STATS_BIRTHTIME_MS, js_mknum(f->birthtime_ms));
+  ant_object_prop_set_unchecked(obj, FS_STATS_DEV, Ant_Value_FromNumber(f->dev));
+  ant_object_prop_set_unchecked(obj, FS_STATS_INO, Ant_Value_FromNumber(f->ino));
+  ant_object_prop_set_unchecked(obj, FS_STATS_SIZE, Ant_Value_FromNumber(f->size));
+  ant_object_prop_set_unchecked(obj, FS_STATS_MODE, Ant_Value_FromNumber((double)f->mode));
+  ant_object_prop_set_unchecked(obj, FS_STATS_NLINK, Ant_Value_FromNumber(f->nlink));
+  ant_object_prop_set_unchecked(obj, FS_STATS_UID, Ant_Value_FromNumber(f->uid));
+  ant_object_prop_set_unchecked(obj, FS_STATS_GID, Ant_Value_FromNumber(f->gid));
+  ant_object_prop_set_unchecked(obj, FS_STATS_RDEV, Ant_Value_FromNumber(f->rdev));
+  ant_object_prop_set_unchecked(obj, FS_STATS_BLKSIZE, Ant_Value_FromNumber(f->blksize));
+  ant_object_prop_set_unchecked(obj, FS_STATS_BLOCKS, Ant_Value_FromNumber(f->blocks));
+  ant_object_prop_set_unchecked(obj, FS_STATS_ATIME_MS, Ant_Value_FromNumber(f->atime_ms));
+  ant_object_prop_set_unchecked(obj, FS_STATS_MTIME_MS, Ant_Value_FromNumber(f->mtime_ms));
+  ant_object_prop_set_unchecked(obj, FS_STATS_CTIME_MS, Ant_Value_FromNumber(f->ctime_ms));
+  ant_object_prop_set_unchecked(obj, FS_STATS_BIRTHTIME_MS, Ant_Value_FromNumber(f->birthtime_ms));
 
   if (
     !fs_stats_set_date(js, stat_obj, FS_STATS_ATIME, f->atime_ms) ||
@@ -1646,8 +1646,8 @@ static bool fs_parse_watchfile_options(
   if (vtype(persistent_val) != kTypeUndefined) out->persistent = js_truthy(js, persistent_val);
   {
     ant_value_t interval_val = js_get(js, options, "interval");
-    if (vtype(interval_val) == kTypeNumber && js_getnum(interval_val) > 0)
-      out->interval_ms = (unsigned int)js_getnum(interval_val);
+    if (vtype(interval_val) == kTypeNumber && Ant_Value_AsNumberUnchecked(interval_val) > 0)
+      out->interval_ms = (unsigned int)Ant_Value_AsNumberUnchecked(interval_val);
   }
   return true;
 }
@@ -2067,7 +2067,7 @@ static ant_value_t builtin_fs_filehandle_close(ant_params_t) {
     return fs_resolved_promise(js, js_mkundef());
     
   uv_fs_t req;
-  int result = uv_fs_close(js->loop, &req, (uv_file)(int)js_getnum(fd_val), NULL);
+  int result = uv_fs_close(js->loop, &req, (uv_file)(int)Ant_Value_AsNumberUnchecked(fd_val), NULL);
   uv_fs_req_cleanup(&req);
   if (result < 0) return fs_rejected_promise(js, fs_mk_uv_error(js, result, "close", NULL, NULL));
 
@@ -2083,7 +2083,7 @@ static ant_value_t builtin_fs_filehandle_stat(ant_params_t) {
   if (is_err(fd_val)) return fs_rejected_promise(js, fd_val);
 
   uv_fs_t req;
-  int result = uv_fs_fstat(NULL, &req, (uv_file)(int)js_getnum(fd_val), NULL);
+  int result = uv_fs_fstat(NULL, &req, (uv_file)(int)Ant_Value_AsNumberUnchecked(fd_val), NULL);
   if (result < 0) {
     ant_value_t err = fs_mk_uv_error(js, result, "fstat", NULL, NULL);
     uv_fs_req_cleanup(&req);
@@ -2103,7 +2103,7 @@ static ant_value_t builtin_fs_filehandle_sync(ant_params_t) {
   if (is_err(fd_val)) return fs_rejected_promise(js, fd_val);
 
   uv_fs_t req;
-  int result = uv_fs_fsync(js->loop, &req, (uv_file)(int)js_getnum(fd_val), NULL);
+  int result = uv_fs_fsync(js->loop, &req, (uv_file)(int)Ant_Value_AsNumberUnchecked(fd_val), NULL);
   uv_fs_req_cleanup(&req);
   if (result < 0) return fs_rejected_promise(js, fs_mk_uv_error(js, result, "fsync", NULL, NULL));
 
@@ -2135,7 +2135,7 @@ static ant_value_t builtin_fs_filehandle_read(ant_params_t) {
   }
 
   uv_buf_t buf = uv_buf_init((char *)(buf_data + offset), (unsigned int)length); uv_fs_t req;
-  int result = uv_fs_read(js->loop, &req, (uv_file)(int)js_getnum(fd_val), &buf, 1, io.position, NULL);
+  int result = uv_fs_read(js->loop, &req, (uv_file)(int)Ant_Value_AsNumberUnchecked(fd_val), &buf, 1, io.position, NULL);
   
   uv_fs_req_cleanup(&req);
   if (result < 0) return fs_rejected_promise(js, fs_mk_uv_error(js, result, "read", NULL, NULL));
@@ -2161,7 +2161,7 @@ static ant_value_t builtin_fs_filehandle_write(ant_params_t) {
   if (vtype(args[0]) == kTypeString) {
     write_data = js_getstr(js, args[0], &write_len);
     if (!write_data) return fs_rejected_promise(js, js_mkerr(js, "Failed to get string"));
-    if (nargs >= 2 && vtype(args[1]) == kTypeNumber) position = (int64_t)js_getnum(args[1]);
+    if (nargs >= 2 && vtype(args[1]) == kTypeNumber) position = (int64_t)Ant_Value_AsNumberUnchecked(args[1]);
   } else {
     fs_io_args_t io = fs_io_args_init();
     if (nargs >= 2 && vtype(args[1]) == kTypeObject) fs_io_args_from_options(js, args[1], &io);
@@ -2184,7 +2184,7 @@ static ant_value_t builtin_fs_filehandle_write(ant_params_t) {
   }
 
   uv_buf_t buf = uv_buf_init((char *)write_data, (unsigned int)write_len); uv_fs_t req;
-  int result = uv_fs_write(js->loop, &req, (uv_file)(int)js_getnum(fd_val), &buf, 1, position, NULL);
+  int result = uv_fs_write(js->loop, &req, (uv_file)(int)Ant_Value_AsNumberUnchecked(fd_val), &buf, 1, position, NULL);
   
   uv_fs_req_cleanup(&req);
   if (result < 0) return fs_rejected_promise(js, fs_mk_uv_error(js, result, "write", NULL, NULL));
@@ -2220,7 +2220,7 @@ static ant_value_t builtin_fs_filehandle_writeFile(ant_params_t) {
   while (written < len) {
     uv_buf_t buf = uv_buf_init((char *)(data + written), (unsigned int)(len - written));
     uv_fs_t req;
-    int result = uv_fs_write(js->loop, &req, (uv_file)(int)js_getnum(fd_val), &buf, 1, -1, NULL);
+    int result = uv_fs_write(js->loop, &req, (uv_file)(int)Ant_Value_AsNumberUnchecked(fd_val), &buf, 1, -1, NULL);
     uv_fs_req_cleanup(&req);
     if (result < 0) return fs_rejected_promise(js, fs_mk_uv_error(js, result, "write", NULL, NULL));
     if (result == 0) return fs_rejected_promise(js, js_mkerr(js, "short write"));
@@ -2266,8 +2266,8 @@ static ant_value_t fs_make_filehandle(ant_t *js, int fd) {
   
   js_set_native(handle, NULL, FS_FILEHANDLE_NATIVE_TAG);
   js_set_proto_init(handle, js->builtins.filehandle_proto);
-  js_set_slot(handle, SLOT_DATA, js_mknum((double)fd));
-  js_set(js, handle, "fd", js_mknum((double)fd));
+  js_set_slot(handle, SLOT_DATA, Ant_Value_FromNumber((double)fd));
+  js_set(js, handle, "fd", Ant_Value_FromNumber((double)fd));
   
   return handle;
 }
@@ -2709,7 +2709,7 @@ static ant_value_t create_dirent_object(
   js_set_proto(js, obj, js->builtins.dirent_proto);
   js_set(js, obj, "name", name_value);
   js_set(js, obj, "parentPath", parent_path);
-  js_set_slot(obj, SLOT_DATA, tov((double)type));
+  js_set_slot(obj, SLOT_DATA, Ant_Value_FromNumber((double)type));
   GC_ROOT_RESTORE(js, root_mark);
   return obj;
 }
@@ -3263,7 +3263,7 @@ static ant_value_t builtin_fs_copyFileSync(ant_params_t) {
     return Ant_Error_CreateOutOfMemory(js);
   }
 
-  int mode = nargs > 2 && vtype(args[2]) == kTypeNumber ? (int)js_getnum(args[2]) : 0;
+  int mode = nargs > 2 && vtype(args[2]) == kTypeNumber ? (int)Ant_Value_AsNumberUnchecked(args[2]) : 0;
   bool exclusive = (mode & 1) != 0;
 
   fs_cp_options_t opts = {
@@ -3556,7 +3556,7 @@ static ant_value_t builtin_fs_rename(ant_params_t) {
 static double fs_time_arg_to_seconds(ant_t *js, ant_value_t v) {
   if (is_date_instance(v)) {
     ant_value_t t = js_get_slot(js_as_obj(v), SLOT_DATA);
-    return (vtype(t) == kTypeNumber) ? js_getnum(t) / 1000.0 : 0.0;
+    return (vtype(t) == kTypeNumber) ? Ant_Value_AsNumberUnchecked(t) / 1000.0 : 0.0;
   }
   return js_to_number(js, v);
 }
@@ -3662,7 +3662,7 @@ static ant_value_t builtin_fs_ftruncateSync(ant_params_t) {
   if (nargs < 1) return js_mkerr(js, "ftruncateSync() requires an fd argument");
   if (vtype(args[0]) != kTypeNumber) return js_mkerr(js, "ftruncateSync() fd must be a number");
 
-  int fd = (int)js_getnum(args[0]);
+  int fd = (int)Ant_Value_AsNumberUnchecked(args[0]);
   int64_t len = 0;
   if (nargs >= 2 && vtype(args[1]) != kTypeUndefined)
     len = (int64_t)js_to_number(js, args[1]);
@@ -3679,7 +3679,7 @@ static ant_value_t builtin_fs_fsyncSync(ant_params_t) {
   if (nargs < 1) return js_mkerr(js, "fsyncSync() requires an fd argument");
   if (vtype(args[0]) != kTypeNumber) return js_mkerr(js, "fsyncSync() fd must be a number");
 
-  int fd = (int)js_getnum(args[0]);
+  int fd = (int)Ant_Value_AsNumberUnchecked(args[0]);
   uv_fs_t req;
   int rc = uv_fs_fsync(js->loop, &req, fd, NULL);
   uv_fs_req_cleanup(&req);
@@ -3825,13 +3825,13 @@ static ant_value_t builtin_fs_mkdirSync(ant_params_t) {
   
   switch (vtype(args[1])) {
     case kTypeNumber:
-      mode = (int)js_getnum(args[1]);
+      mode = (int)Ant_Value_AsNumberUnchecked(args[1]);
       break;
     case kTypeObject: {
       ant_value_t opt = args[1];
       recursive = js_get(js, opt, "recursive") == js_true;
       ant_value_t mode_val = js_get(js, opt, "mode");
-      if (vtype(mode_val) == kTypeNumber) mode = (int)js_getnum(mode_val);
+      if (vtype(mode_val) == kTypeNumber) mode = (int)Ant_Value_AsNumberUnchecked(mode_val);
       break;
     }
     default:
@@ -3881,13 +3881,13 @@ static ant_value_t builtin_fs_mkdir(ant_params_t) {
   if (nargs >= 2) {
     switch (vtype(args[1])) {
       case kTypeNumber:
-        mode = (int)js_getnum(args[1]);
+        mode = (int)Ant_Value_AsNumberUnchecked(args[1]);
         break;
       case kTypeObject: {
         ant_value_t opt = args[1];
         recursive = js_get(js, opt, "recursive") == js_true;
         ant_value_t mode_val = js_get(js, opt, "mode");
-        if (vtype(mode_val) == kTypeNumber) mode = (int)js_getnum(mode_val);
+        if (vtype(mode_val) == kTypeNumber) mode = (int)Ant_Value_AsNumberUnchecked(mode_val);
         break;
       }
       default:
@@ -4079,12 +4079,12 @@ static ant_value_t builtin_fs_rm(ant_params_t) {
 static ant_value_t stat_mode_is(ant_t *js, mode_t type) {
   ant_value_t mode_val = js_get_slot(js_getthis(js), SLOT_DATA);
   if (vtype(mode_val) != kTypeNumber) return js_false;
-  return js_bool(((mode_t)js_getnum(mode_val) & S_IFMT) == type);
+  return js_bool(((mode_t)Ant_Value_AsNumberUnchecked(mode_val) & S_IFMT) == type);
 }
 
 static ant_value_t dirent_type_is(ant_t *js, uv_dirent_type_t type) {
   ant_value_t type_val = js_get_slot(js_getthis(js), SLOT_DATA);
-  return js_bool(vtype(type_val) == kTypeNumber && (int)js_getnum(type_val) == (int)type);
+  return js_bool(vtype(type_val) == kTypeNumber && (int)Ant_Value_AsNumberUnchecked(type_val) == (int)type);
 }
 
 #define FS_FILE_TYPE(name, mode, dirent) \
@@ -4155,7 +4155,7 @@ static ant_value_t fs_mk_syscall_error(
   if (!message) message = "Unknown error";
 
   js_set(js, props, "code", js_mkstr(js, code, strlen(code)));
-  js_set(js, props, "errno", js_mknum(err_num));
+  js_set(js, props, "errno", Ant_Value_FromNumber(err_num));
   
   if (syscall) js_set(js, props, "syscall", js_mkstr(js, syscall, strlen(syscall)));
   if (path) js_set(js, props, "path", js_mkstr_wtf8_lossy(js, path, strlen(path)));
@@ -4350,7 +4350,7 @@ static ant_value_t builtin_fs_fstatSync(ant_params_t) {
   if (nargs < 1) return js_mkerr(js, "fstatSync() requires an fd argument");
   if (vtype(args[0]) != kTypeNumber) return js_mkerr(js, "fstatSync() fd must be a number");
 
-  uv_file fd = (uv_file)(int)js_getnum(args[0]);
+  uv_file fd = (uv_file)(int)Ant_Value_AsNumberUnchecked(args[0]);
   uv_fs_t req;
   int result = uv_fs_fstat(NULL, &req, fd, NULL);
 
@@ -4375,7 +4375,7 @@ static ant_value_t builtin_fs_fstat(ant_params_t) {
   req->uv_req.loop = js->loop;
   req->op_type = FS_OP_STAT;
   req->promise = js_mkpromise(js);
-  req->fd = (uv_file)(int)js_getnum(args[0]);
+  req->fd = (uv_file)(int)Ant_Value_AsNumberUnchecked(args[0]);
   req->uv_req.data = req;
 
   Ant_List_Insert(&js->fs_requests, req);
@@ -4455,7 +4455,7 @@ static ant_value_t builtin_fs_accessSync(ant_params_t) {
   
   int mode = F_OK;
   if (nargs >= 2 && vtype(args[1]) == kTypeNumber) {
-    mode = (int)js_getnum(args[1]);
+    mode = (int)Ant_Value_AsNumberUnchecked(args[1]);
   }
   
   char *path_cstr = strndup(path, path_len);
@@ -4561,7 +4561,7 @@ static ant_value_t builtin_fs_access(ant_params_t) {
   
   int mode = F_OK;
   if (nargs >= 2 && vtype(args[1]) == kTypeNumber) {
-    mode = (int)js_getnum(args[1]);
+    mode = (int)Ant_Value_AsNumberUnchecked(args[1]);
   }
   
   
@@ -5403,7 +5403,7 @@ static ant_value_t builtin_fs_fsync(ant_params_t) {
   req->promise = js_mkundef();
   req->target_buffer = js_mkundef();
   req->callback_fn = args[1];
-  req->fd = (uv_file)(int)js_getnum(args[0]);
+  req->fd = (uv_file)(int)Ant_Value_AsNumberUnchecked(args[0]);
   req->uv_req.data = req;
 
   Ant_List_Insert(&js->fs_requests, req);
@@ -5433,7 +5433,7 @@ static void on_write_fd_complete(uv_fs_t *uv_req) {
   }
   
   req->completed = 1;
-  js_resolve_promise(fs_req_isolate(req), req->promise, js_mknum((double)uv_req->result));
+  js_resolve_promise(fs_req_isolate(req), req->promise, Ant_Value_FromNumber((double)uv_req->result));
   Ant_List_Remove(req);
   free_fs_request(req);
 }
@@ -5470,7 +5470,7 @@ static void on_read_fd_complete(uv_fs_t *uv_req) {
   }
 
   if (is_callable(req->callback_fn)) {
-    ant_value_t cb_args[3] = { js_mknull(), js_mknum((double)bytes_read), req->target_buffer };
+    ant_value_t cb_args[3] = { js_mknull(), Ant_Value_FromNumber((double)bytes_read), req->target_buffer };
     fs_call_callback(fs_req_isolate(req), req->callback_fn, cb_args, 3);
     
     Ant_List_Remove(req);
@@ -5480,7 +5480,7 @@ static void on_read_fd_complete(uv_fs_t *uv_req) {
   }
 
   req->completed = 1;
-  js_resolve_promise(fs_req_isolate(req), req->promise, js_mknum((double)bytes_read));
+  js_resolve_promise(fs_req_isolate(req), req->promise, Ant_Value_FromNumber((double)bytes_read));
   
   Ant_List_Remove(req);
   free_fs_request(req);
@@ -5490,7 +5490,7 @@ static ant_value_t builtin_fs_read_fd(ant_params_t) {
   if (nargs < 2) return js_mkerr(js, "read() requires fd and buffer arguments");
   if (vtype(args[0]) != kTypeNumber) return js_mkerr(js, "read() fd must be a number");
 
-  int fd = (int)js_getnum(args[0]);
+  int fd = (int)Ant_Value_AsNumberUnchecked(args[0]);
 
   ant_value_t buf_arg = args[1];
   TypedArrayData *ta_data = buffer_get_typedarray_data(buf_arg);
@@ -5553,7 +5553,7 @@ static ant_value_t builtin_fs_readSync(ant_params_t) {
   if (nargs < 2) return js_mkerr(js, "readSync() requires fd and buffer arguments");
   if (vtype(args[0]) != kTypeNumber) return js_mkerr(js, "readSync() fd must be a number");
   
-  int fd = (int)js_getnum(args[0]);
+  int fd = (int)Ant_Value_AsNumberUnchecked(args[0]);
 
   fs_io_args_t io = fs_io_args_init();
   if (nargs >= 3 && vtype(args[2]) == kTypeObject) fs_io_args_from_options(js, args[2], &io);
@@ -5577,14 +5577,14 @@ static ant_value_t builtin_fs_readSync(ant_params_t) {
   uv_fs_req_cleanup(&req);
   
   if (result < 0) return js_mkerr(js, "readSync failed: %s", uv_strerror(result));
-  return js_mknum((double)result);
+  return Ant_Value_FromNumber((double)result);
 }
 
 static ant_value_t builtin_fs_writeSync(ant_params_t) {
   if (nargs < 2) return js_mkerr(js, "writeSync() requires fd and data arguments");
   if (vtype(args[0]) != kTypeNumber) return js_mkerr(js, "writeSync() fd must be a number");
   
-  int fd = (int)js_getnum(args[0]);
+  int fd = (int)Ant_Value_AsNumberUnchecked(args[0]);
   
   if (vtype(args[1]) == kTypeString) {
     size_t str_len;
@@ -5593,7 +5593,7 @@ static ant_value_t builtin_fs_writeSync(ant_params_t) {
     
     int64_t position = -1;
     if (nargs >= 3 && vtype(args[2]) == kTypeNumber)
-      position = (int64_t)js_getnum(args[2]);
+      position = (int64_t)Ant_Value_AsNumberUnchecked(args[2]);
     
     uv_fs_t req;
     uv_buf_t buf = uv_buf_init((char *)str, (unsigned int)str_len);
@@ -5601,7 +5601,7 @@ static ant_value_t builtin_fs_writeSync(ant_params_t) {
     uv_fs_req_cleanup(&req);
     
     if (result < 0) return js_mkerr(js, "writeSync failed: %s", uv_strerror(result));
-    return js_mknum((double)result);
+    return Ant_Value_FromNumber((double)result);
   }
   
   fs_io_args_t io = fs_io_args_init();
@@ -5625,14 +5625,14 @@ static ant_value_t builtin_fs_writeSync(ant_params_t) {
   uv_fs_req_cleanup(&req);
   
   if (result < 0) return js_mkerr(js, "writeSync failed: %s", uv_strerror(result));
-  return js_mknum((double)result);
+  return Ant_Value_FromNumber((double)result);
 }
 
 static ant_value_t builtin_fs_write_fd(ant_params_t) {
   if (nargs < 2) return js_mkerr(js, "write() requires fd and data arguments");
   if (vtype(args[0]) != kTypeNumber) return js_mkerr(js, "write() fd must be a number");
   
-  int fd = (int)js_getnum(args[0]);
+  int fd = (int)Ant_Value_AsNumberUnchecked(args[0]);
   const char *write_data;
   size_t write_len;
   int64_t position = -1;
@@ -5643,7 +5643,7 @@ static ant_value_t builtin_fs_write_fd(ant_params_t) {
     if (!str) return js_mkerr(js, "Failed to get string");
     
     if (nargs >= 3 && vtype(args[2]) == kTypeNumber)
-      position = (int64_t)js_getnum(args[2]);
+      position = (int64_t)Ant_Value_AsNumberUnchecked(args[2]);
     
     write_data = str;
     write_len = str_len;
@@ -5736,13 +5736,13 @@ static ant_value_t builtin_fs_writevSync(ant_params_t) {
   if (nargs < 2) return js_mkerr(js, "writevSync() requires fd and buffers arguments");
   if (vtype(args[0]) != kTypeNumber) return js_mkerr(js, "writevSync() fd must be a number");
   
-  int fd = (int)js_getnum(args[0]);
+  int fd = (int)Ant_Value_AsNumberUnchecked(args[0]);
   ant_offset_t arr_len = js_arr_len(js, args[1]);
-  if (arr_len == 0) return js_mknum(0);
+  if (arr_len == 0) return Ant_Value_FromNumber(0);
   
   int64_t position = -1;
   if (nargs >= 3 && vtype(args[2]) == kTypeNumber)
-    position = (int64_t)js_getnum(args[2]);
+    position = (int64_t)Ant_Value_AsNumberUnchecked(args[2]);
   
   uv_buf_t *bufs = calloc((size_t)arr_len, sizeof(uv_buf_t));
   if (!bufs) return Ant_Error_CreateOutOfMemory(js);
@@ -5767,25 +5767,25 @@ static ant_value_t builtin_fs_writevSync(ant_params_t) {
   free(bufs);
   
   if (result < 0) return js_mkerr(js, "writevSync failed: %s", uv_strerror(result));
-  return js_mknum((double)result);
+  return Ant_Value_FromNumber((double)result);
 }
 
 static ant_value_t builtin_fs_writev_fd(ant_params_t) {
   if (nargs < 2) return js_mkerr(js, "writev() requires fd and buffers arguments");
   if (vtype(args[0]) != kTypeNumber) return js_mkerr(js, "writev() fd must be a number");
   
-  int fd = (int)js_getnum(args[0]);
+  int fd = (int)Ant_Value_AsNumberUnchecked(args[0]);
   ant_offset_t arr_len = js_arr_len(js, args[1]);
   
   if (arr_len == 0) {
     ant_value_t promise = js_mkpromise(js);
-    js_resolve_promise(js, promise, js_mknum(0));
+    js_resolve_promise(js, promise, Ant_Value_FromNumber(0));
     return promise;
   }
   
   int64_t position = -1;
   if (nargs >= 3 && vtype(args[2]) == kTypeNumber)
-    position = (int64_t)js_getnum(args[2]);
+    position = (int64_t)Ant_Value_AsNumberUnchecked(args[2]);
   
   uv_buf_t *bufs = calloc((size_t)arr_len, sizeof(uv_buf_t));
   if (!bufs) return Ant_Error_CreateOutOfMemory(js);
@@ -5870,7 +5870,7 @@ static const fs_open_flag_t fs_open_flag_names[] = {
 
 static bool fs_open_flags_of(ant_t *js, ant_value_t arg, int *out) {
   if (vtype(arg) == kTypeNumber) {
-    double flags = js_getnum(arg);
+    double flags = Ant_Value_AsNumberUnchecked(arg);
     if (!(flags >= INT32_MIN && flags <= INT32_MAX) || flags != (double)(int32_t)flags) return false;
     *out = (int)flags;
     return true;
@@ -5910,7 +5910,7 @@ static ant_value_t builtin_fs_openSync(ant_params_t) {
   if (!path) return js_mkerr(js, "Failed to get path string");
   
   int flags = (nargs >= 2) ? parse_open_flags(js, args[1]) : O_RDONLY;
-  int mode = (nargs >= 3 && vtype(args[2]) == kTypeNumber) ? (int)js_getnum(args[2]) : 0666;
+  int mode = (nargs >= 3 && vtype(args[2]) == kTypeNumber) ? (int)Ant_Value_AsNumberUnchecked(args[2]) : 0666;
   
   char *path_cstr = strndup(path, path_len);
   if (!path_cstr) return Ant_Error_CreateOutOfMemory(js);
@@ -5928,14 +5928,14 @@ static ant_value_t builtin_fs_openSync(ant_params_t) {
   uv_fs_req_cleanup(&req);
   free(path_cstr);
   
-  return js_mknum((double)result);
+  return Ant_Value_FromNumber((double)result);
 }
 
 static ant_value_t builtin_fs_closeSync(ant_params_t) {
   if (nargs < 1) return js_mkerr(js, "closeSync() requires a fd argument");
   if (vtype(args[0]) != kTypeNumber) return js_mkerr(js, "closeSync() fd must be a number");
   
-  int fd = (int)js_getnum(args[0]);
+  int fd = (int)Ant_Value_AsNumberUnchecked(args[0]);
   
   uv_fs_t req;
   int result = uv_fs_close(js->loop, &req, fd, NULL);
@@ -5957,7 +5957,7 @@ static void on_open_fd_complete(uv_fs_t *uv_req) {
   }
   
   req->completed = 1;
-  js_resolve_promise(fs_req_isolate(req), req->promise, js_mknum((double)uv_req->result));
+  js_resolve_promise(fs_req_isolate(req), req->promise, Ant_Value_FromNumber((double)uv_req->result));
   Ant_List_Remove(req);
   free_fs_request(req);
 }
@@ -5994,7 +5994,7 @@ static ant_value_t builtin_fs_open_fd(ant_params_t) {
   if (!path) return js_mkerr(js, "Failed to get path string");
   
   int flags = (nargs >= 2) ? parse_open_flags(js, args[1]) : O_RDONLY;
-  int mode = (nargs >= 3 && vtype(args[2]) == kTypeNumber) ? (int)js_getnum(args[2]) : 0666;
+  int mode = (nargs >= 3 && vtype(args[2]) == kTypeNumber) ? (int)Ant_Value_AsNumberUnchecked(args[2]) : 0666;
   
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return Ant_Error_CreateOutOfMemory(js);
@@ -6028,7 +6028,7 @@ static ant_value_t builtin_fs_open_filehandle(ant_params_t) {
   if (!path) return js_mkerr(js, "Failed to get path string");
 
   int flags = (nargs >= 2) ? parse_open_flags(js, args[1]) : O_RDONLY;
-  int mode = (nargs >= 3 && vtype(args[2]) == kTypeNumber) ? (int)js_getnum(args[2]) : 0666;
+  int mode = (nargs >= 3 && vtype(args[2]) == kTypeNumber) ? (int)Ant_Value_AsNumberUnchecked(args[2]) : 0666;
 
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return Ant_Error_CreateOutOfMemory(js);
@@ -6075,7 +6075,7 @@ static ant_value_t builtin_fs_close_fd(ant_params_t) {
   if (nargs < 1) return js_mkerr(js, "close() requires a fd argument");
   if (vtype(args[0]) != kTypeNumber) return js_mkerr(js, "close() fd must be a number");
   
-  int fd = (int)js_getnum(args[0]);
+  int fd = (int)Ant_Value_AsNumberUnchecked(args[0]);
   
   fs_request_t *req = calloc(1, sizeof(fs_request_t));
   if (!req) return Ant_Error_CreateOutOfMemory(js);
@@ -6347,7 +6347,7 @@ static ant_value_t fs_callback_attach_promise(
 
 static ant_value_t fs_callback_wrapper_call(ant_params_t) {
   GC_ROOT_SAVE(root_mark, js);
-  ant_value_t wrapper = js_getcurrentfunc(js);
+  ant_value_t wrapper = js->current_func;
   ant_value_t config = js_get_slot(wrapper, SLOT_DATA);
   ant_value_t original = js_get_slot(config, SLOT_DATA);
   
@@ -6411,7 +6411,7 @@ static ant_value_t fs_make_callback_wrapper(ant_t *js, ant_value_t original, boo
 static ant_value_t fs_promise_wrapper_call(ant_params_t) {
   GC_ROOT_SAVE(root_mark, js);
   
-  ant_value_t wrapper = js_getcurrentfunc(js);
+  ant_value_t wrapper = js->current_func;
   ant_value_t original = js_get_slot(wrapper, SLOT_DATA);
   ant_value_t this_arg = js_getthis(js);
   ant_value_t result = js_mkundef();
@@ -6991,7 +6991,7 @@ static ant_value_t fs_parse_opendir_args(
     ant_value_t size_val = js_get(js, options, "bufferSize");
     if (is_err(size_val)) return size_val;
     if (vtype(size_val) != kTypeUndefined) {
-      double size = vtype(size_val) == kTypeNumber ? js_getnum(size_val) : 0;
+      double size = vtype(size_val) == kTypeNumber ? Ant_Value_AsNumberUnchecked(size_val) : 0;
       if (!(size >= 1 && size <= 4294967295.0) || size != (double)(size_t)size) return js_mkerr_typed(
         js, JS_ERR_RANGE,
         "The value of \"options.bufferSize\" is out of range. It must be >= 1 && <= 4294967295. Received %g", size
@@ -7224,53 +7224,53 @@ static void fs_set_callback_compatible_methods(ant_t *js, ant_value_t lib) {
 
 ant_value_t fs_make_constants(ant_t *js) {
   ant_value_t constants = Ant_Object_Create(js);
-  js_set(js, constants, "F_OK", js_mknum(F_OK));
-  js_set(js, constants, "R_OK", js_mknum(R_OK));
-  js_set(js, constants, "W_OK", js_mknum(W_OK));
-  js_set(js, constants, "X_OK", js_mknum(X_OK));
-  js_set(js, constants, "COPYFILE_EXCL", js_mknum(UV_FS_COPYFILE_EXCL));
-  js_set(js, constants, "COPYFILE_FICLONE", js_mknum(UV_FS_COPYFILE_FICLONE));
-  js_set(js, constants, "COPYFILE_FICLONE_FORCE", js_mknum(UV_FS_COPYFILE_FICLONE_FORCE));
-  js_set(js, constants, "O_RDONLY", js_mknum(O_RDONLY));
-  js_set(js, constants, "O_WRONLY", js_mknum(O_WRONLY));
-  js_set(js, constants, "O_RDWR", js_mknum(O_RDWR));
-  js_set(js, constants, "O_CREAT", js_mknum(O_CREAT));
-  js_set(js, constants, "O_EXCL", js_mknum(O_EXCL));
+  js_set(js, constants, "F_OK", Ant_Value_FromNumber(F_OK));
+  js_set(js, constants, "R_OK", Ant_Value_FromNumber(R_OK));
+  js_set(js, constants, "W_OK", Ant_Value_FromNumber(W_OK));
+  js_set(js, constants, "X_OK", Ant_Value_FromNumber(X_OK));
+  js_set(js, constants, "COPYFILE_EXCL", Ant_Value_FromNumber(UV_FS_COPYFILE_EXCL));
+  js_set(js, constants, "COPYFILE_FICLONE", Ant_Value_FromNumber(UV_FS_COPYFILE_FICLONE));
+  js_set(js, constants, "COPYFILE_FICLONE_FORCE", Ant_Value_FromNumber(UV_FS_COPYFILE_FICLONE_FORCE));
+  js_set(js, constants, "O_RDONLY", Ant_Value_FromNumber(O_RDONLY));
+  js_set(js, constants, "O_WRONLY", Ant_Value_FromNumber(O_WRONLY));
+  js_set(js, constants, "O_RDWR", Ant_Value_FromNumber(O_RDWR));
+  js_set(js, constants, "O_CREAT", Ant_Value_FromNumber(O_CREAT));
+  js_set(js, constants, "O_EXCL", Ant_Value_FromNumber(O_EXCL));
 #ifdef O_NOCTTY
-  js_set(js, constants, "O_NOCTTY", js_mknum(O_NOCTTY));
+  js_set(js, constants, "O_NOCTTY", Ant_Value_FromNumber(O_NOCTTY));
 #else
-  js_set(js, constants, "O_NOCTTY", js_mknum(0));
+  js_set(js, constants, "O_NOCTTY", Ant_Value_FromNumber(0));
 #endif
-  js_set(js, constants, "O_TRUNC", js_mknum(O_TRUNC));
-  js_set(js, constants, "O_APPEND", js_mknum(O_APPEND));
+  js_set(js, constants, "O_TRUNC", Ant_Value_FromNumber(O_TRUNC));
+  js_set(js, constants, "O_APPEND", Ant_Value_FromNumber(O_APPEND));
 #ifdef O_SYNC
-  js_set(js, constants, "O_SYNC", js_mknum(O_SYNC));
+  js_set(js, constants, "O_SYNC", Ant_Value_FromNumber(O_SYNC));
 #else
-  js_set(js, constants, "O_SYNC", js_mknum(0));
+  js_set(js, constants, "O_SYNC", Ant_Value_FromNumber(0));
 #endif
 #ifdef O_SYMLINK
-  js_set(js, constants, "O_SYMLINK", js_mknum(O_SYMLINK));
+  js_set(js, constants, "O_SYMLINK", Ant_Value_FromNumber(O_SYMLINK));
 #endif
 #ifdef O_NOFOLLOW
-  js_set(js, constants, "O_NOFOLLOW", js_mknum(O_NOFOLLOW));
+  js_set(js, constants, "O_NOFOLLOW", Ant_Value_FromNumber(O_NOFOLLOW));
 #endif
 #ifdef S_IFMT
-  js_set(js, constants, "S_IFMT", js_mknum(S_IFMT));
+  js_set(js, constants, "S_IFMT", Ant_Value_FromNumber(S_IFMT));
 #endif
 #ifdef S_IFREG
-  js_set(js, constants, "S_IFREG", js_mknum(S_IFREG));
+  js_set(js, constants, "S_IFREG", Ant_Value_FromNumber(S_IFREG));
 #endif
 #ifdef S_IFDIR
-  js_set(js, constants, "S_IFDIR", js_mknum(S_IFDIR));
+  js_set(js, constants, "S_IFDIR", Ant_Value_FromNumber(S_IFDIR));
 #endif
 #ifdef S_IFLNK
-  js_set(js, constants, "S_IFLNK", js_mknum(S_IFLNK));
+  js_set(js, constants, "S_IFLNK", Ant_Value_FromNumber(S_IFLNK));
 #endif
   return constants;
 }
 
 static ant_value_t builtin_fs_promises_getter(ant_params_t) {
-  ant_value_t getter_fn = js_getcurrentfunc(js);
+  ant_value_t getter_fn = js->current_func;
   ant_value_t cached = js_get_slot(getter_fn, SLOT_DATA);
   if (is_object_type(cached)) return cached;
 

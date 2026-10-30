@@ -23,7 +23,7 @@ static double num(ant_t *js, const char *expr) {
   run(js, source);
   ant_value_t result = js_get(js, js->global, "result");
   assert(vtype(result) == kTypeNumber);
-  return js_getnum(result);
+  return Ant_Value_AsNumberUnchecked(result);
 }
 
 // script code whose bytecode, ICs and interned source live in the arena

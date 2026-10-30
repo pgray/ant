@@ -1,6 +1,10 @@
 #include <stdlib.h>
 #include <libbase64.h>
+
+#include "utf8.h"
+#include "cfunc.h"
 #include "base64.h"
+#include "errors.h"
 
 char *ant_base64_encode(const uint8_t *data, size_t len, size_t *out_len) {
   size_t encoded_len = 4 * ((len + 2) / 3);
@@ -205,4 +209,78 @@ bool ant_base64_decode_into(
   *written = d.out;
   
   return true;
+}
+
+static ant_value_t builtin_btoa(ant_params_t) {
+  if (nargs < 1) return js_mkerr(js, "btoa requires 1 argument");
+  
+  ant_value_t str_val = args[0];
+  if (vtype(str_val) != kTypeString) {
+    const char *str = js_str(js, str_val);
+    str_val = js_mkstr(js, str, strlen(str));
+  }
+  
+  ant_offset_t str_len, str_off = vstr(js, str_val, &str_len);
+  const char *str = (char *)(uintptr_t)(str_off);
+
+  size_t bytes_len = 0;
+  bool is_latin1 = false;
+  uint8_t *bytes = utf8_to_latin1(str, (size_t)str_len, &bytes_len, &is_latin1);
+  
+  if (!bytes) return is_latin1
+    ? Ant_Error_CreateOutOfMemory(js)
+    : js_mkerr(js, "btoa: string contains characters outside Latin1 range");
+
+  size_t out_len;
+  char *out = ant_base64_encode(bytes, bytes_len, &out_len);
+  free(bytes);
+  if (!out) return Ant_Error_CreateOutOfMemory(js);
+  
+  ant_value_t result = js_mkstr(js, out, out_len);
+  free(out);
+  
+  return result;
+}
+
+#include "modules/domexception.h"
+static ant_value_t builtin_atob(ant_params_t) {
+  if (nargs < 1) return js_mkerr(js, "atob requires 1 argument");
+  
+  ant_value_t str_val = args[0];
+  if (vtype(str_val) != kTypeString) {
+    const char *str = js_str(js, str_val);
+    str_val = js_mkstr(js, str, strlen(str));
+  }
+  
+  ant_offset_t str_len, str_off = vstr(js, str_val, &str_len);
+  const char *str = (char *)(uintptr_t)(str_off);
+  if (str_len == 0) return js_mkstr(js, "", 0);
+  
+  size_t cap = ((size_t)str_len / 4) * 3 + 3, read = 0, out_len = 0;
+  uint8_t *out = malloc(cap);
+  if (!out) return Ant_Error_CreateOutOfMemory(js);
+
+  const char *error = NULL;
+  if (!ant_base64_decode_into(str, (size_t)str_len, false, ANT_BASE64_LOOSE, out, cap, &read, &out_len, &error)) {
+    free(out);
+    return js_throw(js, make_dom_exception(js, "The string to be decoded is not correctly encoded.", "InvalidCharacterError"));
+  }
+
+  size_t result_len = 0;
+  char *result_str = latin1_to_utf8(out, out_len, &result_len);
+  
+  free(out);
+  if (!result_str) return Ant_Error_CreateOutOfMemory(js);
+
+  ant_value_t result = js_mkstr(js, result_str, result_len);
+  free(result_str);
+  
+  return result;
+}
+
+void js_base64_init_globals(ant_t *js, ant_value_t glob) {
+  defmethod(js, glob, "btoa", 4, Ant_Function_CreateWithArity(builtin_btoa, 1));
+  js_set_descriptor(js, glob, "btoa", 4, JS_DESC_W | JS_DESC_E | JS_DESC_C);
+  defmethod(js, glob, "atob", 4, Ant_Function_CreateWithArity(builtin_atob, 1));
+  js_set_descriptor(js, glob, "atob", 4, JS_DESC_W | JS_DESC_E | JS_DESC_C);
 }

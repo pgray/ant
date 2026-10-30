@@ -3,10 +3,12 @@
 #include "gc/ropes.h"
 #include "gc.h"
 #include "pool.h"
+#include "gc/strings.h"
 
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 typedef enum {
   GC_ROPE_POOL_MISC,
@@ -310,4 +312,248 @@ void gc_ropes_sweep(ant_t *js, bool minor) {
   js->rope_gc.last_mark = NULL;
   js->rope_gc.minor_marking = false;
   js->rope_gc.conservative_marking = false;
+}
+
+ant_offset_t assert_flat_string_len(ant_value_t value, const char **out_ptr) {
+  ant_flat_string_t *flat = ant_str_flat_ptr(value);
+  assert(flat != NULL);
+  ant_offset_t len = flat->len;
+  if (out_ptr) *out_ptr = flat->bytes;
+  return len;
+}
+
+ant_rope_heap_t *assert_rope_ptr(ant_value_t value) {
+  assert(vtype(value) == kTypeString);
+  assert(str_is_heap_rope(value));
+  ant_rope_heap_t *ptr = ant_str_rope_ptr(value);
+  assert(ptr != NULL);
+  return ptr;
+}
+
+ant_offset_t rope_len(ant_value_t value) {
+  ant_rope_heap_t *ptr = assert_rope_ptr(value);
+  return ptr->len;
+}
+
+uint16_t rope_depth(ant_value_t value) {
+  ant_rope_heap_t *ptr = assert_rope_ptr(value);
+  return ptr->depth;
+}
+
+static inline ant_value_t rope_left(ant_value_t value) {
+  ant_rope_heap_t *ptr = assert_rope_ptr(value);
+  return ptr->left;
+}
+
+static inline ant_value_t rope_right(ant_value_t value) {
+  ant_rope_heap_t *ptr = assert_rope_ptr(value);
+  return ptr->right;
+}
+
+ant_value_t rope_cached_flat(ant_value_t value) {
+  ant_rope_heap_t *ptr = assert_rope_ptr(value);
+  return ptr->cached;
+}
+
+static inline void rope_canonicalize_flat(ant_value_t rope, ant_value_t flat) {
+  ant_rope_heap_t *ptr = assert_rope_ptr(rope);
+  ptr->cached = flat;
+  ptr->left = js_mkundef();
+  ptr->right = js_mkundef();
+  ptr->depth = 0;
+  ptr->len = ant_str_flat_ptr(flat)->len;
+}
+
+ant_string_builder_t *assert_builder_ptr(ant_value_t value) {
+  assert(vtype(value) == kTypeString);
+  assert(str_is_heap_builder(value));
+  
+  ant_string_builder_t *ptr = ant_str_builder_ptr(value);
+  assert(ptr != NULL);
+  
+  return ptr;
+}
+
+ant_offset_t builder_len(ant_value_t value) {
+  ant_string_builder_t *ptr = assert_builder_ptr(value);
+  return ptr->len;
+}
+
+static inline ant_value_t builder_cached_flat(ant_value_t value) {
+  ant_string_builder_t *ptr = assert_builder_ptr(value);
+  return ptr->cached;
+}
+
+static inline void builder_set_cached_flat(ant_value_t builder, ant_value_t flat) {
+  ant_string_builder_t *ptr = assert_builder_ptr(builder);
+  ptr->cached = flat;
+}
+
+static bool rope_flatten_into(ant_value_t str, char *dest, ant_offset_t total_len, ant_offset_t *start) {
+  assert(vtype(str) == kTypeString);
+
+  ant_value_t local[32];
+  ant_value_t *stack = local;
+  
+  size_t sp = 0, cap = 32;
+  ant_offset_t pos = total_len;
+  ant_value_t current = str;
+
+  for (;;) {
+    while (str_is_heap_rope(current)) {
+      ant_value_t cached = rope_cached_flat(current);
+      if (vtype(cached) == kTypeString && !str_is_heap_rope(cached)) {
+        current = cached;
+        break;
+      }
+
+      ant_value_t left = rope_left(current);
+      current = rope_right(current);
+      if (!ant_value_stack_push_with_spill(&stack, &sp, &cap, local, left)) {
+        if (stack != local) free(stack);
+        return false;
+      }
+    }
+
+    const char *src;
+    ant_offset_t len = assert_flat_string_len(current, &src);
+    if (len > pos) {
+      if (stack != local) free(stack);
+      return false;
+    }
+    pos -= len;
+    memcpy(dest + pos, src, (size_t)len);
+
+    if (sp == 0) break;
+    current = stack[--sp];
+  }
+
+  if (stack != local) free(stack);
+  *start = pos;
+  
+  return true;
+}
+
+ant_value_t rope_flatten(ant_t *js, ant_value_t rope) {
+  assert(vtype(rope) == kTypeString);
+  if (!str_is_heap_rope(rope)) return rope;
+
+  GC_ROOT_SAVE(root_mark, js);
+  GC_ROOT_PIN(js, rope);
+  
+  ant_value_t cached = rope_cached_flat(rope);
+  GC_ROOT_PIN(js, cached);
+  if (vtype(cached) == kTypeString && !str_is_heap_rope(cached)) {
+    GC_ROOT_RESTORE(js, root_mark);
+    return cached;
+  }
+  
+  ant_offset_t total_len = rope_len(rope);
+  ant_value_t flat = js_mkstr(js, NULL, total_len);
+  GC_ROOT_PIN(js, flat);
+
+  if (is_err(flat)) {
+    GC_ROOT_RESTORE(js, root_mark);
+    return flat;
+  }
+
+  ant_flat_string_t *flat_ptr = (ant_flat_string_t *)vptr(flat);
+  ant_offset_t start = 0;
+  
+  if (!rope_flatten_into(rope, flat_ptr->bytes, total_len, &start)) {
+    GC_ROOT_RESTORE(js, root_mark);
+    return js_mkerr(js, "string flatten failed");
+  }
+  
+  if (start > 0) memmove(flat_ptr->bytes, flat_ptr->bytes + start, (size_t)(total_len - start));
+  flat_ptr->len = total_len - start;
+  
+  str_flat_finish(flat_ptr, str_detect_ascii_bytes(flat_ptr->bytes, (size_t)flat_ptr->len));
+  if (vtype(cached) == kTypeNumber) str_flat_set_utf16_len(flat_ptr, (ant_offset_t)Ant_Value_AsNumberUnchecked(cached));
+
+  rope_canonicalize_flat(rope, flat);
+  GC_ROOT_RESTORE(js, root_mark);
+  
+  return flat;
+}
+
+ant_value_t builder_flatten(ant_t *js, ant_value_t builder) {
+  assert(vtype(builder) == kTypeString);
+  if (!str_is_heap_builder(builder)) return builder;
+
+  GC_ROOT_SAVE(root_mark, js);
+  GC_ROOT_PIN(js, builder);
+
+  ant_value_t cached = builder_cached_flat(builder);
+  GC_ROOT_PIN(js, cached);
+  
+  if (vtype(cached) == kTypeString && !str_is_heap_rope(cached) && !str_is_heap_builder(cached)) {
+    GC_ROOT_RESTORE(js, root_mark);
+    return cached;
+  }
+
+  ant_string_builder_t *ptr = assert_builder_ptr(builder);
+  ant_value_t snapshot = ptr->snapshot;
+  GC_ROOT_PIN(js, snapshot);
+  ant_value_t flat = js_mkstr(js, NULL, (size_t)ptr->len);
+  
+  GC_ROOT_PIN(js, flat);
+  if (is_err(flat)) {
+    GC_ROOT_RESTORE(js, root_mark);
+    return flat;
+  }
+
+  ant_flat_string_t *flat_ptr = (ant_flat_string_t *)vptr(flat);
+  size_t cursor = 0;
+
+  if (vtype(snapshot) == kTypeString) {
+    snapshot = str_materialize(js, snapshot);
+    if (is_err(snapshot)) {
+      GC_ROOT_RESTORE(js, root_mark);
+      return snapshot;
+    }
+
+    ant_flat_string_t *snapshot_flat = ant_str_flat_ptr(snapshot);
+    if (snapshot_flat && snapshot_flat->len > 0) {
+      memcpy(flat_ptr->bytes, snapshot_flat->bytes, (size_t)snapshot_flat->len);
+      cursor = (size_t)snapshot_flat->len;
+    }
+  }
+  
+  for (ant_builder_chunk_t *chunk = ptr->head; chunk; chunk = chunk->next) {
+    ant_value_t chunk_value = chunk->value;
+    if (str_is_heap_rope(chunk_value) || str_is_heap_builder(chunk_value)) {
+    chunk_value = str_materialize(js, chunk_value);
+    if (is_err(chunk_value)) {
+      GC_ROOT_RESTORE(js, root_mark);
+      return chunk_value;
+    }}
+    
+    ant_flat_string_t *chunk_flat = ant_str_flat_ptr(chunk_value);
+    if (!chunk_flat || chunk_flat->len == 0) continue;
+    memcpy(flat_ptr->bytes + cursor, chunk_flat->bytes, (size_t)chunk_flat->len);
+    cursor += (size_t)chunk_flat->len;
+  }
+  
+  if (ptr->tail_len > 0) {
+    memcpy(flat_ptr->bytes + cursor, ptr->tail, ptr->tail_len);
+    cursor += ptr->tail_len;
+  }
+  
+  flat_ptr->len = (ant_offset_t)cursor;
+  str_flat_finish(flat_ptr, ptr->ascii_state);
+  ptr->len = flat_ptr->len;
+  
+  if (vtype(cached) == kTypeNumber)
+    str_flat_set_utf16_len(flat_ptr, (ant_offset_t)Ant_Value_AsNumberUnchecked(cached));
+  
+  ptr->snapshot = flat;
+  ptr->head = NULL;
+  ptr->chunk_tail = NULL;
+  ptr->tail_len = 0;
+  
+  builder_set_cached_flat(builder, flat);
+  GC_ROOT_RESTORE(js, root_mark);
+  
+  return flat;
 }

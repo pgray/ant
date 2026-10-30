@@ -20,7 +20,7 @@ static void check_prefix_copy(ant_t *js) {
   ant_shape_prop_t *prop = ant_shape_prop_mut_at(copy, 0);
   assert(prop && ant_shape_may_have_gc_refs(copy));
   prop->has_getter = 1;
-  prop->getter = js_mknum(42);
+  prop->getter = Ant_Value_FromNumber(42);
   ant_shape_t *with_accessor = ant_shape_clone(copy);
   assert(with_accessor && ant_shape_may_have_gc_refs(with_accessor));
   assert(ant_shape_clear_accessor_slot(js, with_accessor, 0));
@@ -61,7 +61,7 @@ int main(void) {
   prop->getter = getter;
   prop->setter = setter;
   ant_value_t symbol = js_mksym(js, "gc_shape_key");
-  assert(!is_err(js_setprop(js, owner, symbol, js_mknum(7))));
+  assert(!is_err(js_setprop(js, owner, symbol, Ant_Value_FromNumber(7))));
   gc_run(js);
   assert(gc_obj_is_marked(js, js_obj_ptr(ordinary)));
   assert(gc_obj_is_marked(js, js_obj_ptr(getter)));

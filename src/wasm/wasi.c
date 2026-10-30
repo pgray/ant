@@ -57,7 +57,7 @@ static ant_value_t wasi_exported_func_call(ant_params_t) {
   memset(wasm_argv, 0, sizeof(wasm_argv));
 
   for (int i = 0; i < nargs && (uint32_t)i < param_count; i++) {
-    wasm_argv[i] = (uint32_t)js_getnum(args[i]);
+    wasm_argv[i] = (uint32_t)Ant_Value_AsNumberUnchecked(args[i]);
   }
 
   if (!wasm_runtime_call_wasm(env->exec_env, env->func, param_count, wasm_argv)) {
@@ -67,7 +67,7 @@ static ant_value_t wasi_exported_func_call(ant_params_t) {
   }
 
   if (result_count == 0) return js_mkundef();
-  return js_mknum((double)(int32_t)wasm_argv[0]);
+  return Ant_Value_FromNumber((double)(int32_t)wasm_argv[0]);
 }
 
 static void wasi_func_finalize(ant_t *js, ant_object_t *obj) {

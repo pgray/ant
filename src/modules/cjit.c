@@ -389,7 +389,7 @@ static ant_value_t ant_c_parse_signature(
   if (vtype(length_value) != kTypeNumber)
     return js_mkerr(js, "Ant.unsafe.c() options.args must be an array");
 
-  double length = js_getnum(length_value);
+  double length = Ant_Value_AsNumberUnchecked(length_value);
   if (
     !isfinite(length) || length < 0 || length > (double)ANT_C_MAX_ARGS ||
     length != (double)(size_t)length
@@ -473,16 +473,16 @@ static ant_value_t ant_c_result_to_js(
     : js_mknull();
 
   switch (return_type) {
-    case ANT_C_ARG_INT8: return js_mknum((double)result->i8);
-    case ANT_C_ARG_UINT8: return js_mknum((double)result->u8);
-    case ANT_C_ARG_INT16: return js_mknum((double)result->i16);
-    case ANT_C_ARG_UINT16: return js_mknum((double)result->u16);
-    case ANT_C_ARG_INT32: return js_mknum((double)result->i32);
-    case ANT_C_ARG_UINT32: return js_mknum((double)result->u32);
+    case ANT_C_ARG_INT8: return Ant_Value_FromNumber((double)result->i8);
+    case ANT_C_ARG_UINT8: return Ant_Value_FromNumber((double)result->u8);
+    case ANT_C_ARG_INT16: return Ant_Value_FromNumber((double)result->i16);
+    case ANT_C_ARG_UINT16: return Ant_Value_FromNumber((double)result->u16);
+    case ANT_C_ARG_INT32: return Ant_Value_FromNumber((double)result->i32);
+    case ANT_C_ARG_UINT32: return Ant_Value_FromNumber((double)result->u32);
     case ANT_C_ARG_INT64: return bigint_from_int64(js, result->i64);
     case ANT_C_ARG_UINT64: return bigint_from_uint64(js, result->u64);
-    case ANT_C_ARG_FLOAT: return js_mknum((double)result->f32);
-    case ANT_C_ARG_DOUBLE: return js_mknum(result->f64);
+    case ANT_C_ARG_FLOAT: return Ant_Value_FromNumber((double)result->f32);
+    case ANT_C_ARG_DOUBLE: return Ant_Value_FromNumber(result->f64);
   }
 
   return js_mkerr(js, "Ant.unsafe.c() has an unsupported return type");
@@ -620,7 +620,7 @@ static ant_value_t ant_c_function_call(ant_params_t) {
       function->entry_name, i + 1
     );
 
-    double number = js_getnum(args[i]);
+    double number = Ant_Value_AsNumberUnchecked(args[i]);
     if (!ant_c_number_to_arg(number, function->arg_types[i], &values[i])) return js_mkerr(
       js, "Ant.unsafe.c() entry \"%s\" argument %zu must be a finite integer within range",
       function->entry_name, i + 1
@@ -754,7 +754,7 @@ static ant_value_t ant_c_call_status_entry(
   );
   
   if (signal_number != 0) return ant_c_native_fault(js, "main", signal_number, fault_address);
-  return js_mknum((double)result);
+  return Ant_Value_FromNumber((double)result);
 }
 
 static ant_value_t ant_c_compile(ant_t *js, ant_value_t source_value, ant_value_t options_value) {

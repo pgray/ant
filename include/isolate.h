@@ -643,12 +643,37 @@ struct ant_isolate_t {
   ant_intern_memo_entry_t intern_memo[INTERN_MEMO_SIZE];
 };
 
+// TODO: rename
+static inline ant_value_t js_glob(ant_t *js) { return js->global; }
+static inline ant_value_t js_getthis(ant_t *js) { return js->this_val; }
+
+static inline void js_setthis(ant_t *js, ant_value_t val) { js->this_val = val; }
+static inline void js_set_filename(ant_t *js, const char *filename) { js->filename = filename; }
+
 static inline void ant_ic_epoch_bump(ant_t *js) {
   if (++js->ic.epoch == 0) js->ic.epoch = 1;
 }
 
 static inline void ant_ic_obj_epoch_bump(ant_t *js) {
   if (++js->ic.obj_epoch == 0) js->ic.obj_epoch = 1;
+}
+
+static inline void js_cstk_refresh_floor(ant_t *js) {
+  uintptr_t base = (uintptr_t)js->cstk.base;
+  size_t limit = js->cstk.limit;
+  js->cstk.floor = NULL;
+  if (limit != 0 && base > limit) js->cstk.floor = (void *)(base - limit);
+}
+
+static inline void js_setstackbase(ant_t *js, void *base) {
+  js->cstk.base = base;
+  js->cstk.main_base = base;
+  js_cstk_refresh_floor(js);
+}
+
+static inline void js_setstacklimit(ant_t *js, size_t max) {
+  js->cstk.limit = max;
+  js_cstk_refresh_floor(js);
 }
 
 #endif

@@ -2293,7 +2293,7 @@ void jit_emit_inline_body(
                                        MIR_new_reg_op(ctx, dst),
                                        MIR_new_reg_op(ctx, r_inl_super)));
         } else if (which == SV_SPECIAL_ARGC) {
-          mir_load_imm(ctx, jit_func, dst, tov((double)caller_argc));
+          mir_load_imm(ctx, jit_func, dst, Ant_Value_FromNumber((double)caller_argc));
         } else if (which == SV_SPECIAL_MODULE_IMPORT) {
           MIR_append_insn(ctx, jit_func,
                           MIR_new_call_insn(ctx, 6,

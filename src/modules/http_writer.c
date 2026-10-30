@@ -166,7 +166,7 @@ static bool http_writer_parse_bytes(
 }
 
 static ant_value_t js_http_writer_default_status_text(ant_params_t) {
-  int status = nargs > 0 ? (int)js_getnum(args[0]) : 200;
+  int status = nargs > 0 ? (int)Ant_Value_AsNumberUnchecked(args[0]) : 200;
   const char *text = ant_http1_default_status_text(status);
   return js_mkstr(js, text, strlen(text));
 }
@@ -205,7 +205,7 @@ static ant_value_t js_http_writer_write_basic_response(ant_params_t) {
   const uint8_t *body = NULL;
   
   size_t body_len = 0;
-  int status = nargs > 0 ? (int)js_getnum(args[0]) : 200;
+  int status = nargs > 0 ? (int)Ant_Value_AsNumberUnchecked(args[0]) : 200;
   
   const char *status_text = NULL;
   const char *content_type = NULL;
@@ -239,7 +239,7 @@ static ant_value_t js_http_writer_write_head(ant_params_t) {
   ant_http1_buffer_t buf;
   ant_value_t error = js_mkundef();
   
-  int status = nargs > 0 ? (int)js_getnum(args[0]) : 200;
+  int status = nargs > 0 ? (int)Ant_Value_AsNumberUnchecked(args[0]) : 200;
   const char *status_text = NULL;
   ant_value_t raw_headers = js_mkundef();
   
@@ -262,7 +262,7 @@ static ant_value_t js_http_writer_write_head(ant_params_t) {
 
   if (nargs > index) raw_headers = args[index++];
   if (nargs > index) body_is_stream = js_truthy(js, args[index++]);
-  if (nargs > index) body_size = (size_t)js_getnum(args[index++]);
+  if (nargs > index) body_size = (size_t)Ant_Value_AsNumberUnchecked(args[index++]);
   if (nargs > index) keep_alive = js_truthy(js, args[index++]);
 
   ant_http1_buffer_init(&buf);
@@ -303,44 +303,44 @@ static ant_value_t js_http_writer_is_field_value(ant_params_t) {
 }
 
 static ant_value_t http_writer_value_error(ant_t *js, ant_value_t value) {
-  if (vtype(value) == kTypeNumber) return js_mknum(0);
+  if (vtype(value) == kTypeNumber) return Ant_Value_FromNumber(0);
   ant_value_t str = vtype(value) == kTypeString ? value : js_tostring_val(js, value);
   if (is_err(str)) return str;
   size_t len = 0;
   const char *s = js_getstr(js, str, &len);
-  return js_mknum(s && http_writer_is_latin1_field_value(s, len) ? 0 : 3);
+  return Ant_Value_FromNumber(s && http_writer_is_latin1_field_value(s, len) ? 0 : 3);
 }
 
 static ant_value_t http_writer_header_value_error(ant_t *js, ant_value_t value) {
-  if (vtype(value) == kTypeUndefined) return js_mknum(2);
+  if (vtype(value) == kTypeUndefined) return Ant_Value_FromNumber(2);
   if (vtype(value) != kTypeArray) return http_writer_value_error(js, value);
 
   ant_offset_t len = js_arr_len(js, value);
   for (ant_offset_t i = 0; i < len; i++) {
     ant_value_t result = http_writer_value_error(js, js_arr_get(js, value, i));
-    if (is_err(result) || js_getnum(result) != 0) return result;
+    if (is_err(result) || Ant_Value_AsNumberUnchecked(result) != 0) return result;
   }
   
-  return js_mknum(0);
+  return Ant_Value_FromNumber(0);
 }
 
 static ant_value_t js_http_writer_header_key(ant_params_t) {
   ant_value_t name = nargs > 0 ? args[0] : js_mkundef();
-  if (vtype(name) != kTypeString) return js_mknum(1);
+  if (vtype(name) != kTypeString) return Ant_Value_FromNumber(1);
 
   size_t len = 0;
   const char *str = js_getstr(js, name, &len);
-  if (!str || len == 0) return js_mknum(1);
+  if (!str || len == 0) return Ant_Value_FromNumber(1);
 
   bool upper = false;
   for (size_t i = 0; i < len; i++) {
     unsigned char c = (unsigned char)str[i];
-    if (!ant_ascii_is_tchar(c)) return js_mknum(1);
+    if (!ant_ascii_is_tchar(c)) return Ant_Value_FromNumber(1);
     upper |= ant_ascii_is_upper(c);
   }
 
   ant_value_t error = http_writer_header_value_error(js, nargs > 1 ? args[1] : js_mkundef());
-  if (is_err(error) || js_getnum(error) != 0) return error;
+  if (is_err(error) || Ant_Value_AsNumberUnchecked(error) != 0) return error;
   if (!upper) return name;
 
   str = js_getstr(js, name, &len);

@@ -254,7 +254,7 @@ static ant_value_t child_signal_value(ant_t *js, int signal) {
 static ant_value_t child_exit_code_value(child_process_t *cp) {
   return cp->term_signal
     ? js_mknull()
-    : js_mknum((double)cp->exit_code);
+    : Ant_Value_FromNumber((double)cp->exit_code);
 }
 
 static void check_completion(child_process_t *cp) {
@@ -314,7 +314,7 @@ static ant_value_t child_syscall_error(ant_t *js, int uv_code, const char *sysca
   ant_value_t error = Ant_Error_Create(js, JS_ERR_GENERIC, message);
   if (!is_object_type(error)) return error;
 
-  js_set(js, error, "errno", js_mknum((double)uv_code));
+  js_set(js, error, "errno", Ant_Value_FromNumber((double)uv_code));
   js_set(js, error, "code", js_mkstr(js, code, strlen(code)));
   js_set(js, error, "syscall", js_mkstr(js, syscall, strlen(syscall)));
   if (path) js_set(js, error, "path", js_mkstr(js, path, strlen(path)));
@@ -524,7 +524,7 @@ static ant_value_t child_kill(ant_params_t) {
   int sig = SIGTERM;
   if (nargs > 0) {
     if (vtype(args[0]) == kTypeNumber) {
-      sig = (int)js_getnum(args[0]);
+      sig = (int)Ant_Value_AsNumberUnchecked(args[0]);
     } else if (vtype(args[0]) == kTypeString) {
       size_t sig_len;
       char *sig_str = js_getstr(js, args[0], &sig_len);
@@ -916,7 +916,7 @@ static ant_value_t create_child_object(ant_t *js, child_process_t *cp) {
     js_set_proto_init(obj, js->builtins.child_process_proto);
   
   js_set_native(obj, cp, CHILD_PROCESS_NATIVE_TAG);
-  js_set(js, obj, "pid", js_mknum((double)ant_process_stage_pid(&cp->process)));
+  js_set(js, obj, "pid", Ant_Value_FromNumber((double)ant_process_stage_pid(&cp->process)));
   js_set(js, obj, "exitCode", js_mknull());
   js_set(js, obj, "signalCode", js_mknull());
   js_set(js, obj, "killed", js_false);
@@ -953,7 +953,7 @@ static ant_value_t create_child_object(ant_t *js, child_process_t *cp) {
 
 static char **parse_args_array(ant_t *js, ant_value_t arr, int *count) {
   ant_value_t len_val = js_get(js, arr, "length");
-  int len = (int)js_getnum(len_val);
+  int len = (int)Ant_Value_AsNumberUnchecked(len_val);
   
   char **args = calloc(len + 1, sizeof(char *));
   if (!args) {
@@ -1144,7 +1144,7 @@ static ant_value_t stdio_invalid_value(ant_t *js, ant_value_t value) {
 
 static int stdio_object_fd(ant_t *js, ant_value_t value) {
   ant_value_t fd_val = js_get(js, value, "fd");
-  if (vtype(fd_val) == kTypeNumber && js_getnum(fd_val) >= 0) return (int)js_getnum(fd_val);
+  if (vtype(fd_val) == kTypeNumber && Ant_Value_AsNumberUnchecked(fd_val) >= 0) return (int)Ant_Value_AsNumberUnchecked(fd_val);
 
   #ifndef _WIN32
   child_stream_ctx_t *ctx = get_child_stream_ctx(value);
@@ -1174,7 +1174,7 @@ static ant_value_t parse_stdio_entry(ant_t *js, ant_value_t value, int index, st
   }
 
   if (vtype(value) == kTypeNumber) {
-    double fd = js_getnum(value);
+    double fd = Ant_Value_AsNumberUnchecked(value);
     if (fd < 0 || fd > INT_MAX || fd != (double)(int)fd) return stdio_invalid_value(js, value);
     spec->mode[index] = STDIO_FD;
     spec->fd[index] = (int)fd;
@@ -1607,7 +1607,7 @@ static ant_value_t exec_file_close_callback(ant_params_t) {
   };
 
   bool failed =
-    (vtype(exit_code_val) == kTypeNumber && js_getnum(exit_code_val) != 0) ||
+    (vtype(exit_code_val) == kTypeNumber && Ant_Value_AsNumberUnchecked(exit_code_val) != 0) ||
     vtype(signal_val) == kTypeString;
 
   if (is_object_type(cb_args[0])) js_set(js, cb_args[0], "cmd", cp->exec_command);
@@ -1806,7 +1806,7 @@ static void sync_outcome_init(sync_outcome_t *o) {
     .status = js_mknull(),
     .signal = js_mknull(),
     .output = js_mknull(),
-    .pid = js_mknum(0),
+    .pid = Ant_Value_FromNumber(0),
     .stdout_val = js_mkundef(),
     .stderr_val = js_mkundef(),
   };
@@ -2098,8 +2098,8 @@ static ant_value_t spawn_sync_impl(ant_native_params_t, bool force_shell, sync_o
     return stderr_val;
   }
 
-  outcome->status = js_mknum((double)exit_code);
-  outcome->pid = js_mknum((double)pid);
+  outcome->status = Ant_Value_FromNumber((double)exit_code);
+  outcome->pid = Ant_Value_FromNumber((double)pid);
   ant_value_t result = sync_finish_outputs(js, outcome, stdout_val, stderr_val, 3);
 
   if (stdout_buf) free(stdout_buf);
@@ -2374,7 +2374,7 @@ static const size_t SYNC_MAX_BUFFER_DEFAULT = 1024 * 1024;
 
 static int sync_parse_kill_signal(ant_t *js, ant_value_t value, int fallback) {
   if (vtype(value) == kTypeNumber) {
-    int resolved = (int)js_getnum(value);
+    int resolved = (int)Ant_Value_AsNumberUnchecked(value);
     return resolved > 0 ? resolved : fallback;
   }
   if (vtype(value) != kTypeString) return fallback;
@@ -2434,13 +2434,13 @@ static ant_value_t sync_parse_options(
 
   ant_value_t timeout_val = js_get(js, options, "timeout");
   if (vtype(timeout_val) == kTypeNumber) {
-    double ms = js_getnum(timeout_val);
+    double ms = Ant_Value_AsNumberUnchecked(timeout_val);
     if (ms > 0 && ms < (double)INT_MAX) opts->timeout_ms = (int)ms;
   }
 
   ant_value_t max_buffer_val = js_get(js, options, "maxBuffer");
   if (vtype(max_buffer_val) == kTypeNumber) {
-    double bytes = js_getnum(max_buffer_val);
+    double bytes = Ant_Value_AsNumberUnchecked(max_buffer_val);
     if (bytes >= 0) opts->max_buffer = bytes >= (double)SIZE_MAX ? SIZE_MAX : (size_t)bytes;
   }
 
@@ -2555,13 +2555,13 @@ static ant_value_t sync_build_result(
     : js_mknull();
   if (is_err(stderr_val)) return stderr_val;
 
-  outcome->pid = js_mknum((double)pid);
+  outcome->pid = Ant_Value_FromNumber((double)pid);
 
   int signal_code = WIFSIGNALED(status) ? WTERMSIG(status) : 0;
   if (signal_code) {
     const char *name = process_signal_name(signal_code);
     outcome->signal = name ? js_mkstr(js, name, strlen(name)) : js_mknull();
-  } else outcome->status = js_mknum((double)(WIFEXITED(status) ? WEXITSTATUS(status) : -1));
+  } else outcome->status = Ant_Value_FromNumber((double)(WIFEXITED(status) ? WEXITSTATUS(status) : -1));
 
   int failure = ctl->timed_out ? UV_ETIMEDOUT : ctl->over_buffer ? UV_ENOBUFS : 0;
   if (failure) {
@@ -2700,7 +2700,7 @@ static ant_value_t sync_result_error(
   ant_t *js, const sync_outcome_t *o, ant_value_t command_val, const char *api
 ) {
   ant_value_t spawn_error = o->error;
-  bool failed_status = vtype(o->status) == kTypeNumber && (int)js_getnum(o->status) != 0;
+  bool failed_status = vtype(o->status) == kTypeNumber && (int)Ant_Value_AsNumberUnchecked(o->status) != 0;
   bool signalled = vtype(o->signal) == kTypeString;
   if (!is_object_type(spawn_error) && !failed_status && !signalled) return js_mkundef();
 
@@ -2832,7 +2832,7 @@ static ant_value_t builtin_fork(ant_params_t) {
     ant_value_t exec_args = js_get(js, args[1], "execArgv");
     if (is_special_object(exec_args)) {
       ant_value_t len_val = js_get(js, exec_args, "length");
-      int arr_len = (int)js_getnum(len_val);
+      int arr_len = (int)Ant_Value_AsNumberUnchecked(len_val);
       for (int i = 0; i < arr_len; i++) {
         char idx[16];
         snprintf(idx, sizeof(idx), "%d", i);

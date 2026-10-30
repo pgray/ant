@@ -37,10 +37,10 @@ ant_value_t DesktopBrowserWindowGetBounds(ant_params_t) {
   ant_desktop_window_bounds_t bounds;
   if (!ant_desktop_platform_get_bounds(window, &bounds)) return js_mkerr(js, "BrowserWindow is closed");
   ant_value_t result = Ant_Object_CreateBare(js);
-  js_set(js, result, "x", js_mknum(bounds.x));
-  js_set(js, result, "y", js_mknum(bounds.y));
-  js_set(js, result, "width", js_mknum(bounds.width));
-  js_set(js, result, "height", js_mknum(bounds.height));
+  js_set(js, result, "x", Ant_Value_FromNumber(bounds.x));
+  js_set(js, result, "y", Ant_Value_FromNumber(bounds.y));
+  js_set(js, result, "width", Ant_Value_FromNumber(bounds.width));
+  js_set(js, result, "height", Ant_Value_FromNumber(bounds.height));
   return result;
 }
 

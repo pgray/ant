@@ -64,7 +64,7 @@ static void eventsource_maybe_unroot(eventsource_state_t *es) {
 
 static void eventsource_sync_state(ant_t *js, eventsource_state_t *es) {
   if (!es || !is_object_type(es->obj)) return;
-  js_set(js, es->obj, "readyState", js_mknum(es->ready_state));
+  js_set(js, es->obj, "readyState", Ant_Value_FromNumber(es->ready_state));
 }
 
 static void eventsource_emit(ant_t *js, eventsource_state_t *es, ant_value_t event) {
@@ -347,7 +347,7 @@ static void eventsource_finalize(ant_t *js, ant_object_t *obj) {
 static ant_value_t eventsource_create_object(ant_t *js) {
   ant_value_t obj = Ant_Object_CreateBare(js);
   if (is_object_type(js->builtins.eventsource_proto)) js_set_proto_init(obj, js->builtins.eventsource_proto);
-  js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_EVENTTARGET));
+  js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_EVENTTARGET));
   js_set_finalizer(obj, eventsource_finalize);
   return obj;
 }
@@ -440,15 +440,15 @@ void init_eventsource_module(ant_t *js) {
   ANT_EVENT_HANDLER_DEFINE(js->builtins.eventsource_proto, eventsource, message);
   ANT_EVENT_HANDLER_DEFINE(js->builtins.eventsource_proto, eventsource, error);
   
-  js_set(js, js->builtins.eventsource_proto, "CONNECTING", js_mknum(ES_CONNECTING));
-  js_set(js, js->builtins.eventsource_proto, "OPEN", js_mknum(ES_OPEN));
-  js_set(js, js->builtins.eventsource_proto, "CLOSED", js_mknum(ES_CLOSED));
+  js_set(js, js->builtins.eventsource_proto, "CONNECTING", Ant_Value_FromNumber(ES_CONNECTING));
+  js_set(js, js->builtins.eventsource_proto, "OPEN", Ant_Value_FromNumber(ES_OPEN));
+  js_set(js, js->builtins.eventsource_proto, "CLOSED", Ant_Value_FromNumber(ES_CLOSED));
   js_set_tostringtag(js, js->builtins.eventsource_proto, js_mkstr(js, "EventSource", 11));
 
   js->builtins.eventsource_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_eventsource_ctor, js->builtins.eventsource_proto, "EventSource", 1);
-  js_set(js, js->builtins.eventsource_ctor, "CONNECTING", js_mknum(ES_CONNECTING));
-  js_set(js, js->builtins.eventsource_ctor, "OPEN", js_mknum(ES_OPEN));
-  js_set(js, js->builtins.eventsource_ctor, "CLOSED", js_mknum(ES_CLOSED));
+  js_set(js, js->builtins.eventsource_ctor, "CONNECTING", Ant_Value_FromNumber(ES_CONNECTING));
+  js_set(js, js->builtins.eventsource_ctor, "OPEN", Ant_Value_FromNumber(ES_OPEN));
+  js_set(js, js->builtins.eventsource_ctor, "CLOSED", Ant_Value_FromNumber(ES_CLOSED));
   js_set_global_builtin(js, "EventSource", js->builtins.eventsource_ctor);
 }
 

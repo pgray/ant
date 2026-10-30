@@ -18,7 +18,7 @@ enum {
 static inline uint32_t sv_private_hash_token(ant_value_t token) {
   if (is_object_type(token)) {
     ant_value_t cached = js_get_slot(token, SLOT_DATA);
-    if (vtype(cached) == kTypeNumber) return (uint32_t)js_getnum(cached);
+    if (vtype(cached) == kTypeNumber) return (uint32_t)Ant_Value_AsNumberUnchecked(cached);
   }
 
   uint64_t x = token ^ (token >> 33);
@@ -107,7 +107,7 @@ static inline ant_value_t sv_private_entry_get(ant_private_entry_t *entry, ant_o
   
   switch (idx) {
     case 0: return entry->token;
-    case 1: return js_mknum((double)entry->kind);
+    case 1: return Ant_Value_FromNumber((double)entry->kind);
     case 2: return entry->value;
     case 3: return entry->getter;
     case 4: return entry->setter;
@@ -191,7 +191,7 @@ static inline ant_value_t sv_private_get_value(
 
   ant_value_t kind_val = sv_private_entry_get(entry, 1);
   int kind = vtype(kind_val) == kTypeNumber
-    ? (int)js_getnum(kind_val)
+    ? (int)Ant_Value_AsNumberUnchecked(kind_val)
     : SV_PRIVATE_FIELD;
 
   if (kind == SV_PRIVATE_ACCESSOR) {
@@ -232,7 +232,7 @@ static inline ant_value_t sv_private_put_value(
   if (!entry) return sv_private_missing(js);
 
   ant_value_t kind_val = sv_private_entry_get(entry, 1);
-  int kind = vtype(kind_val) == kTypeNumber ? (int)js_getnum(kind_val) : SV_PRIVATE_FIELD;
+  int kind = vtype(kind_val) == kTypeNumber ? (int)Ant_Value_AsNumberUnchecked(kind_val) : SV_PRIVATE_FIELD;
 
   if (kind == SV_PRIVATE_FIELD) {
     ant_value_t set = sv_private_entry_set(js, obj, entry, 2, val);
@@ -291,7 +291,7 @@ static inline ant_value_t sv_private_define(
     }
     
     ant_value_t kind_val = sv_private_entry_get(entry, 1);
-    int kind = vtype(kind_val) == kTypeNumber ? (int)js_getnum(kind_val) : SV_PRIVATE_FIELD;
+    int kind = vtype(kind_val) == kTypeNumber ? (int)Ant_Value_AsNumberUnchecked(kind_val) : SV_PRIVATE_FIELD;
     if (kind != SV_PRIVATE_ACCESSOR)
       return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot redefine private member");
       

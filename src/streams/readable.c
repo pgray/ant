@@ -406,7 +406,7 @@ static ant_value_t js_rs_controller_get_desired_size(ant_params_t) {
   ant_value_t stream_obj = rs_ctrl_stream(js->this_val);
   rs_stream_t *stream = rs_get_stream(stream_obj);
   if (!stream || stream->state == RS_STATE_ERRORED) return js_mknull();
-  return js_mknum(rs_default_controller_get_desired_size(ctrl, stream));
+  return Ant_Value_FromNumber(rs_default_controller_get_desired_size(ctrl, stream));
 }
 
 static ant_value_t js_rs_controller_close(ant_params_t) {
@@ -462,7 +462,7 @@ static ant_value_t js_rs_controller_enqueue(ant_params_t) {
       return js_throw(js, err);
     }
     
-    if (vtype(size_result) == kTypeNumber) chunk_size = js_getnum(size_result);
+    if (vtype(size_result) == kTypeNumber) chunk_size = Ant_Value_AsNumberUnchecked(size_result);
     else chunk_size = js_to_number(js, size_result);
   }
   ctrl->in_enqueue = false;
@@ -533,7 +533,7 @@ ant_value_t rs_controller_enqueue(ant_t *js, ant_value_t ctrl_obj, ant_value_t c
       readable_stream_error(js, stream_obj, err);
       return js_throw(js, err);
     }
-    if (vtype(size_result) == kTypeNumber) chunk_size = js_getnum(size_result);
+    if (vtype(size_result) == kTypeNumber) chunk_size = Ant_Value_AsNumberUnchecked(size_result);
     else chunk_size = js_to_number(js, size_result);
   }
   ctrl->in_enqueue = false;
@@ -644,7 +644,7 @@ ant_value_t rs_reader_create(ant_t *js, ant_value_t stream_obj, ant_value_t new_
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.reader_proto, new_target);
   
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
-  js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_READABLE_STREAM_READER));
+  js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_READABLE_STREAM_READER));
   js_set_slot(obj, SLOT_ENTRIES, stream_obj);
   js_set_slot(obj, SLOT_RS_CLOSED, closed);
   js_set_slot(obj, SLOT_AUX, js_mkarr(js));
@@ -786,7 +786,7 @@ static ant_value_t setup_default_controller(
 
   ant_value_t ctrl_obj = Ant_Object_CreateBare(js);
   js_set_proto_init(ctrl_obj, js->builtins.controller_proto);
-  js_set_slot(ctrl_obj, SLOT_BRAND, js_mknum(BRAND_READABLE_STREAM_CONTROLLER));
+  js_set_slot(ctrl_obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_READABLE_STREAM_CONTROLLER));
   js_set_native(ctrl_obj, ctrl, RS_CONTROLLER_NATIVE_TAG);
   js_set_slot(ctrl_obj, SLOT_ENTRIES, stream_obj);
   js_set_slot(ctrl_obj, SLOT_RS_PULL, pull_fn);
@@ -860,7 +860,7 @@ static ant_value_t js_rs_ctor(ant_params_t) {
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.rs_proto, call_new_target);
   
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
-  js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_READABLE_STREAM));
+  js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_READABLE_STREAM));
   js_set_native(obj, st, RS_STREAM_NATIVE_TAG);
   js_set_finalizer(obj, rs_stream_finalize);
 
@@ -931,7 +931,7 @@ ant_value_t rs_create_stream(ant_t *js, ant_value_t pull_fn, ant_value_t cancel_
 
   ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_proto_init(obj, js->builtins.rs_proto);
-  js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_READABLE_STREAM));
+  js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_READABLE_STREAM));
   js_set_native(obj, st, RS_STREAM_NATIVE_TAG);
   js_set_finalizer(obj, rs_stream_finalize);
 

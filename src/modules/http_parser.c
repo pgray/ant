@@ -30,7 +30,7 @@ static ant_value_t http_parser_make_error(
 ) {
   ant_value_t props = Ant_Object_CreateBare(js);
   if (code) js_set(js, props, "code", js_mkstr(js, code, strlen(code)));
-  js_set(js, props, "bytesParsed", js_mknum((double)bytes_parsed));
+  js_set(js, props, "bytesParsed", Ant_Value_FromNumber((double)bytes_parsed));
   return js_mkerr_props(js, JS_ERR_SYNTAX, props, "%s", message ? message : "Invalid HTTP request");
 }
 
@@ -57,11 +57,11 @@ static ant_value_t http_parser_head_object(ant_t *js, const ant_http1_parsed_req
   js_set(js, out, "host", parsed->host ? js_mkstr(js, parsed->host, strlen(parsed->host)) : js_mknull());
   js_set(js, out, "contentType", parsed->content_type ? js_mkstr(js, parsed->content_type, strlen(parsed->content_type)) : js_mknull());
   js_set(js, out, "rawHeaders", http_parser_raw_headers_array(js, parsed));
-  js_set(js, out, "contentLength", js_mknum((double)parsed->content_length));
+  js_set(js, out, "contentLength", Ant_Value_FromNumber((double)parsed->content_length));
   js_set(js, out, "absoluteTarget", js_bool(parsed->absolute_target));
   js_set(js, out, "keepAlive", js_bool(parsed->keep_alive));
-  js_set(js, out, "httpVersionMajor", js_mknum((double)parsed->http_major));
-  js_set(js, out, "httpVersionMinor", js_mknum((double)parsed->http_minor));
+  js_set(js, out, "httpVersionMajor", Ant_Value_FromNumber((double)parsed->http_major));
+  js_set(js, out, "httpVersionMinor", Ant_Value_FromNumber((double)parsed->http_minor));
   js_set(js, out, "httpVersion", js_mkstr(js, version_buf, strlen(version_buf)));
 
   return out;
@@ -100,8 +100,8 @@ static ant_value_t js_http_parser_parse_request(ant_params_t) {
   if (!http_parser_input_bytes(js, args[0], &bytes, &len, &err)) return err;
 
   size_t max_header_size = 0;
-  if (nargs > 1 && vtype(args[1]) == kTypeNumber && js_getnum(args[1]) >= 1)
-    max_header_size = (size_t)js_getnum(args[1]);
+  if (nargs > 1 && vtype(args[1]) == kTypeNumber && Ant_Value_AsNumberUnchecked(args[1]) >= 1)
+    max_header_size = (size_t)Ant_Value_AsNumberUnchecked(args[1]);
 
   ant_http1_parse_result_t result = ant_http1_parse_request(
     (const char *)bytes, len, max_header_size, 
@@ -119,8 +119,8 @@ static ant_value_t js_http_parser_parse_request(ant_params_t) {
 
   ant_value_t out = http_parser_head_object(js, &parsed);
   js_set(js, out, "body", body);
-  js_set(js, out, "bodyLength", js_mknum((double)parsed.body_len));
-  js_set(js, out, "consumed", js_mknum((double)parsed.consumed_len));
+  js_set(js, out, "bodyLength", Ant_Value_FromNumber((double)parsed.body_len));
+  js_set(js, out, "consumed", Ant_Value_FromNumber((double)parsed.consumed_len));
 
   ant_http1_free_parsed_request(&parsed);
   return out;
@@ -143,8 +143,8 @@ static ant_value_t js_http_parser_create_request_parser(ant_params_t) {
   if (!cp) return Ant_Error_CreateOutOfMemory(js);
 
   ant_http1_conn_parser_init(cp);
-  if (nargs > 0 && vtype(args[0]) == kTypeNumber && js_getnum(args[0]) >= 1)
-    cp->ctx.header_limit = (size_t)js_getnum(args[0]);
+  if (nargs > 0 && vtype(args[0]) == kTypeNumber && Ant_Value_AsNumberUnchecked(args[0]) >= 1)
+    cp->ctx.header_limit = (size_t)Ant_Value_AsNumberUnchecked(args[0]);
 
   ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_native(obj, cp, HTTP_REQUEST_PARSER_NATIVE_TAG);
@@ -176,7 +176,7 @@ static ant_value_t js_http_parser_feed_request_parser(ant_params_t) {
   }
 
   ant_value_t out = Ant_Object_CreateBare(js);
-  js_set(js, out, "consumed", js_mknum((double)consumed));
+  js_set(js, out, "consumed", Ant_Value_FromNumber((double)consumed));
   js_set(js, out, "complete", js_bool(result == ANT_HTTP1_PARSE_OK));
 
   if (head.method) {
@@ -186,8 +186,8 @@ static ant_value_t js_http_parser_feed_request_parser(ant_params_t) {
 
   if (cp->ctx.body_span) {
     size_t start = (size_t)((const uint8_t *)cp->ctx.body_span - bytes);
-    js_set(js, out, "bodyStart", js_mknum((double)start));
-    js_set(js, out, "bodyEnd", js_mknum((double)(start + cp->ctx.body_span_len)));
+    js_set(js, out, "bodyStart", Ant_Value_FromNumber((double)start));
+    js_set(js, out, "bodyEnd", Ant_Value_FromNumber((double)(start + cp->ctx.body_span_len)));
   } else if (cp->ctx.body.len > 0) {
     ant_value_t body = http_parser_make_buffer(js, (const uint8_t *)cp->ctx.body.data, cp->ctx.body.len);
     if (is_err(body)) return body;

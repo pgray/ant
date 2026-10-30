@@ -21,7 +21,8 @@ static constexpr uint32_t ISOLATE_AWAIT_TAG = Ant_NativeTag("IAWT");
 static constexpr double ISOLATE_DEFAULT_MEMORY_MB = 128.0;
 
 static const char *const guest_type_names[] = {
-  "undefined", "object", "boolean", "number", "string", "symbol", "bigint", "function", "object",
+  "undefined", "object", "boolean", "number", 
+  "string", "symbol", "bigint", "function", "object",
 };
 
 typedef struct {
@@ -199,10 +200,10 @@ ant_value_t guest_host_error(ant_t *js, guest_call_t *call) {
 
 static ant_value_t isolate_heap_object(ant_t *js, guest_call_t *call) {
   ant_value_t stats = Ant_Object_Create(js);
-  js_set(js, stats, "total_heap_size", js_mknum(call->stats[0]));
-  js_set(js, stats, "used_heap_size", js_mknum(call->stats[1]));
-  js_set(js, stats, "heap_size_limit", js_mknum(call->stats[2]));
-  js_set(js, stats, "object_count", js_mknum(call->stats[3]));
+  js_set(js, stats, "total_heap_size", Ant_Value_FromNumber(call->stats[0]));
+  js_set(js, stats, "used_heap_size", Ant_Value_FromNumber(call->stats[1]));
+  js_set(js, stats, "heap_size_limit", Ant_Value_FromNumber(call->stats[2]));
+  js_set(js, stats, "object_count", Ant_Value_FromNumber(call->stats[3]));
   return stats;
 }
 
@@ -335,12 +336,12 @@ static ant_value_t isolate_host_settled(ant_t *js, guest_host_call_t *call, ant_
 }
 
 static ant_value_t isolate_host_fulfilled(ant_params_t) {
-  guest_host_call_t *call = js_get_native(js_getcurrentfunc(js), ISOLATE_AWAIT_TAG);
+  guest_host_call_t *call = js_get_native(js->current_func, ISOLATE_AWAIT_TAG);
   return call ? isolate_host_settled(js, call, nargs ? args[0] : js_mkundef(), true) : js_mkundef();
 }
 
 static ant_value_t isolate_host_rejected(ant_params_t) {
-  guest_host_call_t *call = js_get_native(js_getcurrentfunc(js), ISOLATE_AWAIT_TAG);
+  guest_host_call_t *call = js_get_native(js->current_func, ISOLATE_AWAIT_TAG);
   return call ? isolate_host_settled(js, call, nargs ? args[0] : js_mkundef(), false) : js_mkundef();
 }
 
@@ -442,7 +443,7 @@ static ant_value_t isolate_read_options(ant_t *js, ant_value_t options, isolate_
   ant_value_t timeout = js_get(js, options, "timeout");
   if (vtype(timeout) != kTypeUndefined) {
     if (vtype(timeout) != kTypeNumber) return Ant_Error_CreateInvalidArgType(js, "options.timeout", "of type number", timeout);
-    double ms = js_getnum(timeout);
+    double ms = Ant_Value_AsNumberUnchecked(timeout);
     if (!(ms >= 1 && ms <= 4294967295.0)) return Ant_Error_CreateOutOfRange(js, "options.timeout", ">= 1 && <= 4294967295", timeout);
     out->timeout_ms = (uint32_t)ms;
   }
@@ -705,9 +706,9 @@ static ant_value_t isolate_parse(ant_t *js, ant_value_t options, ant_guest_t *g)
   if (is_object_type(options)) {
     ant_value_t limit = js_get(js, options, "memoryLimit");
     if (vtype(limit) != kTypeUndefined) {
-      if (vtype(limit) != kTypeNumber || !(js_getnum(limit) >= 8))
+      if (vtype(limit) != kTypeNumber || !(Ant_Value_AsNumberUnchecked(limit) >= 8))
         return Ant_Error_CreateOutOfRange(js, "options.memoryLimit", ">= 8", limit);
-      memory = js_getnum(limit);
+      memory = Ant_Value_AsNumberUnchecked(limit);
     }
 
     ant_value_t thread = js_get(js, options, "thread");

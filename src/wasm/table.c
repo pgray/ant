@@ -81,8 +81,8 @@ ant_value_t js_wasm_table_length_getter(ant_params_t) {
   wasm_extern_handle_t *handle = wasm_extern_handle(js->this_val, WASM_EXTERN_WRAP_TABLE);
   if (!handle || !handle->as.table)  return js_mkerr_typed(js, JS_ERR_TYPE, "Expected a WebAssembly.Table");
   if (handle->standalone_table && handle->standalone_table_element != WASM_FUNCREF)
-    return js_mknum((double)handle->standalone_table_size);
-  return js_mknum((double)wasm_table_size(handle->as.table));
+    return Ant_Value_FromNumber((double)handle->standalone_table_size);
+  return Ant_Value_FromNumber((double)wasm_table_size(handle->as.table));
 }
 
 ant_value_t js_wasm_table_get(ant_params_t) {
@@ -94,7 +94,7 @@ ant_value_t js_wasm_table_get(ant_params_t) {
   if (!handle || !handle->as.table)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Expected a WebAssembly.Table");
 
-  if (!wasm_to_page_count(js, nargs > 0 ? args[0] : js_mknum(0), &index))
+  if (!wasm_to_page_count(js, nargs > 0 ? args[0] : Ant_Value_FromNumber(0), &index))
     return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Table.get requires a valid index");
 
   if (handle->standalone_table && handle->standalone_table_element != WASM_FUNCREF) {
@@ -193,7 +193,7 @@ ant_value_t js_wasm_table_grow(ant_params_t) {
 
   if (!handle || !handle->as.table)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Expected a WebAssembly.Table");
-  if (!wasm_to_page_count(js, nargs > 0 ? args[0] : js_mknum(0), &delta))
+  if (!wasm_to_page_count(js, nargs > 0 ? args[0] : Ant_Value_FromNumber(0), &delta))
     return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Table.grow requires a valid length");
 
   if (!handle->standalone_table)
@@ -231,11 +231,11 @@ ant_value_t js_wasm_table_grow(ant_params_t) {
                              vtype(init) == kTypeUndefined ? js_mknull() : init);
     }
     handle->standalone_table_size = wasm_table_size(handle->as.table);
-    return js_mknum((double)old_size);
+    return Ant_Value_FromNumber((double)old_size);
   }
 
   old_size = handle->standalone_table_size;
-  if (delta == 0) return js_mknum((double)old_size);
+  if (delta == 0) return Ant_Value_FromNumber((double)old_size);
   if (delta > UINT32_MAX - old_size)
     return js_mkerr_typed(js, JS_ERR_RANGE, "Failed to grow WebAssembly.Table");
   needed = old_size + delta;
@@ -245,7 +245,7 @@ ant_value_t js_wasm_table_grow(ant_params_t) {
   entries = js_get(js, js->this_val, "__wasmTableEntries");
   for (uint32_t i = old_size; i < needed; i++) wasm_table_entry_set(js, entries, i, init);
   handle->standalone_table_size = needed;
-  return js_mknum((double)old_size);
+  return Ant_Value_FromNumber((double)old_size);
 }
 
 ant_value_t js_wasm_table_ctor(ant_params_t) {

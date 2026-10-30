@@ -681,18 +681,18 @@ static bool console_output_put_indent(ant_output_stream_t *out, int total) {
 
 static int console_get_group_indentation(ant_t *js, ant_value_t this_obj) {
   ant_value_t value = is_special_object(this_obj) ? js_get_slot(this_obj, SLOT_CONSOLE_GROUP_INDENT) : js_mkundef();
-  return vtype(value) == kTypeNumber ? (int)js_getnum(value) : 2;
+  return vtype(value) == kTypeNumber ? (int)Ant_Value_AsNumberUnchecked(value) : 2;
 }
 
 static int console_get_group_level(ant_t *js, ant_value_t this_obj) {
   ant_value_t value = is_special_object(this_obj) ? js_get_slot(this_obj, SLOT_CONSOLE_GROUP_LEVEL) : js_mkundef();
-  return vtype(value) == kTypeNumber ? (int)js_getnum(value) : 0;
+  return vtype(value) == kTypeNumber ? (int)Ant_Value_AsNumberUnchecked(value) : 0;
 }
 
 static void console_set_group_level(ant_t *js, ant_value_t this_obj, int level) {
   if (!is_special_object(this_obj)) return;
   if (level < 0) level = 0;
-  js_set_slot(this_obj, SLOT_CONSOLE_GROUP_LEVEL, js_mknum((double)level));
+  js_set_slot(this_obj, SLOT_CONSOLE_GROUP_LEVEL, Ant_Value_FromNumber((double)level));
 }
 
 static ant_value_t console_get_state_map(ant_t *js, ant_value_t this_obj, const char *name) {
@@ -1030,7 +1030,7 @@ static ant_value_t js_console_time(ant_params_t) {
     return console_emit_current(js, true, NULL, warn_args, 1);
   }
   
-  js_set(js, timers, label, js_mknum(console_now_ms()));
+  js_set(js, timers, label, Ant_Value_FromNumber(console_now_ms()));
   return js_mkundef();
 }
 
@@ -1047,7 +1047,7 @@ static ant_value_t js_console_timeEnd(ant_params_t) {
     return console_emit_current(js, true, NULL, warn_args, 1);
   }
   
-  double elapsed = console_now_ms() - js_getnum(start);
+  double elapsed = console_now_ms() - Ant_Value_AsNumberUnchecked(start);
   js_delete_prop(js, timers, label, strlen(label));
   char buf[256];
   
@@ -1076,7 +1076,7 @@ static ant_value_t js_console_timeLog(ant_params_t) {
   }
   
   char buf[256];
-  double elapsed = console_now_ms() - js_getnum(start);
+  double elapsed = console_now_ms() - Ant_Value_AsNumberUnchecked(start);
   int len = snprintf(buf, sizeof(buf), "%s: %.3fms", label, elapsed);
   
   ant_value_t *out_args = malloc((size_t)(nargs - extra_start + 1) * sizeof(ant_value_t));
@@ -1103,8 +1103,8 @@ static ant_value_t js_console_count(ant_params_t) {
   ant_value_t counts = console_get_state_map(js, this_obj, "counts");
   ant_value_t current = is_special_object(counts) ? js_get(js, counts, label) : js_mkundef();
   
-  double next = vtype(current) == kTypeNumber ? js_getnum(current) + 1 : 1;
-  js_set(js, counts, label, js_mknum(next));
+  double next = vtype(current) == kTypeNumber ? Ant_Value_AsNumberUnchecked(current) + 1 : 1;
+  js_set(js, counts, label, Ant_Value_FromNumber(next));
   
   char buf[256];
   int len = snprintf(buf, sizeof(buf), "%s: %.0f", label, next);
@@ -1368,7 +1368,7 @@ void inspect_value(ant_t *js, ant_value_t val, FILE *stream, int depth, inspect_
   if (t == kTypeUndefined) { fprintf(stream, "undefined"); return; }
   if (t == kTypeNull)  { fprintf(stream, "null"); return; }
   if (t == kTypeBool)  { fprintf(stream, val == js_true ? "true" : "false"); return; }
-  if (t == kTypeNumber)   { fprintf(stream, "%g", js_getnum(val)); return; }
+  if (t == kTypeNumber)   { fprintf(stream, "%g", Ant_Value_AsNumberUnchecked(val)); return; }
   if (t == kTypeError)   { fprintf(stream, "[Error]"); return; }
   
   if (t == kTypeString) {
@@ -1453,7 +1453,7 @@ void inspect_object(ant_t *js, ant_value_t obj, FILE *stream, int depth, inspect
         fprintf(stream, "<native ptr 0x%" PRIx64 ">", (uint64_t)vdata(slot_val));
         break;
       case SLOT_CODE_LEN:
-        fprintf(stream, "%.0f", js_getnum(slot_val));
+        fprintf(stream, "%.0f", Ant_Value_AsNumberUnchecked(slot_val));
         break;
       default:
         if ((t == kTypeObject || t == kTypeFunction || t == kTypePromise) && inspect_was_visited(visited, (uintptr_t)vdata(js_as_obj(slot_val))))
@@ -1573,7 +1573,7 @@ static ant_value_t js_console_constructor(ant_params_t) {
     stdout_obj = js_get(js, options, "stdout");
     stderr_obj = js_get(js, options, "stderr");
     ant_value_t gi = js_get(js, options, "groupIndentation");
-    if (vtype(gi) == kTypeNumber) group_indentation = (int)js_getnum(gi);
+    if (vtype(gi) == kTypeNumber) group_indentation = (int)Ant_Value_AsNumberUnchecked(gi);
   } else {
     if (nargs >= 1) stdout_obj = args[0];
     if (nargs >= 2) stderr_obj = args[1];
@@ -1585,8 +1585,8 @@ static ant_value_t js_console_constructor(ant_params_t) {
   js_set_slot_wb(js, console_obj, SLOT_CONSOLE_COUNTS, Ant_Object_CreateBare(js));
   js_set_slot_wb(js, console_obj, SLOT_CONSOLE_TIMERS, Ant_Object_CreateBare(js));
   
-  js_set_slot(console_obj, SLOT_CONSOLE_GROUP_INDENT, js_mknum((double)group_indentation));
-  js_set_slot(console_obj, SLOT_CONSOLE_GROUP_LEVEL, js_mknum(0));
+  js_set_slot(console_obj, SLOT_CONSOLE_GROUP_INDENT, Ant_Value_FromNumber((double)group_indentation));
+  js_set_slot(console_obj, SLOT_CONSOLE_GROUP_LEVEL, Ant_Value_FromNumber(0));
   
   return console_obj;
 }
@@ -1608,8 +1608,8 @@ static ant_value_t console_create_default(ant_t *js) {
   js_set_proto_init(console_obj, js->builtins.console_proto);
   js_set_slot_wb(js, console_obj, SLOT_CONSOLE_COUNTS, Ant_Object_CreateBare(js));
   js_set_slot_wb(js, console_obj, SLOT_CONSOLE_TIMERS, Ant_Object_CreateBare(js));
-  js_set_slot(console_obj, SLOT_CONSOLE_GROUP_INDENT, js_mknum(2));
-  js_set_slot(console_obj, SLOT_CONSOLE_GROUP_LEVEL, js_mknum(0));
+  js_set_slot(console_obj, SLOT_CONSOLE_GROUP_INDENT, Ant_Value_FromNumber(2));
+  js_set_slot(console_obj, SLOT_CONSOLE_GROUP_LEVEL, Ant_Value_FromNumber(0));
   js_set_tostringtag(js, console_obj, js_mkstr(js, "console", 7));
   
   return console_obj;

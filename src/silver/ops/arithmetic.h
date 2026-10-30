@@ -31,8 +31,8 @@ static inline ant_value_t sv_op_add(sv_vm_t *vm, ant_t *js) {
 
   if (vtype(l) == kTypeNumber && vtype(r) == kTypeNumber) {
     vm->sp -= 2;
-    vm->stack[vm->sp++] = tov(tod(l) + tod(r));
-    return tov(0);
+    vm->stack[vm->sp++] = Ant_Value_FromNumber(Ant_Value_AsNumberUnchecked(l) + Ant_Value_AsNumberUnchecked(r));
+    return Ant_Value_FromNumber(0);
   }
 
   if (vtype(l) == kTypeBigInt && vtype(r) == kTypeBigInt)
@@ -91,9 +91,9 @@ static inline ant_value_t sv_op_add(sv_vm_t *vm, ant_t *js) {
 
   double sum = js_to_number(js, lu) + js_to_number(js, ru);
   vm->sp -= 2;
-  vm->stack[vm->sp++] = tov(sum);
+  vm->stack[vm->sp++] = Ant_Value_FromNumber(sum);
   
-  return tov(0);
+  return Ant_Value_FromNumber(0);
 }
 
 static inline ant_value_t sv_arith_values(ant_t *js, sv_op_t op, ant_value_t l, ant_value_t r) {
@@ -125,11 +125,11 @@ static inline ant_value_t sv_arith_values(ant_t *js, sv_op_t op, ant_value_t l, 
     case OP_MOD: res = bigint_mod(js, ln, rn); break;
     default:     res = bigint_exp(js, ln, rn); break;
   } else switch (op) {
-    case OP_SUB: res = tov(tod(ln) - tod(rn)); break;
-    case OP_MUL: res = tov(tod(ln) * tod(rn)); break;
-    case OP_DIV: res = tov(tod(ln) / tod(rn)); break;
-    case OP_MOD: res = tov(fmod(tod(ln), tod(rn))); break;
-    default:     res = tov(ant_math_js_pow(tod(ln), tod(rn))); break;
+    case OP_SUB: res = Ant_Value_FromNumber(Ant_Value_AsNumberUnchecked(ln) - Ant_Value_AsNumberUnchecked(rn)); break;
+    case OP_MUL: res = Ant_Value_FromNumber(Ant_Value_AsNumberUnchecked(ln) * Ant_Value_AsNumberUnchecked(rn)); break;
+    case OP_DIV: res = Ant_Value_FromNumber(Ant_Value_AsNumberUnchecked(ln) / Ant_Value_AsNumberUnchecked(rn)); break;
+    case OP_MOD: res = Ant_Value_FromNumber(fmod(Ant_Value_AsNumberUnchecked(ln), Ant_Value_AsNumberUnchecked(rn))); break;
+    default:     res = Ant_Value_FromNumber(ant_math_js_pow(Ant_Value_AsNumberUnchecked(ln), Ant_Value_AsNumberUnchecked(rn))); break;
   }
   
   GC_ROOT_RESTORE(js, mark);
@@ -141,7 +141,7 @@ static inline ant_value_t sv_op_arith(sv_vm_t *vm, ant_t *js, sv_op_t op) {
   vm->sp -= 2;
   if (is_err(res)) return res;
   vm->stack[vm->sp++] = res;
-  return tov(0);
+  return Ant_Value_FromNumber(0);
 }
 
 #define SV_ARITH_OP(name, op, expr)                                   \
@@ -149,10 +149,10 @@ static inline ant_value_t sv_op_arith(sv_vm_t *vm, ant_t *js, sv_op_t op) {
     ant_value_t r = vm->stack[vm->sp - 1];                            \
     ant_value_t l = vm->stack[vm->sp - 2];                            \
     if (vtype(l) == kTypeNumber && vtype(r) == kTypeNumber) {         \
-      double a = tod(l), b = tod(r);                                  \
+      double a = Ant_Value_AsNumberUnchecked(l), b = Ant_Value_AsNumberUnchecked(r);                                  \
       vm->sp -= 2;                                                    \
-      vm->stack[vm->sp++] = tov(expr);                                \
-      return tov(0);                                                  \
+      vm->stack[vm->sp++] = Ant_Value_FromNumber(expr);                                \
+      return Ant_Value_FromNumber(0);                                                  \
     }                                                                 \
     return sv_op_arith(vm, js, op);                                   \
   }
@@ -168,10 +168,10 @@ static inline ant_value_t sv_op_neg(sv_vm_t *vm, ant_t *js) {
   ant_value_t n = js_to_numeric(js, vm->stack[vm->sp - 1]);
   vm->sp--;
   if (is_err(n)) return n;
-  ant_value_t res = vtype(n) == kTypeBigInt ? bigint_neg(js, n) : tov(-tod(n));
+  ant_value_t res = vtype(n) == kTypeBigInt ? bigint_neg(js, n) : Ant_Value_FromNumber(-Ant_Value_AsNumberUnchecked(n));
   if (is_err(res)) return res;
   vm->stack[vm->sp++] = res;
-  return tov(0);
+  return Ant_Value_FromNumber(0);
 }
 
 static inline ant_value_t sv_op_uplus(sv_vm_t *vm, ant_t *js) {
@@ -181,7 +181,7 @@ static inline ant_value_t sv_op_uplus(sv_vm_t *vm, ant_t *js) {
   if (vtype(n) == kTypeBigInt)
     return js_mkerr(js, "Cannot convert a BigInt value to a number");
   vm->stack[vm->sp++] = n;
-  return tov(0);
+  return Ant_Value_FromNumber(0);
 }
 
 static __attribute__((noinline)) ant_value_t sv_op_post_update_slow(sv_vm_t *vm, ant_t *js, bool increment) {
@@ -208,8 +208,8 @@ static __attribute__((noinline)) ant_value_t sv_op_post_update_slow(sv_vm_t *vm,
     if (is_err(next)) return next;
   } else {
     double number = js_to_number(js, old);
-    old = tov(number);
-    next = tov(increment ? number + 1.0 : number - 1.0);
+    old = Ant_Value_FromNumber(number);
+    next = Ant_Value_FromNumber(increment ? number + 1.0 : number - 1.0);
   }
   
   vm->stack[vm->sp - 1] = old;
@@ -221,8 +221,8 @@ static __attribute__((noinline)) ant_value_t sv_op_post_update_slow(sv_vm_t *vm,
 static inline __attribute__((always_inline)) ant_value_t sv_op_post_update(sv_vm_t *vm, ant_t *js, bool increment) {
   ant_value_t old = vm->stack[vm->sp - 1];
   if (vtype(old) != kTypeNumber) return sv_op_post_update_slow(vm, js, increment);
-  double number = tod(old);
-  vm->stack[vm->sp++] = tov(increment ? number + 1.0 : number - 1.0);
+  double number = Ant_Value_AsNumberUnchecked(old);
+  vm->stack[vm->sp++] = Ant_Value_FromNumber(increment ? number + 1.0 : number - 1.0);
   return js_mkundef();
 }
 
@@ -238,7 +238,7 @@ static __attribute__((noinline)) ant_value_t sv_op_update_local_slow(ant_value_t
   
   if (vtype(old) != kTypeBigInt) {
     double number = js_to_number(js, old);
-    *slot = tov(increment ? number + 1.0 : number - 1.0);
+    *slot = Ant_Value_FromNumber(increment ? number + 1.0 : number - 1.0);
     return js_mkundef();
   }
   
@@ -273,7 +273,7 @@ static inline ant_value_t sv_op_update_local(
     *slot = out;
   }
   
-  if (vtype(*slot) == kTypeNumber) *slot = tov(tod(*slot) + (increment ? 1.0 : -1.0));
+  if (vtype(*slot) == kTypeNumber) *slot = Ant_Value_FromNumber(Ant_Value_AsNumberUnchecked(*slot) + (increment ? 1.0 : -1.0));
   else {
     ant_value_t err = sv_op_update_local_slow(slot, js, increment);
     if (is_err(err)) return err;
@@ -295,9 +295,9 @@ static inline ant_value_t sv_op_add_local(sv_vm_t *vm, ant_value_t *lp, ant_t *j
   
   ant_value_t val = vm->stack[--vm->sp];
   if (vtype(*slot) == kTypeNumber && vtype(val) == kTypeNumber) {
-    *slot = tov(tod(*slot) + tod(val));
+    *slot = Ant_Value_FromNumber(Ant_Value_AsNumberUnchecked(*slot) + Ant_Value_AsNumberUnchecked(val));
     sv_tfb_record_local(func, (int)idx, *slot);
-    return tov(0);
+    return Ant_Value_FromNumber(0);
   }
   
   vm->stack[vm->sp++] = *slot;
@@ -308,7 +308,7 @@ static inline ant_value_t sv_op_add_local(sv_vm_t *vm, ant_value_t *lp, ant_t *j
   *slot = vm->stack[--vm->sp];
   sv_tfb_record_local(func, (int)idx, *slot);
   
-  return tov(0);
+  return Ant_Value_FromNumber(0);
 }
 
 #endif

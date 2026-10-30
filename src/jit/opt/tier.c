@@ -857,8 +857,8 @@ ant_value_t opt_rt_stable_builtin(sv_vm_t *vm, ant_value_t callee, ant_value_t t
 }
 
 ant_value_t opt_rt_concat(sv_vm_t *vm, ant_value_t lhs, ant_value_t rhs, ant_value_t *args, int64_t argc, int64_t kind) {
-  if (kind & IR_CONCAT_INT32_LHS) lhs = tov((double)(int32_t)(uint32_t)lhs);
-  if (kind & IR_CONCAT_INT32_RHS) rhs = tov((double)(int32_t)(uint32_t)rhs);
+  if (kind & IR_CONCAT_INT32_LHS) lhs = Ant_Value_FromNumber((double)(int32_t)(uint32_t)lhs);
+  if (kind & IR_CONCAT_INT32_RHS) rhs = Ant_Value_FromNumber((double)(int32_t)(uint32_t)rhs);
   return jit_helper_concat(vm->js, lhs, rhs);
 }
 

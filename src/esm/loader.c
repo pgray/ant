@@ -493,7 +493,7 @@ static ant_value_t esm_make_namespace_object(ant_t *js) {
   ant_value_t tag_sym = js->sym.toStringTag_sym;
   mkprop_exact_attrs(js, ns, tag_sym, tag, 0);
 
-  js_set_slot(ns, SLOT_BRAND, js_mknum(BRAND_MODULE_NAMESPACE));
+  js_set_slot(ns, SLOT_BRAND, Ant_Value_FromNumber(BRAND_MODULE_NAMESPACE));
   js_set_slot(ns, SLOT_MODULE_LOADING, js_true);
   GC_ROOT_RESTORE(js, root_mark);
   
@@ -1741,12 +1741,12 @@ static ant_value_t esm_image_value(ant_t *js, const unsigned char *content, size
   ant_value_t data_arr = js_mkarr(js);
 
   for (size_t i = 0; i < size; i++) {
-    js_arr_push(js, data_arr, tov((double)content[i]));
+    js_arr_push(js, data_arr, Ant_Value_FromNumber((double)content[i]));
   }
 
   js_setprop(js, obj, js_mkstr(js, "data", 4), data_arr);
   js_setprop(js, obj, js_mkstr(js, "path", 4), js_mkstr(js, path, strlen(path)));
-  js_setprop(js, obj, js_mkstr(js, "size", 4), tov((double)size));
+  js_setprop(js, obj, js_mkstr(js, "size", 4), Ant_Value_FromNumber((double)size));
 
   return obj;
 }

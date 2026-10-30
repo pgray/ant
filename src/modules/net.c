@@ -214,7 +214,7 @@ static bool net_port_from_number(ant_t *js, ant_value_t value, double port, cons
 }
 
 static double net_port_number(ant_t *js, ant_value_t value) {
-  if (vtype(value) == kTypeNumber) return js_getnum(value);
+  if (vtype(value) == kTypeNumber) return Ant_Value_AsNumberUnchecked(value);
   return net_string_is_blank(js, value) ? -1 : js_to_number(js, value);
 }
 
@@ -258,7 +258,7 @@ bool net_parse_listen_args(ant_native_params_t, net_listen_args_t *out) {
       out->host = js_getstr(js, args[1], &len);
     }
     
-    if (nargs > 2 && vtype(args[2]) == kTypeNumber) out->backlog = (int)js_getnum(args[2]);
+    if (nargs > 2 && vtype(args[2]) == kTypeNumber) out->backlog = (int)Ant_Value_AsNumberUnchecked(args[2]);
     if (nargs > 3 && is_callable(args[3])) out->callback = args[3];
     else if (nargs > 2 && is_callable(args[2])) out->callback = args[2];
     else if (nargs > 1 && is_callable(args[1])) out->callback = args[1];
@@ -279,7 +279,7 @@ bool net_parse_listen_args(ant_native_params_t, net_listen_args_t *out) {
     }
     
     value = js_get(js, args[0], "backlog");
-    if (vtype(value) == kTypeNumber) out->backlog = (int)js_getnum(value);
+    if (vtype(value) == kTypeNumber) out->backlog = (int)Ant_Value_AsNumberUnchecked(value);
     if (nargs > 1 && is_callable(args[1])) out->callback = args[1];
     
     return true;
@@ -287,7 +287,7 @@ bool net_parse_listen_args(ant_native_params_t, net_listen_args_t *out) {
 
   if (vtype(args[0]) == kTypeString) {
     out->path = js_getstr(js, args[0], NULL);
-    if (nargs > 1 && vtype(args[1]) == kTypeNumber) out->backlog = (int)js_getnum(args[1]);
+    if (nargs > 1 && vtype(args[1]) == kTypeNumber) out->backlog = (int)Ant_Value_AsNumberUnchecked(args[1]);
     if (nargs > 2 && is_callable(args[2])) out->callback = args[2];
     else if (nargs > 1 && is_callable(args[1])) out->callback = args[1];
     return true;
@@ -360,7 +360,7 @@ static bool net_parse_connect_args(ant_native_params_t, net_connect_args_t *out)
     if (vtype(value) != kTypeUndefined) out->allow_half_open = js_truthy(js, value);
 
     value = js_get(js, args[0], "timeout");
-    if (vtype(value) == kTypeNumber && js_getnum(value) > 0) out->timeout_ms = (uint64_t)js_getnum(value);
+    if (vtype(value) == kTypeNumber && Ant_Value_AsNumberUnchecked(value) > 0) out->timeout_ms = (uint64_t)Ant_Value_AsNumberUnchecked(value);
 
     value = js_get(js, args[0], "noDelay");
     if (vtype(value) != kTypeUndefined) out->no_delay = js_truthy(js, value);
@@ -369,8 +369,8 @@ static bool net_parse_connect_args(ant_native_params_t, net_connect_args_t *out)
     if (vtype(value) != kTypeUndefined) out->keep_alive = js_truthy(js, value);
 
     value = js_get(js, args[0], "keepAliveInitialDelay");
-    if (vtype(value) == kTypeNumber && js_getnum(value) > 0)
-      out->keep_alive_initial_delay_secs = (unsigned int)(js_getnum(value) / 1000.0);
+    if (vtype(value) == kTypeNumber && Ant_Value_AsNumberUnchecked(value) > 0)
+      out->keep_alive_initial_delay_secs = (unsigned int)(Ant_Value_AsNumberUnchecked(value) / 1000.0);
 
     if (nargs > 1 && is_callable(args[1])) out->callback = args[1];
     return true;
@@ -407,15 +407,15 @@ static void net_socket_sync_state(net_socket_t *socket) {
   js_set(socket->js, obj, "pending", js_bool(socket->connecting || (socket->conn == NULL && !socket->destroyed)));
   js_set(socket->js, obj, "connecting", js_bool(socket->connecting));
   js_set(socket->js, obj, "readyState", js_mkstr(socket->js, ready_state, strlen(ready_state)));
-  js_set(socket->js, obj, "bytesRead", js_mknum((double)(socket->conn ? ant_conn_bytes_read(socket->conn) : 0)));
-  js_set(socket->js, obj, "bytesWritten", js_mknum((double)(socket->conn ? ant_conn_bytes_written(socket->conn) : 0)));
-  js_set(socket->js, obj, "timeout", js_mknum((double)(socket->conn ? ant_conn_timeout_ms(socket->conn) : 0)));
+  js_set(socket->js, obj, "bytesRead", Ant_Value_FromNumber((double)(socket->conn ? ant_conn_bytes_read(socket->conn) : 0)));
+  js_set(socket->js, obj, "bytesWritten", Ant_Value_FromNumber((double)(socket->conn ? ant_conn_bytes_written(socket->conn) : 0)));
+  js_set(socket->js, obj, "timeout", Ant_Value_FromNumber((double)(socket->conn ? ant_conn_timeout_ms(socket->conn) : 0)));
 }
 
 static void net_server_sync_state(net_server_t *server) {
   if (!server || !is_object_type(server->obj)) return;
   js_set(server->js, server->obj, "listening", js_bool(server->listening));
-  js_set(server->js, server->obj, "maxConnections", js_mknum((double)server->max_connections));
+  js_set(server->js, server->obj, "maxConnections", Ant_Value_FromNumber((double)server->max_connections));
   js_set(server->js, server->obj, "dropMaxConnection", js_false);
 }
 
@@ -486,10 +486,10 @@ static void net_socket_finalize(ant_t *js, ant_object_t *obj) {
 static ant_value_t net_socket_emit_connect_error(ant_params_t) {
   ant_value_t state = js_func_data(js->current_func);
   ant_value_t socket_obj = is_object_type(state) ? js_get(js, state, "socket") : js_mkundef();
-  ant_value_t status_val = is_object_type(state) ? js_get(js, state, "status") : js_mknum(UV_EIO);
+  ant_value_t status_val = is_object_type(state) ? js_get(js, state, "status") : Ant_Value_FromNumber(UV_EIO);
   
   net_socket_t *socket = net_socket_data(socket_obj);
-  int status = vtype(status_val) == kTypeNumber ? (int)js_getnum(status_val) : UV_EIO;
+  int status = vtype(status_val) == kTypeNumber ? (int)Ant_Value_AsNumberUnchecked(status_val) : UV_EIO;
   
   ant_value_t err = 0;
   if (!socket) return js_mkundef();
@@ -508,7 +508,7 @@ static ant_value_t net_socket_emit_connect_error(ant_params_t) {
 static void net_socket_schedule_connect_error(ant_t *js, net_socket_t *socket, int status) {
   ant_value_t state = Ant_Object_CreateBare(js);
   js_set(js, state, "socket", socket->obj);
-  js_set(js, state, "status", js_mknum((double)status));
+  js_set(js, state, "status", Ant_Value_FromNumber((double)status));
   queue_microtask(js, js_heavy_mkfun(js, net_socket_emit_connect_error, state));
 }
 
@@ -552,12 +552,12 @@ static void net_socket_attach_conn(net_socket_t *socket, ant_conn_t *conn) {
   ant_conn_set_user_data(conn, socket);
   if (ant_conn_has_remote_addr(conn)) {
     js_set(socket->js, socket->obj, "remoteAddress", js_mkstr(socket->js, ant_conn_remote_addr(conn), strlen(ant_conn_remote_addr(conn))));
-    js_set(socket->js, socket->obj, "remotePort", js_mknum(ant_conn_remote_port(conn)));
+    js_set(socket->js, socket->obj, "remotePort", Ant_Value_FromNumber(ant_conn_remote_port(conn)));
     js_set(socket->js, socket->obj, "remoteFamily", js_mkstr(socket->js, ant_conn_remote_family(conn), strlen(ant_conn_remote_family(conn))));
   }
   if (ant_conn_has_local_addr(conn)) {
     js_set(socket->js, socket->obj, "localAddress", js_mkstr(socket->js, ant_conn_local_addr(conn), strlen(ant_conn_local_addr(conn))));
-    js_set(socket->js, socket->obj, "localPort", js_mknum(ant_conn_local_port(conn)));
+    js_set(socket->js, socket->obj, "localPort", Ant_Value_FromNumber(ant_conn_local_port(conn)));
     js_set(socket->js, socket->obj, "localFamily", js_mkstr(socket->js, ant_conn_local_family(conn), strlen(ant_conn_local_family(conn))));
   }
   net_socket_sync_state(socket);
@@ -592,22 +592,22 @@ static ant_value_t net_isIP(ant_params_t) {
   struct in_addr addr4;
   struct in6_addr addr6;
 
-  if (nargs < 1) return js_mknum(0);
+  if (nargs < 1) return Ant_Value_FromNumber(0);
   host = js_getstr(js, args[0], &len);
-  if (!host) return js_mknum(0);
+  if (!host) return Ant_Value_FromNumber(0);
 
-  if (inet_pton(AF_INET, host, &addr4) == 1) return js_mknum(4);
-  if (inet_pton(AF_INET6, host, &addr6) == 1) return js_mknum(6);
-  return js_mknum(0);
+  if (inet_pton(AF_INET, host, &addr4) == 1) return Ant_Value_FromNumber(4);
+  if (inet_pton(AF_INET6, host, &addr6) == 1) return Ant_Value_FromNumber(6);
+  return Ant_Value_FromNumber(0);
 }
 
 static ant_value_t net_isIPv4(ant_params_t) {
-  if (js_getnum(net_isIP(js, args, nargs, js_mkundef())) == 4.0) return js_true;
+  if (Ant_Value_AsNumberUnchecked(net_isIP(js, args, nargs, js_mkundef())) == 4.0) return js_true;
   return js_false;
 }
 
 static ant_value_t net_isIPv6(ant_params_t) {
-  if (js_getnum(net_isIP(js, args, nargs, js_mkundef())) == 6.0) return js_true;
+  if (Ant_Value_AsNumberUnchecked(net_isIP(js, args, nargs, js_mkundef())) == 6.0) return js_true;
   return js_false;
 }
 
@@ -629,12 +629,12 @@ static void net_server_apply_options(ant_t *js, net_server_t *server, ant_value_
   if (vtype(value) != kTypeUndefined) server->keep_alive = js_truthy(js, value);
 
   value = js_get(js, options, "keepAliveInitialDelay");
-  if (vtype(value) == kTypeNumber && js_getnum(value) > 0)
-    server->keep_alive_initial_delay_secs = (unsigned int)(js_getnum(value) / 1000.0);
+  if (vtype(value) == kTypeNumber && Ant_Value_AsNumberUnchecked(value) > 0)
+    server->keep_alive_initial_delay_secs = (unsigned int)(Ant_Value_AsNumberUnchecked(value) / 1000.0);
 
   value = js_get(js, options, "backlog");
-  if (vtype(value) == kTypeNumber && js_getnum(value) > 0)
-    server->backlog = (int)js_getnum(value);
+  if (vtype(value) == kTypeNumber && Ant_Value_AsNumberUnchecked(value) > 0)
+    server->backlog = (int)Ant_Value_AsNumberUnchecked(value);
 }
 
 static void net_socket_on_read(ant_conn_t *conn, ssize_t nread, void *user_data) {
@@ -794,7 +794,7 @@ static ant_value_t js_net_socket_address(ant_params_t) {
   if (!socket || !socket->conn || !ant_conn_has_local_addr(socket->conn)) return out;
 
   js_set(js, out, "address", js_mkstr(js, ant_conn_local_addr(socket->conn), strlen(ant_conn_local_addr(socket->conn))));
-  js_set(js, out, "port", js_mknum(ant_conn_local_port(socket->conn)));
+  js_set(js, out, "port", Ant_Value_FromNumber(ant_conn_local_port(socket->conn)));
   js_set(js, out, "family", js_mkstr(js, ant_conn_local_family(socket->conn), strlen(ant_conn_local_family(socket->conn))));
 
   return out;
@@ -825,7 +825,7 @@ static ant_value_t js_net_socket_setTimeout(ant_params_t) {
   double timeout = 0;
 
   if (!socket) return Ant_Exception_Current(js);
-  if (nargs > 0 && vtype(args[0]) == kTypeNumber) timeout = js_getnum(args[0]);
+  if (nargs > 0 && vtype(args[0]) == kTypeNumber) timeout = Ant_Value_AsNumberUnchecked(args[0]);
   if (socket->conn) ant_conn_set_timeout_ms(socket->conn, timeout > 0 ? (uint64_t)timeout : 0);
   net_socket_sync_state(socket);
 
@@ -846,7 +846,7 @@ static ant_value_t js_net_socket_setNoDelay(ant_params_t) {
 static ant_value_t js_net_socket_setKeepAlive(ant_params_t) {
   net_socket_t *socket = net_require_socket(js, js_getthis(js));
   bool enable = nargs > 0 && js_truthy(js, args[0]);
-  unsigned int delay = nargs > 1 && vtype(args[1]) == kTypeNumber ? (unsigned int)(js_getnum(args[1]) / 1000.0) : 0;
+  unsigned int delay = nargs > 1 && vtype(args[1]) == kTypeNumber ? (unsigned int)(Ant_Value_AsNumberUnchecked(args[1]) / 1000.0) : 0;
   if (!socket) return Ant_Exception_Current(js);
   if (socket && socket->conn) ant_conn_set_keep_alive(socket->conn, enable, delay);
   return js_getthis(js);
@@ -1208,7 +1208,7 @@ static ant_value_t js_net_server_address(ant_params_t) {
     }
 
     out = Ant_Object_CreateBare(js);
-    js_set(js, out, "port", js_mknum((double)port));
+    js_set(js, out, "port", Ant_Value_FromNumber((double)port));
     js_set(js, out, "family", js_mkstr(js, family, strlen(family)));
     js_set(js, out, "address", js_mkstr(js, addr_str, strlen(addr_str)));
     
@@ -1217,7 +1217,7 @@ static ant_value_t js_net_server_address(ant_params_t) {
 
   struct in6_addr addr6;
   out = Ant_Object_CreateBare(js);
-  js_set(js, out, "port", js_mknum(server->port));
+  js_set(js, out, "port", Ant_Value_FromNumber(server->port));
   
   if (server->host && inet_pton(AF_INET6, server->host, &addr6) == 1) {
     char normalized[INET6_ADDRSTRLEN];
@@ -1236,7 +1236,7 @@ static ant_value_t js_net_server_address(ant_params_t) {
 static ant_value_t js_net_server_getConnections(ant_params_t) {
   net_server_t *server = net_require_server(js, js_getthis(js));
   ant_value_t cb = nargs > 0 ? args[0] : js_mkundef();
-  ant_value_t argv[2] = { js_mknull(), js_mknum((double)net_server_socket_count(server)) };
+  ant_value_t argv[2] = { js_mknull(), Ant_Value_FromNumber((double)net_server_socket_count(server)) };
 
   if (!server) return Ant_Exception_Current(js);
   if (is_callable(cb)) sv_call_value(js, cb, js_mkundef(), argv, 2);
@@ -1286,12 +1286,12 @@ static ant_value_t js_net_setDefaultAutoSelectFamily(ant_params_t) {
 }
 
 static ant_value_t js_net_getDefaultAutoSelectFamilyAttemptTimeout(ant_params_t) {
-  return js_mknum(js->defaults.net_auto_select_family_timeout);
+  return Ant_Value_FromNumber(js->defaults.net_auto_select_family_timeout);
 }
 
 static ant_value_t js_net_setDefaultAutoSelectFamilyAttemptTimeout(ant_params_t) {
   if (nargs > 0 && vtype(args[0]) == kTypeNumber) {
-    double value = js_getnum(args[0]);
+    double value = Ant_Value_AsNumberUnchecked(args[0]);
     if (value > 0 && value < 10) value = 10;
     if (value > 0) js->defaults.net_auto_select_family_timeout = value;
   }

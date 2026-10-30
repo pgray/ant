@@ -67,7 +67,7 @@ typedef struct {
 } opt_text_t;
 
 void opt_text_append(opt_text_t *text, const char *string);
-[[gnu::format(printf, 2, 3)]] void opt_text_appendf(opt_text_t *text, const char *format, ...);
+__attribute__((format(printf, 2, 3))) void opt_text_appendf(opt_text_t *text, const char *format, ...);
 void opt_text_free(opt_text_t *text);
 
 #endif

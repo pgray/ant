@@ -21,13 +21,13 @@ static void jit_emit_dense_array_next(jit_compile_t *c, MIR_label_t done) {
   MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_MOV, MIR_new_reg_op(ctx, tag),
       MIR_new_mem_op(ctx, MIR_JSVAL, 2 * sizeof(ant_value_t), c->r_iter_buf, 0, 1)));
   MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_BNE, MIR_new_label_op(ctx, slow),
-      MIR_new_reg_op(ctx, tag), MIR_new_uint_op(ctx, tov(SV_ITER_ARRAY))));
+      MIR_new_reg_op(ctx, tag), MIR_new_uint_op(ctx, Ant_Value_FromNumber(SV_ITER_ARRAY))));
   MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_MOV, MIR_new_reg_op(ctx, array),
       MIR_new_mem_op(ctx, MIR_JSVAL, 0, c->r_iter_buf, 0, 1)));
   MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_MOV, MIR_new_reg_op(ctx, bits),
       MIR_new_mem_op(ctx, MIR_JSVAL, sizeof(ant_value_t), c->r_iter_buf, 0, 1)));
   MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_UBGT, MIR_new_label_op(ctx, slow),
-      MIR_new_reg_op(ctx, bits), MIR_new_uint_op(ctx, tov((double)INT32_MAX - 1))));
+      MIR_new_reg_op(ctx, bits), MIR_new_uint_op(ctx, Ant_Value_FromNumber((double)INT32_MAX - 1))));
   MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_DMOV, MIR_new_reg_op(ctx, counter),
       MIR_new_mem_op(ctx, MIR_T_D, sizeof(ant_value_t), c->r_iter_buf, 0, 1)));
   MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_D2I,

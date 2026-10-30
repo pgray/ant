@@ -69,8 +69,8 @@ static void web_worker_error(ant_t *js, ant_worker_t *w, ant_value_t error) {
 
   Ant_Event_SetField(js, event, ANT_EVENT_FIELD_ERROR_message, web_worker_error_message(js, error));
   Ant_Event_SetField(js, event, ANT_EVENT_FIELD_ERROR_filename, inline_source ? js_mkstr(js, "", 0) : js_mkstr(js, w->entry, strlen(w->entry)));
-  Ant_Event_SetField(js, event, ANT_EVENT_FIELD_ERROR_lineno, js_mknum(0));
-  Ant_Event_SetField(js, event, ANT_EVENT_FIELD_ERROR_colno, js_mknum(0));
+  Ant_Event_SetField(js, event, ANT_EVENT_FIELD_ERROR_lineno, Ant_Value_FromNumber(0));
+  Ant_Event_SetField(js, event, ANT_EVENT_FIELD_ERROR_colno, Ant_Value_FromNumber(0));
   Ant_Event_SetField(js, event, ANT_EVENT_FIELD_ERROR_error, error);
 
   web_worker_dispatch(js, w, event);
@@ -82,7 +82,7 @@ static void web_worker_exit(ant_t *js, ant_worker_t *w, int code) {
   ant_value_t event = web_worker_event(js, w, js->builtins.close_event_proto, ANT_EVENT_CLOSE, "close");
   if (!is_object_type(event)) return;
 
-  Ant_Event_SetField(js, event, ANT_EVENT_FIELD_CLOSE_code, js_mknum(code));
+  Ant_Event_SetField(js, event, ANT_EVENT_FIELD_CLOSE_code, Ant_Value_FromNumber(code));
   Ant_Event_SetField(js, event, ANT_EVENT_FIELD_CLOSE_reason, js_mkstr(js, "", 0));
   Ant_Event_SetField(js, event, ANT_EVENT_FIELD_CLOSE_wasClean, js_bool(code == 0));
 
@@ -156,7 +156,7 @@ static ant_value_t js_web_worker_ctor(ant_params_t) {
   ant_value_t this_obj = js_getthis(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.web_worker_proto, call_new_target);
   if (is_object_type(proto)) js_set_proto_init(this_obj, proto);
-  js_set_slot(this_obj, SLOT_BRAND, js_mknum(BRAND_EVENTTARGET));
+  js_set_slot(this_obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_EVENTTARGET));
 
   ant_value_t options = nargs > 1 && is_object_type(args[1]) ? args[1] : js_mkundef();
   ant_worker_t *w = worker_new(js, this_obj, &web_worker_ops);
@@ -214,7 +214,7 @@ static ant_value_t js_web_worker_unref(ant_params_t) {
 
 static ant_value_t js_web_worker_thread_id(ant_params_t) {
   ant_worker_t *w = web_worker_this(js);
-  return js_mknum(w && !w->exited ? (double)w->thread_id : -1);
+  return Ant_Value_FromNumber(w && !w->exited ? (double)w->thread_id : -1);
 }
 
 void init_web_worker_module(ant_t *js) {

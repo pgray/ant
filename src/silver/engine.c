@@ -786,7 +786,7 @@ static bool sv_builder_append_number(ant_string_builder_t *builder, ant_value_t 
   builder->tail_len = (uint16_t)(builder->tail_len + n);
   builder->len += (ant_offset_t)n;
   
-  if (vtype(builder->cached) == kTypeNumber) builder->cached = tov(tod(builder->cached) + (double)n);
+  if (vtype(builder->cached) == kTypeNumber) builder->cached = Ant_Value_FromNumber(Ant_Value_AsNumberUnchecked(builder->cached) + (double)n);
   if (builder->ascii_state != STR_ASCII_NO) builder->ascii_state = STR_ASCII_YES;
   
   return true;
@@ -811,7 +811,7 @@ static inline void sv_builder_record_flat(
   builder->len += flat->len;
   if (vtype(cached) == kTypeNumber) {
     ant_offset_t units = ascii == STR_ASCII_YES ? flat->len : str_utf16_len(js, value);
-    builder->cached = tov(tod(cached) + (double)units);
+    builder->cached = Ant_Value_FromNumber(Ant_Value_AsNumberUnchecked(cached) + (double)units);
   } else builder->cached = js_mkundef();
   
   sv_builder_note_ascii(builder, ascii);
@@ -1058,7 +1058,7 @@ ant_value_t sv_string_builder_append_at(
   }
 
   if (vtype(lhs) == kTypeNumber && vtype(rhs) == kTypeNumber) {
-    *slot = tov(tod(lhs) + tod(rhs));
+    *slot = Ant_Value_FromNumber(Ant_Value_AsNumberUnchecked(lhs) + Ant_Value_AsNumberUnchecked(rhs));
     sv_record_slot_feedback(frame, func, slot_idx, *slot);
     return js_mkundef();
   }
@@ -1139,7 +1139,7 @@ ant_value_t sv_string_builder_append_snapshot_at(
     return sv_string_builder_append_at(vm, js, slot, frame, func, slot_idx, rhs);
 
   if (vtype(lhs) == kTypeNumber && vtype(rhs) == kTypeNumber) {
-    *slot = tov(tod(lhs) + tod(rhs));
+    *slot = Ant_Value_FromNumber(Ant_Value_AsNumberUnchecked(lhs) + Ant_Value_AsNumberUnchecked(rhs));
     sv_record_slot_feedback(frame, func, slot_idx, *slot);
     return js_mkundef();
   }
@@ -2256,7 +2256,7 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
     ant_value_t r = vm->stack[vm->sp - 1], l = vm->stack[vm->sp - 2];
     sv_tfb_record2(func, ip, l, r);
     if (__builtin_expect(vtype(l) == kTypeNumber && vtype(r) == kTypeNumber, 1)) {
-      vm->sp--; vm->stack[vm->sp - 1] = tov(tod(l) + tod(r)); NEXT(OP_ADD);
+      vm->sp--; vm->stack[vm->sp - 1] = Ant_Value_FromNumber(Ant_Value_AsNumberUnchecked(l) + Ant_Value_AsNumberUnchecked(r)); NEXT(OP_ADD);
     }
     VM_CHECK(sv_op_add(vm, js)); NEXT(OP_ADD);
   }
@@ -2264,7 +2264,7 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
   L_ADD_NUM: {
     ant_value_t r = vm->stack[--vm->sp];
     ant_value_t l = vm->stack[vm->sp - 1];
-    vm->stack[vm->sp - 1] = tov(tod(l) + tod(r));
+    vm->stack[vm->sp - 1] = Ant_Value_FromNumber(Ant_Value_AsNumberUnchecked(l) + Ant_Value_AsNumberUnchecked(r));
     NEXT(OP_ADD_NUM);
   }
   
@@ -2272,7 +2272,7 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
     ant_value_t r = vm->stack[vm->sp - 1], l = vm->stack[vm->sp - 2];
     sv_tfb_record2(func, ip, l, r);
     if (__builtin_expect(vtype(l) == kTypeNumber && vtype(r) == kTypeNumber, 1)) {
-      vm->sp--; vm->stack[vm->sp - 1] = tov(tod(l) - tod(r)); NEXT(OP_SUB);
+      vm->sp--; vm->stack[vm->sp - 1] = Ant_Value_FromNumber(Ant_Value_AsNumberUnchecked(l) - Ant_Value_AsNumberUnchecked(r)); NEXT(OP_SUB);
     }
     VM_CHECK(sv_op_sub(vm, js)); NEXT(OP_SUB);
   }
@@ -2280,21 +2280,21 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
   L_SUB_NUM: {
     ant_value_t r = vm->stack[--vm->sp];
     ant_value_t l = vm->stack[vm->sp - 1];
-    vm->stack[vm->sp - 1] = tov(tod(l) - tod(r));
+    vm->stack[vm->sp - 1] = Ant_Value_FromNumber(Ant_Value_AsNumberUnchecked(l) - Ant_Value_AsNumberUnchecked(r));
     NEXT(OP_SUB_NUM);
   }
 
   L_MUL_NUM: {
     ant_value_t r = vm->stack[--vm->sp];
     ant_value_t l = vm->stack[vm->sp - 1];
-    vm->stack[vm->sp - 1] = tov(tod(l) * tod(r));
+    vm->stack[vm->sp - 1] = Ant_Value_FromNumber(Ant_Value_AsNumberUnchecked(l) * Ant_Value_AsNumberUnchecked(r));
     NEXT(OP_MUL_NUM);
   }
 
   L_DIV_NUM: {
     ant_value_t r = vm->stack[--vm->sp];
     ant_value_t l = vm->stack[vm->sp - 1];
-    vm->stack[vm->sp - 1] = tov(tod(l) / tod(r));
+    vm->stack[vm->sp - 1] = Ant_Value_FromNumber(Ant_Value_AsNumberUnchecked(l) / Ant_Value_AsNumberUnchecked(r));
     NEXT(OP_DIV_NUM);
   }
   
@@ -2313,14 +2313,14 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
   
   L_INC: {
     ant_value_t v = vm->stack[vm->sp - 1];
-    if (__builtin_expect(vtype(v) == kTypeNumber, 1)) vm->stack[vm->sp - 1] = tov(tod(v) + 1.0);
+    if (__builtin_expect(vtype(v) == kTypeNumber, 1)) vm->stack[vm->sp - 1] = Ant_Value_FromNumber(Ant_Value_AsNumberUnchecked(v) + 1.0);
     else VM_CHECK(sv_op_update_local_slow(&vm->stack[vm->sp - 1], js, true));
     NEXT(OP_INC);
   }
 
   L_DEC: {
     ant_value_t v = vm->stack[vm->sp - 1];
-    if (__builtin_expect(vtype(v) == kTypeNumber, 1)) vm->stack[vm->sp - 1] = tov(tod(v) - 1.0);
+    if (__builtin_expect(vtype(v) == kTypeNumber, 1)) vm->stack[vm->sp - 1] = Ant_Value_FromNumber(Ant_Value_AsNumberUnchecked(v) - 1.0);
     else VM_CHECK(sv_op_update_local_slow(&vm->stack[vm->sp - 1], js, false));
     NEXT(OP_DEC);
   }
@@ -2362,7 +2362,7 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
     ant_value_t r = vm->stack[vm->sp - 1], l = vm->stack[vm->sp - 2];
     sv_tfb_record2(func, ip, l, r);
     if (__builtin_expect(vtype(l) == kTypeNumber && vtype(r) == kTypeNumber, 1)) {
-      vm->sp--; vm->stack[vm->sp - 1] = mkval(kTypeBool, tod(l) < tod(r)); NEXT(OP_LT);
+      vm->sp--; vm->stack[vm->sp - 1] = mkval(kTypeBool, Ant_Value_AsNumberUnchecked(l) < Ant_Value_AsNumberUnchecked(r)); NEXT(OP_LT);
     }
     VM_CHECK(sv_op_lt(vm, js)); NEXT(OP_LT);
   }

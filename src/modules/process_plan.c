@@ -786,7 +786,7 @@ static ant_value_t process_plan_make_result(
   GC_ROOT_PIN(js, stderr_value);
   js_set(js, result, "stdout", stdout_value);
   js_set(js, result, "stderr", stderr_value);
-  js_set(js, result, "exitCode", js_mknum((double)exit_code));
+  js_set(js, result, "exitCode", Ant_Value_FromNumber((double)exit_code));
   const char *signal_name = process_signal_name(signal);
   js_set(js, result, "signalCode", signal_name
     ? js_mkstr(js, signal_name, strlen(signal_name)) : js_mknull());

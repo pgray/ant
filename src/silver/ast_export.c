@@ -140,8 +140,8 @@ static ant_value_t syntax_position(syntax_export_ctx_t *ctx, uint32_t byte_offse
   ant_value_t out = syntax_obj(ctx);
   size_t line_index = syntax_line_index(ctx, byte_offset);
   uint32_t line_start = ctx->line_starts[line_index];
-  syntax_set(ctx, out, "line", js_mknum((double)(line_index + 1)));
-  syntax_set(ctx, out, "column", js_mknum((double)(ctx->utf16_at[byte_offset] - ctx->utf16_at[line_start])));
+  syntax_set(ctx, out, "line", Ant_Value_FromNumber((double)(line_index + 1)));
+  syntax_set(ctx, out, "column", Ant_Value_FromNumber((double)(ctx->utf16_at[byte_offset] - ctx->utf16_at[line_start])));
   return out;
 }
 
@@ -155,8 +155,8 @@ static void syntax_add_common(
   uint32_t start = out->start > ctx->source_len ? (uint32_t)ctx->source_len : out->start;
   uint32_t end = out->end > ctx->source_len ? (uint32_t)ctx->source_len : out->end;
   if (end < start) end = start;
-  syntax_set(ctx, out->value, "start", js_mknum((double)ctx->utf16_at[start]));
-  syntax_set(ctx, out->value, "end", js_mknum((double)ctx->utf16_at[end]));
+  syntax_set(ctx, out->value, "start", Ant_Value_FromNumber((double)ctx->utf16_at[start]));
+  syntax_set(ctx, out->value, "end", Ant_Value_FromNumber((double)ctx->utf16_at[end]));
   if (ctx->locations) {
     ant_value_t loc = syntax_obj(ctx);
     syntax_set(ctx, loc, "start", syntax_position(ctx, start));
@@ -402,7 +402,7 @@ static syntax_exported_t syntax_export_node(
 
   switch (node->type) {
   case N_NUMBER:
-    syntax_set(ctx, out.value, "value", js_mknum(node->num));
+    syntax_set(ctx, out.value, "value", Ant_Value_FromNumber(node->num));
     syntax_add_common(ctx, &out, "Literal");
     return out;
   case N_STRING:

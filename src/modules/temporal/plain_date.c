@@ -97,7 +97,7 @@ static ant_value_t temporal_plain_date_compare(ant_params_t) {
   int8_t comparison = temporal_rs_PlainDate_compare(one, two);
   temporal_rs_PlainDate_destroy(one);
   temporal_rs_PlainDate_destroy(two);
-  return js_mknum(comparison);
+  return Ant_Value_FromNumber(comparison);
 }
 
 static PlainDate *temporal_plain_date_this(ant_t *js, const char *method, ant_value_t *err) {
@@ -108,7 +108,7 @@ static PlainDate *temporal_plain_date_this(ant_t *js, const char *method, ant_va
   static ant_value_t temporal_plain_date_get_##name(ant_params_t) { \
     (void)args; (void)nargs; ant_value_t err = js_mkundef(); \
     PlainDate *self = temporal_plain_date_this(js, "Temporal.PlainDate.prototype." #name, &err); \
-    return self ? js_mknum((double)capi(self)) : err; \
+    return self ? Ant_Value_FromNumber((double)capi(self)) : err; \
   }
 
 PLAIN_DATE_NUMBER_GETTER(year, temporal_rs_PlainDate_year)
@@ -141,7 +141,7 @@ static ant_value_t temporal_plain_date_get_week_of_year(ant_params_t) {
   PlainDate *self = temporal_plain_date_this(js, "Temporal.PlainDate.prototype.weekOfYear", &err);
   if (!self) return err;
   temporal_rs_PlainDate_week_of_year_result result = temporal_rs_PlainDate_week_of_year(self);
-  return result.is_ok ? js_mknum(result.ok) : js_mkundef();
+  return result.is_ok ? Ant_Value_FromNumber(result.ok) : js_mkundef();
 }
 
 static ant_value_t temporal_plain_date_get_year_of_week(ant_params_t) {
@@ -149,7 +149,7 @@ static ant_value_t temporal_plain_date_get_year_of_week(ant_params_t) {
   PlainDate *self = temporal_plain_date_this(js, "Temporal.PlainDate.prototype.yearOfWeek", &err);
   if (!self) return err;
   temporal_rs_PlainDate_year_of_week_result result = temporal_rs_PlainDate_year_of_week(self);
-  return result.is_ok ? js_mknum(result.ok) : js_mkundef();
+  return result.is_ok ? Ant_Value_FromNumber(result.ok) : js_mkundef();
 }
 
 static ant_value_t temporal_plain_date_get_in_leap_year(ant_params_t) {
@@ -175,7 +175,7 @@ static ant_value_t temporal_plain_date_get_era_year(ant_params_t) {
   PlainDate *self = temporal_plain_date_this(js, "Temporal.PlainDate.prototype.eraYear", &err);
   if (!self) return err;
   temporal_rs_PlainDate_era_year_result result = temporal_rs_PlainDate_era_year(self);
-  return result.is_ok ? js_mknum(result.ok) : js_mkundef();
+  return result.is_ok ? Ant_Value_FromNumber(result.ok) : js_mkundef();
 }
 
 static ant_value_t temporal_plain_date_binary_duration(

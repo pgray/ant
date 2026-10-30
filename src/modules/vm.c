@@ -468,7 +468,7 @@ static ant_value_t vm_run_options(ant_t *js, ant_value_t options, vm_interrupt_t
   ant_value_t timeout = js_get(js, options, "timeout");
   if (vtype(timeout) != kTypeUndefined) {
     if (vtype(timeout) != kTypeNumber) return Ant_Error_CreateInvalidArgType(js, "options.timeout", "of type number", timeout);
-    double ms = js_getnum(timeout);
+    double ms = Ant_Value_AsNumberUnchecked(timeout);
     if (ms != floor(ms)) return Ant_Error_CreateOutOfRange(js, "options.timeout", "an integer", timeout);
     if (ms <= 0 || ms > 4294967295.0) return Ant_Error_CreateOutOfRange(js, "options.timeout", ">= 1 && <= 4294967295", timeout);
     it->timeout_ms = (uint32_t)ms;
@@ -517,7 +517,7 @@ static ant_value_t vm_option_int32(ant_t *js, ant_value_t options, const char *n
   snprintf(arg, sizeof(arg), "options.%s", name);
   if (vtype(value) != kTypeNumber) return Ant_Error_CreateInvalidArgType(js, arg, "of type number", value);
   
-  double number = js_getnum(value);
+  double number = Ant_Value_AsNumberUnchecked(value);
   if (number != floor(number)) return Ant_Error_CreateOutOfRange(js, arg, "an integer", value);
   if (number < -2147483648.0 || number > 2147483647.0)
     return Ant_Error_CreateOutOfRange(js, arg, ">= -2147483648 && <= 2147483647", value);
@@ -891,7 +891,7 @@ static ant_value_t vm_measure_memory(ant_params_t) {
     js->gc.pool_last_live + js->gc.pool_alloc +
     js->alloc_bytes.closures + js->alloc_bytes.upvalues;
   
-  ant_value_t estimate = js_mknum((double)used);
+  ant_value_t estimate = Ant_Value_FromNumber((double)used);
   ant_value_t range = js_mkarr(js);
   js_arr_push(js, range, estimate);
   js_arr_push(js, range, estimate);
@@ -901,8 +901,8 @@ static ant_value_t vm_measure_memory(ant_params_t) {
   js_set(js, total, "jsMemoryRange", range);
 
   ant_value_t wasm = Ant_Object_CreateBare(js);
-  js_set(js, wasm, "code", js_mknum(0));
-  js_set(js, wasm, "metadata", js_mknum(0));
+  js_set(js, wasm, "code", Ant_Value_FromNumber(0));
+  js_set(js, wasm, "metadata", Ant_Value_FromNumber(0));
 
   ant_value_t result = Ant_Object_CreateBare(js);
   js_set(js, result, "total", total);

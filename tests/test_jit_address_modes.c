@@ -120,11 +120,11 @@ static void check_dense_read_guard(void) {
   ant_object_t *array = js_obj_ptr(boxed);
   assert(array && array->flags.fast_array && array->u.array.data);
   assert(read(boxed, 0) == js_mkundef());
-  js_arr_push(js, boxed, tov(41));
-  js_arr_push(js, boxed, tov(42));
+  js_arr_push(js, boxed, Ant_Value_FromNumber(41));
+  js_arr_push(js, boxed, Ant_Value_FromNumber(42));
   js_arr_push(js, boxed, js_mkundef());
-  assert(read(boxed, 0) == tov(41));
-  assert(read(boxed, 1) == tov(42));
+  assert(read(boxed, 0) == Ant_Value_FromNumber(41));
+  assert(read(boxed, 1) == Ant_Value_FromNumber(42));
   assert(read(boxed, 2) == js_mkundef());
   assert(read(boxed, 3) == js_mkundef());
   assert(read(boxed, UINT64_MAX) == js_mkundef());

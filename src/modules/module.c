@@ -77,7 +77,7 @@ static ant_value_t builtin_module_isBuiltin(ant_params_t) {
 }
 
 static ant_value_t builtin_module_deregisterHooks(ant_params_t) {
-  ant_value_t self = js_getcurrentfunc(js);
+  ant_value_t self = js->current_func;
   ant_value_t hook = js_get_slot(self, SLOT_DATA);
   if (vtype(hook) == kTypeUndefined || vtype(js->modules.hooks) != kTypeArray) return js_mkundef();
 
@@ -160,7 +160,7 @@ static ant_value_t builtin_module_enableCompileCache(ant_params_t) {
   ant_value_t out = Ant_Object_Create(js);
   GC_ROOT_PIN(js, out);
   
-  js_set(js, out, "status", js_mknum(COMPILE_CACHE_DISABLED));
+  js_set(js, out, "status", Ant_Value_FromNumber(COMPILE_CACHE_DISABLED));
   js_set(js, out, "message", js_mkstr(js, "Compile cache is not supported by Ant", 37));
   GC_ROOT_RESTORE(js, root_mark);
   
@@ -173,10 +173,10 @@ static ant_value_t module_constants(ant_t *js) {
   ant_value_t status = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, status);
   
-  js_set(js, status, "FAILED", js_mknum(COMPILE_CACHE_FAILED));
-  js_set(js, status, "ENABLED", js_mknum(COMPILE_CACHE_ENABLED));
-  js_set(js, status, "ALREADY_ENABLED", js_mknum(COMPILE_CACHE_ALREADY_ENABLED));
-  js_set(js, status, "DISABLED", js_mknum(COMPILE_CACHE_DISABLED));
+  js_set(js, status, "FAILED", Ant_Value_FromNumber(COMPILE_CACHE_FAILED));
+  js_set(js, status, "ENABLED", Ant_Value_FromNumber(COMPILE_CACHE_ENABLED));
+  js_set(js, status, "ALREADY_ENABLED", Ant_Value_FromNumber(COMPILE_CACHE_ALREADY_ENABLED));
+  js_set(js, status, "DISABLED", Ant_Value_FromNumber(COMPILE_CACHE_DISABLED));
 
   ant_value_t constants = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, constants);

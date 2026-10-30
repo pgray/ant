@@ -217,7 +217,7 @@ static inline sv_func_sidecar_t *sv_func_ensure_sidecar(sv_func_t *func) {
 
 static inline bool sv_tfb_is_double(ant_value_t v) {
   if (vtype(v) != kTypeNumber) return false;
-  double d = tod(v);
+  double d = Ant_Value_AsNumberUnchecked(v);
   if (!(d >= (double)INT32_MIN && d <= (double)INT32_MAX)) return true;
   return (double)(int32_t)d != d || (d == 0 && signbit(d));
 }
@@ -246,7 +246,7 @@ static inline void sv_tfb_record_iteration(sv_func_t *func, uint8_t *ip, ant_val
   uint8_t *site = sv_tfb_site(func, ip);
   if (!site || vtype(tag) != kTypeNumber) return;
   uint8_t old = *site;
-  sv_tfb_site_update(func, site, old, old | (uint8_t)(1u << ((uint32_t)tod(tag) & 7)));
+  sv_tfb_site_update(func, site, old, old | (uint8_t)(1u << ((uint32_t)Ant_Value_AsNumberUnchecked(tag) & 7)));
 }
 
 static inline void sv_tfb_record1(sv_func_t *func, uint8_t *ip, ant_value_t v) {
@@ -300,7 +300,7 @@ static inline bool sv_tfb_specialization_ready(uint8_t feedback) {
 
 static inline bool sv_tfb_is_word32_number(ant_value_t value) {
   if (vtype(value) != kTypeNumber) return false;
-  double number = tod(value);
+  double number = Ant_Value_AsNumberUnchecked(value);
   return fabs(number) < 0x1p63;
 }
 
@@ -342,7 +342,7 @@ static inline bool sv_tfb_dense_element(
 ) {
   if (vtype(object) != kTypeArray || vtype(key) != kTypeNumber) return false;
 
-  double number = tod(key);
+  double number = Ant_Value_AsNumberUnchecked(key);
   if (!isfinite(number) || number < 0 || number >= (double)UINT32_MAX || trunc(number) != number) return false;
 
   ant_object_t *ptr = js_obj_ptr(js_as_obj(object));
@@ -472,7 +472,7 @@ static inline bool sv_tfb_dense_numeric_put(
       vtype(key) != kTypeNumber)
     return false;
 
-  double number = tod(key);
+  double number = Ant_Value_AsNumberUnchecked(key);
   if (!isfinite(number) || number < 0 ||
       number >= (double)UINT32_MAX || trunc(number) != number)
     return false;

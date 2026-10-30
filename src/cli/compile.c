@@ -8,6 +8,7 @@
 
 #include "ant.h"
 #include "bootstrap.h"
+#include "isolate.h"
 #include "runtime.h"
 #include "utils.h"
 #include "vfs_bundle.h"

@@ -19,14 +19,14 @@ int main(void) {
 
   for (unsigned variant = 0; variant < 4; variant++) {
     ant_value_t array = js_mkarr(js);
-    for (unsigned i = 0; i < 10; i++) js_arr_push(js, array, js_mknum(i));
+    for (unsigned i = 0; i < 10; i++) js_arr_push(js, array, Ant_Value_FromNumber(i));
     if (variant == 1) js_set_finalizer(array, test_finalizer);
-    if (variant == 2) js_set_slot(array, SLOT_CTOR, js_mknum(42));
+    if (variant == 2) js_set_slot(array, SLOT_CTOR, Ant_Value_FromNumber(42));
     if (variant == 3) {
       for (unsigned i = 0; i <= ANT_INOBJ_MAX_SLOTS; i++) {
         char key[16];
         int len = snprintf(key, sizeof(key), "property%u", i);
-        ant_value_t result = js_setprop(js, array, js_mkstr(js, key, (size_t)len), js_mknum(i));
+        ant_value_t result = js_setprop(js, array, js_mkstr(js, key, (size_t)len), Ant_Value_FromNumber(i));
         assert(!is_err(result));
       }
     }

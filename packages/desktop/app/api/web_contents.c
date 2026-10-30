@@ -29,7 +29,7 @@ ant_value_t DesktopWebContentsInspectElement(ant_params_t) {
   if (nargs < 2 || vtype(args[0]) != kTypeNumber || vtype(args[1]) != kTypeNumber)
     return js_mkerr(js, "inspectElement(x, y) requires coordinates");
 
-  if (!ant_desktop_platform_inspect(window, (int)js_getnum(args[0]), (int)js_getnum(args[1])))
+  if (!ant_desktop_platform_inspect(window, (int)Ant_Value_AsNumberUnchecked(args[0]), (int)Ant_Value_AsNumberUnchecked(args[1])))
     return js_mkerr(js, "Chromium is not running for this BrowserWindow");
 
   return js_mkundef();

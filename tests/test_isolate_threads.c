@@ -61,7 +61,7 @@ static double run_once(void) {
 
   ant_value_t result = js_get(js, js_glob(js), "result");
   assert(vtype(result) == kTypeNumber);
-  double value = js_getnum(result);
+  double value = Ant_Value_AsNumberUnchecked(result);
   js_destroy(js);
   return value;
 }

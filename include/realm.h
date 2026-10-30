@@ -3,6 +3,8 @@
 
 #include "isolate.h"
 
+void realm_init_core(ant_t *js);
+
 typedef struct ant_realm_token {
   ant_realm_t *realm;
   uint32_t refs;

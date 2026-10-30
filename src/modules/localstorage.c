@@ -239,7 +239,7 @@ static ant_value_t js_localstorage_key(ant_params_t) {
     return js_mknull();
   }
   
-  double idx = js_getnum(args[0]);
+  double idx = Ant_Value_AsNumberUnchecked(args[0]);
   if (idx < 0) return js_mknull();
   
   size_t index = (size_t)idx;
@@ -259,7 +259,7 @@ static ant_value_t js_localstorage_length(ant_params_t) {
   size_t length = storage_length();
   ant_mutex_unlock(&local_storage_lock);
   
-  return js_mknum((double)length);
+  return Ant_Value_FromNumber((double)length);
 }
 
 // localStorage.setFile(path)

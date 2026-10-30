@@ -97,7 +97,7 @@ static ant_value_t temporal_plain_yearmonth_compare(ant_params_t) {
   int8_t comparison = temporal_rs_PlainYearMonth_compare(one, two);
   temporal_rs_PlainYearMonth_destroy(one);
   temporal_rs_PlainYearMonth_destroy(two);
-  return js_mknum(comparison);
+  return Ant_Value_FromNumber(comparison);
 }
 
 static PlainYearMonth *temporal_plain_yearmonth_this(ant_t *js, const char *method, ant_value_t *err) {
@@ -110,7 +110,7 @@ static PlainYearMonth *temporal_plain_yearmonth_this(ant_t *js, const char *meth
       (void)nargs;                                                                                                     \
       ant_value_t err = js_mkundef();                                                                                  \
       PlainYearMonth *self = temporal_plain_yearmonth_this(js, "Temporal.PlainYearMonth.prototype." #name, &err);      \
-      return self ? js_mknum((double)capi(self)) : err;                                                                \
+      return self ? Ant_Value_FromNumber((double)capi(self)) : err;                                                                \
     }
 
 PLAIN_YEARMONTH_NUMBER_GETTER(year, temporal_rs_PlainYearMonth_year)
@@ -164,7 +164,7 @@ static ant_value_t temporal_plain_yearmonth_get_era_year(ant_params_t) {
   PlainYearMonth *self = temporal_plain_yearmonth_this(js, "Temporal.PlainYearMonth.prototype.eraYear", &err);
   if (!self) return err;
   temporal_rs_PlainYearMonth_era_year_result result = temporal_rs_PlainYearMonth_era_year(self);
-  return result.is_ok ? js_mknum(result.ok) : js_mkundef();
+  return result.is_ok ? Ant_Value_FromNumber(result.ok) : js_mkundef();
 }
 
 static ant_value_t temporal_plain_yearmonth_binary_duration(ant_native_params_t, bool subtract) {

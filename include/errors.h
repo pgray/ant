@@ -61,6 +61,7 @@ void js_print_stack_trace_vm(ant_t *js, FILE *stream);
 void js_capture_stack(ant_t *js, ant_value_t err_obj);
 void js_capture_stack_above(ant_t *js, ant_value_t err_obj, ant_value_t above);
 void js_error_define_stack(ant_t *js, ant_value_t obj, ant_value_t record, ant_value_t text);
+void js_errors_init(ant_t *js, ant_value_t object_proto, ant_value_t function_proto);
 
 ant_value_t js_error_header_text(ant_t *js, ant_value_t obj);
 ant_value_t js_error_display_name(ant_t *js, ant_value_t obj, ant_value_t name);

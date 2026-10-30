@@ -78,15 +78,15 @@ ant_value_t js_mkdate(ant_t *js, double ms) {
   ant_value_t obj = Ant_Object_CreateBare(js);
   if (is_err(obj)) return obj;
   js_set_proto_init(obj, js->builtins.date_proto);
-  js_set_slot(obj, SLOT_DATA, tov(ms));
-  js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_DATE));
+  js_set_slot(obj, SLOT_DATA, Ant_Value_FromNumber(ms));
+  js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_DATE));
   return obj;
 }
 
 bool is_date_instance(ant_value_t value) {
   if (!is_object_type(value)) return false;
   ant_value_t brand = js_get_slot(js_as_obj(value), SLOT_BRAND);
-  return vtype(brand) == kTypeNumber && (int)js_getnum(brand) == BRAND_DATE;
+  return vtype(brand) == kTypeNumber && (int)Ant_Value_AsNumberUnchecked(brand) == BRAND_DATE;
 }
 
 static bool date_this_time_value(ant_t *js, ant_value_t this_val, double *out, ant_value_t *err) {
@@ -96,7 +96,7 @@ static bool date_this_time_value(ant_t *js, ant_value_t this_val, double *out, a
   }
   
   ant_value_t t = js_get_slot(js_as_obj(this_val), SLOT_DATA);
-  *out = (vtype(t) == kTypeNumber) ? tod(t) : JS_NAN;
+  *out = (vtype(t) == kTypeNumber) ? Ant_Value_AsNumberUnchecked(t) : JS_NAN;
   return true;
 }
 
@@ -105,8 +105,8 @@ static ant_value_t date_set_this_time_value(ant_t *js, ant_value_t this_val, dou
     return js_mkerr_typed(js, JS_ERR_TYPE, "not a Date object");
   }
   
-  js_set_slot(js_as_obj(this_val), SLOT_DATA, tov(v));
-  return tov(v);
+  js_set_slot(js_as_obj(this_val), SLOT_DATA, Ant_Value_FromNumber(v));
+  return Ant_Value_FromNumber(v);
 }
 
 static int64_t math_mod(int64_t a, int64_t b) {
@@ -823,7 +823,7 @@ static ant_value_t builtin_Date(ant_params_t) {
     
     if (is_object_type(input) && is_date_instance(input)) {
       ant_value_t tv = js_get_slot(js_as_obj(input), SLOT_DATA);
-      val = (vtype(tv) == kTypeNumber) ? tod(tv) : JS_NAN;
+      val = (vtype(tv) == kTypeNumber) ? Ant_Value_AsNumberUnchecked(tv) : JS_NAN;
       val = date_timeclip(val);
     } else {
       ant_value_t prim = js_to_primitive(js, input, 0);
@@ -851,14 +851,14 @@ static ant_value_t builtin_Date(ant_params_t) {
     val = (i == n) ? date_make_fields(&fields, 1) : JS_NAN;
   }
 
-  js_set_slot(js_as_obj(js->this_val), SLOT_DATA, tov(val));
-  js_set_slot(js_as_obj(js->this_val), SLOT_BRAND, js_mknum(BRAND_DATE));
+  js_set_slot(js_as_obj(js->this_val), SLOT_DATA, Ant_Value_FromNumber(val));
+  js_set_slot(js_as_obj(js->this_val), SLOT_BRAND, Ant_Value_FromNumber(BRAND_DATE));
   
   return js->this_val;
 }
 
 static ant_value_t builtin_Date_UTC(ant_params_t) {
-  if (nargs == 0) return tov(JS_NAN);
+  if (nargs == 0) return Ant_Value_FromNumber(JS_NAN);
 
   date_fields_t fields = {0};
   fields.day = 1;
@@ -867,26 +867,26 @@ static ant_value_t builtin_Date_UTC(ant_params_t) {
 
   for (int i = 0; i < n; i++) {
     double a = js_to_number(js, args[i]);
-    if (!isfinite(a)) return tov(JS_NAN);
+    if (!isfinite(a)) return Ant_Value_FromNumber(JS_NAN);
     double t = trunc(a);
     date_fields_set(&fields, (date_field_index_t)i, t);
     if (i == 0 && fields.year >= 0 && fields.year < 100) fields.year += 1900;
   }
 
-  return tov(date_make_fields(&fields, 0));
+  return Ant_Value_FromNumber(date_make_fields(&fields, 0));
 }
 
 static ant_value_t builtin_Date_parse(ant_params_t) {
-  if (nargs < 1) return tov(JS_NAN);
+  if (nargs < 1) return Ant_Value_FromNumber(JS_NAN);
   double v;
   if (!date_parse_string_to_ms(js, args[0], &v)) {
     return js_mkerr_typed(js, JS_ERR_INTERNAL, "Date parse failed");
   }
-  return tov(v);
+  return Ant_Value_FromNumber(v);
 }
 
 static ant_value_t builtin_Date_now(ant_params_t) {
-  return tov((double)date_now());
+  return Ant_Value_FromNumber((double)date_now());
 }
 
 static ant_value_t date_get_field(ant_t *js, date_get_field_spec_t spec) {
@@ -895,10 +895,10 @@ static ant_value_t date_get_field(ant_t *js, date_get_field_spec_t spec) {
 
   int res = date_extract_fields(js, js->this_val, &fields, spec.local_time, 0, &err);
   if (res < 0) return err;
-  if (!res) return tov(JS_NAN);
+  if (!res) return Ant_Value_FromNumber(JS_NAN);
 
   if (spec.legacy_get_year) fields.year -= 1900;
-  return tov(date_fields_get(&fields, spec.field));
+  return Ant_Value_FromNumber(date_fields_get(&fields, spec.field));
 }
 
 static ant_value_t date_set_field(ant_native_params_t, date_set_field_spec_t spec) {
@@ -921,7 +921,7 @@ static ant_value_t date_set_field(ant_native_params_t, date_set_field_spec_t spe
     date_fields_set(&fields, (date_field_index_t)(spec.first_field + i), trunc(a));
   }
 
-  if (!res) return tov(JS_NAN);
+  if (!res) return Ant_Value_FromNumber(JS_NAN);
   if (nargs > 0) d = date_make_fields(&fields, spec.local_time);
 
   return date_set_this_time_value(js, js->this_val, d);
@@ -931,7 +931,7 @@ static ant_value_t builtin_Date_valueOf(ant_params_t) {
   double v;
   ant_value_t err;
   if (!date_this_time_value(js, js->this_val, &v, &err)) return err;
-  return tov(v);
+  return Ant_Value_FromNumber(v);
 }
 
 static ant_value_t builtin_Date_getTime(ant_params_t) {
@@ -982,8 +982,8 @@ static ant_value_t builtin_Date_getTimezoneOffset(ant_params_t) {
   double v;
   ant_value_t err;
   if (!date_this_time_value(js, js->this_val, &v, &err)) return err;
-  if (isnan(v)) return tov(JS_NAN);
-  return tov((double)get_timezone_offset((int64_t)trunc(v)));
+  if (isnan(v)) return Ant_Value_FromNumber(JS_NAN);
+  return Ant_Value_FromNumber((double)get_timezone_offset((int64_t)trunc(v)));
 }
 
 static ant_value_t builtin_Date_setTime(ant_params_t) {
@@ -1163,7 +1163,7 @@ static ant_value_t builtin_Date_setYear(ant_params_t) {
     if (y >= 0 && y < 100) y += 1900;
   }
 
-  ant_value_t darg = tov(y);
+  ant_value_t darg = Ant_Value_FromNumber(y);
   static const date_set_field_spec_t kSetYearSpec = {
     DATE_FIELD_YEAR, DATE_FIELD_MONTH, true
   };
@@ -1210,7 +1210,7 @@ static ant_value_t builtin_Date_toJSON(ant_params_t) {
   ant_value_t tv = date_to_primitive_number(js, obj);
   if (is_err(tv)) return tv;
 
-  if (vtype(tv) == kTypeNumber && !isfinite(tod(tv))) {
+  if (vtype(tv) == kTypeNumber && !isfinite(Ant_Value_AsNumberUnchecked(tv))) {
     return js_mknull();
   }
 

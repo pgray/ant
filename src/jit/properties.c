@@ -1141,7 +1141,7 @@ static bool mir_emit_get_field_native_getter(
   INSN(MIR_JMP, LBL(done));
   
   MIR_append_insn(ctx, fn, zero);
-  mir_load_imm(ctx, fn, dst, js_mknum(0.0));
+  mir_load_imm(ctx, fn, dst, Ant_Value_FromNumber(0.0));
   MIR_append_insn(ctx, fn, done);
   
 #undef INSN

@@ -1,11 +1,7 @@
+// TODO: split up
+
 #ifndef ANT_H
 #define ANT_H
-
-#pragma once
-#define PCRE2_CODE_UNIT_WIDTH 8
-
-#include "types.h"
-#include "common.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -13,6 +9,10 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <inttypes.h>
+
+#include "types.h"
+#include "common.h"
+#include "value.h"
 
 static constexpr uint8_t CFUNC_HAS_PROTOTYPE  = 0x01u;
 static constexpr uint8_t CFUNC_IS_CONSTRUCTOR = 0x02u;
@@ -42,9 +42,6 @@ ant_t *ant_create(const ant_isolate_options_t *options);
 
 // clean up after a thread
 void ant_thread_cleanup(void);
-
-// globalThis
-ant_value_t js_glob(ant_t *);
 
 void init_intrinsic_symbols(ant_t *js);
 void js_init_function_has_instance(ant_t *js);
@@ -84,26 +81,16 @@ js_eval_result_t js_eval_bytecode_repl(ant_t *, const char *, size_t);
 
 void js_destroy(ant_t *);
 bool js_truthy(ant_t *, ant_value_t);
-void js_setstackbase(ant_t *, void *);
-void js_setstacklimit(ant_t *, size_t);
 
 uint32_t js_to_uint32(double d);
 int32_t js_to_int32(double d);
 
 bool js_chkargs(ant_value_t *, int, const char *);
-void js_set_filename(ant_t *, const char *);
 void js_stats(ant_t *, size_t *total, size_t *min, size_t *cstacksize);
 
-ant_value_t js_mkundef(void);
-ant_value_t js_mknull(void);
-ant_value_t js_mknum(double);
 ant_value_t js_mkpromise(ant_t *js);
 ant_value_t js_mkgenerator(ant_t *js);
 
-ant_value_t js_getthis(ant_t *);
-void js_setthis(ant_t *, ant_value_t);
-
-ant_value_t js_getcurrentfunc(ant_t *);
 ant_value_t js_get(ant_t *, ant_value_t, const char *);
 ant_value_t js_getprop_proto(ant_t *, ant_value_t, const char *);
 ant_value_t js_getprop_fallback(ant_t *js, ant_value_t obj, const char *name);
@@ -134,7 +121,6 @@ ant_value_t js_get_sym(ant_t *, ant_value_t obj, ant_value_t sym);
 ant_value_t js_get_symbol(ant_t *, ant_value_t obj, const char *key);
 ant_value_t js_get_sym_with_receiver(ant_t *, ant_value_t obj, ant_value_t sym, ant_value_t receiver);
 
-ant_value_t Ant_Object_CreateBare(ant_t *);
 ant_value_t Ant_Object_Create(ant_t *);
 ant_value_t js_mkarr(ant_t *);
 
@@ -179,9 +165,7 @@ ant_value_t js_setprop_readonly_nonconfigurable(ant_t *, ant_value_t obj, const 
 ant_object_t *js_obj_ptr(ant_value_t val);
 ant_value_t js_obj_from_ptr(ant_object_t *obj);
 
-double js_getnum(ant_value_t val);
 char *js_getstr(ant_t *js, ant_value_t val, size_t *len);
-
 const char *js_str(ant_t *, ant_value_t val);
 const char *get_str_prop(ant_t *js, ant_value_t obj, const char *key, ant_offset_t klen, ant_offset_t *out_len);
 

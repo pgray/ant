@@ -17,15 +17,23 @@ void js_define_methods(
   size_t count, uint8_t attrs
 );
 
+bool js_cfunc_has_prototype(ant_value_t cfunc);
+
 ant_value_t js_mkfun_dyn(ant_cfunc_t fn);
 ant_value_t js_cfunc_noop(ant_params_t);
 ant_value_t js_mkfun_meta(const ant_cfunc_meta_t *meta);
 ant_value_t js_mkfun_site(ant_cfunc_site_t *site);
+ant_value_t js_cfunc_name_value(ant_t *js, ant_value_t cfunc);
+ant_value_t js_cfunc_length_value(ant_value_t cfunc);
 
 ant_value_t js_heavy_mkfun(ant_t *js, ant_value_t (*fn)(ant_params_t), ant_value_t data);
 ant_value_t js_heavy_mkfun_cfunc(ant_t *js, ant_value_t cfunc, ant_value_t data);
 ant_value_t js_heavy_mkfun_native(ant_t *js, ant_value_t (*fn)(ant_params_t), void *ptr, uint32_t tag);
 ant_value_t js_make_ctor_cfunc(ant_t *js, ant_value_t cfunc, ant_value_t proto, uint8_t proto_attrs);
+ant_value_t js_expose_cfunc_for_key(ant_t *js, ant_value_t value, const char *key, size_t key_len);
+
+ant_value_t setup_func_prototype(ant_t *js, ant_value_t func);
+ant_value_t setup_func_prototype_property(ant_t *js, ant_value_t func, bool mark_constructor);
 
 #define Ant_Function_CreateWithMeta(fn, name, arity, flags) ({ \
   static ant_cfunc_site_t _ant_cfunc_site = {                  \

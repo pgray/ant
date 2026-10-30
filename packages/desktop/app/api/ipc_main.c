@@ -10,12 +10,12 @@ ant_value_t DesktopNativeIpcReply(ant_params_t) {
       vtype(args[3]) != kTypeString) {
     return js_mkerr(js, "invalid native IPC reply");
   }
-  ant_desktop_window_state_t *window = ant_desktop_window_find((ant_desktop_window_id_t)js_getnum(args[0]));
+  ant_desktop_window_state_t *window = ant_desktop_window_find((ant_desktop_window_id_t)Ant_Value_AsNumberUnchecked(args[0]));
   if (!window) return js_mkerr(js, "IPC BrowserWindow is closed");
   size_t payload_length = 0;
   const char *payload = js_getstr(js, args[3], &payload_length);
   int operation = js_truthy(js, args[2]) ? 0 : 1;
-  if (!ant_desktop_platform_send_ipc(window, operation, (uint64_t)js_getnum(args[1]), NULL, 0, payload,
+  if (!ant_desktop_platform_send_ipc(window, operation, (uint64_t)Ant_Value_AsNumberUnchecked(args[1]), NULL, 0, payload,
                                      payload_length)) {
     return js_mkerr(js, "Chromium is not running for this BrowserWindow");
   }

@@ -138,16 +138,19 @@ static inline void *vptr_masked(ant_value_t value, uint64_t tag_mask) {
   return ant_cage_decode(vdata(value) & ~tag_mask);
 }
 
-static inline double tod(ant_value_t value) {
+static inline double Ant_Value_AsNumberUnchecked(ant_value_t value) {
   union { ant_value_t value; double number; } bits = {value};
   return bits.number;
 }
 
-static inline ant_value_t tov(double number) {
+static inline ant_value_t Ant_Value_FromNumber(double number) {
   union { double number; ant_value_t value; } bits = {number};
   if (__builtin_expect(isnan(number), 0) && bits.value > NANBOX_PREFIX)
     return UINT64_C(0x7FF8000000000000); // canonical NaN
   return bits.value;
 }
+
+static inline ant_value_t js_mkundef(void) { return mkval(kTypeUndefined, 0); }
+static inline ant_value_t js_mknull(void) { return mkval(kTypeNull, 0); }
 
 #endif

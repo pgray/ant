@@ -143,7 +143,7 @@ static void lock_list_remove(navigator_locks_t *client, lock_request_t *req) {
 
 static lock_request_t *lock_find(navigator_locks_t *client, ant_value_t id) {
   if (!client || vtype(id) != kTypeNumber) return NULL;
-  uint64_t want = (uint64_t)js_getnum(id);
+  uint64_t want = (uint64_t)Ant_Value_AsNumberUnchecked(id);
   for (lock_request_t *req = client->requests; req; req = req->next)
     if (req->id == want) return req;
   return NULL;
@@ -376,7 +376,7 @@ static void lock_await_callback(ant_t *js, lock_request_t *req, ant_value_t resu
 
   ant_value_t data = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, data);
-  js_set(js, data, "lockId", req ? js_mknum((double)req->id) : js_mkundef());
+  js_set(js, data, "lockId", req ? Ant_Value_FromNumber((double)req->id) : js_mkundef());
   js_set(js, data, "outerPromise", outer_promise);
 
   ant_value_t on_resolve = js_heavy_mkfun(js, lock_then_handler, data);
@@ -599,7 +599,7 @@ static ant_value_t locks_request(ant_params_t) {
   lock_list_append(client, req);
   if (has_signal && lock_state(req) == LOCK_PENDING) {
     req->signal = opts.signal;
-    req->abort_fn = js_heavy_mkfun(js, lock_abort_handler, js_mknum((double)req->id));
+    req->abort_fn = js_heavy_mkfun(js, lock_abort_handler, Ant_Value_FromNumber((double)req->id));
     abort_signal_add_listener(js, opts.signal, req->abort_fn);
   }
 
@@ -679,7 +679,7 @@ static const char *get_platform_string(void) {
 void init_navigator_module(ant_t *js) {
   ant_value_t navigator_obj = Ant_Object_Create(js);
   
-  js_set(js, navigator_obj, "hardwareConcurrency", js_mknum((double)get_hardware_concurrency()));
+  js_set(js, navigator_obj, "hardwareConcurrency", Ant_Value_FromNumber((double)get_hardware_concurrency()));
   js_set(js, navigator_obj, "language", js_mkstr(js, "en-US", 5));
   
   ant_value_t languages_arr = js_mkarr(js);

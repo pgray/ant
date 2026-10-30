@@ -92,11 +92,11 @@ static ant_value_t async_resource_emitDestroy(ant_params_t) {
 }
 
 static ant_value_t async_resource_asyncId(ant_params_t) {
-  return js_mknum(0);
+  return Ant_Value_FromNumber(0);
 }
 
 static ant_value_t async_resource_triggerAsyncId(ant_params_t) {
-  return js_mknum(0);
+  return Ant_Value_FromNumber(0);
 }
 
 static ant_value_t async_hook_enable(ant_params_t) {
@@ -115,11 +115,11 @@ static ant_value_t async_hooks_createHook(ant_params_t) {
 }
 
 static ant_value_t async_hooks_executionAsyncId(ant_params_t) {
-  return js_mknum(1);
+  return Ant_Value_FromNumber(1);
 }
 
 static ant_value_t async_hooks_triggerAsyncId(ant_params_t) {
-  return js_mknum(0);
+  return Ant_Value_FromNumber(0);
 }
 
 static ant_value_t async_hooks_executionAsyncResource(ant_params_t) {

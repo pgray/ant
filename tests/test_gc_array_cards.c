@@ -43,7 +43,7 @@ static void check_tag(ant_t *js, const char *array_name, uint32_t idx, double ta
   assert(vtype(element) == kTypeObject);
   assert(js_obj_ptr(element)->mark_epoch != ANT_GC_DEAD);
   ant_value_t value = js_get(js, element, "tag");
-  assert(vtype(value) == kTypeNumber && js_getnum(value) == tag);
+  assert(vtype(value) == kTypeNumber && Ant_Value_AsNumberUnchecked(value) == tag);
 }
 
 static ant_object_t *old_array(ant_t *js, const char *name, unsigned length) {

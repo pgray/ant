@@ -214,7 +214,7 @@ static ant_value_t lp_current(lp_state_t *st, int field, const char *name) {
 
 static ant_value_t lp_result(lp_state_t *st, uint32_t flags) {
   ant_value_t items[LP_FIELD_COUNT + 1];
-  items[0] = js_mknum((double)(flags | st->flags | st->assigned));
+  items[0] = Ant_Value_FromNumber((double)(flags | st->flags | st->assigned));
   for (int i = 0; i < LP_FIELD_COUNT; i++) items[i + 1] = st->values[i];
   return js_mkarr_dense_literal(st->js, items, LP_FIELD_COUNT + 1);
 }

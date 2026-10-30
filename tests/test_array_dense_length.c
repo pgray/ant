@@ -18,15 +18,15 @@ int main(void) {
   ant_object_t *obj = js_obj_ptr(array);
   assert(obj->flags.dense_length_fits);
   for (unsigned i = 0; i < 1000; i++) {
-    js_arr_push(js, array, js_mknum(i));
+    js_arr_push(js, array, Ant_Value_FromNumber(i));
     assert(obj->flags.dense_length_fits);
     assert(obj->u.array.len <= obj->u.array.cap);
   }
-  assert(vtype(js_setprop(js, array, length, js_mknum(UINT32_MAX))) != kTypeError);
+  assert(vtype(js_setprop(js, array, length, Ant_Value_FromNumber(UINT32_MAX))) != kTypeError);
   assert(obj->u.array.len == UINT32_MAX);
   assert(!obj->flags.dense_length_fits);
-  assert(js_getnum(js_arr_get(js, array, 999)) == 999);
-  assert(vtype(js_setprop(js, array, length, js_mknum(2))) != kTypeError);
+  assert(Ant_Value_AsNumberUnchecked(js_arr_get(js, array, 999)) == 999);
+  assert(vtype(js_setprop(js, array, length, Ant_Value_FromNumber(2))) != kTypeError);
   assert(obj->u.array.len == 2);
   assert(obj->flags.dense_length_fits);
   assert(vtype(js_arr_get(js, array, 999)) == kTypeUndefined);

@@ -655,12 +655,15 @@ static int64_t a64_signed_for(bool x, uint64_t value) {
 static void a64_fp_imm(text_t *t, uint32_t imm8) {
   uint64_t sign = imm8 >> 7, b = (imm8 >> 6) & 1;
   uint64_t exponent = ((b ^ 1) << 10) | (b ? 0xffu << 2 : 0) | ((imm8 >> 4) & 3);
+  
   double value = asm_f64_from_bits((sign << 63) | (exponent << 52) | ((uint64_t)(imm8 & 0xf) << 48));
   char buf[40];
+  
   for (int precision = 1; precision <= 17; precision++) {
     snprintf(buf, sizeof(buf), "%.*g", precision, value);
     if (strtod(buf, NULL) == value) break;
   }
+  
   put(t, "#%s%s", buf, strpbrk(buf, ".e") ? "" : ".0");
 }
 

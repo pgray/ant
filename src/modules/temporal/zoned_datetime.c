@@ -252,7 +252,7 @@ static ant_value_t temporal_zdt_compare(ant_params_t) {
   int8_t comparison = temporal_rs_ZonedDateTime_compare_instant(one, two);
   temporal_rs_ZonedDateTime_destroy(one);
   temporal_rs_ZonedDateTime_destroy(two);
-  return js_mknum(comparison);
+  return Ant_Value_FromNumber(comparison);
 }
 
 static ZonedDateTime *temporal_zdt_this(ant_t *js, const char *method, ant_value_t *err) {
@@ -265,7 +265,7 @@ static ZonedDateTime *temporal_zdt_this(ant_t *js, const char *method, ant_value
       (void)nargs;                                                                                                     \
       ant_value_t err = js_mkundef();                                                                                  \
       ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype." #name, &err);                    \
-      return self ? js_mknum((double)capi(self)) : err;                                                                \
+      return self ? Ant_Value_FromNumber((double)capi(self)) : err;                                                                \
     }
 
 ZDT_NUMBER_GETTER(year, temporal_rs_ZonedDateTime_year)
@@ -324,7 +324,7 @@ static ant_value_t temporal_zdt_get_week_of_year(ant_params_t) {
   ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.weekOfYear", &err);
   if (!self) return err;
   temporal_rs_ZonedDateTime_week_of_year_result r = temporal_rs_ZonedDateTime_week_of_year(self);
-  return r.is_ok ? js_mknum(r.ok) : js_mkundef();
+  return r.is_ok ? Ant_Value_FromNumber(r.ok) : js_mkundef();
 }
 static ant_value_t temporal_zdt_get_year_of_week(ant_params_t) {
   (void)args;
@@ -333,7 +333,7 @@ static ant_value_t temporal_zdt_get_year_of_week(ant_params_t) {
   ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.yearOfWeek", &err);
   if (!self) return err;
   temporal_rs_ZonedDateTime_year_of_week_result r = temporal_rs_ZonedDateTime_year_of_week(self);
-  return r.is_ok ? js_mknum(r.ok) : js_mkundef();
+  return r.is_ok ? Ant_Value_FromNumber(r.ok) : js_mkundef();
 }
 static ant_value_t temporal_zdt_get_in_leap_year(ant_params_t) {
   (void)args;
@@ -363,7 +363,7 @@ static ant_value_t temporal_zdt_get_era_year(ant_params_t) {
   ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.eraYear", &err);
   if (!self) return err;
   temporal_rs_ZonedDateTime_era_year_result r = temporal_rs_ZonedDateTime_era_year(self);
-  return r.is_ok ? js_mknum(r.ok) : js_mkundef();
+  return r.is_ok ? Ant_Value_FromNumber(r.ok) : js_mkundef();
 }
 static ant_value_t temporal_zdt_get_offset(ant_params_t) {
   (void)args;
@@ -387,7 +387,7 @@ static ant_value_t temporal_zdt_get_hours_in_day(ant_params_t) {
   if (!self) return err;
   temporal_rs_ZonedDateTime_hours_in_day_with_provider_result r =
     temporal_rs_ZonedDateTime_hours_in_day_with_provider(self, temporal_provider(js));
-  return r.is_ok ? js_mknum(r.ok) : temporal_error(js, r.err);
+  return r.is_ok ? Ant_Value_FromNumber(r.ok) : temporal_error(js, r.err);
 }
 
 static ant_value_t temporal_zdt_binary_duration(ant_native_params_t, bool subtract) {

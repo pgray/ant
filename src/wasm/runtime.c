@@ -155,10 +155,10 @@ ant_value_t wasm_value_from_i64(ant_t *js, int64_t value) {
 
 ant_value_t wasm_value_to_js(ant_t *js, const wasm_val_t *value) {
   switch (value->kind) {
-    case WASM_I32: return js_mknum((double)value->of.i32);
+    case WASM_I32: return Ant_Value_FromNumber((double)value->of.i32);
     case WASM_I64: return wasm_value_from_i64(js, value->of.i64);
-    case WASM_F32: return js_mknum((double)value->of.f32);
-    case WASM_F64: return js_mknum(value->of.f64);
+    case WASM_F32: return Ant_Value_FromNumber((double)value->of.f32);
+    case WASM_F64: return Ant_Value_FromNumber(value->of.f64);
     case WASM_EXTERNREF:
       return value->of.ref ? js_mkundef() : js_mknull();
     case WASM_FUNCREF: {
@@ -269,7 +269,7 @@ ant_value_t wasm_wrap_extern_object(ant_t *js, wasm_extern_wrap_kind_t kind, ant
 
   ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_proto_init(obj, proto);
-  js_set_slot(obj, SLOT_BRAND, js_mknum(brand));
+  js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(brand));
   js_set_native(obj, handle, WASM_EXTERN_NATIVE_TAG);
   if (is_object_type(owner)) js_set_slot_wb(js, obj, SLOT_ENTRIES, owner);
   return obj;

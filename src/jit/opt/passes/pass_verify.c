@@ -13,7 +13,7 @@ typedef struct {
   uint32_t count;
 } pass_errors_t;
 
-[[gnu::format(printf, 2, 3)]] static void pass_error(pass_errors_t *errors, const char *format, ...) {
+static __attribute__((format(printf, 2, 3))) void pass_error(pass_errors_t *errors, const char *format, ...) {
   char buffer[512];
   va_list args;
   va_start(args, format);

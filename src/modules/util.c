@@ -588,7 +588,7 @@ static int util_inspect_depth(ant_native_params_t) {
   if (vtype(depth) == kTypeNull) return MAX_STRINGIFY_DEPTH;
   if (vtype(depth) != kTypeNumber) return ANT_INSPECT_MAX_DEPTH;
   
-  double d = js_getnum(depth);
+  double d = Ant_Value_AsNumberUnchecked(depth);
   if (!(d >= 0)) return ANT_INSPECT_MAX_DEPTH;
   
   return d >= MAX_STRINGIFY_DEPTH ? MAX_STRINGIFY_DEPTH : (int)d;
@@ -1151,7 +1151,7 @@ static bool util_style_should_colorize(ant_t *js, ant_value_t options) {
   if (!is_callable(get_depth)) return true;
 
   ant_value_t depth = sv_vm_call(js->vm, js, get_depth, stream, NULL, 0, NULL, js_mkundef());
-  return vtype(depth) == kTypeNumber && js_getnum(depth) > 2;
+  return vtype(depth) == kTypeNumber && Ant_Value_AsNumberUnchecked(depth) > 2;
 }
 
 static ant_value_t util_style_text(ant_params_t) {
@@ -1200,7 +1200,7 @@ static ant_value_t util_style_text(ant_params_t) {
 }
 
 static ant_value_t util_promisify_callback(ant_params_t) {
-  ant_value_t fn = js_getcurrentfunc(js);
+  ant_value_t fn = js->current_func;
   ant_value_t ctx = js_get_slot(fn, SLOT_DATA);
   if (!is_object_type(ctx)) return js_mkundef();
 
@@ -1233,7 +1233,7 @@ static ant_value_t util_promisify_callback(ant_params_t) {
 }
 
 static ant_value_t util_promisified_call(ant_params_t) {
-  ant_value_t fn = js_getcurrentfunc(js);
+  ant_value_t fn = js->current_func;
   ant_value_t original = js_get_slot(fn, SLOT_DATA);
   if (!is_callable(original)) return js_mkerr(js, "promisified target is not callable");
 
@@ -1307,7 +1307,7 @@ static ant_value_t util_callbackify_error(ant_params_t) {
 }
 
 static ant_value_t util_callbackified_call(ant_params_t) {
-  ant_value_t fn = js_getcurrentfunc(js);
+  ant_value_t fn = js->current_func;
   ant_value_t original = js_get_slot(fn, SLOT_DATA);
   
   if (!is_callable(original)) return js_mkerr(js, "callbackified target is not callable");
@@ -1355,7 +1355,7 @@ static ant_value_t util_callbackified_call(ant_params_t) {
 }
 
 static ant_value_t util_deprecated_call(ant_params_t) {
-  ant_value_t fn = js_getcurrentfunc(js);
+  ant_value_t fn = js->current_func;
   ant_value_t ctx = js_get_slot(fn, SLOT_DATA);
   if (!is_object_type(ctx)) return js_mkundef();
 

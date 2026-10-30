@@ -187,7 +187,7 @@ static inline ant_value_t sv_spread_into(sv_vm_t *vm, ant_t *js, ant_value_t arr
 
   if (vtype(iterable) == kTypeArray && js_array_iteration_default(js, iterable)) {
     ant_value_t spread = js_arr_spread_into(js, arr, iterable);
-    return is_err(spread) ? spread : tov(0);
+    return is_err(spread) ? spread : Ant_Value_FromNumber(0);
   }
 
   GC_ROOT_SAVE(root_mark, js);
@@ -209,7 +209,7 @@ static inline ant_value_t sv_spread_into(sv_vm_t *vm, ant_t *js, ant_value_t arr
   }
 
   GC_ROOT_RESTORE(js, root_mark);
-  return is_err(status) ? status : tov(0);
+  return is_err(status) ? status : Ant_Value_FromNumber(0);
 }
 
 static inline ant_value_t sv_op_spread(sv_vm_t *vm, ant_t *js) {
@@ -252,7 +252,7 @@ static inline ant_value_t sv_op_define_class(
     ant_value_t func_proto = js_get_slot(js->global, SLOT_FUNC_PROTO);
     
     if (vtype(func_proto) == kTypeFunction) js_set_proto_init(ctor_obj, func_proto);
-    mkprop_interned_exact(js, ctor_obj, js->intern.length, tov(0), ANT_PROP_ATTR_CONFIGURABLE);
+    mkprop_interned_exact(js, ctor_obj, js->intern.length, Ant_Value_FromNumber(0), ANT_PROP_ATTR_CONFIGURABLE);
   }
 
   proto = mkobj(js, 0);

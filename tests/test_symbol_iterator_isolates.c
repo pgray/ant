@@ -33,13 +33,13 @@ static ant_value_t Next(ant_params_t) {
 }
 
 static ant_value_t OtherNext(ant_params_t) {
-  return js_iter_result(js, true, js_mknum(99));
+  return js_iter_result(js, true, Ant_Value_FromNumber(99));
 }
 
 static bool Advance(ant_t *js, iterator_t *it, ant_value_t *out) {
   (void)js;
   (void)it;
-  *out = js_mknum(17);
+  *out = Ant_Value_FromNumber(17);
   return true;
 }
 
@@ -47,13 +47,13 @@ static void CheckArray(ant_t *js) {
   GC_ROOT_SAVE(mark, js);
   ant_value_t array = js_mkarr(js);
   GC_ROOT_PIN(js, array);
-  js_arr_push(js, array, js_mknum(42));
+  js_arr_push(js, array, Ant_Value_FromNumber(42));
   iterator_t it;
   assert(js_iter_open(js, array, &it));
   GC_ROOT_PIN(js, it.iterator);
   assert(it.advance);
   ant_value_t value;
-  assert(js_iter_next(js, &it, &value) && js_getnum(value) == 42);
+  assert(js_iter_next(js, &it, &value) && Ant_Value_AsNumberUnchecked(value) == 42);
   assert(!js_iter_next(js, &it, &value));
   ant_value_t ctor = js_get(js, js->global, "Symbol");
   assert(js_get(js, ctor, "iterator") == js->sym.iterator_sym);
@@ -87,10 +87,10 @@ static void CheckGrowth(ant_t *js) {
     iterator_t it;
     assert(js_iter_open(js, iterator, &it) && it.advance == Advance);
     ant_value_t value;
-    assert(js_iter_next(js, &it, &value) && js_getnum(value) == 17);
+    assert(js_iter_next(js, &it, &value) && Ant_Value_AsNumberUnchecked(value) == 17);
     js_set(js, iterator, "next", Ant_Function_Create(OtherNext));
     assert(js_iter_open(js, iterator, &it) && !it.advance);
-    assert(js_iter_next(js, &it, &value) && js_getnum(value) == 99);
+    assert(js_iter_next(js, &it, &value) && Ant_Value_AsNumberUnchecked(value) == 99);
     GC_ROOT_RESTORE(js, mark);
   }
 }

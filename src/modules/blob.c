@@ -191,7 +191,7 @@ static ant_value_t blob_wrap(ant_t *js, blob_data_t *bd) {
   ant_value_t obj = Ant_Object_CreateBare(js);
 
   js_set_proto_init(obj, js->builtins.blob_proto);
-  js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_BLOB));
+  js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_BLOB));
   js_set_native(obj, bd, BLOB_NATIVE_TAG);
   js_set_finalizer(obj, blob_finalize);
 
@@ -211,7 +211,7 @@ ant_value_t blob_create_shared(ant_t *js, blob_storage_t *storage, const char *t
 static ant_value_t blob_get_size(ant_params_t) {
   (void)args; (void)nargs;
   blob_data_t *bd = blob_get_data(js->this_val);
-  return js_mknum(bd ? (double)bd->size : 0);
+  return Ant_Value_FromNumber(bd ? (double)bd->size : 0);
 }
 
 static ant_value_t blob_get_type(ant_params_t) {
@@ -231,7 +231,7 @@ static ant_value_t file_get_name(ant_params_t) {
 static ant_value_t file_get_last_modified(ant_params_t) {
   (void)args; (void)nargs;
   blob_data_t *bd = blob_get_data(js->this_val);
-  return js_mknum(bd ? (double)bd->last_modified : 0);
+  return Ant_Value_FromNumber(bd ? (double)bd->last_modified : 0);
 }
 
 static ant_value_t js_blob_text(ant_params_t) {
@@ -385,7 +385,7 @@ static ant_value_t js_blob_ctor(ant_params_t) {
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.blob_proto, call_new_target);
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
 
-  js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_BLOB));
+  js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_BLOB));
   js_set_native(obj, bd, BLOB_NATIVE_TAG);
   js_set_finalizer(obj, blob_finalize);
   
@@ -456,7 +456,7 @@ static ant_value_t js_file_ctor(ant_params_t) {
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.file_proto, call_new_target);
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
 
-  js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_FILE));
+  js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_FILE));
   js_set_native(obj, bd, BLOB_NATIVE_TAG);
   js_set_finalizer(obj, blob_finalize);
   

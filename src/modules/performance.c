@@ -40,7 +40,7 @@ static double perf_now(ant_t *js) {
 
 // performance.now()
 static ant_value_t js_performance_now(ant_params_t) {
-  return js_mknum(perf_now(js));
+  return Ant_Value_FromNumber(perf_now(js));
 }
 
 void Ant_Performance_MarkLoopStart(ant_t *js) {
@@ -56,16 +56,16 @@ static bool perf_elu_read(ant_t *js, ant_value_t value, perf_elu_t *out) {
   if (!is_object_type(value)) return false;
   ant_value_t idle = js_get(js, value, "idle");
   ant_value_t active = js_get(js, value, "active");
-  out->idle = vtype(idle) == kTypeNumber ? js_getnum(idle) : 0;
-  out->active = vtype(active) == kTypeNumber ? js_getnum(active) : 0;
+  out->idle = vtype(idle) == kTypeNumber ? Ant_Value_AsNumberUnchecked(idle) : 0;
+  out->active = vtype(active) == kTypeNumber ? Ant_Value_AsNumberUnchecked(active) : 0;
   return true;
 }
 
 static ant_value_t perf_elu_result(ant_t *js, double idle, double active, double utilization) {
   ant_value_t obj = Ant_Object_Create(js);
-  js_set(js, obj, "idle", js_mknum(idle));
-  js_set(js, obj, "active", js_mknum(active));
-  js_set(js, obj, "utilization", js_mknum(utilization));
+  js_set(js, obj, "idle", Ant_Value_FromNumber(idle));
+  js_set(js, obj, "active", Ant_Value_FromNumber(active));
+  js_set(js, obj, "utilization", Ant_Value_FromNumber(utilization));
   return obj;
 }
 
@@ -113,7 +113,7 @@ static ant_value_t js_performance_elu(ant_params_t) {
 // performance.toJSON()
 static ant_value_t js_performance_to_json(ant_params_t) {
   ant_value_t obj = Ant_Object_Create(js);
-  js_set(js, obj, "timeOrigin", js_mknum(js->perf_time_origin_ms));
+  js_set(js, obj, "timeOrigin", Ant_Value_FromNumber(js->perf_time_origin_ms));
   return obj;
 }
 
@@ -281,7 +281,7 @@ static ant_value_t js_eld_reset(ant_params_t) {
 static ant_value_t eld_read_percentile(ant_t *js, ant_value_t arg, double *out) {
   if (vtype(arg) != kTypeNumber)
     return js_mkerr_code(js, JS_ERR_TYPE, "ERR_INVALID_ARG_TYPE", "The \"percentile\" argument must be of type number");
-  double p = js_getnum(arg);
+  double p = Ant_Value_AsNumberUnchecked(arg);
   if (!(p > 0 && p <= 100)) {
     char msg[128];
     snprintf(msg, sizeof(msg), "The value of \"percentile\" is out of range. It must be > 0 && <= 100. Received %g", p);
@@ -298,7 +298,7 @@ static ant_value_t js_eld_percentile(ant_params_t) {
   double p = 0;
   err = eld_read_percentile(js, nargs > 0 ? args[0] : js_mkundef(), &p);
   if (is_err(err)) return err;
-  return js_mknum((double)hist_percentile(&m->hist, p));
+  return Ant_Value_FromNumber((double)hist_percentile(&m->hist, p));
 }
 
 static ant_value_t js_eld_percentile_bigint(ant_params_t) {
@@ -322,18 +322,18 @@ static ant_value_t js_eld_percentiles(ant_params_t) {
   const perf_histogram_t *h = &m->hist;
 
   if (h->count == 0) {
-    collections_map_store_cloned_entry(js, entries, js_mknum(100), js_mknum(0));
+    collections_map_store_cloned_entry(js, entries, Ant_Value_FromNumber(100), Ant_Value_FromNumber(0));
     return map;
   }
 
-  collections_map_store_cloned_entry(js, entries, js_mknum(0), js_mknum((double)h->min));
+  collections_map_store_cloned_entry(js, entries, Ant_Value_FromNumber(0), Ant_Value_FromNumber((double)h->min));
   for (int i = 1; i < 64; i++) {
     double p = 100.0 - 100.0 / (double)((uint64_t)1 << i);
     uint64_t value = hist_percentile(h, p);
-    collections_map_store_cloned_entry(js, entries, js_mknum(p), js_mknum((double)value));
+    collections_map_store_cloned_entry(js, entries, Ant_Value_FromNumber(p), Ant_Value_FromNumber((double)value));
     if (value >= h->max) break;
   }
-  collections_map_store_cloned_entry(js, entries, js_mknum(100), js_mknum((double)h->max));
+  collections_map_store_cloned_entry(js, entries, Ant_Value_FromNumber(100), Ant_Value_FromNumber((double)h->max));
   return map;
 }
 
@@ -347,16 +347,16 @@ static ant_value_t js_eld_percentiles(ant_params_t) {
     return expr;                          \
   }
 
-ELD_GETTER(js_eld_min, js_mknum((double)h->min))
-ELD_GETTER(js_eld_max, js_mknum((double)h->max))
-ELD_GETTER(js_eld_count, js_mknum((double)h->count))
-ELD_GETTER(js_eld_exceeds, js_mknum(0))
+ELD_GETTER(js_eld_min, Ant_Value_FromNumber((double)h->min))
+ELD_GETTER(js_eld_max, Ant_Value_FromNumber((double)h->max))
+ELD_GETTER(js_eld_count, Ant_Value_FromNumber((double)h->count))
+ELD_GETTER(js_eld_exceeds, Ant_Value_FromNumber(0))
 ELD_GETTER(js_eld_min_bigint, bigint_from_uint64(js, h->min))
 ELD_GETTER(js_eld_max_bigint, bigint_from_uint64(js, h->max))
 ELD_GETTER(js_eld_count_bigint, bigint_from_uint64(js, h->count))
 ELD_GETTER(js_eld_exceeds_bigint, bigint_from_uint64(js, 0))
-ELD_GETTER(js_eld_mean, js_mknum(h->count ? h->sum / (double)h->count : JS_NAN))
-ELD_GETTER(js_eld_stddev, js_mknum(h->count ? sqrt(fmax(0, h->sum_sq / (double)h->count - (h->sum / (double)h->count) * (h->sum / (double)h->count))) : JS_NAN))
+ELD_GETTER(js_eld_mean, Ant_Value_FromNumber(h->count ? h->sum / (double)h->count : JS_NAN))
+ELD_GETTER(js_eld_stddev, Ant_Value_FromNumber(h->count ? sqrt(fmax(0, h->sum_sq / (double)h->count - (h->sum / (double)h->count) * (h->sum / (double)h->count))) : JS_NAN))
 
 #undef ELD_GETTER
 
@@ -403,7 +403,7 @@ static ant_value_t eld_read_resolution(ant_t *js, ant_value_t options, uint64_t 
   if (vtype(value) != kTypeNumber)
     return js_mkerr_code(js, JS_ERR_TYPE, "ERR_INVALID_ARG_TYPE", "The \"options.resolution\" property must be of type number");
 
-  double resolution = js_getnum(value);
+  double resolution = Ant_Value_AsNumberUnchecked(value);
   if (resolution != floor(resolution) || resolution < 1 || resolution > 9007199254740991.0) {
     char msg[160];
     snprintf(msg, sizeof(msg), resolution != floor(resolution)
@@ -460,7 +460,7 @@ void init_performance_module(ant_t *js) {
   js->perf_elu_start_ms = -1;
   
   js_set(js, perf_obj, "now", Ant_Function_Create(js_performance_now));
-  js_set(js, perf_obj, "timeOrigin", js_mknum(js->perf_time_origin_ms));
+  js_set(js, perf_obj, "timeOrigin", Ant_Value_FromNumber(js->perf_time_origin_ms));
   js_set(js, perf_obj, "toJSON", Ant_Function_Create(js_performance_to_json));
   js_set(js, perf_obj, "eventLoopUtilization", Ant_Function_CreateWithArity(js_performance_elu, 2));
   js_set(js, perf_obj, "markResourceTiming", Ant_Function_CreateWithArity(js_cfunc_noop, 7));

@@ -422,15 +422,20 @@ js_cstr_t js_inspect_cstr(ant_t *js, ant_value_t value, char *stack_buf, size_t 
 js_cstr_t js_inspect_cstr_depth(ant_t *js, ant_value_t value, char *stack_buf, size_t stack_size, int max_depth);
 js_cstr_t js_inspect_cstr_opts(ant_t *js, ant_value_t value, char *stack_buf, size_t stack_size, int max_depth, uint8_t flags);
 
+ant_offset_t rope_len(ant_value_t value);
 ant_offset_t vstr(ant_t *js, ant_value_t value, ant_offset_t *len);
 ant_offset_t vstrlen(ant_t *js, ant_value_t value);
 ant_offset_t str_len_fast(ant_t *js, ant_value_t str);
 ant_offset_t str_utf16_len(ant_t *js, ant_value_t str);
+ant_offset_t assert_flat_string_len(ant_value_t value, const char **out_ptr);
 
 ant_value_t rope_flatten(ant_t *js, ant_value_t rope);
+ant_value_t js_empty_string(ant_t *js);
+ant_value_t js_mkstr_int32(ant_t *js, int32_t value);
 ant_value_t str_materialize(ant_t *js, ant_value_t value);
 ant_value_t js_mkstr_byte_range(ant_t *js, const char *parent, size_t start, size_t len);
 ant_value_t js_mkstr_ascii(ant_t *js, const void *ptr, size_t len);
+ant_value_t js_mkrope(ant_t *js, ant_value_t left, ant_value_t right, ant_offset_t total_len, uint16_t depth);
 
 size_t utf8_export_into(
   const char *str, size_t str_len, uint8_t *dst, 
@@ -440,10 +445,22 @@ size_t utf8_export_into(
 uint64_t gc_strings_sweep_epoch(void);
 js_intern_stats_t js_intern_stats(ant_t *js);
 
+ant_string_builder_t *assert_builder_ptr(ant_value_t value);
+ant_offset_t builder_len(ant_value_t value);
+ant_rope_heap_t *assert_rope_ptr(ant_value_t value);
+
 void gc_strings_begin(ant_t *js);
 void gc_strings_sweep(ant_t *js);
 void gc_strings_epoch_bump(void);
 void gc_strings_mark(ant_t *js, const void *ptr);
 void gc_strings_destroy(ant_t *js);
+
+void intern_table_free(ant_t *js);
+uint16_t rope_depth(ant_value_t value);
+ant_value_t rope_cached_flat(ant_value_t value);
+
+ant_value_t builder_flatten(ant_t *js, ant_value_t builder);
+ant_value_t intern_value(ant_t *js, const char *interned);
+ant_value_t mkstr_with_ascii(ant_t *js, const void *ptr, size_t len, bool known_ascii);
 
 #endif

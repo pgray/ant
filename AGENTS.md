@@ -32,7 +32,8 @@ relevant decision or regression, not as routine startup context.
 ## Codebase Map
 
 - `src/main.c`, `src/ant.c`, and `src/runtime.c` wire process startup and the
-  runtime entrypoints.
+  runtime entrypoints; the object model and core builtins are split across
+  `src/` and `src/modules/` (see ARCHITECTURE.md).
 - `src/silver/` contains the parser, compiler, and VM for the Ant Silver engine.
 - `src/jit/` contains Silver's native JIT compiler and runtime integration.
 - `src/gc/` contains heap layout, roots, strings, ropes, and collection logic.

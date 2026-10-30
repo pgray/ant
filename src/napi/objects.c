@@ -8,12 +8,12 @@ void ant_napi_link_objects(void) {}
 static bool napi_slot_get_u64(ant_t *js, ant_value_t obj, internal_slot_t slot, uint64_t *out) {
   ant_value_t value = js_get_slot(obj, slot);
   if (vtype(value) != kTypeNumber) return false;
-  *out = (uint64_t)js_getnum(value);
+  *out = (uint64_t)Ant_Value_AsNumberUnchecked(value);
   return true;
 }
 
 static void napi_slot_set_u64(ant_t *js, ant_value_t obj, internal_slot_t slot, uint64_t v) {
-  js_set_slot(obj, slot, js_mknum((double)v));
+  js_set_slot(obj, slot, Ant_Value_FromNumber((double)v));
 }
 
 static napi_external_entry_t *napi_find_external(ant_t *js, napi_value value) {
@@ -53,7 +53,7 @@ static int napi_desc_flags(napi_property_attributes attributes) {
 }
 
 static ant_value_t napi_callback_trampoline(ant_params_t) {
-  ant_value_t current = js_getcurrentfunc(js);
+  ant_value_t current = js->current_func;
   napi_callback_binding_t *binding = (napi_callback_binding_t *)js_get_native(current, NAPI_CALLBACK_NATIVE_TAG);
   if (!binding || !binding->cb) return js_mkundef();
 
@@ -162,7 +162,7 @@ static ant_value_t napi_convert_property_key(
   const char *str = js_getstr(js, key, &len);
   uint32_t idx = 0;
   if (!str || !napi_parse_index_key(str, len, &idx)) return key;
-  return js_mknum((double)idx);
+  return Ant_Value_FromNumber((double)idx);
 }
 
 

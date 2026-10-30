@@ -987,7 +987,7 @@ static ant_value_t js_headers_ctor(ant_params_t) {
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.headers_proto, call_new_target);
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
 
-  js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_HEADERS));
+  js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_HEADERS));
   js_set_native(obj, l, HEADERS_NATIVE_TAG);
   js_set_finalizer(obj, headers_finalize);
   
@@ -1007,7 +1007,7 @@ ant_value_t headers_create_from_data(ant_t *js, headers_data_t *data) {
   ant_value_t obj = Ant_Object_CreateBare(js);
   js_reserve_slots(obj, 2);
   js_set_proto_init(obj, js->builtins.headers_proto);
-  js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_HEADERS));
+  js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_HEADERS));
   js_set_native(obj, data, HEADERS_NATIVE_TAG);
   js_set_finalizer(obj, headers_finalize);
 

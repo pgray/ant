@@ -48,8 +48,8 @@ static void node_worker_error(ant_t *js, ant_worker_t *w, ant_value_t error) {
 
 static void node_worker_exit(ant_t *js, ant_worker_t *w, int code) {
   if (!is_object_type(w->obj)) return;
-  ant_value_t code_val = js_mknum(code);
-  js_set(js, w->obj, "threadId", js_mknum(-1));
+  ant_value_t code_val = Ant_Value_FromNumber(code);
+  js_set(js, w->obj, "threadId", Ant_Value_FromNumber(-1));
   node_worker_emit(js, w, "exit", &code_val, 1);
 }
 
@@ -97,7 +97,7 @@ static void node_worker_define_props(ant_t *js, ant_worker_t *w) {
   ant_value_t obj = w->obj;
   worker_stdio_parent_init(js, w);
 
-  js_set(js, obj, "threadId", js_mknum((double)w->thread_id));
+  js_set(js, obj, "threadId", Ant_Value_FromNumber((double)w->thread_id));
   js_set(js, obj, "resourceLimits", worker_limits_object(js, w->requested_limits, -1));
   js_set(js, obj, "stdin", w->stdin_enabled ? w->stdin_obj : js_mknull());
   js_set(js, obj, "stdout", w->stdout_obj);
@@ -256,7 +256,7 @@ static void worker_setup_child_state(ant_t *js, ant_value_t lib) {
   }
 
   js_set(js, lib, "parentPort", worker_parent_port(js));
-  js_set(js, lib, "threadId", js_mknum((double)w->thread_id));
+  js_set(js, lib, "threadId", Ant_Value_FromNumber((double)w->thread_id));
   js_set(js, lib, "resourceLimits", worker_limits_object(js, w->limits, 0));
   js_set(js, lib, "threadName", w->name ? js_mkstr(js, w->name, strlen(w->name)) : js_mkstr(js, "", 0));
 }
@@ -264,7 +264,7 @@ static void worker_setup_child_state(ant_t *js, ant_value_t lib) {
 static void worker_setup_main_state(ant_t *js, ant_value_t lib) {
   js_set(js, lib, "parentPort", js_mknull());
   js_set(js, lib, "workerData", js_mknull());
-  js_set(js, lib, "threadId", js_mknum(0));
+  js_set(js, lib, "threadId", Ant_Value_FromNumber(0));
   js_set(js, lib, "threadName", js_mkstr(js, "", 0));
   js_set(js, lib, "resourceLimits", Ant_Object_Create(js));
 }

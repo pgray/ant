@@ -106,7 +106,7 @@ static int rl_normalize_history_capacity(int capacity) {
 static int rl_history_capacity_from_value(ant_value_t value) {
   if (vtype(value) != kTypeNumber) return DEFAULT_HISTORY_SIZE;
 
-  double n = js_getnum(value);
+  double n = Ant_Value_AsNumberUnchecked(value);
   if (!isfinite(n) || n <= 0) return DEFAULT_HISTORY_SIZE;
   if (n > MAX_HISTORY) return MAX_HISTORY;
   return (int)n;
@@ -115,7 +115,7 @@ static int rl_history_capacity_from_value(ant_value_t value) {
 static unsigned long long rl_history_length_from_value(ant_value_t value) {
   if (vtype(value) != kTypeNumber) return 0;
 
-  double n = js_getnum(value);
+  double n = Ant_Value_AsNumberUnchecked(value);
   if (!isfinite(n) || n <= 0) return 0;
   if (n > (double)MAX_SAFE_ARRAY_LENGTH) return MAX_SAFE_ARRAY_LENGTH;
   return (unsigned long long)n;
@@ -485,11 +485,11 @@ static ant_value_t rl_async_iter_queue(ant_t *js, ant_value_t state, const char 
 
 static ant_offset_t rl_async_iter_queue_head(ant_t *js, ant_value_t state, const char *head_key) {
   ant_value_t head = is_object_type(state) ? js_get(js, state, head_key) : js_mkundef();
-  return vtype(head) == kTypeNumber ? (ant_offset_t)js_getnum(head) : 0;
+  return vtype(head) == kTypeNumber ? (ant_offset_t)Ant_Value_AsNumberUnchecked(head) : 0;
 }
 
 static void rl_async_iter_set_queue_head(ant_t *js, ant_value_t state, const char *head_key, ant_offset_t head) {
-  if (is_object_type(state)) js_set(js, state, head_key, js_mknum((double)head));
+  if (is_object_type(state)) js_set(js, state, head_key, Ant_Value_FromNumber((double)head));
 }
 
 static void rl_close_interface(ant_t *js, rl_interface_t *iface) {
@@ -625,7 +625,7 @@ static rl_interface_t *get_interface(ant_t *js, ant_value_t this_obj) {
   ant_value_t id_val = js_get(js, this_obj, "_rl_id");
   if (vtype(id_val) != kTypeNumber) return NULL;
   
-  uint64_t id = (uint64_t)js_getnum(id_val);
+  uint64_t id = (uint64_t)Ant_Value_AsNumberUnchecked(id_val);
   rl_interface_t *iface = NULL;
   HASH_FIND(hh, js->rl_interfaces, &id, sizeof(uint64_t), iface);
   
@@ -886,8 +886,8 @@ static ant_value_t rl_interface_cursor_getter(ant_params_t) {
   ant_value_t this_obj = js_getthis(js);
   rl_interface_t *iface = get_interface(js, this_obj);
   
-  if (!iface) return js_mknum(0);
-  return js_mknum((double)iface->line_pos);
+  if (!iface) return Ant_Value_FromNumber(0);
+  return Ant_Value_FromNumber((double)iface->line_pos);
 }
 
 static ant_value_t rl_interface_question_callback(ant_params_t) {
@@ -939,8 +939,8 @@ static ant_value_t rl_interface_get_cursor_pos(ant_params_t) {
   
   if (!iface) {
     ant_value_t result = Ant_Object_CreateBare(js);
-    js_set(js, result, "rows", js_mknum(0));
-    js_set(js, result, "cols", js_mknum(0));
+    js_set(js, result, "rows", Ant_Value_FromNumber(0));
+    js_set(js, result, "cols", Ant_Value_FromNumber(0));
     return result;
   }
   
@@ -964,8 +964,8 @@ static ant_value_t rl_interface_get_cursor_pos(ant_params_t) {
   int col_pos = total_cols % cols;
   
   ant_value_t result = Ant_Object_CreateBare(js);
-  js_set(js, result, "rows", js_mknum((double)rows));
-  js_set(js, result, "cols", js_mknum((double)col_pos));
+  js_set(js, result, "rows", Ant_Value_FromNumber((double)rows));
+  js_set(js, result, "cols", Ant_Value_FromNumber((double)col_pos));
   return result;
 }
 
@@ -1061,7 +1061,7 @@ static void rl_async_iter_compact_queue(ant_t *js, ant_value_t state, const char
 
   if (head >= len) {
     js_set(js, state, queue_key, js_mkarr(js));
-    js_set(js, state, head_key, js_mknum(0));
+    js_set(js, state, head_key, Ant_Value_FromNumber(0));
     return;
   }
 
@@ -1070,7 +1070,7 @@ static void rl_async_iter_compact_queue(ant_t *js, ant_value_t state, const char
   compact = js_mkarr(js);
   for (ant_offset_t i = head; i < len; i++) js_arr_push(js, compact, js_arr_get(js, queue, i));
   js_set(js, state, queue_key, compact);
-  js_set(js, state, head_key, js_mknum(0));
+  js_set(js, state, head_key, Ant_Value_FromNumber(0));
 }
 
 static void rl_async_iter_queue_push(ant_t *js, ant_value_t state, const char *queue_key, ant_value_t value) {
@@ -1115,7 +1115,7 @@ static void rl_async_iter_finish(ant_t *js, ant_value_t state) {
 }
 
 static ant_value_t rl_async_iter_on_line(ant_params_t) {
-  ant_value_t state = rl_async_iter_state(js, js_getcurrentfunc(js));
+  ant_value_t state = rl_async_iter_state(js, js->current_func);
   ant_value_t line = nargs > 0 ? args[0] : js_mkundef();
   ant_value_t pending = 0;
 
@@ -1131,7 +1131,7 @@ static ant_value_t rl_async_iter_on_line(ant_params_t) {
 }
 
 static ant_value_t rl_async_iter_on_close(ant_params_t) {
-  ant_value_t state = rl_async_iter_state(js, js_getcurrentfunc(js));
+  ant_value_t state = rl_async_iter_state(js, js->current_func);
   rl_async_iter_finish(js, state);
   return js_mkundef();
 }
@@ -1213,9 +1213,9 @@ static ant_value_t rl_interface_async_iterator(ant_params_t) {
 
   js_set(js, state, "iface", this_obj);
   js_set(js, state, "buffer", js_mkarr(js));
-  js_set(js, state, "bufferHead", js_mknum(0));
+  js_set(js, state, "bufferHead", Ant_Value_FromNumber(0));
   js_set(js, state, "pending", js_mkarr(js));
-  js_set(js, state, "pendingHead", js_mknum(0));
+  js_set(js, state, "pendingHead", Ant_Value_FromNumber(0));
   js_set(js, state, "done", js_bool(iface->closed));
 
   if (!iface->closed) {
@@ -1316,13 +1316,13 @@ static ant_value_t rl_create_interface(ant_params_t) {
   
   ant_value_t crlf_delay_val = js_get(js, options, "crlfDelay");
   iface->crlf_delay = (vtype(crlf_delay_val) == kTypeNumber)
-    ? (int)js_getnum(crlf_delay_val) 
+    ? (int)Ant_Value_AsNumberUnchecked(crlf_delay_val) 
     : 100;
   if (iface->crlf_delay < 100) iface->crlf_delay = 100;
   
   ant_value_t tab_size_val = js_get(js, options, "tabSize");
   iface->tab_size = (vtype(tab_size_val) == kTypeNumber)
-    ? (int)js_getnum(tab_size_val) 
+    ? (int)Ant_Value_AsNumberUnchecked(tab_size_val) 
     : DEFAULT_TAB_SIZE;
   if (iface->tab_size < 1) iface->tab_size = 1;
   
@@ -1358,7 +1358,7 @@ static ant_value_t rl_create_interface(ant_params_t) {
   js_set_proto_init(obj, rl_get_interface_proto(js));
   iface->js_obj = obj;
   
-  js_set(js, obj, "_rl_id", js_mknum((double)iface->id));
+  js_set(js, obj, "_rl_id", Ant_Value_FromNumber((double)iface->id));
   js_set(js, obj, "terminal", js_bool(iface->terminal));
 
   start_reading(iface);

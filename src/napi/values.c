@@ -251,7 +251,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_create_array_with_length(
   ant_value_t r = js_setprop(
     nenv->js, arr,
     js_mkstr(nenv->js, "length", 6),
-    js_mknum((double)length)
+    Ant_Value_FromNumber((double)length)
   );
   if (is_err(r) || Ant_Exception_Pending(nenv->js)) return napi_check_pending_from_result(env, r);
   *result = NAPI_RETURN(nenv, arr);
@@ -260,25 +260,25 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_create_array_with_length(
 
 NAPI_EXTERN napi_status NAPI_CDECL napi_create_double(napi_env env, double value, napi_value *result) {
   if (!env || !result) return napi_set_last(env, napi_invalid_arg, "invalid argument");
-  *result = (napi_value)js_mknum(value);
+  *result = (napi_value)Ant_Value_FromNumber(value);
   return napi_set_last(env, napi_ok, NULL);
 }
 
 NAPI_EXTERN napi_status NAPI_CDECL napi_create_int32(napi_env env, int32_t value, napi_value *result) {
   if (!env || !result) return napi_set_last(env, napi_invalid_arg, "invalid argument");
-  *result = (napi_value)js_mknum((double)value);
+  *result = (napi_value)Ant_Value_FromNumber((double)value);
   return napi_set_last(env, napi_ok, NULL);
 }
 
 NAPI_EXTERN napi_status NAPI_CDECL napi_create_uint32(napi_env env, uint32_t value, napi_value *result) {
   if (!env || !result) return napi_set_last(env, napi_invalid_arg, "invalid argument");
-  *result = (napi_value)js_mknum((double)value);
+  *result = (napi_value)Ant_Value_FromNumber((double)value);
   return napi_set_last(env, napi_ok, NULL);
 }
 
 NAPI_EXTERN napi_status NAPI_CDECL napi_create_int64(napi_env env, int64_t value, napi_value *result) {
   if (!env || !result) return napi_set_last(env, napi_invalid_arg, "invalid argument");
-  *result = (napi_value)js_mknum((double)value);
+  *result = (napi_value)Ant_Value_FromNumber((double)value);
   return napi_set_last(env, napi_ok, NULL);
 }
 
@@ -679,7 +679,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_get_value_double(
 ) {
   if (!env || !result) return napi_set_last(env, napi_invalid_arg, "invalid argument");
   if (vtype((ant_value_t)value) != kTypeNumber) return napi_set_last(env, napi_number_expected, "number expected");
-  *result = js_getnum((ant_value_t)value);
+  *result = Ant_Value_AsNumberUnchecked((ant_value_t)value);
   return napi_set_last(env, napi_ok, NULL);
 }
 
@@ -690,7 +690,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_get_value_int32(
 ) {
   if (!env || !result) return napi_set_last(env, napi_invalid_arg, "invalid argument");
   if (vtype((ant_value_t)value) != kTypeNumber) return napi_set_last(env, napi_number_expected, "number expected");
-  *result = (int32_t)js_getnum((ant_value_t)value);
+  *result = (int32_t)Ant_Value_AsNumberUnchecked((ant_value_t)value);
   return napi_set_last(env, napi_ok, NULL);
 }
 
@@ -701,7 +701,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_get_value_uint32(
 ) {
   if (!env || !result) return napi_set_last(env, napi_invalid_arg, "invalid argument");
   if (vtype((ant_value_t)value) != kTypeNumber) return napi_set_last(env, napi_number_expected, "number expected");
-  *result = (uint32_t)js_getnum((ant_value_t)value);
+  *result = (uint32_t)Ant_Value_AsNumberUnchecked((ant_value_t)value);
   return napi_set_last(env, napi_ok, NULL);
 }
 
@@ -712,7 +712,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_get_value_int64(
 ) {
   if (!env || !result) return napi_set_last(env, napi_invalid_arg, "invalid argument");
   if (vtype((ant_value_t)value) != kTypeNumber) return napi_set_last(env, napi_number_expected, "number expected");
-  *result = (int64_t)js_getnum((ant_value_t)value);
+  *result = (int64_t)Ant_Value_AsNumberUnchecked((ant_value_t)value);
   return napi_set_last(env, napi_ok, NULL);
 }
 
@@ -805,7 +805,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_get_date_value(
   if (!is_date_instance((ant_value_t)value)) return napi_set_last(env, napi_date_expected, "date expected");
 
   ant_value_t time_val = js_get_slot((ant_value_t)value, SLOT_DATA);
-  *result = vtype(time_val) == kTypeNumber ? js_getnum(time_val) : JS_NAN;
+  *result = vtype(time_val) == kTypeNumber ? Ant_Value_AsNumberUnchecked(time_val) : JS_NAN;
   return napi_set_last(env, napi_ok, NULL);
 }
 
@@ -1172,7 +1172,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_coerce_to_number(
   if (!nenv || !nenv->js || !result) return napi_set_last(env, napi_invalid_arg, "invalid argument");
   double num = js_to_number(nenv->js, (ant_value_t)value);
   if (Ant_Exception_Pending(nenv->js)) return napi_check_pending_from_result(env, js_mkundef());
-  *result = NAPI_RETURN(nenv, js_mknum(num));
+  *result = NAPI_RETURN(nenv, Ant_Value_FromNumber(num));
   return napi_set_last(env, napi_ok, NULL);
 }
 

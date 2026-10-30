@@ -660,7 +660,7 @@ int uuidv7_new(uint8_t *uuid_out) {
 static ant_value_t js_crypto_random(ant_params_t) {
   unsigned int value = 0;
   if (crypto_fill_random(&value, sizeof(value)) < 0) return crypto_random_error(js);
-  return js_mknum((double)value);
+  return Ant_Value_FromNumber((double)value);
 }
 
 // crypto.randomBytes(length)
@@ -669,7 +669,7 @@ static ant_value_t js_crypto_random_bytes(ant_params_t) {
     return js_mkerr(js, "randomBytes requires a length argument");
   }
 
-  int length = (int)js_getnum(args[0]);
+  int length = (int)Ant_Value_AsNumberUnchecked(args[0]);
   if (length <= 0 || length > 65536) {
     return js_mkerr(js, "invalid length");
   }
@@ -1091,7 +1091,7 @@ static ant_value_t crypto_new_key_record(ant_t *js, unsigned index) {
         js_mkstr(js, hashes[index - 4], strlen(hashes[index - 4]));
       js_mkprop_fast(js, seed, "name", 4, name);
       if (index == CRYPTO_KEY_AES_GCM || index == CRYPTO_KEY_HMAC)
-        js_mkprop_fast(js, seed, "length", 6, js_mknum(0));
+        js_mkprop_fast(js, seed, "length", 6, Ant_Value_FromNumber(0));
       if (index == CRYPTO_KEY_HMAC)
         js_mkprop_fast(js, seed, "hash", 4, js_mkundef());
     }
@@ -1119,7 +1119,7 @@ static ant_value_t crypto_make_key_algorithm(
   GC_ROOT_PIN(js, hash);
 
   if (kind == CRYPTO_KEY_AES_GCM) {
-    crypto_key_record_set(js, algorithm, 1, js_mknum((double)key_bits));
+    crypto_key_record_set(js, algorithm, 1, Ant_Value_FromNumber((double)key_bits));
   } else if (kind == CRYPTO_KEY_HMAC) {
     unsigned hash_index = crypto_hash_record_index(md);
     if (!hash_index) {
@@ -1132,7 +1132,7 @@ static ant_value_t crypto_make_key_algorithm(
       GC_ROOT_RESTORE(js, root_mark);
       return hash;
     }
-    crypto_key_record_set(js, algorithm, 1, js_mknum((double)key_bits));
+    crypto_key_record_set(js, algorithm, 1, Ant_Value_FromNumber((double)key_bits));
     crypto_key_record_set(js, algorithm, 2, hash);
   }
 
@@ -1380,7 +1380,7 @@ static ant_value_t crypto_subtle_derive_bits_impl(ant_params_t) {
     );
   }
 
-  double length_num = js_getnum(args[2]);
+  double length_num = Ant_Value_AsNumberUnchecked(args[2]);
   if (!isfinite(length_num) || length_num < 0 || length_num > (double)INT_MAX * 8.0 || fmod(length_num, 8) != 0) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "deriveBits length must be a non-negative multiple of 8");
   }
@@ -1399,7 +1399,7 @@ static ant_value_t crypto_subtle_derive_bits_impl(ant_params_t) {
   }
 
   ant_value_t iterations_val = js_get(js, args[0], "iterations");
-  double iterations_num = js_getnum(iterations_val);
+  double iterations_num = Ant_Value_AsNumberUnchecked(iterations_val);
   if (!isfinite(iterations_num) || iterations_num <= 0 || iterations_num > INT_MAX || floor(iterations_num) != iterations_num) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "PBKDF2 iterations must be a positive integer");
   }
@@ -1512,7 +1512,7 @@ static ant_value_t crypto_aes_gcm_crypt(
   int tag_len = 16;
   ant_value_t tag_len_val = js_get(js, algorithm, "tagLength");
   if (vtype(tag_len_val) == kTypeNumber) {
-    tag_len = (int)(js_getnum(tag_len_val) / 8.0);
+    tag_len = (int)(Ant_Value_AsNumberUnchecked(tag_len_val) / 8.0);
     if (tag_len <= 0 || tag_len > 16) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid AES-GCM tagLength");
   }
 
@@ -2094,8 +2094,8 @@ static ant_value_t crypto_pbkdf2_result(
   err = crypto_get_input_bytes(js, salt_val, js_mkundef(), &salt, &salt_len, &salt_owned);
   if (is_err(err)) goto cleanup_err;
 
-  int iterations = (int)js_getnum(iterations_val);
-  int keylen = (int)js_getnum(keylen_val);
+  int iterations = (int)Ant_Value_AsNumberUnchecked(iterations_val);
+  int keylen = (int)Ant_Value_AsNumberUnchecked(keylen_val);
   if (iterations <= 0 || keylen < 0) {
     err = js_mkerr(js, "Invalid PBKDF2 parameters");
     goto cleanup_err;
@@ -2161,7 +2161,7 @@ static ant_value_t crypto_scrypt_result(ant_native_params_t, int options_index) 
   err = crypto_get_input_bytes(js, args[1], js_mkundef(), &salt, &salt_len, &salt_owned);
   if (is_err(err)) goto cleanup_err;
 
-  int keylen = (int)js_getnum(args[2]);
+  int keylen = (int)Ant_Value_AsNumberUnchecked(args[2]);
   if (keylen < 0) {
     err = js_mkerr(js, "Invalid scrypt key length");
     goto cleanup_err;
@@ -2172,21 +2172,21 @@ static ant_value_t crypto_scrypt_result(ant_native_params_t, int options_index) 
     ant_value_t v = js_get(js, args[options_index], "N");
     if (vtype(v) == kTypeUndefined) v = js_get(js, args[options_index], "cost");
     if (is_err(v)) { err = v; goto cleanup_err; }
-    if (vtype(v) == kTypeNumber) N = (uint64_t)js_getnum(v);
+    if (vtype(v) == kTypeNumber) N = (uint64_t)Ant_Value_AsNumberUnchecked(v);
     v = js_get(js, args[options_index], "r");
 
     if (vtype(v) == kTypeUndefined) v = js_get(js, args[options_index], "blockSize");
     if (is_err(v)) { err = v; goto cleanup_err; }
-    if (vtype(v) == kTypeNumber) r = (uint64_t)js_getnum(v);
+    if (vtype(v) == kTypeNumber) r = (uint64_t)Ant_Value_AsNumberUnchecked(v);
     v = js_get(js, args[options_index], "p");
 
     if (vtype(v) == kTypeUndefined) v = js_get(js, args[options_index], "parallelization");
     if (is_err(v)) { err = v; goto cleanup_err; }
-    if (vtype(v) == kTypeNumber) p = (uint64_t)js_getnum(v);
+    if (vtype(v) == kTypeNumber) p = (uint64_t)Ant_Value_AsNumberUnchecked(v);
     v = js_get(js, args[options_index], "maxmem");
 
     if (is_err(v)) { err = v; goto cleanup_err; }
-    if (vtype(v) == kTypeNumber) maxmem = (uint64_t)js_getnum(v);
+    if (vtype(v) == kTypeNumber) maxmem = (uint64_t)Ant_Value_AsNumberUnchecked(v);
   }
 
   uint8_t *out = malloc((size_t)keylen ? (size_t)keylen : 1);

@@ -265,7 +265,7 @@ static void emit_number(sv_compiler_t *c, double num) {
   if (num >= -128 && num <= 127 && num == (int)num && num != -0.0) {
     emit_op(c, OP_CONST_I8);
     emit(c, (uint8_t)(int8_t)num);
-  } else emit_constant(c, tov(num));
+  } else emit_constant(c, Ant_Value_FromNumber(num));
 }
 
 
@@ -9018,7 +9018,7 @@ void sv_disasm(ant_t *js, sv_func_t *func, const char *label) {
       ant_offset_t soff = vstr(js, v, &slen);
       fprintf(stderr, "           %d: <String[%d]: #%.*s>\n", i, (int)slen, (int)slen, (const char *)(uintptr_t)soff);
     } else if (t == kTypeNumber) {
-      fprintf(stderr, "           %d: <Number [%g]>\n", i, tod(v));
+      fprintf(stderr, "           %d: <Number [%g]>\n", i, Ant_Value_AsNumberUnchecked(v));
     } else if (t == kTypeFunctionInfo) {
       sv_func_t *child = (sv_func_t *)vptr(v);
       const char *cname = child->debug->name ? child->debug->name : "";

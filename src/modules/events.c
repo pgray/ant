@@ -552,7 +552,7 @@ static bool is_eventtarget_instance(ant_value_t target) {
 static int eventemitter_get_max_listeners_impl(ant_value_t target) {
   ant_value_t slot = js_get_slot(target, SLOT_EVENT_MAX_LISTENERS);
   if (vtype(slot) == kTypeNumber) {
-    int n = (int)js_getnum(slot);
+    int n = (int)Ant_Value_AsNumberUnchecked(slot);
     return n >= 0 ? n : EVENTS_DEFAULT_MAX_LISTENERS;
   }
   return EVENTS_DEFAULT_MAX_LISTENERS;
@@ -646,7 +646,7 @@ static event_data_t *event_init(
   
   *data = (event_data_t){
     .type = type, .target = js_mknull(), .current_target = js_mknull(),
-    .phase = js_mknum(0), .time_stamp = js_mknum(get_timestamp_ms()),
+    .phase = Ant_Value_FromNumber(0), .time_stamp = Ant_Value_FromNumber(get_timestamp_ms()),
     .kind = kind, .field_count = count, .bubbles = bubbles, .cancelable = cancelable,
   };
   
@@ -744,8 +744,8 @@ static ant_value_t js_errorevent_ctor(ant_params_t) {
   
   if (is_err(r = event_init_field(js, event, init, "message", ANT_EVENT_FIELD_ERROR_message,  empty, true))) return r;
   if (is_err(r = event_init_field(js, event, init, "filename", ANT_EVENT_FIELD_ERROR_filename, empty, true))) return r;
-  if (is_err(r = event_init_field(js, event, init, "lineno", ANT_EVENT_FIELD_ERROR_lineno, js_mknum(0), false))) return r;
-  if (is_err(r = event_init_field(js, event, init, "colno", ANT_EVENT_FIELD_ERROR_colno, js_mknum(0), false))) return r;
+  if (is_err(r = event_init_field(js, event, init, "lineno", ANT_EVENT_FIELD_ERROR_lineno, Ant_Value_FromNumber(0), false))) return r;
+  if (is_err(r = event_init_field(js, event, init, "colno", ANT_EVENT_FIELD_ERROR_colno, Ant_Value_FromNumber(0), false))) return r;
   if (is_err(r = event_init_field(js, event, init, "error", ANT_EVENT_FIELD_ERROR_error, js_mkundef(), false))) return r;
   
   return js_mkundef();
@@ -929,12 +929,12 @@ void Ant_Event_BeginDispatch(ant_t *js, ant_value_t event, ant_value_t target) {
   if (!data) {
     js_set(js, event, "target", target);
     js_set(js, event, "currentTarget", target);
-    js_set(js, event, "eventPhase", js_mknum(2));
+    js_set(js, event, "eventPhase", Ant_Value_FromNumber(2));
     return;
   }
   
   data->target = data->current_target = target;
-  data->phase = js_mknum(2);
+  data->phase = Ant_Value_FromNumber(2);
   data->dispatching = true;
   data->stop_immediate = false;
   gc_write_barrier(js, js_obj_ptr(event), target);
@@ -944,12 +944,12 @@ void Ant_Event_EndDispatch(ant_t *js, ant_value_t event) {
   event_data_t *data = get_event_data(event);
   if (!data) {
     js_set(js, event, "currentTarget", js_mknull());
-    js_set(js, event, "eventPhase", js_mknum(0));
+    js_set(js, event, "eventPhase", Ant_Value_FromNumber(0));
     return;
   }
   
   data->current_target = js_mknull();
-  data->phase = js_mknum(0);
+  data->phase = Ant_Value_FromNumber(0);
   data->dispatching = false;
 }
 
@@ -1006,8 +1006,8 @@ static void event_define_prototype(ant_t *js, ant_value_t proto, ant_value_t cto
   
   for (size_t i = 0; i < countof(phases); i++) {
     ant_value_t key = js_mkstr(js, phases[i], strlen(phases[i]));
-    mkprop_exact_attrs(js, proto, key, js_mknum((double)i), ANT_PROP_ATTR_ENUMERABLE);
-    mkprop_exact_attrs(js, ctor, key, js_mknum((double)i), ANT_PROP_ATTR_ENUMERABLE);
+    mkprop_exact_attrs(js, proto, key, Ant_Value_FromNumber((double)i), ANT_PROP_ATTR_ENUMERABLE);
+    mkprop_exact_attrs(js, ctor, key, Ant_Value_FromNumber((double)i), ANT_PROP_ATTR_ENUMERABLE);
   }
 }
 
@@ -1030,7 +1030,7 @@ static ant_value_t js_eventtarget_ctor(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "EventTarget constructor requires 'new'");
 
   ant_value_t this_obj = js_getthis(js);
-  if (is_object_type(this_obj)) js_set_slot(this_obj, SLOT_BRAND, js_mknum(BRAND_EVENTTARGET));
+  if (is_object_type(this_obj)) js_set_slot(this_obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_EVENTTARGET));
   return js_mkundef();
 }
 
@@ -1633,33 +1633,33 @@ static ant_value_t js_eventemitter_removeAllListeners(ant_params_t) {
 }
 
 static ant_value_t js_eventemitter_listenerCount(ant_params_t) {
-  if (nargs < 1) return js_mknum(0);
+  if (nargs < 1) return Ant_Value_FromNumber(0);
   ant_value_t key = evt_key_from_arg(args[0]);
   
-  if (!key) return js_mknum(0);
+  if (!key) return Ant_Value_FromNumber(0);
   EventType *evt = find_emitter_event_type(js, js_getthis(js), key);
   
-  if (!evt) return js_mknum(0);
-  return js_mknum((double)evt_live_count(evt));
+  if (!evt) return Ant_Value_FromNumber(0);
+  return Ant_Value_FromNumber((double)evt_live_count(evt));
 }
 
 static ant_value_t js_eventemitter_setMaxListeners(ant_params_t) {
   if (nargs < 1) return js_mkerr(js, "setMaxListeners requires 1 argument");
   if (vtype(args[0]) != kTypeNumber) return js_mkerr(js, "n must be a number");
 
-  int n = (int)js_getnum(args[0]);
+  int n = (int)Ant_Value_AsNumberUnchecked(args[0]);
   if (n < 0) return js_mkerr(js, "n must be non-negative");
 
   ant_value_t this_obj = js_getthis(js);
   if (!is_object_type(this_obj)) return js_mkerr_typed(js, JS_ERR_TYPE, "setMaxListeners requires an object receiver");
-  js_set_slot(this_obj, SLOT_EVENT_MAX_LISTENERS, js_mknum(n));
+  js_set_slot(this_obj, SLOT_EVENT_MAX_LISTENERS, Ant_Value_FromNumber(n));
   return this_obj;
 }
 
 static ant_value_t js_eventemitter_getMaxListeners(ant_params_t) {
   ant_value_t this_obj = js_getthis(js);
-  if (!is_object_type(this_obj)) return js_mknum(EVENTS_DEFAULT_MAX_LISTENERS);
-  return js_mknum(eventemitter_get_max_listeners_impl(this_obj));
+  if (!is_object_type(this_obj)) return Ant_Value_FromNumber(EVENTS_DEFAULT_MAX_LISTENERS);
+  return Ant_Value_FromNumber(eventemitter_get_max_listeners_impl(this_obj));
 }
 
 static ant_value_t js_eventemitter_rawListeners(ant_params_t) {
@@ -1896,21 +1896,21 @@ static ant_value_t js_events_set_max_listeners(ant_params_t) {
   if (nargs < 1) return js_mkerr(js, "setMaxListeners requires at least 1 argument");
   if (vtype(args[0]) != kTypeNumber) return js_mkerr(js, "n must be a number");
 
-  int n = (int)js_getnum(args[0]);
+  int n = (int)Ant_Value_AsNumberUnchecked(args[0]);
   if (n < 0) return js_mkerr(js, "n must be non-negative");
 
   for (int i = 1; i < nargs; i++) {
     if (!is_object_type(args[i])) continue;
-    js_set_slot(args[i], SLOT_EVENT_MAX_LISTENERS, js_mknum(n));
+    js_set_slot(args[i], SLOT_EVENT_MAX_LISTENERS, Ant_Value_FromNumber(n));
   }
 
   return js_mkundef();
 }
 
 static ant_value_t js_events_get_max_listeners(ant_params_t) {
-  if (nargs < 1) return js_mknum(EVENTS_DEFAULT_MAX_LISTENERS);
-  if (!is_object_type(args[0])) return js_mknum(EVENTS_DEFAULT_MAX_LISTENERS);
-  return js_mknum(eventemitter_get_max_listeners_impl(args[0]));
+  if (nargs < 1) return Ant_Value_FromNumber(EVENTS_DEFAULT_MAX_LISTENERS);
+  if (!is_object_type(args[0])) return Ant_Value_FromNumber(EVENTS_DEFAULT_MAX_LISTENERS);
+  return Ant_Value_FromNumber(eventemitter_get_max_listeners_impl(args[0]));
 }
 
 static ant_value_t js_events_get_event_listeners(ant_params_t) {
@@ -1936,7 +1936,7 @@ static void events_on_queue_compact(ant_t *js, ant_value_t state, const char *ar
   ant_value_t arr = js_get(js, state, arr_name);
   ant_value_t head_val = js_get(js, state, head_name);
   
-  ant_offset_t head = vtype(head_val) == kTypeNumber ? (ant_offset_t)js_getnum(head_val) : 0;
+  ant_offset_t head = vtype(head_val) == kTypeNumber ? (ant_offset_t)Ant_Value_AsNumberUnchecked(head_val) : 0;
   ant_offset_t len = vtype(arr) == kTypeArray ? js_arr_len(js, arr) : 0;
   ant_value_t compact = 0;
 
@@ -1948,18 +1948,18 @@ static void events_on_queue_compact(ant_t *js, ant_value_t state, const char *ar
     js_arr_push(js, compact, js_arr_get(js, arr, i));
 
   js_set(js, state, arr_name, compact);
-  js_set(js, state, head_name, js_mknum(0));
+  js_set(js, state, head_name, Ant_Value_FromNumber(0));
 }
 
 static ant_value_t events_on_queue_shift(ant_t *js, ant_value_t state, const char *arr_name, const char *head_name) {
   ant_value_t arr = js_get(js, state, arr_name);
   ant_value_t head_val = js_get(js, state, head_name);
   
-  ant_offset_t head = vtype(head_val) == kTypeNumber ? (ant_offset_t)js_getnum(head_val) : 0;
+  ant_offset_t head = vtype(head_val) == kTypeNumber ? (ant_offset_t)Ant_Value_AsNumberUnchecked(head_val) : 0;
   ant_value_t value = 0;
 
   if (vtype(arr) != kTypeArray || head >= js_arr_len(js, arr)) return js_mkundef();
-  js_set(js, state, head_name, js_mknum((double)(head + 1)));
+  js_set(js, state, head_name, Ant_Value_FromNumber((double)(head + 1)));
   
   value = js_arr_get(js, arr, head);
   events_on_queue_compact(js, state, arr_name, head_name);
@@ -2125,9 +2125,9 @@ static ant_value_t js_events_on(ant_params_t) {
   js_set(js, state, "signal", js_mkundef());
   js_set(js, state, "abortListener", js_mkundef());
   js_set(js, state, "buffer", js_mkarr(js));
-  js_set(js, state, "bufferHead", js_mknum(0));
+  js_set(js, state, "bufferHead", Ant_Value_FromNumber(0));
   js_set(js, state, "parked", js_mkarr(js));
-  js_set(js, state, "parkedHead", js_mknum(0));
+  js_set(js, state, "parkedHead", Ant_Value_FromNumber(0));
   js_set(js, state, "finished", js_false);
   js_set(js, state, "storedError", js_mkundef());
 

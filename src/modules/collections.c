@@ -104,8 +104,8 @@ typedef struct {
 
 static ant_value_t normalize_map_key(ant_value_t key) {
   if (vtype(key) == kTypeNumber) {
-    double d = tod(key);
-    if (d == 0.0 && signbit(d)) return js_mknum(0.0);
+    double d = Ant_Value_AsNumberUnchecked(key);
+    if (d == 0.0 && signbit(d)) return Ant_Value_FromNumber(0.0);
   }
   return key;
 }
@@ -902,12 +902,12 @@ __attribute__((aligned(64))) ant_value_t collections_map_get_numeric_pair(
   unsigned char inline_key[128];
   char right_buf[32];
   
-  size_t left_len = collection_number_to_string(tod(left), (char *)inline_key + 1, sizeof(right_buf));  
+  size_t left_len = collection_number_to_string(Ant_Value_AsNumberUnchecked(left), (char *)inline_key + 1, sizeof(right_buf));  
   if (left_len > sizeof(right_buf)) return Ant_Error_CreateOutOfMemory(js);
 
   bool right_inline = separator_len <= sizeof(inline_key) - 1 - left_len - sizeof(right_buf);
   char *right_out = right_inline ? (char *)inline_key + 1 + left_len + separator_len : right_buf;
-  size_t right_len = collection_number_to_string(tod(right), right_out, sizeof(right_buf));
+  size_t right_len = collection_number_to_string(Ant_Value_AsNumberUnchecked(right), right_out, sizeof(right_buf));
 
   if (right_len > sizeof(right_buf) ||
     separator_len > SIZE_MAX - 1 - left_len - right_len)
@@ -960,7 +960,7 @@ static ant_value_t map_numeric_template_general(
   
   for (uint8_t i = 0; i < substitution_count; i++) {
     number_lens[i] = collection_number_to_string(
-      tod(substitutions[i]), number_bufs[i], sizeof(number_bufs[i]));
+      Ant_Value_AsNumberUnchecked(substitutions[i]), number_bufs[i], sizeof(number_bufs[i]));
     if (number_lens[i] > sizeof(number_bufs[i]) ||
         desc->segments[i].len > SIZE_MAX - key_len ||
         number_lens[i] > SIZE_MAX - key_len - desc->segments[i].len)
@@ -1102,7 +1102,7 @@ static ant_value_t map_size(ant_params_t) {
   map_entry_t **map_ptr = get_map_from_obj(this_val);
   if (!map_ptr) return collection_receiver_error(js, "get Map.prototype.size");
   
-  return js_mknum((double)HASH_COUNT(*map_ptr));
+  return Ant_Value_FromNumber((double)HASH_COUNT(*map_ptr));
 }
 
 static ant_value_t map_forEach(ant_params_t) {
@@ -1267,7 +1267,7 @@ static ant_value_t set_size(ant_params_t) {
   set_entry_t **set_ptr = get_set_from_obj(this_val);
   if (!set_ptr) return collection_receiver_error(js, "get Set.prototype.size");
   
-  return js_mknum((double)HASH_COUNT(*set_ptr));
+  return Ant_Value_FromNumber((double)HASH_COUNT(*set_ptr));
 }
 
 static ant_value_t set_values(ant_params_t) {
@@ -1992,11 +1992,11 @@ static ant_value_t finreg_register(ant_params_t) {
   js_setprop(js, entry, js_mkstr(js, idx, idx_len), held_value);
   idx_len = uint_to_str(idx, sizeof(idx), 2);
   js_setprop(js, entry, js_mkstr(js, idx, idx_len), unregister_token);
-  js_setprop(js, entry, js->length_str, tov(3.0));
+  js_setprop(js, entry, js->length_str, Ant_Value_FromNumber(3.0));
   
   idx_len = uint_to_str(idx, sizeof(idx), len);
   js_setprop(js, registrations, js_mkstr(js, idx, idx_len), entry);
-  js_setprop(js, registrations, js->length_str, tov((double)(len + 1)));
+  js_setprop(js, registrations, js->length_str, Ant_Value_FromNumber((double)(len + 1)));
   
   return js_mkundef();
 }

@@ -207,7 +207,7 @@ static int error_stack_trace_limit(ant_t *js) {
   if (vtype(ctor) != kTypeFunction) return 10;
   if (!js_try_get_own_data_prop_interned(js, ctor, js->intern.stack_trace_limit, &limit) || vtype(limit) != kTypeNumber) return -1;
   
-  double d = js_getnum(limit);
+  double d = Ant_Value_AsNumberUnchecked(limit);
   if (!(d > 0)) return 0;
   
   return d >= (double)INT_MAX ? INT_MAX : (int)d;
@@ -710,8 +710,8 @@ static ant_value_t callsite_toString(ant_params_t) {
   
   if (vtype(name) == kTypeString) n = js_getstr(js, name, &n_len);
   if (vtype(file) == kTypeString) f = js_getstr(js, file, &f_len);
-  int l = vtype(line) == kTypeNumber ? (int)js_getnum(line) : 0;
-  int c = vtype(col)  == kTypeNumber ? (int)js_getnum(col)  : 0;
+  int l = vtype(line) == kTypeNumber ? (int)Ant_Value_AsNumberUnchecked(line) : 0;
+  int c = vtype(col)  == kTypeNumber ? (int)Ant_Value_AsNumberUnchecked(col)  : 0;
 
   errbuf_t eb;
   if (!errbuf_init(&eb, 256)) return Ant_Error_CreateOutOfMemory(js);
@@ -766,8 +766,8 @@ ant_value_t js_build_callsite_array(ant_t *js, ant_value_t above) {
     error_frame_view_t view = error_frame_view(js, &frames[i], file);
     data = js_mkarr(js);
     js_arr_push(js, data, js_mkstr(js, view.file, strlen(view.file)));
-    js_arr_push(js, data, js_mknum((double)view.line));
-    js_arr_push(js, data, js_mknum((double)view.col));
+    js_arr_push(js, data, Ant_Value_FromNumber((double)view.line));
+    js_arr_push(js, data, Ant_Value_FromNumber((double)view.col));
     js_arr_push(js, data, js_mkstr(js, view.name, strlen(view.name)));
     js_arr_push(js, data, js_bool(view.construct));
 

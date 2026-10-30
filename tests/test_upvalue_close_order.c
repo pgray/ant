@@ -9,7 +9,7 @@ static void ordered(sv_upvalue_t *head) {
 
 static void mixed_cleanup(void) {
   ant_value_t slots[64];
-  for (int i = 0; i < 64; i++) slots[i] = js_mknum(i);
+  for (int i = 0; i < 64; i++) slots[i] = Ant_Value_FromNumber(i);
   sv_upvalue_t low = {.location = &slots[4]};
   sv_upvalue_t outer = {.location = &slots[18], .next = &low};
   sv_upvalue_t a = {.location = &slots[25], .next = &outer};
@@ -19,21 +19,21 @@ static void mixed_cleanup(void) {
 
   sv_close_upvalues_from_slot(&vm, &slots[24]);
   assert(vm.open_upvalues == &high && high.next == &outer && outer.next == &low);
-  assert(a.location == &a.closed && a.closed == js_mknum(25) && !a.next);
-  assert(b.location == &b.closed && b.closed == js_mknum(29) && !b.next);
+  assert(a.location == &a.closed && a.closed == Ant_Value_FromNumber(25) && !a.next);
+  assert(b.location == &b.closed && b.closed == Ant_Value_FromNumber(29) && !b.next);
   assert(high.location == &slots[60] && low.location == &slots[4]);
-  slots[18] = js_mknum(42);
+  slots[18] = Ant_Value_FromNumber(42);
   sv_close_upvalues_from_slot(&vm, &slots[24]);
-  assert(*outer.location == js_mknum(42));
+  assert(*outer.location == Ant_Value_FromNumber(42));
   sv_close_upvalues_from_slot(&vm, vm.stack);
-  assert(outer.location == &outer.closed && outer.closed == js_mknum(42));
+  assert(outer.location == &outer.closed && outer.closed == Ant_Value_FromNumber(42));
   assert(high.next == &low && !low.next);
   ordered(vm.open_upvalues);
 }
 
 static void rebasing(void) {
   ant_value_t slots[64];
-  for (int i = 0; i < 64; i++) slots[i] = js_mknum(i);
+  for (int i = 0; i < 64; i++) slots[i] = Ant_Value_FromNumber(i);
   sv_upvalue_t low = {.location = &slots[4]};
   sv_upvalue_t outer = {.location = &slots[20], .next = &low};
   sv_upvalue_t a = {.location = &slots[25], .next = &outer};
@@ -44,7 +44,7 @@ static void rebasing(void) {
   memcpy(slots + 48, slots + 24, 8 * sizeof(*slots));
   sv_rebase_open_upvalues(&head, slots + 24, slots + 48, 8);
   assert(b.location == slots + 52 && a.location == slots + 49);
-  assert(*b.location == js_mknum(28) && *a.location == js_mknum(25));
+  assert(*b.location == Ant_Value_FromNumber(28) && *a.location == Ant_Value_FromNumber(25));
   ordered(head);
 
   memcpy(slots + 8, slots + 48, 8 * sizeof(*slots));

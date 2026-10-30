@@ -511,7 +511,7 @@ static ant_value_t get_process_stream(ant_t *js, const char *name) {
 
 static void ensure_stream_common_props(ant_t *js, ant_value_t stream, int fd) {
   if (!is_special_object(stream)) return;
-  js_set(js, stream, "fd", js_mknum((double)fd));
+  js_set(js, stream, "fd", Ant_Value_FromNumber((double)fd));
   js_set(js, stream, "isTTY", js_bool(is_tty_fd(fd)));
 }
 
@@ -569,7 +569,7 @@ static ant_value_t tty_write_stream_rows_getter(ant_params_t) {
   int rows = 0;
   int cols = 0;
   get_tty_size(fd, &rows, &cols);
-  return js_mknum((double)rows);
+  return Ant_Value_FromNumber((double)rows);
 }
 
 static ant_value_t tty_write_stream_columns_getter(ant_params_t) {
@@ -579,7 +579,7 @@ static ant_value_t tty_write_stream_columns_getter(ant_params_t) {
   int rows = 0;
   int cols = 0;
   get_tty_size(fd, &rows, &cols);
-  return js_mknum((double)cols);
+  return Ant_Value_FromNumber((double)cols);
 }
 
 static ant_value_t tty_write_stream_get_window_size(ant_params_t) {
@@ -589,8 +589,8 @@ static ant_value_t tty_write_stream_get_window_size(ant_params_t) {
   get_tty_size(fd, &rows, &cols);
 
   ant_value_t arr = js_mkarr(js);
-  js_arr_push(js, arr, js_mknum((double)cols));
-  js_arr_push(js, arr, js_mknum((double)rows));
+  js_arr_push(js, arr, Ant_Value_FromNumber((double)cols));
+  js_arr_push(js, arr, Ant_Value_FromNumber((double)rows));
   return arr;
 }
 
@@ -713,7 +713,7 @@ static ant_value_t tty_write_stream_get_color_depth(ant_params_t) {
 
   int fd = stream_fd_from_this(js, ANT_STDOUT_FD);
   int depth = detect_color_depth(js, fd, env_obj);
-  return js_mknum((double)depth);
+  return Ant_Value_FromNumber((double)depth);
 }
 
 static ant_value_t tty_write_stream_has_colors(ant_params_t) {

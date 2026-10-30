@@ -73,7 +73,7 @@ static int name_to_code(const char *name) {
 static void set_constants(ant_t *js, ant_value_t obj) {
   for (size_t i = 0; i < DOMEX_CONSTANTS_LEN; i++) mkprop_exact_attrs(
     js, obj, js_mkstr(js, domex_constants[i].prop, strlen(domex_constants[i].prop)),
-    js_mknum(domex_constants[i].code), ANT_PROP_ATTR_ENUMERABLE
+    Ant_Value_FromNumber(domex_constants[i].code), ANT_PROP_ATTR_ENUMERABLE
   );
 }
 
@@ -104,7 +104,7 @@ static ant_value_t domexception_ctor(ant_params_t) {
 
   js_set(js, self, "message", js_mkstr(js, msg,  msg_len));
   js_set(js, self, "name",    js_mkstr(js, name, name_len));
-  js_set(js, self, "code",    js_mknum(code));
+  js_set(js, self, "code",    Ant_Value_FromNumber(code));
 
   js_set_slot(self, SLOT_ERROR_BRAND, js_true);
   js_capture_stack_above(js, self, call_new_target);
@@ -122,7 +122,7 @@ ant_value_t make_dom_exception(ant_t *js, const char *message, const char *name)
 
   js_set(js, obj, "message", js_mkstr(js, message, msg_len));
   js_set(js, obj, "name",    js_mkstr(js, name,    name_len));
-  js_set(js, obj, "code",    js_mknum(code));
+  js_set(js, obj, "code",    Ant_Value_FromNumber(code));
   
   js_set_tostringtag(js, obj, js_mkstr(js, "DOMException", 12));
   js_set_slot(obj, SLOT_ERROR_BRAND, js_true);
@@ -139,7 +139,7 @@ void init_domexception_module(ant_t *js) {
 
   js_set(js, proto, "name",    js_mkstr(js, "Error", 5));
   js_set(js, proto, "message", js_mkstr(js, "",      0));
-  js_set(js, proto, "code",    js_mknum(0));
+  js_set(js, proto, "code",    Ant_Value_FromNumber(0));
   
   js_set_tostringtag(js, proto, js_mkstr(js, "DOMException", 12));
   set_constants(js, proto);

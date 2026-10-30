@@ -495,7 +495,7 @@ static inline ant_value_t sv_op_eval(sv_vm_t *vm, ant_t *js, sv_frame_t *frame, 
 static inline ant_value_t sv_op_check_ctor(sv_vm_t *vm, ant_t *js) {
   if (vtype(sv_vm_get_new_target(vm)) == kTypeUndefined)
     return js_mkerr_typed(js, JS_ERR_TYPE, SV_CLASS_CTOR_CALL_ERROR);
-  return tov(0);
+  return Ant_Value_FromNumber(0);
 }
 
 static inline void sv_op_check_ctor_ret(sv_vm_t *vm, sv_frame_t *frame) {

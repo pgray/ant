@@ -20,7 +20,7 @@ static inline ant_value_t sv_module_export_to_ns(
   if (len == 7 && memcmp(name, "default", 7) == 0)
     js_set_slot_wb(js, module_ns, SLOT_DEFAULT, value);
 
-  return tov(0);
+  return Ant_Value_FromNumber(0);
 }
 
 static inline ant_value_t sv_module_export_cstr(
@@ -62,7 +62,7 @@ static inline ant_value_t sv_op_to_object(sv_vm_t *vm, ant_t *js) {
   ant_value_t v = vm->stack[vm->sp - 1];
   uint8_t t = vtype(v);
   
-  if (t == kTypeObject || t == kTypeArray || t == kTypeFunction) return tov(0);
+  if (t == kTypeObject || t == kTypeArray || t == kTypeFunction) return Ant_Value_FromNumber(0);
   if (t == kTypeNull || t == kTypeUndefined)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert undefined or null to object");
   
@@ -72,7 +72,7 @@ static inline ant_value_t sv_op_to_object(sv_vm_t *vm, ant_t *js) {
   js_set_slot(obj_as_obj, SLOT_PRIMITIVE, v);
   vm->stack[vm->sp - 1] = obj;
   
-  return tov(0);
+  return Ant_Value_FromNumber(0);
 }
 
 static inline void sv_op_to_propkey(sv_vm_t *vm, ant_t *js) {
@@ -243,7 +243,7 @@ static inline ant_value_t sv_op_import_named(
   if (is_err(value)) return value;
   vm->stack[vm->sp - 1] = value;
 
-  return tov(0);
+  return Ant_Value_FromNumber(0);
 }
 
 static inline ant_value_t sv_op_export(
@@ -285,7 +285,7 @@ static inline ant_value_t sv_op_export_all(sv_vm_t *vm, ant_t *js) {
   js_prop_iter_end(&iter);
   vm->sp--;
   
-  return tov(0);
+  return Ant_Value_FromNumber(0);
 }
 
 static inline ant_object_t *sv_with_proto_ptr(ant_object_t *base_ptr) {
@@ -547,7 +547,7 @@ static inline void sv_op_special_obj(
       vm->stack[vm->sp++] = frame ? frame->super_val : js_mkundef();
       return;
     case SV_SPECIAL_ARGC:
-      vm->stack[vm->sp++] = js_mknum(frame ? (double)frame->argc : 0);
+      vm->stack[vm->sp++] = Ant_Value_FromNumber(frame ? (double)frame->argc : 0);
       return;
     case SV_SPECIAL_ARGUMENTS:
       if (frame) break;

@@ -140,7 +140,7 @@ static ant_value_t request_create_object(ant_t *js, request_data_t *req, ant_val
   }
 
   js_set_proto_init(obj, js->builtins.request_proto);
-  js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_REQUEST));
+  js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_REQUEST));
   js_set_native(obj, req, REQUEST_NATIVE_TAG);
   js_set_finalizer(obj, request_finalize);
 
@@ -573,7 +573,7 @@ static ant_value_t stream_body_read(ant_params_t) {
   ant_value_t promise = js_get(js, state, "promise");
   ant_value_t reader  = js_get(js, state, "reader");
   ant_value_t chunks  = js_get(js, state, "chunks");
-  int mode            = (int)js_getnum(js_get(js, state, "mode"));
+  int mode            = (int)Ant_Value_AsNumberUnchecked(js_get(js, state, "mode"));
 
   ant_value_t done_val = js_get(js, result, "done");
   ant_value_t value    = js_get(js, result, "value");
@@ -619,7 +619,7 @@ static ant_value_t consume_body_from_stream(
   js_set(js, state, "promise", promise);
   js_set(js, state, "reader",  reader);
   js_set(js, state, "chunks",  js_mkarr(js));
-  js_set(js, state, "mode",    js_mknum(mode));
+  js_set(js, state, "mode",    Ant_Value_FromNumber(mode));
   js_set(js, state, "type",    body_type ? js_mkstr(js, body_type, strlen(body_type)) : js_mkundef());
 
   stream_schedule_next_read(js, state, js_mkundef(), reader);
@@ -985,7 +985,7 @@ static ant_value_t js_request_clone(ant_params_t) {
   ant_value_t obj = Ant_Object_CreateBare(js);
   (void)js_reserve_slots(obj, REQUEST_RESERVED_SLOTS);
   js_set_proto_init(obj, js->builtins.request_proto);
-  js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_REQUEST));
+  js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_REQUEST));
   js_set_native(obj, nd, REQUEST_NATIVE_TAG);
   js_set_finalizer(obj, request_finalize);
   
@@ -1346,7 +1346,7 @@ static ant_value_t js_request_ctor(ant_params_t) {
   if (is_object_type(proto)) js_set_proto_init(obj, proto);
   else js_set_proto_init(obj, js->builtins.request_proto);
   
-  js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_REQUEST));
+  js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_REQUEST));
   js_set_native(obj, req, REQUEST_NATIVE_TAG);
   js_set_finalizer(obj, request_finalize);
   js_set_slot(obj, SLOT_REQUEST_ABORT_REASON, js_mkundef());
@@ -1419,7 +1419,7 @@ ant_value_t request_create_from_input_init(ant_t *js, ant_value_t input, ant_val
   obj = Ant_Object_CreateBare(js);
   (void)js_reserve_slots(obj, REQUEST_RESERVED_SLOTS);
   js_set_proto_init(obj, js->builtins.request_proto);
-  js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_REQUEST));
+  js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_REQUEST));
   js_set_native(obj, req, REQUEST_NATIVE_TAG);
   js_set_finalizer(obj, request_finalize);
   js_set_slot(obj, SLOT_REQUEST_ABORT_REASON, js_mkundef());

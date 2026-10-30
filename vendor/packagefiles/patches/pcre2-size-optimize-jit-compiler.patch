@@ -39,6 +39,15 @@
    dependencies: jit_deps,
    include_directories: includes,
    c_args: [general_c_args, '-DPCRE2_CODE_UNIT_WIDTH=8'],
+@@ -242,7 +255,7 @@
+ libpcre2_8 = declare_dependency(
+   link_with: pcre2_8_lib,
+   include_directories: includes,
+-  compile_args: static_defs,
++  compile_args: static_defs + ['-DPCRE2_CODE_UNIT_WIDTH=8'],
+ )
+ 
+ meson.override_dependency('libpcre2-8', libpcre2_8)
 @@ -268,7 +281,7 @@
  
  pcre2_16_lib = library(

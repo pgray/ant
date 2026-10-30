@@ -57,7 +57,7 @@ static inline ant_value_t sv_disposal_record_call(ant_t *js, ant_value_t record)
   ant_value_t method = js_arr_get(js, record, 2);
   
   int kind = vtype(kind_v) == kTypeNumber
-    ? (int)js_getnum(kind_v) : -1;
+    ? (int)Ant_Value_AsNumberUnchecked(kind_v) : -1;
 
   ant_value_t this_arg = kind == SV_DISPOSAL_RECORD_USE ? value : js_mkundef();
   ant_value_t arg = value;
@@ -122,7 +122,7 @@ static inline ant_value_t sv_using_push(
     return record;
   }
   
-  js_arr_push(js, record, js_mknum((double)SV_DISPOSAL_RECORD_USE));
+  js_arr_push(js, record, Ant_Value_FromNumber((double)SV_DISPOSAL_RECORD_USE));
   js_arr_push(js, record, resource);
   js_arr_push(js, record, method);
   js_arr_push(js, entries, record);
@@ -248,12 +248,12 @@ static inline ant_value_t sv_async_dispose_continue(
   }
 
   ant_value_t idx_v = js_get_slot(state, SLOT_ITER_STATE);
-  ant_offset_t idx = vtype(idx_v) == kTypeNumber ? (ant_offset_t)js_getnum(idx_v) : 0;
+  ant_offset_t idx = vtype(idx_v) == kTypeNumber ? (ant_offset_t)Ant_Value_AsNumberUnchecked(idx_v) : 0;
 
   while (idx > 0) {
     GC_ROOT_SAVE(iter_mark, js);
     idx--;
-    js_set_slot(state, SLOT_ITER_STATE, js_mknum((double)idx));
+    js_set_slot(state, SLOT_ITER_STATE, Ant_Value_FromNumber((double)idx));
     
     ant_value_t record = js_arr_get(js, entries, idx);
     GC_ROOT_PIN(js, record);
@@ -363,7 +363,7 @@ static inline ant_value_t sv_using_dispose_async(
   js_set_slot(state, SLOT_DATA, result_promise);
   js_set_slot(state, SLOT_AUX, completion);
   js_set_slot(state, SLOT_SETTLED, js_bool(has_completion));
-  js_set_slot(state, SLOT_ITER_STATE, js_mknum((double)js_arr_len(js, work)));
+  js_set_slot(state, SLOT_ITER_STATE, Ant_Value_FromNumber((double)js_arr_len(js, work)));
 
   ant_value_t result = sv_async_dispose_continue(js, state, false, js_mkundef());
   GC_ROOT_RESTORE(js, root_mark);

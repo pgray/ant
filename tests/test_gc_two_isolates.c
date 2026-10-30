@@ -26,7 +26,7 @@ static void check_child(ant_t *js, double tag) {
   assert(vtype(child) == kTypeObject);
   assert(js_obj_ptr(child)->mark_epoch != ANT_GC_DEAD);
   ant_value_t value = js_get(js, child, "tag");
-  assert(vtype(value) == kTypeNumber && js_getnum(value) == tag);
+  assert(vtype(value) == kTypeNumber && Ant_Value_AsNumberUnchecked(value) == tag);
 }
 
 int main(void) {

@@ -174,7 +174,7 @@ static thread_msg_status_t mailbox_deliver(ant_t *js, thread_msg_t *msg) {
   }
 
   GC_ROOT_SAVE(mark, js);
-  ant_value_t argv[2] = { value, js_mknum((double)msg->source) };
+  ant_value_t argv[2] = { value, Ant_Value_FromNumber((double)msg->source) };
   
   GC_ROOT_PIN(js, argv[0]);
   emit_process_event(js, "workerMessage", argv, 2);
@@ -293,12 +293,12 @@ ant_value_t worker_post_message_to_thread(ant_native_params_t) {
   if (vtype(timeout) != kTypeUndefined) {
     if (vtype(timeout) != kTypeNumber)
       return mailbox_rejected(js, Ant_Error_CreateInvalidArgType(js, "timeout", "of type number", timeout));
-    if (!(js_getnum(timeout) >= 0))
+    if (!(Ant_Value_AsNumberUnchecked(timeout) >= 0))
       return mailbox_rejected(js, Ant_Error_CreateOutOfRange(js, "timeout", ">= 0", timeout));
   }
 
   uint64_t self = ant_worker_thread_id(js);
-  double num = vtype(id) == kTypeNumber ? js_getnum(id) : -1;
+  double num = vtype(id) == kTypeNumber ? Ant_Value_AsNumberUnchecked(id) : -1;
   
   if (num == (double)self) return mailbox_rejected(js, js_mkerr_code(
     js, JS_ERR_GENERIC, 
@@ -343,7 +343,7 @@ ant_value_t worker_post_message_to_thread(ant_native_params_t) {
   if (vtype(timeout) == kTypeNumber && uv_timer_init(js->loop, &req->timer) == 0) {
     req->has_timer = true;
     req->timer.data = req;
-    uv_timer_start(&req->timer, thread_request_timeout, (uint64_t)js_getnum(timeout), 0);
+    uv_timer_start(&req->timer, thread_request_timeout, (uint64_t)Ant_Value_AsNumberUnchecked(timeout), 0);
   }
 
   msg->kind = THREAD_MSG_REQUEST;

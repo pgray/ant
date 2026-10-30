@@ -260,7 +260,7 @@ static jit_integer_range_t jit_constant_integer_range(sv_func_t *func, uint8_t *
   if (*ip == OP_CONST || *ip == OP_CONST8) {
     uint32_t index = *ip == OP_CONST ? sv_get_u32(ip + 1) : sv_get_u8(ip + 1);
     if (index < (uint32_t)func->const_count && vtype(func->constants[index]) == kTypeNumber)
-      return jit_number_integer_range(tod(func->constants[index]));
+      return jit_number_integer_range(Ant_Value_AsNumberUnchecked(func->constants[index]));
   }
   return (jit_integer_range_t){0};
 }
@@ -953,7 +953,7 @@ void vstack_ensure_boxed(jit_vstack_t *vs, int idx,
   if (!vs->slot_type || vs->slot_type[idx] == SLOT_BOXED) return;
   jit_integer_range_t range = vs->integer_range ? vs->integer_range[idx] : (jit_integer_range_t){0};
   if (vs->slot_type[idx] == SLOT_I32 && range.known && range.min == range.max) {
-    mir_load_imm(ctx, fn, vs->regs[idx], tov((double)range.min));
+    mir_load_imm(ctx, fn, vs->regs[idx], Ant_Value_FromNumber((double)range.min));
   } else {
     mir_emit_slot_boxed(
         ctx, fn, vs->regs[idx], vs->d_regs[idx], vs->slot_type[idx], d_slot);
@@ -1236,7 +1236,7 @@ MIR_reg_t mir_emit_word32_guard(
       MIR_new_reg_op(ctx, magnitude), MIR_new_reg_op(ctx, bits), MIR_new_int_op(ctx, 1)));
   MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_UBGE,
       MIR_new_label_op(ctx, slow), MIR_new_reg_op(ctx, magnitude),
-      MIR_new_uint_op(ctx, tov(0x1p63) << 1)));
+      MIR_new_uint_op(ctx, Ant_Value_FromNumber(0x1p63) << 1)));
   if (!is_known_double) {
     snprintf(name, sizeof(name), "word_double_%d", site);
     number = MIR_new_func_reg(ctx, fn->u.func, MIR_T_D, name);
@@ -1263,7 +1263,7 @@ MIR_reg_t mir_emit_array_index_guard(
   }
   MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_UBGT,
       MIR_new_label_op(ctx, slow), MIR_new_reg_op(ctx, bits),
-      MIR_new_uint_op(ctx, tov((double)UINT32_MAX - 1.0))));
+      MIR_new_uint_op(ctx, Ant_Value_FromNumber((double)UINT32_MAX - 1.0))));
   if (!is_known_double) {
     snprintf(name, sizeof(name), "index_double_%d", site);
     number = MIR_new_func_reg(ctx, fn->u.func, MIR_T_D, name);

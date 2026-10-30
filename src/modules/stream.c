@@ -560,7 +560,7 @@ static uint32_t stream_field_tag(stream_field_target_t target) {
 
 static const stream_field_t *stream_current_field(ant_t *js) {
   ant_value_t index = js_func_data(js->current_func);
-  return &stream_fields[(size_t)js_getnum(index)];
+  return &stream_fields[(size_t)Ant_Value_AsNumberUnchecked(index)];
 }
 
 static inline stream_private_state_t *stream_field_owner(ant_value_t receiver, const stream_field_t *field) {
@@ -889,7 +889,7 @@ static ant_value_t stream_field_get(ant_params_t) {
   void *ptr = (char *)priv + field->offset;
   switch (field->kind) {
     case STREAM_FIELD_BOOL: return js_bool(*(bool *)ptr);
-    case STREAM_FIELD_NUM: return js_mknum(*(double *)ptr);
+    case STREAM_FIELD_NUM: return Ant_Value_FromNumber(*(double *)ptr);
     case STREAM_FIELD_VALUE: return *(ant_value_t *)ptr;
     case STREAM_FIELD_TRI: {
       stream_tristate_t tri = *(stream_tristate_t *)ptr;
@@ -911,8 +911,8 @@ static void stream_define_fields(ant_t *js, ant_value_t target, stream_field_tar
     const stream_field_t *field = &stream_fields[i];
     if (field->target != on) continue;
 
-    ant_value_t getter = js_heavy_mkfun(js, stream_field_get, js_mknum((double)i));
-    ant_value_t setter = field->readonly ? js_mkundef() : js_heavy_mkfun(js, stream_field_set, js_mknum((double)i));
+    ant_value_t getter = js_heavy_mkfun(js, stream_field_get, Ant_Value_FromNumber((double)i));
+    ant_value_t setter = field->readonly ? js_mkundef() : js_heavy_mkfun(js, stream_field_set, Ant_Value_FromNumber((double)i));
     js_set_accessor_desc(js, target, field->name, strlen(field->name), getter, setter, flags);
   }
 }
@@ -1147,7 +1147,7 @@ static bool stream_listener_count_positive(ant_t *js, ant_value_t target, const 
 
   args[0] = js_mkstr(js, event_name, strlen(event_name));
   result = stream_call_prop(js, target, "listenerCount", args, 1);
-  return vtype(result) == kTypeNumber && js_getnum(result) > 0;
+  return vtype(result) == kTypeNumber && Ant_Value_AsNumberUnchecked(result) > 0;
 }
 
 static void stream_remove_listener(
@@ -1202,8 +1202,8 @@ static double stream_high_water_mark_from_options(
   ant_value_t hwm = stream_get_option(js, options, "highWaterMark");
   if ((is_undefined(hwm) || is_null(hwm)) && side_key) hwm = stream_get_option(js, options, side_key);
 
-  return (vtype(hwm) == kTypeNumber && js_getnum(hwm) >= 0)
-    ? floor(js_getnum(hwm))
+  return (vtype(hwm) == kTypeNumber && Ant_Value_AsNumberUnchecked(hwm) >= 0)
+    ? floor(Ant_Value_AsNumberUnchecked(hwm))
     : stream_default_high_water_mark(js, object_mode);
 }
 
@@ -1836,7 +1836,7 @@ static ant_value_t stream_rs_read(ant_t *js, stream_private_state_t *priv, doubl
   double n_orig = n;
 
   if (n > rs->high_water_mark) {
-    if (n > 1073741824.0) return Ant_Error_CreateOutOfRange(js, "size", "<= 1GiB", js_mknum(n));
+    if (n > 1073741824.0) return Ant_Error_CreateOutOfRange(js, "size", "<= 1GiB", Ant_Value_FromNumber(n));
     rs->high_water_mark = stream_grow_high_water_mark(n);
   }
 
@@ -1866,7 +1866,7 @@ static ant_value_t stream_rs_read(ant_t *js, stream_private_state_t *priv, doubl
     if (rs->length == 0) rs->need_readable = true;
 
     ant_value_t read_fn = stream_priv_method(js, priv, STREAM_METHOD_READ);
-    ant_value_t read_args[1] = { js_mknum(rs->high_water_mark) };
+    ant_value_t read_args[1] = { Ant_Value_FromNumber(rs->high_water_mark) };
     bool prev_in_read = rs->in_read;
 
     rs->in_read = true;
@@ -2199,7 +2199,7 @@ static ant_value_t js_readable_read(ant_params_t) {
 
   double n = (double)NAN;
   if (nargs > 0 && !is_undefined(args[0])) {
-    n = vtype(args[0]) == kTypeNumber ? tod(args[0]) : js_to_number(js, args[0]);
+    n = vtype(args[0]) == kTypeNumber ? Ant_Value_AsNumberUnchecked(args[0]) : js_to_number(js, args[0]);
     if (Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
     if (!isnan(n)) n = trunc(n);
   }
@@ -3622,7 +3622,7 @@ static ant_value_t stream_readable_from_options(ant_t *js, ant_value_t opts) {
   if (is_object_type(opts)) js_set_proto_init(options, opts);
 
   if (vtype(stream_get_option(js, opts, "objectMode")) == kTypeUndefined) js_set(js, options, "objectMode", js_true);
-  if (vtype(stream_get_option(js, opts, "highWaterMark")) == kTypeUndefined) js_set(js, options, "highWaterMark", js_mknum(1));
+  if (vtype(stream_get_option(js, opts, "highWaterMark")) == kTypeUndefined) js_set(js, options, "highWaterMark", Ant_Value_FromNumber(1));
 
   return options;
 }
@@ -4352,16 +4352,16 @@ ant_value_t stream_destroy(ant_t *js, ant_value_t stream_obj, ant_value_t error)
 
 static ant_value_t js_stream_get_default_high_water_mark(ant_params_t) {
   bool object_mode = nargs > 0 && js_truthy(js, args[0]);
-  return js_mknum(stream_default_high_water_mark(js, object_mode));
+  return Ant_Value_FromNumber(stream_default_high_water_mark(js, object_mode));
 }
 
 static ant_value_t js_stream_set_default_high_water_mark(ant_params_t) {
-  if (nargs < 2 || vtype(args[1]) != kTypeNumber || js_getnum(args[1]) < 0)
+  if (nargs < 2 || vtype(args[1]) != kTypeNumber || Ant_Value_AsNumberUnchecked(args[1]) < 0)
     return js_mkerr_typed(js, JS_ERR_RANGE, "setDefaultHighWaterMark requires a non-negative number");
 
   bool object_mode = js_truthy(js, args[0]);
-  if (object_mode) js->defaults.stream_object_high_water_mark = js_getnum(args[1]);
-  else js->defaults.stream_high_water_mark = js_getnum(args[1]);
+  if (object_mode) js->defaults.stream_object_high_water_mark = Ant_Value_AsNumberUnchecked(args[1]);
+  else js->defaults.stream_high_water_mark = Ant_Value_AsNumberUnchecked(args[1]);
 
   return js_mkundef();
 }

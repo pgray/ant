@@ -21,7 +21,7 @@ int main(void) {
   init_iterator_module(js);
   const uint32_t counts[] = {0, 1, 2, 7, 8, 9, 33};
   ant_value_t values[33];
-  for (uint32_t i = 0; i < 33; i++) values[i] = js_mknum(i);
+  for (uint32_t i = 0; i < 33; i++) values[i] = Ant_Value_FromNumber(i);
   for (size_t test = 0; test < sizeof counts / sizeof *counts; test++) {
     uint32_t count = counts[test];
     sv_frame_t frame = {.bp = values, .argc = (int)count};
@@ -37,8 +37,8 @@ int main(void) {
     assert(ptr->extra_slots == NULL && ptr->flags.arguments_object);
     assert(js_get_slot(args, SLOT_ARGUMENTS_OBJECT) == js_true);
     for (uint32_t i = 0; i < count; i++) assert(js_arr_get(js, args, i) == values[i]);
-    js_arr_push(js, args, js_mknum(99));
-    assert(js_arr_get(js, args, count) == js_mknum(99));
+    js_arr_push(js, args, Ant_Value_FromNumber(99));
+    assert(js_arr_get(js, args, count) == Ant_Value_FromNumber(99));
     assert(ptr->u.array.cap >= count + 1);
 
     // Preserve the internal slot API for non-marker values as well.

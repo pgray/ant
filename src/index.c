@@ -6,7 +6,7 @@
 
 static inline ant_value_t js_to_integer_number(ant_t *js, ant_value_t value, double *out) {
   if (__builtin_expect(vtype(value) == kTypeNumber, 1)) {
-    *out = tod(value);
+    *out = Ant_Value_AsNumberUnchecked(value);
     return js_mkundef();
   }
 

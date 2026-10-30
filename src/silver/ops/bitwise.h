@@ -24,15 +24,15 @@ static inline ant_value_t sv_bitwise_numbers(ant_t *js, sv_op_t op, ant_value_t 
     return bigint_shift_right_logical(js, l, shift);
   }
   
-  double a = tod(l), b = tod(r);
+  double a = Ant_Value_AsNumberUnchecked(l), b = Ant_Value_AsNumberUnchecked(r);
   uint32_t shift = js_to_uint32(b) & 0x1f;
   switch (op) {
-    case OP_BAND: return tov((double)(js_to_int32(a) & js_to_int32(b)));
-    case OP_BOR:  return tov((double)(js_to_int32(a) | js_to_int32(b)));
-    case OP_BXOR: return tov((double)(js_to_int32(a) ^ js_to_int32(b)));
-    case OP_SHL:  return tov((double)(int32_t)((uint32_t)js_to_int32(a) << shift));
-    case OP_SHR:  return tov((double)(js_to_int32(a) >> shift));
-    default:      return tov((double)(js_to_uint32(a) >> shift));
+    case OP_BAND: return Ant_Value_FromNumber((double)(js_to_int32(a) & js_to_int32(b)));
+    case OP_BOR:  return Ant_Value_FromNumber((double)(js_to_int32(a) | js_to_int32(b)));
+    case OP_BXOR: return Ant_Value_FromNumber((double)(js_to_int32(a) ^ js_to_int32(b)));
+    case OP_SHL:  return Ant_Value_FromNumber((double)(int32_t)((uint32_t)js_to_int32(a) << shift));
+    case OP_SHR:  return Ant_Value_FromNumber((double)(js_to_int32(a) >> shift));
+    default:      return Ant_Value_FromNumber((double)(js_to_uint32(a) >> shift));
   }
 }
 
@@ -66,7 +66,7 @@ static inline ant_value_t sv_bitnot_value(ant_t *js, ant_value_t v) {
   ant_value_t n = js_to_numeric(js, v);
   if (is_err(n)) return n;
   if (vtype(n) == kTypeBigInt) return bigint_bitnot(js, n);
-  return tov((double)(~js_to_int32(tod(n))));
+  return Ant_Value_FromNumber((double)(~js_to_int32(Ant_Value_AsNumberUnchecked(n))));
 }
 
 static inline ant_value_t sv_op_bitwise(sv_vm_t *vm, ant_t *js, sv_op_t op) {
@@ -74,7 +74,7 @@ static inline ant_value_t sv_op_bitwise(sv_vm_t *vm, ant_t *js, sv_op_t op) {
   vm->sp -= 2;
   if (is_err(res)) return res;
   vm->stack[vm->sp++] = res;
-  return tov(0);
+  return Ant_Value_FromNumber(0);
 }
 
 static inline ant_value_t sv_op_band(sv_vm_t *vm, ant_t *js) { return sv_op_bitwise(vm, js, OP_BAND); }
@@ -89,7 +89,7 @@ static inline ant_value_t sv_op_bnot(sv_vm_t *vm, ant_t *js) {
   vm->sp--;
   if (is_err(res)) return res;
   vm->stack[vm->sp++] = res;
-  return tov(0);
+  return Ant_Value_FromNumber(0);
 }
 
 #endif

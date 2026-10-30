@@ -92,11 +92,11 @@ typedef struct set_store {
 } set_store_t;
 
 static inline ant_value_t collections_iter_slot(collection_iter_state_t *st) {
-  return tov((double)(uintptr_t)st);
+  return Ant_Value_FromNumber((double)(uintptr_t)st);
 }
 
 static inline collection_iter_state_t *collections_iter_from_slot(ant_value_t slot) {
-  return (collection_iter_state_t *)(uintptr_t)tod(slot);
+  return (collection_iter_state_t *)(uintptr_t)Ant_Value_AsNumberUnchecked(slot);
 }
 
 map_entry_t *collections_map_iter_step(map_iterator_state_t *st);

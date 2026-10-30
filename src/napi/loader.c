@@ -114,7 +114,7 @@ ant_value_t napi_process_dlopen_js(ant_params_t) {
   if (!path || path_len == 0) return js_mkerr(js, "process.dlopen filename must be non-empty");
 
   int flags = NAPI_DEFAULT_DLOPEN_FLAGS;
-  if (nargs >= 3 && vtype(args[2]) == kTypeNumber) flags = (int)js_getnum(args[2]);
+  if (nargs >= 3 && vtype(args[2]) == kTypeNumber) flags = (int)Ant_Value_AsNumberUnchecked(args[2]);
 
   ant_value_t loaded = napi_dlopen_common(js, args[0], path, flags);
   if (is_err(loaded)) return loaded;

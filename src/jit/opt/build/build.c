@@ -711,7 +711,7 @@ static void opt_compute_liveness(opt_builder_t *b) {
 static ir_node_id_t opt_constant(opt_builder_t *b, uint64_t bits);
 
 static uint64_t opt_completion_bits(uint32_t kind) {
-  return tov((double)kind);
+  return Ant_Value_FromNumber((double)kind);
 }
 
 static opt_frame_t opt_frame_new(opt_builder_t *b) {
@@ -4375,7 +4375,7 @@ static opt_flow_t opt_build_constant_op(opt_builder_t *b, const uint8_t *ip, sv_
       if (index >= (uint32_t)b->func->const_count) return opt_build_bad_operand(b);
       ant_value_t value = b->func->constants[index];
       if (vtype(value) == kTypeFunctionInfo || opt_bitset_contains(&b->patched_constants, index)) return OPT_FLOW_GENERIC;
-      bits = vtype(value) == kTypeNumber ? ir_value_number(tod(value)) : value;
+      bits = vtype(value) == kTypeNumber ? ir_value_number(Ant_Value_AsNumberUnchecked(value)) : value;
       break;
     }
     case OP_UNDEF: bits = IR_VALUE_UNDEFINED; break;
@@ -4923,7 +4923,7 @@ static ir_node_id_t opt_call_output(opt_builder_t *b, ir_node_id_t call, uint32_
 }
 
 static uint64_t opt_iteration_tag(uint8_t kind) {
-  return tov((double)kind);
+  return Ant_Value_FromNumber((double)kind);
 }
 
 static bool opt_is_iteration_tag(const opt_builder_t *b, ir_node_id_t tag, uint8_t kind) {
@@ -5300,7 +5300,7 @@ static uint32_t opt_completion_kinds(const opt_builder_t *b, const opt_finally_t
       exact = false;
       break;
     }
-    uint32_t value = (uint32_t)js_getnum(constant), k = 0;
+    uint32_t value = (uint32_t)Ant_Value_AsNumberUnchecked(constant), k = 0;
     if (!value) continue;
     while (k < count && kinds[k] != value) k++;
     if (k == count && count < OPT_FINALLY_CONTS + 1) kinds[count++] = value;

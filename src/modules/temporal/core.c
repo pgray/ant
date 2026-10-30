@@ -880,7 +880,7 @@ bool temporal_to_string_options(
     value = js_get(js, options, "fractionalSecondDigits"); if (is_err(value)) { *err = value; return false; }
   if (vtype(value) != kTypeUndefined) {
     if (vtype(value) == kTypeNumber) {
-      double number = floor(tod(value));
+      double number = floor(Ant_Value_AsNumberUnchecked(value));
       if (!isfinite(number) || number < 0 || number > 9) {
         *err = js_mkerr_typed(js, JS_ERR_RANGE, "invalid fractionalSecondDigits"); return false;
       }
@@ -1033,7 +1033,7 @@ ant_value_t temporal_make_function(
   js_set_slot(obj, SLOT_CFUNC, js_mkfun_dyn(callback));
   js_mkprop_fast(js, obj, "name", 4, js_mkstr(js, name, name_len));
   js_set_descriptor(js, obj, "name", 4, JS_DESC_C);
-  js_mkprop_fast(js, obj, "length", 6, js_mknum(length));
+  js_mkprop_fast(js, obj, "length", 6, Ant_Value_FromNumber(length));
   js_set_descriptor(js, obj, "length", 6, JS_DESC_C);
   return js_obj_to_func(js, obj);
 }

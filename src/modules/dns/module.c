@@ -119,7 +119,7 @@ static ant_value_t dns_resolver_option(ant_t *js, ant_value_t options, const cha
   snprintf(label, sizeof(label), "options.%s", name);
   if (vtype(value) != kTypeNumber) return Ant_Error_CreateInvalidArgType(js, label, "of type number", value);
 
-  double number = js_getnum(value);
+  double number = Ant_Value_AsNumberUnchecked(value);
   if (number != (double)(int)number || number < min) {
     char message[160];
     snprintf(message, sizeof(message), "The value of \"%s\" is out of range. It must be >= %d and <= 2147483647. Received %g", label, min, number);
@@ -241,9 +241,9 @@ ant_value_t dns_library(ant_t *js) {
   js_define_methods(js, lib, dns_order_methods, countof(dns_order_methods), ANT_PROP_ATTR_DEFAULT);
   js_define_methods(js, lib, dns_shared_methods, countof(dns_shared_methods), ANT_PROP_ATTR_DEFAULT);
 
-  js_set(js, lib, "ADDRCONFIG", js_mknum(AI_ADDRCONFIG));
-  js_set(js, lib, "ALL", js_mknum(AI_ALL));
-  js_set(js, lib, "V4MAPPED", js_mknum(AI_V4MAPPED));
+  js_set(js, lib, "ADDRCONFIG", Ant_Value_FromNumber(AI_ADDRCONFIG));
+  js_set(js, lib, "ALL", Ant_Value_FromNumber(AI_ALL));
+  js_set(js, lib, "V4MAPPED", Ant_Value_FromNumber(AI_V4MAPPED));
   dns_define_error_codes(js, lib);
 
   js_define_methods(js, lib, dns_callback_resolvers, countof(dns_callback_resolvers), ANT_PROP_ATTR_DEFAULT);

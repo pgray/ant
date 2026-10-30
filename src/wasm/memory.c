@@ -106,12 +106,12 @@ ant_value_t js_wasm_memory_grow(ant_params_t) {
   if (!handle || !handle->as.memory)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Expected a WebAssembly.Memory");
 
-  if (!wasm_to_page_count(js, nargs > 0 ? args[0] : js_mknum(0), &delta))
+  if (!wasm_to_page_count(js, nargs > 0 ? args[0] : Ant_Value_FromNumber(0), &delta))
     return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Memory.grow requires a valid page count");
 
   old_size = wasm_memory_size(handle->as.memory);
 
-  if (delta == 0) return js_mknum((double)old_size);
+  if (delta == 0) return Ant_Value_FromNumber((double)old_size);
 
   if (!wasm_memory_grow(handle->as.memory, delta))
     return js_mkerr_typed(js, JS_ERR_RANGE, "Failed to grow memory by %u pages", delta);
@@ -121,7 +121,7 @@ ant_value_t js_wasm_memory_grow(ant_params_t) {
   Ant_List_Remove(handle);
   js_set_slot_wb(js, js->this_val, SLOT_AUX, js_mkundef());
 
-  return js_mknum((double)old_size);
+  return Ant_Value_FromNumber((double)old_size);
 }
 
 ant_value_t js_wasm_memory_ctor(ant_params_t) {

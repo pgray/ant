@@ -11,7 +11,7 @@ ant_value_t js_to_length_slow(ant_t *js, ant_value_t value, size_t *out);
 
 static inline ant_value_t js_to_index_fast(ant_t *js, ant_value_t value, size_t *out) {
   if (__builtin_expect(vtype(value) == kTypeNumber, 1)) {
-    double number = tod(value);
+    double number = Ant_Value_AsNumberUnchecked(value);
     if (__builtin_expect(
       number >= 0.0 && number <= MAX_SAFE_INTEGER &&
       number <= (double)SIZE_MAX, 1 )
@@ -22,7 +22,7 @@ static inline ant_value_t js_to_index_fast(ant_t *js, ant_value_t value, size_t 
 
 static inline ant_value_t js_to_length_fast(ant_t *js, ant_value_t value, size_t *out) {
   if (__builtin_expect(vtype(value) == kTypeNumber, 1)) {
-    double number = tod(value);
+    double number = Ant_Value_AsNumberUnchecked(value);
     if (__builtin_expect(
       number >= 0.0 && number <= MAX_SAFE_INTEGER &&
       number <= (double)SIZE_MAX, 1)

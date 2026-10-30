@@ -35,7 +35,7 @@ static ant_value_t IteratorSelf(ant_params_t) { return js->this_val; }
 static ant_value_t IteratorNext(ant_params_t) {
   if (fail_next) return js_throw(js, original_reason);
   unsigned index = next_calls++;
-  return js_iter_result(js, index < item_limit, js_mknum(index));
+  return js_iter_result(js, index < item_limit, Ant_Value_FromNumber(index));
 }
 
 static ant_value_t IteratorReturn(ant_params_t) {

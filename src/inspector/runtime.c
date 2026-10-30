@@ -114,7 +114,7 @@ static bool inspector_append_preview_value(ant_t *js, ant_value_t value, sbuf_t 
     case kTypeBool:
       return sbuf_appendf(out, "\"type\":\"boolean\",\"value\":\"%s\"", value == js_true ? "true" : "false");
     case kTypeNumber: {
-      double n = js_getnum(value);
+      double n = Ant_Value_AsNumberUnchecked(value);
       if (isnan(n)) return sbuf_append(out, "\"type\":\"number\",\"value\":\"NaN\"");
       if (isinf(n)) return sbuf_appendf(out, "\"type\":\"number\",\"value\":\"%sInfinity\"", n < 0 ? "-" : "");
       return sbuf_appendf(out, "\"type\":\"number\",\"value\":\"%.17g\"", n);
@@ -275,7 +275,7 @@ bool inspector_value_to_remote_object(ant_t *js, ant_value_t value, sbuf_t *out)
     case kTypeBool:
       return sbuf_appendf(out, "{\"type\":\"boolean\",\"value\":%s}", value == js_true ? "true" : "false");
     case kTypeNumber: {
-      double n = js_getnum(value);
+      double n = Ant_Value_AsNumberUnchecked(value);
       if (isnan(n)) return sbuf_append(out, "{\"type\":\"number\",\"unserializableValue\":\"NaN\",\"description\":\"NaN\"}");
       if (isinf(n)) return sbuf_appendf(
         out, "{\"type\":\"number\",\"unserializableValue\":\"%sInfinity\",\"description\":\"%sInfinity\"}",
@@ -605,7 +605,7 @@ static inspector_await_t *inspector_take_pending_await(uint32_t await_id) {
 static uint32_t inspector_current_await_id(ant_t *js) {
   ant_value_t state = js_func_data(js->current_func);
   if (vtype(state) != kTypeNumber) return 0;
-  double id = js_getnum(state);
+  double id = Ant_Value_AsNumberUnchecked(state);
   return id > 0 && id <= UINT32_MAX ? (uint32_t)id : 0;
 }
 
@@ -662,7 +662,7 @@ static bool inspector_defer_eval_result(
 
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, promise);
-  ant_value_t state = js_mknum((double)pending->id);
+  ant_value_t state = Ant_Value_FromNumber((double)pending->id);
   ant_value_t fulfilled = js_heavy_mkfun(js, inspector_await_fulfilled, state);
   GC_ROOT_PIN(js, fulfilled);
   ant_value_t rejected = js_heavy_mkfun(js, inspector_await_rejected, state);

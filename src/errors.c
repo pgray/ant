@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#include <stdio.h>
 
 #include "errors.h"
 #include "utf8.h"
@@ -16,6 +17,9 @@
 #include "silver/stack_trace.h"
 #include "modules/io.h"
 #include "modules/bigint.h"
+#include "silver/call.h"
+#include "modules/iterator.h"
+#include "props.h"
 
 void print_error_value(ant_t *js, ant_value_t value, ant_value_t fallback_stack, const char *prefix) {
   if (is_err(value)) {
@@ -33,7 +37,7 @@ void print_error_value(ant_t *js, ant_value_t value, ant_value_t fallback_stack,
   if (vtype(obj) == kTypeObject) {
     ant_value_t err_type = js_get_slot(obj, SLOT_ERR_TYPE);
     is_real_error = js_get_slot(obj, SLOT_ERROR_BRAND) == js_true || vtype(err_type) == kTypeNumber;
-    no_stack = vtype(err_type) == kTypeNumber && ((int)js_getnum(err_type) & JS_ERR_NO_STACK);
+    no_stack = vtype(err_type) == kTypeNumber && ((int)Ant_Value_AsNumberUnchecked(err_type) & JS_ERR_NO_STACK);
     if (!no_stack) stack = js_getprop_fallback_len(js, obj, "stack", 5);
   }
   
@@ -61,10 +65,10 @@ bool js_mark_errorlike_no_stack(ant_t *js, ant_value_t value) {
   if ((!name || !*name) && (!message || !*message)) return false;
 
   ant_value_t err_type = js_get_slot(value, SLOT_ERR_TYPE);
-  int base_type = vtype(err_type) == kTypeNumber ? (int)js_getnum(err_type) : JS_ERR_GENERIC;
+  int base_type = vtype(err_type) == kTypeNumber ? (int)Ant_Value_AsNumberUnchecked(err_type) : JS_ERR_GENERIC;
 
   js_set(js, value, "stack", js_mkundef());
-  js_set_slot(value, SLOT_ERR_TYPE, js_mknum((double)(base_type | JS_ERR_NO_STACK)));
+  js_set_slot(value, SLOT_ERR_TYPE, Ant_Value_FromNumber((double)(base_type | JS_ERR_NO_STACK)));
   
   return true;
 }
@@ -99,7 +103,7 @@ static ant_value_t error_header_part(ant_t *js, ant_value_t obj, const char *key
 
 static bool error_has_node_code(ant_value_t obj) {
   ant_value_t type = vtype(obj) == kTypeObject ? js_get_slot(obj, SLOT_ERR_TYPE) : js_mkundef();
-  return vtype(type) == kTypeNumber && ((int)js_getnum(type) & JS_ERR_NODE_CODE);
+  return vtype(type) == kTypeNumber && ((int)Ant_Value_AsNumberUnchecked(type) & JS_ERR_NODE_CODE);
 }
 
 static bool error_props_have_node_code(ant_t *js, ant_value_t props) {
@@ -284,7 +288,7 @@ static ant_value_t make_error_value(
     if (error_props_have_node_code(js, props)) type_bits |= JS_ERR_NODE_CODE;
   }
   
-  js_set_slot(err_obj, SLOT_ERR_TYPE, js_mknum((double)type_bits));
+  js_set_slot(err_obj, SLOT_ERR_TYPE, Ant_Value_FromNumber((double)type_bits));
   js_set_slot(err_obj, SLOT_ERROR_BRAND, js_true);
   
   ant_value_t proto = js->error_realm
@@ -414,7 +418,7 @@ ant_value_t js_throw(ant_t *js, ant_value_t value) {
     if (error_has_captured_stack(value)) {
       no_stack = true;
       stack = js_get_slot(value, SLOT_ERROR_STACK_TEXT);
-    } else if (vtype(kind) == kTypeNumber && ((int)js_getnum(kind) & JS_ERR_NO_STACK)) no_stack = true;
+    } else if (vtype(kind) == kTypeNumber && ((int)Ant_Value_AsNumberUnchecked(kind) & JS_ERR_NO_STACK)) no_stack = true;
     else no_stack = js_try_get_own_data_prop(js, value, "stack", 5, &stack) && vtype(stack) == kTypeString;
     if (vtype(stack) != kTypeString) stack = js_mkundef();
   }
@@ -541,7 +545,7 @@ static void js_describe_range_value(ant_t *js, ant_value_t value, char *out, siz
     return;
   }
   
-  double d = js_getnum(value);
+  double d = Ant_Value_AsNumberUnchecked(value);
   if (d == 0 && signbit(d)) { snprintf(out, len, "-0"); return; }
   
   size_t n = js_number_to_chars(value, raw, sizeof(raw) - 1);
@@ -567,3 +571,294 @@ __attribute__((noinline, cold)) ant_value_t Ant_Error_CreateOutOfRange(
   return js_mkerr_code(js, JS_ERR_RANGE, "ERR_OUT_OF_RANGE", message);
 }
 
+static ant_value_t builtin_error_captureStackTrace(ant_params_t) {
+  if (nargs < 1 || !is_object_type(args[0]))
+    return js_mkerr(js, "argument must be an object");
+
+  ant_value_t target = args[0];
+  ant_value_t above = nargs > 1 ? args[1] : js_mkundef();
+  
+  if (vtype(above) == kTypeBuiltin && js_as_cfunc(above) == builtin_error_captureStackTrace) above = js_mkundef();
+  ant_value_t error_ctor = lkp_val(js, js_glob(js), "Error", 5);
+  ant_value_t prep = js_mkundef();
+
+  if (vtype(error_ctor) == kTypeFunction || vtype(error_ctor) == kTypeBuiltin)
+    prep = lkp_val(js, js_func_obj(error_ctor), "prepareStackTrace", 17);
+
+  if (vtype(prep) == kTypeFunction || vtype(prep) == kTypeBuiltin) {
+    ant_value_t callsites = js_build_callsite_array(js, above);
+    ant_value_t prep_args[2] = { target, callsites };
+    
+    ant_value_t result = sv_vm_call(js->vm, js, prep, js_mkundef(), prep_args, 2, NULL, js_mkundef());
+    if (Ant_Exception_Pending(js)) return js_mkundef();
+    
+    js_error_define_stack(js, target, js_mkundef(), result);
+  } else js_capture_stack_above(js, target, above);
+
+  return js_mkundef();
+}
+
+static ant_value_t builtin_error_isError(ant_params_t) {
+  if (nargs < 1) return js_false;
+  ant_value_t val = args[0];
+  if (!is_object_type(val)) return js_false;
+  return get_slot(val, SLOT_ERROR_BRAND) == js_true ? js_true : js_false;
+}
+
+static ant_value_t error_install_message_cause(ant_t *js, ant_value_t err, ant_value_t message, ant_value_t options) {
+  if (vtype(message) != kTypeUndefined) {
+    ant_value_t msg = js_template_to_string(js, message);
+    if (is_err(msg)) return msg;
+    mkprop_interned(js, err, js->intern.message, msg, ANT_PROP_ATTR_WRITABLE | ANT_PROP_ATTR_CONFIGURABLE);
+  }
+  
+  if (is_object_type(options) && lkp_proto(js, options, "cause", 5).obj) {
+    ant_value_t cause = js_get(js, options, "cause");
+    if (is_err(cause)) return cause;
+    mkprop_bytes(js, err, "cause", 5, cause, JS_DESC_W | JS_DESC_C);
+  }
+  
+  return js_mkundef();
+}
+
+static ant_value_t builtin_Error(ant_params_t) {
+  bool is_new = (vtype(call_new_target) != kTypeUndefined);
+  ant_value_t this_val = js->this_val;
+  
+  if (!is_new) {
+    this_val = Ant_Object_CreateBare(js);
+    ant_value_t proto = lkp_interned_val(js, js_func_obj(js->current_func), js->intern.prototype);
+    if (vtype(proto) != kTypeUndefined) js_set_proto_init(this_val, proto);
+    else js_set_proto_init(this_val, js->builtins.error_protos[JS_ERR_GENERIC]);
+  }
+  
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, this_val);
+  js_capture_stack_above(js, this_val, call_new_target);
+  
+  ant_value_t installed = error_install_message_cause(
+    js, this_val, nargs > 0 ? args[0] : js_mkundef(), 
+    nargs > 1 ? args[1] : js_mkundef()
+  );
+  
+  set_slot(this_val, SLOT_ERROR_BRAND, js_true);
+  GC_ROOT_RESTORE(js, mark);
+  
+  return is_err(installed) ? installed : this_val;
+}
+
+ant_value_t Ant_Error_CreateConstructorEx(ant_t *js, const char *name, ant_value_t cfunc, ant_value_t *out_proto) {
+  size_t name_len = strlen(name);
+  ant_value_t error_ctor = js->builtins.error_ctor;
+  
+  ant_value_t proto = Ant_Object_CreateBare(js);
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, proto);
+  
+  set_proto(js, proto, js->builtins.error_protos[JS_ERR_GENERIC]);
+  mkprop_bytes(js, proto, "name", 4, js_mkstr(js, name, name_len), JS_DESC_W | JS_DESC_C);
+  mkprop_bytes(js, proto, "message", 7, js_mkstr(js, "", 0), JS_DESC_W | JS_DESC_C);
+  
+  ant_value_t ctor = mkobj(js, 0);
+  GC_ROOT_PIN(js, ctor);
+  
+  set_proto(js, ctor, error_ctor);
+  set_slot(ctor, SLOT_CFUNC, cfunc);
+  js_setprop_readonly_nonconfigurable(js, ctor, "prototype", 9, proto);
+  js_set_function_name(js, ctor, name, name_len);
+  
+  ant_value_t ctor_func = js_obj_to_func(js, ctor);
+  defhidden(js, proto, "constructor", 11, ctor_func);
+  GC_ROOT_RESTORE(js, mark);
+  
+  if (out_proto) *out_proto = proto;
+  return ctor_func;
+}
+
+ant_value_t Ant_Error_CreateConstructor(ant_t *js, const char *name, ant_value_t *out_proto) {
+  return Ant_Error_CreateConstructorEx(js, name, Ant_Function_CreateWithArity(builtin_Error, 1), out_proto);
+}
+
+static ant_value_t builtin_Error_toString(ant_params_t) {
+  ant_value_t this_val = js_getthis(js);
+  
+  ant_value_t name = js_getprop_fallback_len(js, this_val, "name", 4);
+  if (vtype(name) == kTypeUndefined) name = js_mkstr(js, "Error", 5);
+  else if (vtype(name) != kTypeString) {
+    const char *s = js_str(js, name);
+    name = js_mkstr(js, s, strlen(s));
+  }
+  name = js_error_display_name(js, this_val, name);
+  if (is_err(name)) return name;
+  
+  ant_value_t msg = js_getprop_fallback_len(js, this_val, "message", 7);
+  if (vtype(msg) == kTypeUndefined) msg = js_mkstr(js, "", 0);
+  else if (vtype(msg) != kTypeString) {
+    const char *s = js_str(js, msg);
+    msg = js_mkstr(js, s, strlen(s));
+  }
+  
+  ant_offset_t name_len, msg_len;
+  ant_offset_t name_off = vstr(js, name, &name_len);
+  ant_offset_t msg_off = vstr(js, msg, &msg_len);
+  
+  const char *name_str = (const char *)(uintptr_t)(name_off);
+  const char *msg_str = (const char *)(uintptr_t)(msg_off);
+  
+  if (name_len == 0) return msg;
+  if (msg_len == 0) return name;
+
+  size_t total = (size_t)(name_len + 2 + msg_len);
+  char *buf = malloc(total + 1);
+  if (!buf) return Ant_Error_CreateOutOfMemory(js);
+
+  memcpy(buf, name_str, (size_t)name_len);
+  buf[name_len] = ':';
+  buf[name_len + 1] = ' ';
+  memcpy(buf + name_len + 2, msg_str, (size_t)msg_len);
+  buf[total] = '\0';
+  
+  ant_value_t result = js_mkstr(js, buf, total);
+  free(buf);
+  
+  return result;
+}
+
+static ant_value_t builtin_AggregateError(ant_params_t) {
+  bool is_new = (vtype(call_new_target) != kTypeUndefined);
+  ant_value_t this_val = js->this_val;
+  
+  if (!is_new) {
+    this_val = Ant_Object_CreateBare(js);
+    ant_prop_loc_t proto_off = lkp_interned(js_func_obj(js->current_func), js->intern.prototype);
+    if (proto_off.obj) js_set_proto_init(this_val, js_prop_load(proto_off));
+    else js_set_proto_init(this_val, js->builtins.error_protos[JS_ERR_AGGREGATE]);
+  }
+  
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, this_val);
+  
+  ant_value_t installed = error_install_message_cause(
+    js, this_val, nargs > 1 ? args[1] : js_mkundef(), 
+    nargs > 2 ? args[2] : js_mkundef()
+  );
+  
+  if (is_err(installed)) { 
+    GC_ROOT_RESTORE(js, mark); 
+    return installed;
+  }
+  
+  ant_value_t errors = Ant_Iterator_ToList(js, nargs > 0 ? args[0] : js_mkundef(), "AggregateError errors is not iterable");
+  if (is_err(errors)) {
+    GC_ROOT_RESTORE(js, mark);
+    return errors;
+  }
+  
+  mkprop_bytes(js, this_val, "errors", 6, errors, JS_DESC_W | JS_DESC_C);
+  set_slot(this_val, SLOT_ERROR_BRAND, js_true);
+  
+  js_capture_stack_above(js, this_val, call_new_target);
+  GC_ROOT_RESTORE(js, mark);
+
+  return this_val;
+}
+
+static ant_value_t builtin_SuppressedError(ant_params_t) {
+  bool is_new = (vtype(call_new_target) != kTypeUndefined);
+  ant_value_t this_val = js->this_val;
+
+  if (!is_new) {
+    this_val = Ant_Object_CreateBare(js);
+    ant_prop_loc_t proto_off = lkp_interned(js_func_obj(js->current_func), js->intern.prototype);
+    if (proto_off.obj) js_set_proto_init(this_val, js_prop_load(proto_off));
+    else js_set_proto_init(this_val, js->builtins.suppressed_error_proto);
+  }
+
+  ant_value_t error = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t suppressed = nargs > 1 ? args[1] : js_mkundef();
+  
+  GC_ROOT_SAVE(mark, js);
+  GC_ROOT_PIN(js, this_val);
+  
+  ant_value_t installed = error_install_message_cause(js, this_val, nargs > 2 ? args[2] : js_mkundef(), js_mkundef());
+  
+  GC_ROOT_RESTORE(js, mark);
+  if (is_err(installed)) return installed;
+
+  mkprop_bytes(js, this_val, "error", 5, error, JS_DESC_W | JS_DESC_C);
+  mkprop_bytes(js, this_val, "suppressed", 10, suppressed, JS_DESC_W | JS_DESC_C);
+
+  set_slot(this_val, SLOT_ERROR_BRAND, js_true);
+  js_capture_stack_above(js, this_val, call_new_target);
+
+  return this_val;
+}
+
+void js_errors_init(ant_t *js, ant_value_t object_proto, ant_value_t function_proto) {
+  ant_value_t error_proto = Ant_Object_CreateBare(js);
+  set_proto(js, error_proto, object_proto);
+  
+  mkprop_bytes(js, error_proto, "name", 4, ANT_STRING("Error"), JS_DESC_W | JS_DESC_C);
+  mkprop_bytes(js, error_proto, "message", 7, js_mkstr(js, "", 0), JS_DESC_W | JS_DESC_C);
+  defmethod(js, error_proto, "toString", 8, Ant_Function_Create(builtin_Error_toString));
+  js->builtins.error_protos[JS_ERR_GENERIC] = error_proto;
+  
+  ant_value_t err_ctor_obj = mkobj(js, 0);
+  set_proto(js, err_ctor_obj, function_proto);
+  set_slot(err_ctor_obj, SLOT_CFUNC, Ant_Function_CreateWithArity(builtin_Error, 1));
+  js_setprop_readonly_nonconfigurable(js, err_ctor_obj, "prototype", 9, error_proto);
+  js_set_function_name(js, err_ctor_obj, "Error", sizeof("Error") - 1);
+  
+  ant_value_t err_ctor_func = js_obj_to_func(js, err_ctor_obj);
+  js_set_global_builtin(js, "Error", err_ctor_func);
+  js->builtins.error_ctor = err_ctor_func;
+  defhidden(js, error_proto, "constructor", 11, err_ctor_func);
+  defmethod(js, err_ctor_func, "isError", 7, Ant_Function_CreateWithArity(builtin_error_isError, 1));
+  defmethod(js, err_ctor_func, "captureStackTrace", 17, Ant_Function_CreateWithArity(builtin_error_captureStackTrace, 2));
+  js_setprop(js, err_ctor_func, ANT_STRING("stackTraceLimit"), Ant_Value_FromNumber(10));
+  
+  #define REGISTER_ERROR_SUBTYPE(err_type, name_str) do { \
+    ant_value_t ctor_func = Ant_Error_CreateConstructor(js, name_str, &js->builtins.error_protos[err_type]); \
+    js_set_global_builtin(js, name_str, ctor_func); \
+  } while(0)
+  
+  REGISTER_ERROR_SUBTYPE(JS_ERR_EVAL, "EvalError");
+  REGISTER_ERROR_SUBTYPE(JS_ERR_RANGE, "RangeError");
+  REGISTER_ERROR_SUBTYPE(JS_ERR_REFERENCE, "ReferenceError");
+  REGISTER_ERROR_SUBTYPE(JS_ERR_SYNTAX, "SyntaxError");
+  REGISTER_ERROR_SUBTYPE(JS_ERR_TYPE, "TypeError");
+  REGISTER_ERROR_SUBTYPE(JS_ERR_URI, "URIError");
+  REGISTER_ERROR_SUBTYPE(JS_ERR_INTERNAL, "InternalError");
+  
+  #undef REGISTER_ERROR_SUBTYPE
+  
+  ant_value_t aggregate_proto = Ant_Object_CreateBare(js);
+  set_proto(js, aggregate_proto, error_proto);
+  mkprop_bytes(js, aggregate_proto, "name", 4, ANT_STRING("AggregateError"), JS_DESC_W | JS_DESC_C);
+  js->builtins.error_protos[JS_ERR_AGGREGATE] = aggregate_proto;
+  
+  ant_value_t aggregate_ctor = mkobj(js, 0);
+  set_proto(js, aggregate_ctor, err_ctor_func);
+  set_slot(aggregate_ctor, SLOT_CFUNC, Ant_Function_CreateWithArity(builtin_AggregateError, 2));
+  js_setprop_readonly_nonconfigurable(js, aggregate_ctor, "prototype", 9, aggregate_proto);
+  js_set_function_name(js, aggregate_ctor, "AggregateError", sizeof("AggregateError") - 1);
+  
+  ant_value_t aggregate_ctor_func = js_obj_to_func(js, aggregate_ctor);
+  defhidden(js, aggregate_proto, "constructor", 11, aggregate_ctor_func);
+  js_set_global_builtin(js, "AggregateError", aggregate_ctor_func);
+
+  ant_value_t suppressed_proto = Ant_Object_CreateBare(js);
+  set_proto(js, suppressed_proto, error_proto);
+  mkprop_bytes(js, suppressed_proto, "name", 4, ANT_STRING("SuppressedError"), JS_DESC_W | JS_DESC_C);
+  js->builtins.suppressed_error_proto = suppressed_proto;
+  
+  ant_value_t suppressed_ctor = mkobj(js, 0);
+  set_proto(js, suppressed_ctor, err_ctor_func);
+  set_slot(suppressed_ctor, SLOT_CFUNC, Ant_Function_CreateWithArity(builtin_SuppressedError, 3));
+  js_setprop_readonly_nonconfigurable(js, suppressed_ctor, "prototype", 9, suppressed_proto);
+  js_set_function_name(js, suppressed_ctor, "SuppressedError", sizeof("SuppressedError") - 1);
+  
+  ant_value_t suppressed_ctor_func = js_obj_to_func(js, suppressed_ctor);
+  defhidden(js, suppressed_proto, "constructor", 11, suppressed_ctor_func);
+  js_set_global_builtin(js, "SuppressedError", suppressed_ctor_func);
+}

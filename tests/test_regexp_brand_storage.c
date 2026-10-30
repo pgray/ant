@@ -20,8 +20,8 @@ int main(void) {
   assert(!ptr->flags.regexp_brand);
   js_set_slot(object, SLOT_REGEXP_FLAGS_STRING, flags);
   assert(ptr->flags.regexp_brand && js_get_slot(object, SLOT_REGEXP_FLAGS_STRING) == flags);
-  js_set_slot_wb(js, object, SLOT_REGEXP_FLAGS_STRING, js_mknum(1));
-  assert(!ptr->flags.regexp_brand && js_get_slot(object, SLOT_REGEXP_FLAGS_STRING) == js_mknum(1));
+  js_set_slot_wb(js, object, SLOT_REGEXP_FLAGS_STRING, Ant_Value_FromNumber(1));
+  assert(!ptr->flags.regexp_brand && js_get_slot(object, SLOT_REGEXP_FLAGS_STRING) == Ant_Value_FromNumber(1));
   js_set_slot_wb(js, object, SLOT_REGEXP_FLAGS_STRING, flags);
   assert(ptr->flags.regexp_brand);
   js_set_slot(object, SLOT_REGEXP_FLAGS_STRING, js_mkundef());
@@ -30,7 +30,7 @@ int main(void) {
   assert(!ptr->flags.regexp_brand && js_get_slot(object, SLOT_ARGUMENTS_OBJECT) == js_true);
   // Adding unrelated native storage must not change the cached brand.
   js_set_slot_wb(js, object, SLOT_REGEXP_FLAGS_STRING, flags);
-  js_set_slot(object, SLOT_DATA, js_mknum(9));
+  js_set_slot(object, SLOT_DATA, Ant_Value_FromNumber(9));
   assert(ptr->flags.regexp_brand);
   GC_ROOT_RESTORE(js, roots);
   js_destroy(js);

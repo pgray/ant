@@ -655,7 +655,7 @@ static ant_value_t js_node_target_emit(ant_params_t) {
 }
 
 static ant_value_t js_node_target_listener_count(ant_params_t) {
-  if (nargs < 1) return js_mknum(0);
+  if (nargs < 1) return Ant_Value_FromNumber(0);
   ant_value_t type = js_tostring_val(js, args[0]);
   if (is_err(type)) return type;
   
@@ -667,11 +667,11 @@ static ant_value_t js_node_target_listener_count(ant_params_t) {
   memcpy(buf, name, len);
   buf[len] = '\0';
   
-  return js_mknum((double)eventemitter_listener_count(js, js_getthis(js), buf));
+  return Ant_Value_FromNumber((double)eventemitter_listener_count(js, js_getthis(js), buf));
 }
 
 static ant_value_t js_node_target_max_listeners(ant_params_t) {
-  return js_mknum(EVENTS_DEFAULT_MAX_LISTENERS);
+  return Ant_Value_FromNumber(EVENTS_DEFAULT_MAX_LISTENERS);
 }
 
 static ant_value_t js_node_target_set_max_listeners(ant_params_t) {

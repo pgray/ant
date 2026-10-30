@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "ant.h"
+#include "internal.h"
 #include "modules/http_metadata.h"
 
 static const char *const http_methods[] = {

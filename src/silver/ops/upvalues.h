@@ -21,7 +21,7 @@ static inline ant_value_t sv_define_function_length(ant_t *js, ant_value_t func_
   return sv_mkprop_interned_exact_key(
     js, func_obj,
     js->intern.length, "length", 6,
-    tov(length), ANT_PROP_ATTR_CONFIGURABLE
+    Ant_Value_FromNumber(length), ANT_PROP_ATTR_CONFIGURABLE
   );
 }
 

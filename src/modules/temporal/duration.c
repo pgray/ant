@@ -147,7 +147,7 @@ static ant_value_t temporal_duration_compare(ant_params_t) {
   temporal_rs_Duration_destroy(two);
   temporal_relative_to_destroy(&relative);
   if (!result.is_ok) return temporal_error(js, result.err);
-  return js_mknum(result.ok);
+  return Ant_Value_FromNumber(result.ok);
 }
 
 static Duration *temporal_duration_this(ant_t *js, const char *method, ant_value_t *err) {
@@ -158,7 +158,7 @@ static Duration *temporal_duration_this(ant_t *js, const char *method, ant_value
   static ant_value_t temporal_duration_get_##name(ant_params_t) { \
     (void)args; (void)nargs; ant_value_t err = js_mkundef(); \
     Duration *self = temporal_duration_this(js, "Temporal.Duration.prototype." #name, &err); \
-    return self ? js_mknum((double)capi(self)) : err; \
+    return self ? Ant_Value_FromNumber((double)capi(self)) : err; \
   }
 
 DURATION_NUMBER_GETTER(years, temporal_rs_Duration_years)
@@ -405,12 +405,12 @@ static ant_value_t temporal_duration_total(ant_params_t) {
   if (!relative.date && !relative.zoned &&
       temporal_duration_exact_integral_total(self, unit, &exact_total)) {
     temporal_relative_to_destroy(&relative);
-    return js_mknum(exact_total);
+    return Ant_Value_FromNumber(exact_total);
   }
   temporal_rs_Duration_total_with_provider_result result = temporal_rs_Duration_total_with_provider(
     self, unit, relative.value, temporal_provider(js));
   temporal_relative_to_destroy(&relative);
-  return result.is_ok ? js_mknum(result.ok) : temporal_error(js, result.err);
+  return result.is_ok ? Ant_Value_FromNumber(result.ok) : temporal_error(js, result.err);
 }
 
 static ant_value_t temporal_duration_value_of(ant_params_t) {

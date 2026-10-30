@@ -281,7 +281,7 @@ static ant_value_t wire_write_primitive(wire_writer_t *w, ant_value_t value) {
     case kTypeUndefined: return put_u8(w, WIRE_UNDEFINED) ? js_mkundef() : wire_oom(w->js);
     case kTypeNull: return put_u8(w, WIRE_NULL) ? js_mkundef() : wire_oom(w->js);
     case kTypeBool: return put_u8(w, js_truthy(w->js, value) ? WIRE_TRUE : WIRE_FALSE) ? js_mkundef() : wire_oom(w->js);
-    case kTypeNumber: return put_u8(w, WIRE_NUMBER) && put_f64(w, js_getnum(value)) ? js_mkundef() : wire_oom(w->js);
+    case kTypeNumber: return put_u8(w, WIRE_NUMBER) && put_f64(w, Ant_Value_AsNumberUnchecked(value)) ? js_mkundef() : wire_oom(w->js);
     case kTypeBigInt: return wire_write_bigint(w, value);
     case kTypeString: return wire_write_string(w, WIRE_STRING, value);
     default: return wire_uncloneable(w, value);
@@ -463,7 +463,7 @@ static ant_value_t wire_write_object(wire_writer_t *w, ant_value_t value) {
 
   if (is_date_instance(value)) {
     ant_value_t time = js_get_slot(value, SLOT_DATA);
-    double ms = vtype(time) == kTypeNumber ? js_getnum(time) : 0;
+    double ms = vtype(time) == kTypeNumber ? Ant_Value_AsNumberUnchecked(time) : 0;
     if (!put_u8(w, WIRE_DATE) || !put_f64(w, ms)) return wire_oom(js);
     return wire_remember(w, value) ? js_mkundef() : wire_oom(js);
   }
@@ -797,7 +797,7 @@ static ant_value_t wire_read_primitive_tag(wire_reader_t *r, uint8_t tag) {
     case WIRE_FALSE: return js_false;
     case WIRE_NUMBER: {
       double d;
-      return get_f64(r, &d) ? js_mknum(d) : wire_corrupt(js);
+      return get_f64(r, &d) ? Ant_Value_FromNumber(d) : wire_corrupt(js);
     }
     case WIRE_STRING: {
       const char *s;
@@ -839,7 +839,7 @@ static ant_value_t wire_read_error(wire_reader_t *r) {
   if (stack) js_error_define_stack(js, err, js_mkundef(), js_mkstr(js, stack, stack_len));
   if (message) defhidden(js, err, "message", 7, js_mkstr(js, message, message_len));
   js_set_slot(err, SLOT_ERROR_BRAND, js_true);
-  js_set_slot(err, SLOT_ERR_TYPE, js_mknum((double)type));
+  js_set_slot(err, SLOT_ERR_TYPE, Ant_Value_FromNumber((double)type));
   if (type == JS_ERR_GENERIC && !(name_len == 5 && memcmp(name, "Error", 5) == 0))
     defhidden(js, err, "name", 4, js_mkstr(js, name, name_len));
 

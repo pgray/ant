@@ -119,7 +119,7 @@ static ser_status_t ser_val(ant_t *js, enc_t *e, ant_value_t val, ant_value_t *b
   if (t == kTypeBool) return enc_u8(e, (val == js_true) ? 'T' : 'F') ? SER_OK : SER_OOM;
 
   if (t == kTypeNumber) {
-    double d = js_getnum(val);
+    double d = Ant_Value_AsNumberUnchecked(val);
     if (isnan(d)) return enc_u8(e, 'Z') ? SER_OK : SER_OOM;
     SER_TRY(enc_u8(e, 'D'));
     return enc_bytes(e, &d, 8) ? SER_OK : SER_OOM;
@@ -239,13 +239,13 @@ static ant_value_t des_val(ant_t *js, dec_t *d) {
     case 'N': return js_mknull();
     case 'T': return js_true;
     case 'F': return js_false;
-    case 'Z': return js_mknum((double)NAN);
+    case 'Z': return Ant_Value_FromNumber((double)NAN);
     case 'D': {
       if (d->pos + 8 > d->len) return js_mkundef();
       double v;
       memcpy(&v, d->data + d->pos, 8);
       d->pos += 8;
-      return js_mknum(v);
+      return Ant_Value_FromNumber(v);
     }
     case 'S': {
       uint32_t n;
@@ -323,20 +323,20 @@ static ant_value_t v8_get_heap_statistics(ant_params_t) {
   size_t heap_limit = arena_reserved + closure_reserved;
 
   ant_value_t obj = Ant_Object_Create(js);
-  js_set(js, obj, "total_heap_size",             js_mknum((double)total_heap));
-  js_set(js, obj, "total_heap_size_executable",  js_mknum(0));
-  js_set(js, obj, "total_physical_size",         js_mknum((double)rss));
-  js_set(js, obj, "total_available_size",        js_mknum((double)(heap_limit > used_heap ? heap_limit - used_heap : 0)));
-  js_set(js, obj, "total_global_handles_size",   js_mknum(0));
-  js_set(js, obj, "used_global_handles_size",    js_mknum(0));
-  js_set(js, obj, "used_heap_size",              js_mknum((double)used_heap));
-  js_set(js, obj, "heap_size_limit",             js_mknum((double)heap_limit));
-  js_set(js, obj, "malloced_memory",             js_mknum((double)extra_alloc));
-  js_set(js, obj, "peak_malloced_memory",        js_mknum((double)extra_alloc));
-  js_set(js, obj, "does_zap_garbage",            js_mknum(0));
-  js_set(js, obj, "number_of_native_contexts",   js_mknum(1));
-  js_set(js, obj, "number_of_detached_contexts", js_mknum(0));
-  js_set(js, obj, "total_heap_blinded_size",     js_mknum(0));
+  js_set(js, obj, "total_heap_size",             Ant_Value_FromNumber((double)total_heap));
+  js_set(js, obj, "total_heap_size_executable",  Ant_Value_FromNumber(0));
+  js_set(js, obj, "total_physical_size",         Ant_Value_FromNumber((double)rss));
+  js_set(js, obj, "total_available_size",        Ant_Value_FromNumber((double)(heap_limit > used_heap ? heap_limit - used_heap : 0)));
+  js_set(js, obj, "total_global_handles_size",   Ant_Value_FromNumber(0));
+  js_set(js, obj, "used_global_handles_size",    Ant_Value_FromNumber(0));
+  js_set(js, obj, "used_heap_size",              Ant_Value_FromNumber((double)used_heap));
+  js_set(js, obj, "heap_size_limit",             Ant_Value_FromNumber((double)heap_limit));
+  js_set(js, obj, "malloced_memory",             Ant_Value_FromNumber((double)extra_alloc));
+  js_set(js, obj, "peak_malloced_memory",        Ant_Value_FromNumber((double)extra_alloc));
+  js_set(js, obj, "does_zap_garbage",            Ant_Value_FromNumber(0));
+  js_set(js, obj, "number_of_native_contexts",   Ant_Value_FromNumber(1));
+  js_set(js, obj, "number_of_detached_contexts", Ant_Value_FromNumber(0));
+  js_set(js, obj, "total_heap_blinded_size",     Ant_Value_FromNumber(0));
   
   return obj;
 }
@@ -349,20 +349,20 @@ static ant_value_t v8_get_heap_space_statistics(ant_params_t) {
   double arena_available = (double)(arena_committed / 2 > arena_live_bytes / 2 ? arena_committed / 2 - arena_live_bytes / 2 : 0);
 
   js_set(js, nursery, "space_name",            js_mkstr(js, "new_space", 9));
-  js_set(js, nursery, "space_size",            js_mknum((double)arena_committed / 2));
-  js_set(js, nursery, "space_used_size",       js_mknum((double)arena_live_bytes / 2));
-  js_set(js, nursery, "space_available_size",  js_mknum(arena_available));
-  js_set(js, nursery, "physical_space_size",   js_mknum((double)arena_committed / 2));
+  js_set(js, nursery, "space_size",            Ant_Value_FromNumber((double)arena_committed / 2));
+  js_set(js, nursery, "space_used_size",       Ant_Value_FromNumber((double)arena_live_bytes / 2));
+  js_set(js, nursery, "space_available_size",  Ant_Value_FromNumber(arena_available));
+  js_set(js, nursery, "physical_space_size",   Ant_Value_FromNumber((double)arena_committed / 2));
 
   ant_value_t oldspace = Ant_Object_Create(js);
   size_t old_live = js->old_live_count * js->obj_arena.elem_size;
   double old_size = (double)(arena_committed / 2 > old_live ? arena_committed / 2 - old_live : 0);
   
   js_set(js, oldspace, "space_name",           js_mkstr(js, "old_space", 9));
-  js_set(js, oldspace, "space_size",           js_mknum((double)arena_committed / 2));
-  js_set(js, oldspace, "space_used_size",      js_mknum((double)old_live));
-  js_set(js, oldspace, "space_available_size", js_mknum(old_size));
-  js_set(js, oldspace, "physical_space_size",  js_mknum((double)arena_committed / 2));
+  js_set(js, oldspace, "space_size",           Ant_Value_FromNumber((double)arena_committed / 2));
+  js_set(js, oldspace, "space_used_size",      Ant_Value_FromNumber((double)old_live));
+  js_set(js, oldspace, "space_available_size", Ant_Value_FromNumber(old_size));
+  js_set(js, oldspace, "physical_space_size",  Ant_Value_FromNumber((double)arena_committed / 2));
 
   ant_value_t arr = js_mkarr(js);
   js_arr_push(js, arr, nursery);
@@ -390,16 +390,16 @@ static ant_value_t v8_get_heap_code_statistics(ant_params_t) {
   ant_pool_stats_t rope_stats = js_rope_pool_stats(js);
   ant_value_t obj = Ant_Object_Create(js);
   
-  js_set(js, obj, "code_and_metadata_size",      js_mknum((double)(closure_structs + bytecode_alloc)));
-  js_set(js, obj, "bytecode_and_metadata_size",  js_mknum((double)bytecode_alloc));
-  js_set(js, obj, "external_script_source_size", js_mknum((double)rope_stats.used));
-  js_set(js, obj, "cpu_profiler_metadata_size",  js_mknum(0));
+  js_set(js, obj, "code_and_metadata_size",      Ant_Value_FromNumber((double)(closure_structs + bytecode_alloc)));
+  js_set(js, obj, "bytecode_and_metadata_size",  Ant_Value_FromNumber((double)bytecode_alloc));
+  js_set(js, obj, "external_script_source_size", Ant_Value_FromNumber((double)rope_stats.used));
+  js_set(js, obj, "cpu_profiler_metadata_size",  Ant_Value_FromNumber(0));
   
   return obj;
 }
 
 static ant_value_t v8_cached_data_version_tag(ant_params_t) {
-  return js_mknum(0xA0A0A0);
+  return Ant_Value_FromNumber(0xA0A0A0);
 }
 
 ant_value_t v8_library(ant_t *js) {

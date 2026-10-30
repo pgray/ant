@@ -208,11 +208,11 @@ static void tls_socket_sync_state(ant_tls_socket_t *socket) {
   js_set(js, socket->obj, "writable", js_bool(!socket->destroyed));
   js_set(js, socket->obj, "writableNeedDrain", js_false);
   js_set(js, socket->obj, "readyState", js_mkstr(js, ready_state, strlen(ready_state)));
-  js_set(js, socket->obj, "timeout", js_mknum((double)socket->timeout_ms));
-  js_set(js, socket->obj, "bytesRead", js_mknum((double)socket->bytes_read));
-  js_set(js, socket->obj, "bytesWritten", js_mknum((double)socket->bytes_written));
+  js_set(js, socket->obj, "timeout", Ant_Value_FromNumber((double)socket->timeout_ms));
+  js_set(js, socket->obj, "bytesRead", Ant_Value_FromNumber((double)socket->bytes_read));
+  js_set(js, socket->obj, "bytesWritten", Ant_Value_FromNumber((double)socket->bytes_written));
   js_set(js, socket->obj, "remoteAddress", socket->host ? js_mkstr(js, socket->host, strlen(socket->host)) : js_mkundef());
-  js_set(js, socket->obj, "remotePort", socket->port > 0 ? js_mknum((double)socket->port) : js_mkundef());
+  js_set(js, socket->obj, "remotePort", socket->port > 0 ? Ant_Value_FromNumber((double)socket->port) : js_mkundef());
   js_set(js, socket->obj, "remoteFamily", js_mkstr(js, socket->family, strlen(socket->family)));
 }
 
@@ -675,7 +675,7 @@ static ant_value_t js_tls_socket_setNoDelay(ant_params_t) {
 static ant_value_t js_tls_socket_setKeepAlive(ant_params_t) {
   ant_tls_socket_t *socket = tls_require_socket(js, js_getthis(js));
   bool enable = nargs > 0 && js_truthy(js, args[0]);
-  unsigned int delay = nargs > 1 && vtype(args[1]) == kTypeNumber ? (unsigned int)(js_getnum(args[1]) / 1000.0) : 0;
+  unsigned int delay = nargs > 1 && vtype(args[1]) == kTypeNumber ? (unsigned int)(Ant_Value_AsNumberUnchecked(args[1]) / 1000.0) : 0;
   if (!socket) return Ant_Exception_Current(js);
   if (!socket->destroyed && !socket->closing) tlsuv_stream_keepalive(&socket->stream, enable ? 1 : 0, delay);
   return js_getthis(js);
@@ -684,7 +684,7 @@ static ant_value_t js_tls_socket_setKeepAlive(ant_params_t) {
 static ant_value_t js_tls_socket_setTimeout(ant_params_t) {
   ant_tls_socket_t *socket = tls_require_socket(js, js_getthis(js));
   if (!socket) return Ant_Exception_Current(js);
-  socket->timeout_ms = nargs > 0 && vtype(args[0]) == kTypeNumber && js_getnum(args[0]) > 0 ? (uint64_t)js_getnum(args[0]) : 0;
+  socket->timeout_ms = nargs > 0 && vtype(args[0]) == kTypeNumber && Ant_Value_AsNumberUnchecked(args[0]) > 0 ? (uint64_t)Ant_Value_AsNumberUnchecked(args[0]) : 0;
   tls_socket_sync_state(socket);
   if (nargs > 1 && is_callable(args[1]))
     eventemitter_add_listener(js, socket->obj, "timeout", args[1], true);
@@ -702,7 +702,7 @@ static ant_value_t tls_sockaddr_object(ant_t *js, const struct sockaddr *addr) {
   uv_ip_name(addr, host, sizeof(host));
   js_set(js, out, "address", js_mkstr(js, host, strlen(host)));
   js_set(js, out, "family", js_mkstr(js, v6 ? "IPv6" : "IPv4", 4));
-  js_set(js, out, "port", js_mknum((double)port));
+  js_set(js, out, "port", Ant_Value_FromNumber((double)port));
   return out;
 }
 
@@ -1380,7 +1380,7 @@ static ant_value_t tls_server_create(ant_t *js, ant_value_t options, ant_value_t
   js_set_native(obj, server, TLS_SERVER_NATIVE_TAG);
   js_set_finalizer(obj, tls_server_finalize);
   
-  js_set(js, obj, "maxConnections", js_mknum(0));
+  js_set(js, obj, "maxConnections", Ant_Value_FromNumber(0));
   tls_server_sync_state(server);
 
   if (is_callable(listener)) eventemitter_add_listener(js, obj, "secureConnection", listener, false);
@@ -1541,10 +1541,10 @@ static ant_value_t js_tls_server_address(ant_params_t) {
 
 static ant_value_t js_tls_server_getConnections(ant_params_t) {
   ant_tls_server_t *server = tls_require_server(js, js_getthis(js));
-  ant_value_t argv[2] = { js_mknull(), js_mknum(0) };
+  ant_value_t argv[2] = { js_mknull(), Ant_Value_FromNumber(0) };
 
   if (!server) return Ant_Exception_Current(js);
-  argv[1] = js_mknum((double)server->connections);
+  argv[1] = Ant_Value_FromNumber((double)server->connections);
   if (nargs > 0 && is_callable(args[0])) sv_call_value(js, args[0], js_mkundef(), argv, 2);
   return js_getthis(js);
 }
@@ -2035,7 +2035,7 @@ static void tls_load_root_certificates(ant_t *js, ant_value_t out) {
 #endif
 
 static ant_value_t js_tls_root_certificates(ant_params_t) {
-  ant_value_t getter = js_getcurrentfunc(js);
+  ant_value_t getter = js->current_func;
   ant_value_t cached = js_get_slot(getter, SLOT_DATA);
   ant_value_t out = 0;
 
@@ -2099,8 +2099,8 @@ ant_value_t tls_library(ant_t *js) {
   js_set(js, lib, "DEFAULT_ECDH_CURVE", js_mkstr(js, "auto", 4));
   js_set(js, lib, "DEFAULT_MIN_VERSION", js_mkstr(js, "TLSv1.2", 7));
   js_set(js, lib, "DEFAULT_MAX_VERSION", js_mkstr(js, "TLSv1.3", 7));
-  js_set(js, lib, "CLIENT_RENEG_LIMIT", js_mknum(3));
-  js_set(js, lib, "CLIENT_RENEG_WINDOW", js_mknum(600));
+  js_set(js, lib, "CLIENT_RENEG_LIMIT", Ant_Value_FromNumber(3));
+  js_set(js, lib, "CLIENT_RENEG_WINDOW", Ant_Value_FromNumber(600));
   js_set(js, lib, "default", lib);
   js_set_tostringtag(js, lib, js_mkstr(js, "tls", 3));
   

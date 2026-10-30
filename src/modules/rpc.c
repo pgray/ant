@@ -198,7 +198,7 @@ static ant_value_t rpc_parse_integrity_options(
 
   ant_value_t iv = js_get(js, options, "integrity");
   if (vtype(iv) == kTypeNumber) {
-    uint32_t raw = (uint32_t)js_getnum(iv);
+    uint32_t raw = (uint32_t)Ant_Value_AsNumberUnchecked(iv);
     if (raw & ~(WIRECALL_INTEGRITY_CHECKSUM | WIRECALL_INTEGRITY_MAC))
       return js_mkerr_typed(js, JS_ERR_RANGE, "invalid rpc integrity");
     *integrity = raw;
@@ -253,7 +253,7 @@ static int rpc_write_js_value(ant_t *js, wirecall_writer *writer, ant_value_t va
   uint8_t type = vtype(value);
   if (type == kTypeNull) return wirecall_writer_null(writer);
   if (type == kTypeBool) return wirecall_writer_bool(writer, value == js_true || vdata(value) != 0);
-  if (type == kTypeNumber) return wirecall_writer_f64(writer, js_getnum(value));
+  if (type == kTypeNumber) return wirecall_writer_f64(writer, Ant_Value_AsNumberUnchecked(value));
   if (type == kTypeBigInt) {
     if (bigint_is_negative(js, value)) {
       ant_value_t min = bigint_from_int64(js, INT64_MIN);
@@ -324,7 +324,7 @@ static ant_value_t rpc_values_to_js_array(ant_t *js, const wirecall_value *value
         value = bigint_from_uint64(js, values[i].as.u64);
         break;
       case WIRECALL_TYPE_F64:
-        value = js_mknum(values[i].as.f64);
+        value = Ant_Value_FromNumber(values[i].as.f64);
         break;
       case WIRECALL_TYPE_STRING:
         value = js_mkstr(js, values[i].as.string.data, values[i].as.string.len);
@@ -510,14 +510,14 @@ static void rpc_complete_task(rpc_deferred_task_t *task, ant_value_t result, boo
 }
 
 static ant_value_t rpc_task_promise_resolve(ant_params_t) {
-  rpc_deferred_task_t *task = (rpc_deferred_task_t *)js_get_native(js_getcurrentfunc(js), RPC_TASK_NATIVE_TAG);
+  rpc_deferred_task_t *task = (rpc_deferred_task_t *)js_get_native(js->current_func, RPC_TASK_NATIVE_TAG);
   rpc_complete_task(task, nargs > 0 ? args[0] : js_mkundef(), false);
   rpc_task_release(task);
   return js_mkundef();
 }
 
 static ant_value_t rpc_task_promise_reject(ant_params_t) {
-  rpc_deferred_task_t *task = (rpc_deferred_task_t *)js_get_native(js_getcurrentfunc(js), RPC_TASK_NATIVE_TAG);
+  rpc_deferred_task_t *task = (rpc_deferred_task_t *)js_get_native(js->current_func, RPC_TASK_NATIVE_TAG);
   rpc_complete_task(task, nargs > 0 ? args[0] : js_mkundef(), true);
   rpc_task_release(task);
   return js_mkundef();
@@ -735,7 +735,7 @@ static ant_value_t rpc_server_port_getter(ant_params_t) {
   rpc_server_t *server = rpc_require_server(js, js_getthis(js));
   if (!server) return Ant_Exception_Current(js);
   if (server->server) server->port = wirecall_server_port(server->server);
-  return js_mknum((double)server->port);
+  return Ant_Value_FromNumber((double)server->port);
 }
 
 static ant_value_t rpc_server_listen(ant_params_t) {
@@ -759,7 +759,7 @@ static ant_value_t rpc_server_listen(ant_params_t) {
     js_reject_promise(js, promise, js_mkerr_typed(js, JS_ERR_TYPE, "RpcServer.listen options.port must be a number"));
     return promise;
   }
-  snprintf(port_buf, sizeof(port_buf), "%u", (unsigned)(uint16_t)js_getnum(port_val));
+  snprintf(port_buf, sizeof(port_buf), "%u", (unsigned)(uint16_t)Ant_Value_AsNumberUnchecked(port_val));
 
   char *host = NULL;
   ant_value_t host_val = js_get(js, opts, "host");
@@ -785,7 +785,7 @@ static ant_value_t rpc_server_listen(ant_params_t) {
 
   ant_value_t workers_val = js_get(js, opts, "workers");
   if (vtype(workers_val) == kTypeNumber) {
-    uint32_t workers = (uint32_t)js_getnum(workers_val);
+    uint32_t workers = (uint32_t)Ant_Value_AsNumberUnchecked(workers_val);
     if (workers > 0 && wirecall_server_set_workers(server->server, workers) != 0) {
       free(host);
       js_reject_promise(js, promise, js_mkerr_typed(js, JS_ERR_RANGE, "invalid rpc worker count"));
@@ -1203,7 +1203,7 @@ static ant_value_t rpc_client_ctor(ant_params_t) {
     free(host);
     return js_mkerr_typed(js, JS_ERR_TYPE, "RpcClient options.port must be a number");
   }
-  snprintf(port_buf, sizeof(port_buf), "%u", (unsigned)(uint16_t)js_getnum(port_val));
+  snprintf(port_buf, sizeof(port_buf), "%u", (unsigned)(uint16_t)Ant_Value_AsNumberUnchecked(port_val));
 
   rpc_client_t *client = calloc(1, sizeof(*client));
   if (!client) {

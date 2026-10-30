@@ -266,7 +266,7 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
     if (stack) defhidden(js, clone, "stack", 5, js_mkstr(js, stack, strlen(stack)));
     if (msg)   defhidden(js, clone, "message", 7, js_mkstr(js, msg, strlen(msg)));
     js_set_slot(clone, SLOT_ERROR_BRAND, js_true);
-    js_set_slot(clone, SLOT_ERR_TYPE, js_mknum((double)type));
+    js_set_slot(clone, SLOT_ERR_TYPE, Ant_Value_FromNumber((double)type));
 
     ant_value_t cause = js_mkundef();
     if (js_try_get_own_data_prop(js, val, "cause", 5, &cause)) {
@@ -284,7 +284,7 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
     if (is_object_type(date_proto)) js_set_proto_init(clone, date_proto);
     
     js_set_slot(clone, SLOT_DATA, js_get_slot(val, SLOT_DATA));
-    js_set_slot(clone, SLOT_BRAND, js_mknum(BRAND_DATE));
+    js_set_slot(clone, SLOT_BRAND, Ant_Value_FromNumber(BRAND_DATE));
     sc_add(seen, val, clone);
 
     return clone;

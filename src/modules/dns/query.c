@@ -22,7 +22,7 @@ static void dns_set_str(ant_t *js, ant_value_t obj, const char *key, const ares_
 }
 
 static void dns_set_num(ant_t *js, ant_value_t obj, const char *key, double value) {
-  js_set(js, obj, key, js_mknum(value));
+  js_set(js, obj, key, Ant_Value_FromNumber(value));
 }
 
 static ant_value_t dns_rr_address(ant_t *js, const ares_dns_rr_t *rr, ares_dns_rec_type_t type) {

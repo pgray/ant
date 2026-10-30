@@ -802,7 +802,7 @@ static inline uint8_t parse_number(sv_lexer_t *lx, const char *buf, ant_offset_t
     value = literal.value;
   }
   
-  lx->st.tval = tov(value);
+  lx->st.tval = Ant_Value_FromNumber(value);
   ant_offset_t toklen = numlen;
   
   if (toklen < remaining && buf[toklen] == 'n') {
@@ -1148,7 +1148,7 @@ static inline uint8_t parse_operator(sv_lexer_t *lx, const char *buf, ant_offset
         lx->st.tlen = literal.len;
       } else {
         lx->st.tlen = literal.len;
-        lx->st.tval = tov(literal.value);
+        lx->st.tval = Ant_Value_FromNumber(literal.value);
         lx->st.tok = TOK_NUMBER;
       }
     } else { 

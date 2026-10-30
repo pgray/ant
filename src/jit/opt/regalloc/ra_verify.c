@@ -35,7 +35,7 @@ typedef struct {
   ra_phi_inputs_t phi_inputs;
 } ra_verifier_t;
 
-[[gnu::format(printf, 2, 3)]] static void ra_error(ra_verifier_t *verifier, const char *format, ...) {
+static __attribute__((format(printf, 2, 3))) void ra_error(ra_verifier_t *verifier, const char *format, ...) {
   if (!verifier->checking) return;
   char buffer[512];
   va_list args;

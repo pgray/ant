@@ -29,7 +29,7 @@ ant_value_t DesktopMenuInsert(ant_params_t) {
     return js_mkerr(js, "menu.insert(position, item) requires an index and MenuItem");
   }
   ant_offset_t count = js_arr_len(js, template_value);
-  ant_offset_t position = (ant_offset_t)MAX(0, js_getnum(args[0]));
+  ant_offset_t position = (ant_offset_t)MAX(0, Ant_Value_AsNumberUnchecked(args[0]));
   if (position > count) position = count;
   ant_value_t replacement = js_mkarr(js);
   for (ant_offset_t index = 0; index < count; index++) {

@@ -106,21 +106,21 @@ static void check_failed_fills(ant_t *js, ant_value_t object, ant_shape_t *old_s
     assert(ic.cached_shape == NULL && !(ic.shape_ref_mask & SV_IC_SHAPE_REF_CACHED));
     ant_value_t ignored;
     assert(!sv_ic_try_get_hit(js, &ic, object, js_obj_ptr(object), &atom, &ignored, NULL));
-    if (i == 0) assert(js_getnum(out) == 41);
+    if (i == 0) assert(Ant_Value_AsNumberUnchecked(out) == 41);
     else assert(vtype(out) == kTypeUndefined);
   }
 
   sv_atom_t atom = {.str = intern_string(js, "target", 6), .len = 6};
   sv_ic_entry_t ic = {.cached_shape = old_shape, .cached_index = 123};
   int attempts = registration_attempts;
-  assert(js_getnum(sv_put_field_cached(js, object, js_mknum(42), &atom, &ic)) == 42);
-  assert(js_getnum(js_get(js, object, "target")) == 42);
+  assert(Ant_Value_AsNumberUnchecked(sv_put_field_cached(js, object, Ant_Value_FromNumber(42), &atom, &ic)) == 42);
+  assert(Ant_Value_AsNumberUnchecked(js_get(js, object, "target")) == 42);
   assert(registration_attempts == attempts + 1);
   assert(ic.cached_shape == NULL && !(ic.shape_ref_mask & SV_IC_SHAPE_REF_CACHED));
 
   // A first fill stays unusable even after the index and epoch are written.
   memset(&ic, 0, sizeof(ic));
-  assert(js_getnum(sv_put_field_cached(js, object, js_mknum(43), &atom, &ic)) == 43);
+  assert(Ant_Value_AsNumberUnchecked(sv_put_field_cached(js, object, Ant_Value_FromNumber(43), &atom, &ic)) == 43);
   assert(ic.cached_shape == NULL && !(ic.shape_ref_mask & SV_IC_SHAPE_REF_CACHED));
 }
 
@@ -192,9 +192,9 @@ int main(void) {
   ant_value_t object = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, object);
   js_set_proto(js, object, js_mknull());
-  js_set(js, old, "other", js_mknum(1));
-  js_set(js, object, "padding", js_mknum(0));
-  js_set(js, object, "target", js_mknum(41));
+  js_set(js, old, "other", Ant_Value_FromNumber(1));
+  js_set(js, object, "padding", Ant_Value_FromNumber(0));
+  js_set(js, object, "target", Ant_Value_FromNumber(41));
   ant_shape_t *shape = js_obj_ptr(object)->shape;
   ant_shape_t *old_shape = js_obj_ptr(old)->shape;
   assert(shape && old_shape && shape != old_shape);
@@ -203,7 +203,7 @@ int main(void) {
     check_field_codegen(shape, old, SV_GF_IC_MISSING, true, hot);
     check_field_codegen(shape, js_mknull(), SV_GF_IC_MISSING, true, hot);
     check_field_codegen(shape, mkval(kTypeFunction, 1), SV_GF_IC_MISSING, true, hot);
-    check_field_codegen(shape, js_mknum(1), SV_GF_IC_MISSING, false, hot);
+    check_field_codegen(shape, Ant_Value_FromNumber(1), SV_GF_IC_MISSING, false, hot);
     check_field_codegen(shape, js_mkundef(), SV_GF_IC_MISSING, false, hot);
     check_field_codegen(NULL, js_mknull(), SV_GF_IC_MISSING, false, hot);
     check_field_codegen(NULL, js_mknull(), SV_GF_IC_OWN, false, hot);

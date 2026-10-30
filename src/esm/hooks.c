@@ -45,7 +45,7 @@ static ant_value_t esm_hook_make_next(ant_t *js, ant_value_t next_fn, const esm_
   ant_value_t data = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, data);
   js_set(js, data, "hooks", chain->hooks);
-  js_set(js, data, "level", js_mknum((double)level));
+  js_set(js, data, "level", Ant_Value_FromNumber((double)level));
   js_set(js, data, "ctx", chain->ctx);
   js_set(js, data, "base", chain->base ? js_mkstr(js, chain->base, strlen(chain->base)) : js_mkundef());
   js_set(js, data, "require", js_bool(chain->is_require));
@@ -69,7 +69,7 @@ static ant_value_t builtin_esm_next_resolve(ant_params_t) {
   ant_value_t data = js_func_data(js->current_func);
   js_set(js, data, "called", js_true);
 
-  int level = (int)js_getnum(js_get(js, data, "level"));
+  int level = (int)Ant_Value_AsNumberUnchecked(js_get(js, data, "level"));
   ant_value_t base_val = js_get(js, data, "base");
 
   ant_value_t spec = nargs > 0 ? args[0] : js_mkundef();
@@ -101,7 +101,7 @@ static ant_value_t builtin_esm_next_load(ant_params_t) {
   ant_value_t data = js_func_data(js->current_func);
   js_set(js, data, "called", js_true);
 
-  int level = (int)js_getnum(js_get(js, data, "level"));
+  int level = (int)Ant_Value_AsNumberUnchecked(js_get(js, data, "level"));
   ant_value_t url = nargs > 0 ? args[0] : js_mkundef();
 
   esm_chain_t chain = {

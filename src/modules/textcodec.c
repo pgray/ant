@@ -150,8 +150,8 @@ static ant_value_t js_textencoder_encode_into(ant_params_t) {
   );
 
   ant_value_t result = Ant_Object_Create(js);
-  js_set(js, result, "read", js_mknum((double)read_units));
-  js_set(js, result, "written", js_mknum((double)written));
+  js_set(js, result, "read", Ant_Value_FromNumber((double)read_units));
+  js_set(js, result, "written", Ant_Value_FromNumber((double)written));
   
   return result;
 }

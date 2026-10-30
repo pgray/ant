@@ -85,7 +85,7 @@ void init_wasm_module(ant_t *js) {
   defhidden(js, ns, "RuntimeError", 12, runtime_error_ctor);
 
   ant_value_t js_tag_kinds = js_mkarr(js);
-  js_arr_push(js, js_tag_kinds, js_mknum((double)WASM_EXTERNREF));
+  js_arr_push(js, js_tag_kinds, Ant_Value_FromNumber((double)WASM_EXTERNREF));
   defhidden(js, ns, "JSTag", 5, wasm_make_tag(js, js->builtins.wasm_tag_proto, js_tag_kinds, true));
   js_set_global_builtin(js, "WebAssembly", ns);
 }

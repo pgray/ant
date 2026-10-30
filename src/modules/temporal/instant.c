@@ -84,7 +84,7 @@ static ant_value_t temporal_instant_compare(ant_params_t) {
   int8_t comparison = temporal_rs_Instant_compare(one, two);
   temporal_rs_Instant_destroy(one);
   temporal_rs_Instant_destroy(two);
-  return js_mknum(comparison);
+  return Ant_Value_FromNumber(comparison);
 }
 
 static Instant *temporal_instant_this(ant_t *js, const char *method, ant_value_t *err) {
@@ -95,7 +95,7 @@ static ant_value_t temporal_instant_get_epoch_milliseconds(ant_params_t) {
   (void)args; (void)nargs;
   ant_value_t err = js_mkundef();
   Instant *self = temporal_instant_this(js, "Temporal.Instant.prototype.epochMilliseconds", &err);
-  return self ? js_mknum((double)temporal_rs_Instant_epoch_milliseconds(self)) : err;
+  return self ? Ant_Value_FromNumber((double)temporal_rs_Instant_epoch_milliseconds(self)) : err;
 }
 
 static ant_value_t temporal_instant_get_epoch_nanoseconds(ant_params_t) {

@@ -128,7 +128,7 @@ static void websocket_free_state(websocket_state_t *ws) {
 
 static void websocket_sync_state(ant_t *js, websocket_state_t *ws) {
   if (!ws || !is_object_type(ws->obj)) return;
-  js_set(js, ws->obj, "readyState", js_mknum(ws->ready_state));
+  js_set(js, ws->obj, "readyState", Ant_Value_FromNumber(ws->ready_state));
 }
 
 static const uint8_t ws_deflate_flush_tail[] = { 
@@ -320,7 +320,7 @@ static void websocket_emit_close(ant_t *js, websocket_state_t *ws, uint16_t code
   ant_value_t event = Ant_EventTarget_CreateEvent(js, ws->obj, js->builtins.close_event_proto, ANT_EVENT_CLOSE, "close");
   if (!is_object_type(event)) return;
   
-  Ant_Event_SetField(js, event, ANT_EVENT_FIELD_CLOSE_code, js_mknum(code));
+  Ant_Event_SetField(js, event, ANT_EVENT_FIELD_CLOSE_code, Ant_Value_FromNumber(code));
   Ant_Event_SetField(js, event, ANT_EVENT_FIELD_CLOSE_reason, js_mkstr(js, reason ? reason : "", reason ? strlen(reason) : 0));
   Ant_Event_SetField(js, event, ANT_EVENT_FIELD_CLOSE_wasClean, js_bool(was_clean));
   
@@ -450,8 +450,8 @@ static websocket_state_t *websocket_state_new(ant_t *js, ant_value_t obj) {
 static ant_value_t websocket_create_object(ant_t *js) {
   ant_value_t obj = Ant_Object_CreateBare(js);
   if (is_object_type(js->builtins.websocket_proto)) js_set_proto_init(obj, js->builtins.websocket_proto);
-  js_set_slot(obj, SLOT_BRAND, js_mknum(BRAND_EVENTTARGET));
-  js_set(js, obj, "bufferedAmount", js_mknum(0));
+  js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_EVENTTARGET));
+  js_set(js, obj, "bufferedAmount", Ant_Value_FromNumber(0));
   js_set(js, obj, "extensions", js_mkstr(js, "", 0));
   js_set(js, obj, "protocol", js_mkstr(js, "", 0));
   js_set_finalizer(obj, websocket_finalize);
@@ -639,7 +639,7 @@ static ant_value_t js_websocket_send(ant_params_t) {
 
 static ant_value_t js_websocket_close(ant_params_t) {
   websocket_state_t *ws = websocket_data(js_getthis(js));
-  uint16_t code = nargs > 0 && vtype(args[0]) == kTypeNumber ? (uint16_t)js_getnum(args[0]) : 1000;
+  uint16_t code = nargs > 0 && vtype(args[0]) == kTypeNumber ? (uint16_t)Ant_Value_AsNumberUnchecked(args[0]) : 1000;
   const char *reason = NULL;
 
   if (!ws) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid WebSocket");
@@ -692,7 +692,7 @@ static ant_value_t websocket_to_bool(ant_t *js, ant_value_t value) {
 
 static ant_value_t websocket_to_number(ant_t *js, ant_value_t value) {
   double number = js_to_number(js, value);
-  return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : js_mknum(number);
+  return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : Ant_Value_FromNumber(number);
 }
 
 static ant_value_t js_message_event_ctor(ant_params_t) {
@@ -726,7 +726,7 @@ static ant_value_t js_close_event_ctor(ant_params_t) {
   ant_value_t r;
   
   if (is_err(r = websocket_event_init_field(js, event, init, "wasClean", ANT_EVENT_FIELD_CLOSE_wasClean, js_false, websocket_to_bool))) return r;
-  if (is_err(r = websocket_event_init_field(js, event, init, "code", ANT_EVENT_FIELD_CLOSE_code, js_mknum(0), websocket_to_number))) return r;
+  if (is_err(r = websocket_event_init_field(js, event, init, "code", ANT_EVENT_FIELD_CLOSE_code, Ant_Value_FromNumber(0), websocket_to_number))) return r;
   if (is_err(r = websocket_event_init_field(js, event, init, "reason", ANT_EVENT_FIELD_CLOSE_reason, js_mkstr(js, "", 0), js_tostring_val))) return r;
   
   return event;
@@ -921,16 +921,16 @@ void init_websocket_module(ant_t *js) {
   ANT_EVENT_HANDLER_DEFINE(js->builtins.websocket_proto, js_websocket, close);
   ANT_EVENT_HANDLER_DEFINE(js->builtins.websocket_proto, js_websocket, error);
   
-  js_set(js, js->builtins.websocket_proto, "CONNECTING", js_mknum(WS_CONNECTING));
-  js_set(js, js->builtins.websocket_proto, "OPEN", js_mknum(WS_OPEN));
-  js_set(js, js->builtins.websocket_proto, "CLOSING", js_mknum(WS_CLOSING));
-  js_set(js, js->builtins.websocket_proto, "CLOSED", js_mknum(WS_CLOSED));
+  js_set(js, js->builtins.websocket_proto, "CONNECTING", Ant_Value_FromNumber(WS_CONNECTING));
+  js_set(js, js->builtins.websocket_proto, "OPEN", Ant_Value_FromNumber(WS_OPEN));
+  js_set(js, js->builtins.websocket_proto, "CLOSING", Ant_Value_FromNumber(WS_CLOSING));
+  js_set(js, js->builtins.websocket_proto, "CLOSED", Ant_Value_FromNumber(WS_CLOSED));
   js_set_tostringtag(js, js->builtins.websocket_proto, js_mkstr(js, "WebSocket", 9));
   js->builtins.websocket_ctor = Ant_Function_CreateIntrinsicConstructor(js, js_websocket_ctor, js->builtins.websocket_proto, "WebSocket", 1);
-  js_set(js, js->builtins.websocket_ctor, "CONNECTING", js_mknum(WS_CONNECTING));
-  js_set(js, js->builtins.websocket_ctor, "OPEN", js_mknum(WS_OPEN));
-  js_set(js, js->builtins.websocket_ctor, "CLOSING", js_mknum(WS_CLOSING));
-  js_set(js, js->builtins.websocket_ctor, "CLOSED", js_mknum(WS_CLOSED));
+  js_set(js, js->builtins.websocket_ctor, "CONNECTING", Ant_Value_FromNumber(WS_CONNECTING));
+  js_set(js, js->builtins.websocket_ctor, "OPEN", Ant_Value_FromNumber(WS_OPEN));
+  js_set(js, js->builtins.websocket_ctor, "CLOSING", Ant_Value_FromNumber(WS_CLOSING));
+  js_set(js, js->builtins.websocket_ctor, "CLOSED", Ant_Value_FromNumber(WS_CLOSED));
   js_set_global_builtin(js, "WebSocket", js->builtins.websocket_ctor);
 
   js->builtins.message_event_proto = Ant_Object_CreateBare(js);

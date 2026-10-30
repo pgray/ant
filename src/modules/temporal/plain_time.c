@@ -85,7 +85,7 @@ static ant_value_t temporal_plain_time_compare(ant_params_t) {
   int8_t comparison = temporal_rs_PlainTime_compare(one, two);
   temporal_rs_PlainTime_destroy(one);
   temporal_rs_PlainTime_destroy(two);
-  return js_mknum(comparison);
+  return Ant_Value_FromNumber(comparison);
 }
 
 static PlainTime *temporal_plain_time_this(ant_t *js, const char *method, ant_value_t *err) {
@@ -96,7 +96,7 @@ static PlainTime *temporal_plain_time_this(ant_t *js, const char *method, ant_va
   static ant_value_t temporal_plain_time_get_##name(ant_params_t) { \
     (void)args; (void)nargs; ant_value_t err = js_mkundef(); \
     PlainTime *self = temporal_plain_time_this(js, "Temporal.PlainTime.prototype." #name, &err); \
-    return self ? js_mknum((double)capi(self)) : err; \
+    return self ? Ant_Value_FromNumber((double)capi(self)) : err; \
   }
 
 PLAIN_TIME_GETTER(hour, temporal_rs_PlainTime_hour)

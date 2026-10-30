@@ -605,7 +605,7 @@ static bool js_inspect_shape_entry(js_inspect_builder_t *builder, ant_value_t as
   if (vtype(val) == kTypeUndefined && streq(key, klen, "undefined", 9)) {
     is_special_global = true;
   } else if (vtype(val) == kTypeNumber) {
-    double d = tod(val);
+    double d = Ant_Value_AsNumberUnchecked(val);
     if (isinf(d) && d > 0 && streq(key, klen, "Infinity", 8)) {
       is_special_global = true;
     } else if (isnan(d) && streq(key, klen, "NaN", 3)) {
@@ -922,3 +922,105 @@ bool js_inspect_error(js_inspect_builder_t *builder, ant_value_t obj) {
   GC_ROOT_RESTORE(js, root_mark);
   return ok;
 }
+
+void string_builder_init(string_builder_t *sb, char *static_buf, size_t static_cap) {
+  sb->buffer = static_buf;
+  sb->capacity = static_cap;
+  sb->size = 0;
+  sb->is_dynamic = false;
+}
+
+void string_builder_dispose(string_builder_t *sb) {
+  if (sb->is_dynamic && sb->buffer) free(sb->buffer);
+  sb->buffer = NULL;
+  sb->capacity = 0;
+  sb->size = 0;
+  sb->is_dynamic = false;
+}
+
+bool string_builder_append(string_builder_t *sb, const char *data, size_t len) {
+  if (len > SIZE_MAX - sb->size) return false;
+  size_t needed = sb->size + len;
+
+  if (needed > sb->capacity) {
+    size_t new_capacity = sb->capacity 
+      ? sb->capacity : 256;
+    
+    while (new_capacity < needed) {
+      if (new_capacity > SIZE_MAX / 2) { new_capacity = needed; break; }
+      new_capacity *= 2;
+    }
+    
+    char *new_buffer = sb->is_dynamic
+      ? (char *)realloc(sb->buffer, new_capacity)
+      : (char *)calloc(1, new_capacity);
+      
+    if (!new_buffer) return false;
+    if (!sb->is_dynamic && sb->size > 0) memcpy(new_buffer, sb->buffer, sb->size);
+    
+    sb->buffer = new_buffer;
+    sb->capacity = new_capacity;
+    sb->is_dynamic = true;
+  }
+  
+  if (len > 0) {
+    memcpy(sb->buffer + sb->size, data, len);
+    sb->size += len;
+  }
+  
+  return true;
+}
+
+ant_value_t string_builder_finalize(ant_t *js, string_builder_t *sb) {
+  ant_value_t result = js_mkstr(js, sb->buffer, sb->size);
+  string_builder_dispose(sb);
+  return result;
+}
+
+bool string_builder_append_value(
+  ant_t *js, string_builder_t *sb, ant_value_t value, ant_value_t *err
+) {
+  ant_value_t s = js_tostring_val(js, value);
+  if (is_err(s)) {
+    if (err) *err = s;
+    return false;
+  }
+
+  ant_offset_t slen = 0;
+  ant_offset_t soff = vstr(js, s, &slen);
+  
+  if (string_builder_append(sb, 
+    (const char *)(uintptr_t)soff, 
+    (size_t)slen)
+  ) return true;
+
+  if (err) *err = js_mkerr(js, "oom");
+  return false;
+}
+
+bool string_template_append_value(
+  ant_t *js, string_builder_t *sb, 
+  ant_value_t value, ant_value_t *err
+) {
+switch (vtype(value)) {
+  case kTypeString: {
+    ant_offset_t len = 0;
+    ant_offset_t off = vstr(js, value, &len);
+    return string_builder_append(sb, (const char *)(uintptr_t)off, (size_t)len);
+  }
+  
+  case kTypeNumber: {
+    char buf[32];
+    size_t len = js_number_to_chars(value, buf, sizeof(buf));
+    return string_builder_append(sb, buf, len);
+  }
+  
+  case kTypeBool: {
+    if (vdata(value)) return string_builder_append(sb, "true", 4);
+    return string_builder_append(sb, "false", 5);
+  }
+  
+  case kTypeNull: return string_builder_append(sb, "null", 4);
+  case kTypeUndefined: return string_builder_append(sb, "undefined", 9);
+  default: return string_builder_append_value(js, sb, value, err);
+}}

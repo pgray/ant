@@ -86,15 +86,15 @@ static ant_value_t intl_canonical_locale_list_fill(ant_t *js, ant_value_t out, a
   ant_value_t len_val = js_get(js, locales, "length");
   if (is_err(len_val)) return len_val;
   
-  ant_value_t len_num = vtype(len_val) == kTypeUndefined ? js_mknum(0) : js_to_numeric(js, len_val);
+  ant_value_t len_num = vtype(len_val) == kTypeUndefined ? Ant_Value_FromNumber(0) : js_to_numeric(js, len_val);
   if (is_err(len_num)) return len_num;
   
   if (vtype(len_num) == kTypeBigInt) 
     return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert a BigInt value to a number");
-  double len = js_getnum(len_num);
+  double len = Ant_Value_AsNumberUnchecked(len_num);
 
   for (double k = 0; k < len; k++) {
-    ant_value_t present = do_in(js, js_mknum(k), locales);
+    ant_value_t present = do_in(js, Ant_Value_FromNumber(k), locales);
     if (is_err(present)) return present;
     if (present != js_true) continue;
 
@@ -166,10 +166,10 @@ static ant_value_t intl_collator_compare(ant_params_t) {
   const char *right_str = js_getstr(js, right, NULL);
 
   int result = strcoll(left_str ? left_str : "", right_str ? right_str : "");
-  if (result < 0) return js_mknum(-1);
-  if (result > 0) return js_mknum(1);
+  if (result < 0) return Ant_Value_FromNumber(-1);
+  if (result > 0) return Ant_Value_FromNumber(1);
   
-  return js_mknum(0);
+  return Ant_Value_FromNumber(0);
 }
 
 static ant_value_t intl_collator_compare_numeric(ant_params_t) {
@@ -206,24 +206,24 @@ static ant_value_t intl_collator_compare_numeric(ant_params_t) {
 
       size_t left_digits = left_end - left_run;
       size_t right_digits = right_end - right_run;
-      if (left_digits != right_digits) return js_mknum(left_digits < right_digits ? -1 : 1);
+      if (left_digits != right_digits) return Ant_Value_FromNumber(left_digits < right_digits ? -1 : 1);
 
       int cmp = left_digits > 0 ? memcmp(left_str + left_run, right_str + right_run, left_digits) : 0;
-      if (cmp != 0) return js_mknum(cmp < 0 ? -1 : 1);
+      if (cmp != 0) return Ant_Value_FromNumber(cmp < 0 ? -1 : 1);
 
       while (i < left_end && ant_ascii_is_digit(left_str[i])) i++;
       while (j < right_end && ant_ascii_is_digit(right_str[j])) j++;
       continue;
     }
 
-    if (lc != rc) return js_mknum((unsigned char)lc < (unsigned char)rc ? -1 : 1);
+    if (lc != rc) return Ant_Value_FromNumber((unsigned char)lc < (unsigned char)rc ? -1 : 1);
     i++;
     j++;
   }
 
-  if (i < left_len) return js_mknum(1);
-  if (j < right_len) return js_mknum(-1);
-  return js_mknum(0);
+  if (i < left_len) return Ant_Value_FromNumber(1);
+  if (j < right_len) return Ant_Value_FromNumber(-1);
+  return Ant_Value_FromNumber(0);
 }
 
 static ant_value_t intl_collator_resolved_options(ant_params_t) {
@@ -242,7 +242,7 @@ static ant_value_t intl_collator_resolved_options(ant_params_t) {
 
 static ant_value_t intl_numberformat_format(ant_params_t) {
   double number = nargs > 0 ? js_to_number(js, args[0]) : 0.0;
-  ant_value_t raw_val = js_tostring_val(js, js_mknum(number));
+  ant_value_t raw_val = js_tostring_val(js, Ant_Value_FromNumber(number));
   if (is_err(raw_val)) return raw_val;
 
   size_t raw_len = 0;
@@ -414,7 +414,7 @@ static ant_value_t intl_segmenter_segment(ant_params_t) {
     ant_value_t record = Ant_Object_Create(js);
     
     js_set(js, record, "segment", js_mkstr(js, input_str + offset, segment_len));
-    js_set(js, record, "index", js_mknum((double)offset));
+    js_set(js, record, "index", Ant_Value_FromNumber((double)offset));
     js_set(js, record, "input", input);
     
     if (word_granularity) js_set(

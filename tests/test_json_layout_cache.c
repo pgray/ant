@@ -56,10 +56,10 @@ int main(void) {
 
   // Cached bulk layouts detach on append without recording a transition.
   ant_shape_t *original = js_obj_ptr(a)->shape;
-  js_set(js, a, "extra", js_mknum(1));
-  js_set(js, b, "extra", js_mknum(2));
-  assert(js_getnum(js_get(js, a, "extra")) == 1);
-  assert(js_getnum(js_get(js, b, "extra")) == 2);
+  js_set(js, a, "extra", Ant_Value_FromNumber(1));
+  js_set(js, b, "extra", Ant_Value_FromNumber(2));
+  assert(Ant_Value_AsNumberUnchecked(js_get(js, a, "extra")) == 1);
+  assert(Ant_Value_AsNumberUnchecked(js_get(js, b, "extra")) == 2);
   assert(js_obj_ptr(a)->shape != original);
   assert(js_obj_ptr(a)->shape != js_obj_ptr(b)->shape);
   assert(!ant_shape_is_shared(js_obj_ptr(a)->shape));
@@ -88,7 +88,7 @@ int main(void) {
   }
   c = parse_record(js, 128, 0);
   assert(js_obj_ptr(c)->shape != original);
-  assert(js_getnum(js_get(js, a, "layout0_key127")) == 127);
+  assert(Ant_Value_AsNumberUnchecked(js_get(js, a, "layout0_key127")) == 127);
 
   // The byte budget also evicts before the entry limit for larger records.
   json_layout_cache_clear(js);
@@ -115,7 +115,7 @@ int main(void) {
   check_budget(js);
   json_layout_cache_clear(js);
   assert(!js->json_layout_cache);
-  assert(js_getnum(js_get(js, a, "layout99_key127")) == 127);
+  assert(Ant_Value_AsNumberUnchecked(js_get(js, a, "layout99_key127")) == 127);
   // Leave an entry for runtime teardown to release.
   b = parse_record(js, 128, 100);
   GC_ROOT_RESTORE(js, roots);

@@ -4,12 +4,15 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
+#include "types.h"
 
 typedef enum {
   ANT_BASE64_LOOSE,
   ANT_BASE64_STRICT,
   ANT_BASE64_STOP_BEFORE_PARTIAL,
 } ant_base64_last_chunk_t;
+
+void js_base64_init_globals(ant_t *js, ant_value_t glob);
 
 char *ant_base64_encode(const uint8_t *data, size_t len, size_t *out_len);
 uint8_t *ant_base64_decode(const char *data, size_t len, size_t *out_len);

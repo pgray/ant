@@ -133,8 +133,8 @@ ant_value_t js_report_error(ant_params_t) {
   js_set(js, event, "type",     js_mkstr(js, "error", 5));
   js_set(js, event, "message",  js_mkstr(js, msg, strlen(msg)));
   js_set(js, event, "filename", js_mkstr(js, filename, strlen(filename)));
-  js_set(js, event, "lineno",   js_mknum(lineno));
-  js_set(js, event, "colno",    js_mknum(colno));
+  js_set(js, event, "lineno",   Ant_Value_FromNumber(lineno));
+  js_set(js, event, "colno",    Ant_Value_FromNumber(colno));
   js_set(js, event, "error",    error);
 
   js_dispatch_global_event(js, event);
@@ -144,7 +144,7 @@ ant_value_t js_report_error(ant_params_t) {
   if (ht == kTypeFunction || ht == kTypeBuiltin) {
     ant_value_t msg_str  = js_mkstr(js, msg, strlen(msg));
     ant_value_t file_str = js_mkstr(js, filename, strlen(filename));
-    ant_value_t call_args[5] = { msg_str, file_str, js_mknum(lineno), js_mknum(colno), error };
+    ant_value_t call_args[5] = { msg_str, file_str, Ant_Value_FromNumber(lineno), Ant_Value_FromNumber(colno), error };
     sv_vm_call(js->vm, js, handler, global, call_args, 5, NULL, js_mkundef());
   }
 

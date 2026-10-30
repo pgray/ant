@@ -26,7 +26,7 @@ static ant_object_t *global_object(ant_t *js, const char *name) {
 static double global_number(ant_t *js, const char *name) {
   ant_value_t value = js_get(js, js->global, name);
   assert(vtype(value) == kTypeNumber);
-  return js_getnum(value);
+  return Ant_Value_AsNumberUnchecked(value);
 }
 
 int main(void) {

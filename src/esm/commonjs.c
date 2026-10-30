@@ -218,8 +218,8 @@ void esm_cjs_update_children(ant_t *js, ant_value_t parent, ant_value_t child, b
     if (js_arr_get(js, children, i) != child) continue;
     if (remove) {
       for (ant_offset_t j = i + 1; j < len; j++)
-        js_setprop(js, children, js_mknum((double)(j - 1)), js_arr_get(js, children, j));
-      js_setprop(js, children, js->length_str, js_mknum((double)(len - 1)));
+        js_setprop(js, children, Ant_Value_FromNumber((double)(j - 1)), js_arr_get(js, children, j));
+      js_setprop(js, children, js->length_str, Ant_Value_FromNumber((double)(len - 1)));
     }
     return;
   }

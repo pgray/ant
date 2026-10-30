@@ -767,11 +767,11 @@ static bool cron_relative_ms(
   }
   ant_value_t number = value;
   if (is_date_instance(value)) number = js_get_slot(value, SLOT_DATA);
-  if (vtype(number) != kTypeNumber || !isfinite(js_getnum(number))) {
+  if (vtype(number) != kTypeNumber || !isfinite(Ant_Value_AsNumberUnchecked(number))) {
     *error = js_mkerr_typed(js, JS_ERR_TYPE, "Ant.cron.parse() relativeDate must be a Date or number");
     return false;
   }
-  double milliseconds = js_getnum(number);
+  double milliseconds = Ant_Value_AsNumberUnchecked(number);
   if (milliseconds < -(double)CRON_DATE_LIMIT_MS || milliseconds > (double)CRON_DATE_LIMIT_MS) {
     *error = js_mkerr_typed(js, JS_ERR_TYPE, "Invalid date value");
     return false;
@@ -2601,7 +2601,7 @@ int cron_run_scheduled_export(
   ant_value_t controller = Ant_Object_CreateBare(js);
   js_set(js, controller, "cron", js_mkstr(js, expression, strlen(expression)));
   js_set(js, controller, "type", js_mkstr(js, "scheduled", 9));
-  js_set(js, controller, "scheduledTime", js_mknum((double)scheduled_time));
+  js_set(js, controller, "scheduledTime", Ant_Value_FromNumber((double)scheduled_time));
   ant_value_t result = sv_vm_call(
     js->vm, js, handler, default_export, &controller, 1, NULL, js_mkundef()
   );

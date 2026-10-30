@@ -78,7 +78,7 @@ ant_value_t js_wasm_global_ctor(ant_params_t) {
   if (!ok)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Unsupported WebAssembly.Global value type");
 
-  if (!js_value_to_wasm(js, nargs >= 2 ? args[1] : js_mknum(0), kind, &initial))
+  if (!js_value_to_wasm(js, nargs >= 2 ? args[1] : Ant_Value_FromNumber(0), kind, &initial))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Unsupported WebAssembly.Global initial value");
 
   mutable_val = js_get(js, descriptor, "mutable");

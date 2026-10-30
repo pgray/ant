@@ -56,7 +56,7 @@ static ant_value_t dns_parse_family(ant_t *js, ant_value_t value, const char *na
     if (len == 4 && memcmp(text, "IPv6", 4) == 0) { *out = 6; return js_mkundef(); }
   }
 
-  double family = vtype(value) == kTypeNumber ? js_getnum(value) : -1;
+  double family = vtype(value) == kTypeNumber ? Ant_Value_AsNumberUnchecked(value) : -1;
   if (family != 0 && family != 4 && family != 6) return Ant_Error_CreateInvalidArgValue(js, name, "0, 4, 6", value);
 
   *out = (int)family;
@@ -92,7 +92,7 @@ static ant_value_t dns_parse_lookup_object(ant_t *js, ant_value_t options, dns_l
   ant_value_t hints = js_get(js, options, "hints");
   if (vtype(hints) != kTypeUndefined && vtype(hints) != kTypeNull) {
     if (vtype(hints) != kTypeNumber) return dns_invalid_type(js, "options.hints", "of type number", hints);
-    uint32_t flags = (uint32_t)(int64_t)js_getnum(hints);
+    uint32_t flags = (uint32_t)(int64_t)Ant_Value_AsNumberUnchecked(hints);
     if (flags & ~(uint32_t)DNS_HINTS_MASK) return Ant_Error_CreateInvalidArgValue(js, "hints", NULL, hints);
     out->hints = (int)flags;
   }
@@ -123,7 +123,7 @@ static ant_value_t dns_parse_lookup_object(ant_t *js, ant_value_t options, dns_l
 static ant_value_t dns_address_object(ant_t *js, const char *address, int family) {
   ant_value_t obj = Ant_Object_Create(js);
   js_set(js, obj, "address", address ? js_mkstr(js, address, strlen(address)) : js_mknull());
-  js_set(js, obj, "family", js_mknum(family));
+  js_set(js, obj, "family", Ant_Value_FromNumber(family));
   return obj;
 }
 
@@ -135,7 +135,7 @@ static void dns_lookup_finish(dns_request_t *req, const char *address, int famil
   if (req->all) {
     dns_request_resolve(req, list, &list, 1);
   } else {
-    ant_value_t args[2] = { address ? js_mkstr(js, address, strlen(address)) : js_mknull(), js_mknum(family) };
+    ant_value_t args[2] = { address ? js_mkstr(js, address, strlen(address)) : js_mknull(), Ant_Value_FromNumber(family) };
     GC_ROOT_PIN(js, args[0]);
     ant_value_t value = dns_address_object(js, address, family);
     dns_request_resolve(req, value, args, 2);
@@ -263,11 +263,13 @@ ant_value_t dns_lookup_impl(ant_native_params_t, bool promises) {
 
 static ant_value_t dns_parse_port(ant_t *js, ant_value_t value, int *out) {
   double port = (double)NAN;
-  if (vtype(value) == kTypeNumber) port = js_getnum(value);
+  
+  if (vtype(value) == kTypeNumber) port = Ant_Value_AsNumberUnchecked(value);
   else if (vtype(value) == kTypeString) {
     size_t len = 0;
     const char *text = js_getstr(js, value, &len);
     char *end = NULL;
+    
     if (len > 0) port = strtod(text, &end);
     if (!end || *end) port = (double)NAN;
   }

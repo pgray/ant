@@ -147,7 +147,7 @@ static inline ant_value_t sv_yield_star_next(
   sv_vm_t *vm, ant_t *js, ant_value_t *lp, uint16_t base,
   ant_value_t sent, ant_value_t *out_value, bool *out_done, bool *raw
 ) {
-  int tag = (int)js_getnum(lp[base + SV_YS_TAG]);
+  int tag = (int)Ant_Value_AsNumberUnchecked(lp[base + SV_YS_TAG]);
   bool first = js_truthy(js, lp[base + SV_YS_STATE]);
   lp[base + SV_YS_STATE] = js_false;
 
@@ -185,7 +185,7 @@ static inline ant_value_t sv_yield_star_next(
 }
 
 static inline ant_value_t sv_yield_star_make_generic(ant_t *js, ant_value_t *lp, uint16_t base) {
-  if ((int)js_getnum(lp[base + SV_YS_TAG]) == SV_ITER_GENERIC) return js_mkundef();
+  if ((int)Ant_Value_AsNumberUnchecked(lp[base + SV_YS_TAG]) == SV_ITER_GENERIC) return js_mkundef();
 
   ant_value_t state[3] = { lp[base + SV_YS_ITER], lp[base + SV_YS_NEXT], lp[base + SV_YS_TAG] };
   ant_value_t iterator = sv_iter_record_iterator(js, state);
@@ -200,7 +200,7 @@ static inline ant_value_t sv_yield_star_make_generic(ant_t *js, ant_value_t *lp,
 
   lp[base + SV_YS_ITER] = iterator;
   lp[base + SV_YS_NEXT] = next_method;
-  lp[base + SV_YS_TAG] = tov(SV_ITER_GENERIC);
+  lp[base + SV_YS_TAG] = Ant_Value_FromNumber(SV_ITER_GENERIC);
 
   return js_mkundef();
 }
@@ -244,7 +244,7 @@ static inline ant_value_t sv_yield_star_return(
   sv_vm_t *vm, ant_t *js, ant_value_t *lp, uint16_t base,
   ant_value_t value, ant_value_t *out_value, bool *out_done, bool *raw
 ) {
-  int tag = (int)js_getnum(lp[base + SV_YS_TAG]);
+  int tag = (int)Ant_Value_AsNumberUnchecked(lp[base + SV_YS_TAG]);
   bool want_raw = *raw;
   *raw = false;
 
@@ -316,7 +316,7 @@ static inline __attribute__((noinline)) ant_value_t sv_yield_star_init_async(
   
   lp[base + SV_YS_NEXT] = next_method;
   lp[base + SV_YS_TAG] = js_mkundef();
-  lp[base + SV_YS_STATE] = tov(SV_YS_ASYNC_CONTINUE);
+  lp[base + SV_YS_STATE] = Ant_Value_FromNumber(SV_YS_ASYNC_CONTINUE);
   vm->stack[vm->sp - 1] = js_mkundef();
   
   return js_true;
@@ -340,7 +340,7 @@ static inline __attribute__((noinline)) ant_value_t sv_yield_star_async_call(
       method = js_getprop_fallback(js, iterator, "return");
       if (is_err(method)) return method;
       if (!is_callable(method)) {
-        lp[base + SV_YS_STATE] = tov(SV_YS_ASYNC_RETURN_DIRECT);
+        lp[base + SV_YS_STATE] = Ant_Value_FromNumber(SV_YS_ASYNC_RETURN_DIRECT);
         return js_mkundef();
       }
       mode = SV_YS_ASYNC_RETURN;
@@ -360,7 +360,7 @@ static inline __attribute__((noinline)) ant_value_t sv_yield_star_async_call(
       break;
   }
 
-  lp[base + SV_YS_STATE] = tov(mode);
+  lp[base + SV_YS_STATE] = Ant_Value_FromNumber(mode);
   ant_value_t result = sv_vm_call(
     vm, js, method, iterator, &received,
     mode == SV_YS_ASYNC_THROW_CLOSED ? 0 : 1, NULL, js_mkundef()
@@ -375,7 +375,7 @@ static inline __attribute__((noinline)) ant_value_t sv_yield_star_async_call(
 static inline __attribute__((noinline)) sv_ys_step_t sv_yield_star_async_result(
   sv_vm_t *vm, ant_t *js, ant_value_t *lp, uint16_t base
 ) {
-  sv_ys_async_mode_t mode = (sv_ys_async_mode_t)js_getnum(lp[base + SV_YS_STATE]);
+  sv_ys_async_mode_t mode = (sv_ys_async_mode_t)Ant_Value_AsNumberUnchecked(lp[base + SV_YS_STATE]);
   ant_value_t result = vm->stack[vm->sp - 1];
   
   ant_value_t value = result;

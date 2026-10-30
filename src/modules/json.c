@@ -365,9 +365,9 @@ static ant_value_t yyjson_to_jsval(
   }
   
   case YYJSON_TYPE_NUM: {
-    if (yyjson_is_sint(val)) return js_mknum((double)yyjson_get_sint(val));
-    if (yyjson_is_uint(val)) return js_mknum((double)yyjson_get_uint(val));
-    return js_mknum(yyjson_get_real(val));
+    if (yyjson_is_sint(val)) return Ant_Value_FromNumber((double)yyjson_get_sint(val));
+    if (yyjson_is_uint(val)) return Ant_Value_FromNumber((double)yyjson_get_uint(val));
+    return Ant_Value_FromNumber(yyjson_get_real(val));
   }
   
   case YYJSON_TYPE_ARR: {
@@ -677,7 +677,7 @@ static int is_key_in_replacer_arr(ant_t *js, json_cycle_ctx *ctx, const char *ke
     if (key_matches(item_str, item_len, key, key_len)) return 1;
   } else if (type == kTypeNumber) {
     char numstr[32];
-    snprintf(numstr, sizeof(numstr), "%.0f", js_getnum(item));
+    snprintf(numstr, sizeof(numstr), "%.0f", Ant_Value_AsNumberUnchecked(item));
     if (key_matches(numstr, strlen(numstr), key, key_len)) return 1;
   }}
   
@@ -1057,7 +1057,7 @@ static json_write_t json_write_impl(
       json_capture_error(ctx, js_mkerr_typed(ctx->js, JS_ERR_TYPE,"Do not know how to serialize a BigInt"));
       return JSON_W_ABORT;
 
-    case kTypeNumber: return json_out_number(out, js_getnum(val)) ? JSON_W_OK : JSON_W_ABORT;
+    case kTypeNumber: return json_out_number(out, Ant_Value_AsNumberUnchecked(val)) ? JSON_W_OK : JSON_W_ABORT;
     case kTypeString: return json_out_quoted(ctx->js, out, val) ? JSON_W_OK : JSON_W_ABORT;
 
     case kTypeObject:
@@ -1068,7 +1068,7 @@ static json_write_t json_write_impl(
   if (vtype(val) == kTypeObject) {
     ant_value_t prim = js_get_slot(val, SLOT_PRIMITIVE);
     switch (vtype(prim)) {
-      case kTypeNumber:  return json_out_number(out, js_getnum(prim)) ? JSON_W_OK : JSON_W_ABORT;
+      case kTypeNumber:  return json_out_number(out, Ant_Value_AsNumberUnchecked(prim)) ? JSON_W_OK : JSON_W_ABORT;
       case kTypeString:  return json_out_quoted(ctx->js, out, prim) ? JSON_W_OK : JSON_W_ABORT;
       case kTypeBool: return json_out_write(out, prim == js_true ? "true" : "false", prim == js_true ? 4 : 5) ? JSON_W_OK : JSON_W_ABORT;
 
@@ -1288,7 +1288,7 @@ static bool json_set_replacer(ant_t *js, json_cycle_ctx *ctx, ant_value_t replac
   if (vtype(len_val) != kTypeNumber) return true;
 
   ctx->replacer_arr = replacer;
-  ctx->replacer_arr_len = (int)js_getnum(len_val);
+  ctx->replacer_arr_len = (int)Ant_Value_AsNumberUnchecked(len_val);
   
   if (json_ctx_pin_value(ctx, replacer)) return true;
   *error_out = ctx->error;
@@ -1317,7 +1317,7 @@ static bool json_set_indent(ant_t *js, json_cycle_ctx *ctx, ant_args_t) {
   }
 
   if (vtype(space) == kTypeNumber) {
-    double d = js_getnum(space);
+    double d = Ant_Value_AsNumberUnchecked(space);
     if (isnan(d) || d < 1) return true;
     size_t n = d > 10 ? 10 : (size_t)d;
     memset(ctx->indent, ' ', n);

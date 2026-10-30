@@ -149,12 +149,6 @@ static inline bool is_empty_slot(ant_value_t v) {
   return v == T_EMPTY;
 }
 
-static inline void js_cstk_refresh_floor(ant_t *js) {
-  uintptr_t base = (uintptr_t)js->cstk.base;
-  js->cstk.floor = (js->cstk.base != NULL && js->cstk.limit != 0 && base > js->cstk.limit)
-    ? (void *)(base - js->cstk.limit) : NULL;
-}
-
 static inline bool is_callable(ant_value_t v) {
   uint8_t t = vtype(v);
   if (t == kTypeFunction || t == kTypeBuiltin) return true;
@@ -303,6 +297,8 @@ ant_prop_loc_t lkp_sym(ant_value_t obj, ant_offset_t sym_off);
 ant_prop_loc_t lkp_sym_proto(ant_t *js, ant_value_t obj, ant_offset_t sym_off);
 
 ant_value_t mkobj(ant_t *js, ant_offset_t parent);
+static inline ant_value_t Ant_Object_CreateBare(ant_t *js) { return mkobj(js, 0); }
+
 ant_value_t js_mkarr_dense_literal(ant_t *js, const ant_value_t *elements, uint32_t count);
 ant_value_t js_mkarr_dense_uninit(ant_t *js, uint32_t count, ant_value_t **out_data);
 ant_value_t js_arr_spread_into(ant_t *js, ant_value_t dst, ant_value_t src);
@@ -559,7 +555,7 @@ static inline ant_value_t js_string_wrapper_value(ant_value_t obj) {
 static inline int js_brand_id(ant_value_t obj) {
   if (!is_object_type(obj)) return BRAND_NONE;
   ant_value_t brand = js_get_slot(obj, SLOT_BRAND);
-  return vtype(brand) == kTypeNumber ? (int)js_getnum(brand) : BRAND_NONE;
+  return vtype(brand) == kTypeNumber ? (int)Ant_Value_AsNumberUnchecked(brand) : BRAND_NONE;
 }
 
 static inline bool js_check_brand(ant_value_t obj, int brand) {

@@ -12,7 +12,7 @@ static inline void sv_op_const(sv_vm_t *vm, sv_func_t *func, uint8_t *ip) {
 
 static inline void sv_op_const_i8(sv_vm_t *vm, uint8_t *ip) {
   int8_t val = sv_get_i8(ip + 1);
-  vm->stack[vm->sp++] = tov((double)val);
+  vm->stack[vm->sp++] = Ant_Value_FromNumber((double)val);
 }
 
 static inline int sv_literal_constant_at(sv_func_t *func, const uint8_t *ip, ant_value_t *value) {
@@ -31,7 +31,7 @@ static inline int sv_literal_constant_at(sv_func_t *func, const uint8_t *ip, ant
       break;
     }
     
-    case OP_CONST_I8: *value = tov((double)(int8_t)ip[1]); break;
+    case OP_CONST_I8: *value = Ant_Value_FromNumber((double)(int8_t)ip[1]); break;
     case OP_TRUE: *value = js_true; break;
     case OP_FALSE: *value = js_false; break;
     case OP_NULL: *value = js_mknull(); break;
@@ -130,7 +130,7 @@ static inline ant_value_t sv_op_object(sv_vm_t *vm, ant_t *js, sv_func_t *func, 
   sv_obj_site_apply(js, func, site, ptr);
   vm->stack[vm->sp++] = obj;
   
-  return tov(0);
+  return Ant_Value_FromNumber(0);
 }
 
 static inline ant_value_t sv_op_private_token(sv_vm_t *vm, ant_t *js, uint8_t *ip) {
@@ -138,10 +138,10 @@ static inline ant_value_t sv_op_private_token(sv_vm_t *vm, ant_t *js, uint8_t *i
   if (__builtin_expect(is_err(obj), 0)) return obj;
   
   uint32_t hash = sv_get_u32(ip + 1);
-  js_set_slot(obj, SLOT_DATA, js_mknum((double)hash));
+  js_set_slot(obj, SLOT_DATA, Ant_Value_FromNumber((double)hash));
   vm->stack[vm->sp++] = obj;
   
-  return tov(0);
+  return Ant_Value_FromNumber(0);
 }
 
 static inline ant_value_t sv_op_array(sv_vm_t *vm, ant_t *js, uint8_t *ip) {
@@ -153,7 +153,7 @@ static inline ant_value_t sv_op_array(sv_vm_t *vm, ant_t *js, uint8_t *ip) {
   vm->sp -= n;
   vm->stack[vm->sp++] = arr;
   
-  return tov(0);
+  return Ant_Value_FromNumber(0);
 }
 
 static inline void sv_op_set_brand(sv_vm_t *vm, uint8_t *ip) {
@@ -161,7 +161,7 @@ static inline void sv_op_set_brand(sv_vm_t *vm, uint8_t *ip) {
   uint8_t brand = sv_get_u8(ip + 1);
   ant_value_t obj = vm->stack[vm->sp - 1];
   if (is_object_type(obj))
-    js_set_slot(obj, SLOT_BRAND, js_mknum((double)brand));
+    js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber((double)brand));
 }
 
 static inline void sv_op_regexp(sv_vm_t *vm, ant_t *js) {

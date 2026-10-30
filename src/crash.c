@@ -719,7 +719,7 @@ static const char *crash_get_string(ant_t *js, ant_value_t obj, const char *key,
 static unsigned long long crash_get_uint(ant_t *js, ant_value_t obj, const char *key) {
   ant_value_t value = crash_get(js, obj, key);
   if (vtype(value) != kTypeNumber) return 0;
-  double n = js_getnum(value);
+  double n = Ant_Value_AsNumberUnchecked(value);
   if (n <= 0) return 0;
   return (unsigned long long)n;
 }

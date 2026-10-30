@@ -23,7 +23,7 @@ static int message_getter_calls;
 
 static ant_value_t ThrowingMessageGetter(ant_params_t) {
   message_getter_calls++;
-  return js_throw(js, js_mknum(99));
+  return js_throw(js, Ant_Value_FromNumber(99));
 }
 
 static void CheckMessageAccessors(ant_t *js) {
@@ -43,7 +43,7 @@ static void CheckMessageAccessors(ant_t *js) {
 
     for (int pending = 0; pending < 2; pending++) {
       ant_value_t previous = pending
-        ? Ant_Exception_Raise(js, js_mknum(73), js_mkundef())
+        ? Ant_Exception_Raise(js, Ant_Value_FromNumber(73), js_mkundef())
         : js_mkundef();
       message_getter_calls = 0;
       const char *detail = RuntimeErrorDetail(js, record);
@@ -74,7 +74,7 @@ int main(void) {
 
   ant_value_t stack = js_mkstr(js, "captured desktop stack", 22);
   record = Ant_Exception_Raise(js, error, stack);
-  ant_value_t newer = Ant_Exception_Raise(js, js_mknum(73), js_mkundef());
+  ant_value_t newer = Ant_Exception_Raise(js, Ant_Value_FromNumber(73), js_mkundef());
   assert(strstr(RuntimeErrorDetail(js, record), "captured desktop stack"));
   assert(Ant_Exception_Peek(js) == newer);
   record = newer;

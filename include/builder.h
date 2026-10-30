@@ -27,6 +27,13 @@ typedef struct {
   size_t error_stack_len;
 } js_inspect_builder_t;
 
+typedef struct {
+  char *buffer;
+  size_t capacity;
+  size_t size;
+  bool is_dynamic;
+} string_builder_t;
+
 static inline char *fixed_buf_write_ptr(char *buf, size_t len, size_t n, size_t *avail) {
   if (!buf || len == 0) {
     if (avail) *avail = 0;
@@ -37,6 +44,9 @@ static inline char *fixed_buf_write_ptr(char *buf, size_t len, size_t n, size_t 
   if (avail) *avail = len - write_index;
   return buf + write_index;
 }
+
+void string_builder_init(string_builder_t *sb, char *static_buf, size_t static_cap);
+void string_builder_dispose(string_builder_t *sb);
 
 void js_inspect_builder_init_fixed(js_inspect_builder_t *builder, ant_t *js, char *buf, size_t len, size_t initial_n);
 bool js_inspect_builder_init_dynamic(js_inspect_builder_t *builder, ant_t *js, size_t initial_cap);
@@ -58,8 +68,21 @@ __attribute__((format(printf, 3, 4)))
 bool js_inspect_header_for(js_inspect_builder_t *builder, ant_value_t obj, const char *fmt, ...);
 
 ant_value_t js_inspect_builder_result(js_inspect_builder_t *builder);
+ant_value_t string_builder_finalize(ant_t *js, string_builder_t *sb);
+
 bool js_inspect_plain_header(js_inspect_builder_t *builder, ant_value_t obj);
 bool js_inspect_map(js_inspect_builder_t *builder, ant_value_t obj, struct map_entry **map);
 bool js_inspect_set(js_inspect_builder_t *builder, ant_value_t obj, struct set_entry **set);
+bool string_builder_append(string_builder_t *sb, const char *data, size_t len);
+
+bool string_builder_append_value(
+  ant_t *js, string_builder_t *sb, 
+  ant_value_t value, ant_value_t *err
+);
+
+bool string_template_append_value(
+  ant_t *js, string_builder_t *sb, 
+  ant_value_t value, ant_value_t *err
+);
 
 #endif
