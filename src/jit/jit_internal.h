@@ -575,8 +575,8 @@ bool jit_upvalue_is_builder_target(sv_func_t *func, uint32_t idx);
 MIR_label_t mir_emit_string_builder_read_open(
     MIR_context_t ctx, MIR_item_t fn,
     MIR_reg_t value, MIR_reg_t scratch,
-    MIR_reg_t r_vm, MIR_reg_t r_js,
-    MIR_item_t helper1_proto, MIR_item_t imp_str_read_value);
+    MIR_reg_t r_js,
+    MIR_item_t read_proto, MIR_item_t imp_str_read_value);
 void mir_emit_string_builder_append_ascii_byte(
     MIR_context_t ctx, MIR_item_t fn,
     MIR_reg_t lhs, MIR_reg_t rhs, MIR_reg_t result,

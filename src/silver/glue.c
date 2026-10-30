@@ -135,14 +135,13 @@ static inline bool jit_numeric_operand(ant_value_t v) {
 JIT_ARITH_HELPERS(X)
 #undef X
 
-ant_value_t jit_helper_str_read_value(
-  sv_vm_t *vm, ant_t *js, ant_value_t value
-) {
-  (void)vm; // TODO: remove this
+ant_value_t jit_helper_str_read_value(ant_t *js, ant_value_t value) {
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, value);
+  
   ant_value_t out = sv_string_builder_read_value(js, value);
   GC_ROOT_RESTORE(js, root_mark);
+  
   return out;
 }
 

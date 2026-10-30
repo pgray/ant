@@ -20,6 +20,7 @@ void jit_helper_disable_param_counters(sv_func_t *func, uint64_t params);
 void jit_helper_shape_transition(ant_t *js, ant_object_t *obj, ant_shape_t *to_shape);
 void jit_helper_protector_store(ant_t *js, ant_object_t *holder, const char *key);
 
+ant_value_t jit_helper_str_read_value(ant_t *js, ant_value_t value);
 ant_value_t jit_helper_add(sv_vm_t *vm, ant_t *js, ant_value_t l, ant_value_t r);
 ant_value_t jit_helper_concat(ant_t *js, ant_value_t l, ant_value_t r);
 ant_value_t jit_helper_sub(sv_vm_t *vm, ant_t *js, ant_value_t l, ant_value_t r);
@@ -488,11 +489,6 @@ ant_value_t jit_helper_str_append_local_snapshot(
   ant_value_t *args, int argc,
   ant_value_t *locals, uint16_t slot_idx,
   ant_value_t lhs, ant_value_t rhs
-);
-
-ant_value_t jit_helper_str_read_value(
-  sv_vm_t *vm, ant_t *js, 
-  ant_value_t value
 );
 
 ant_value_t jit_helper_str_flush_local(

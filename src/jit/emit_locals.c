@@ -314,7 +314,7 @@ void jit_emit_locals(jit_compile_t *c) {
       if (!c->builder_target_slots || ((int)idx < c->param_count && c->builder_target_slots[idx])) {
         MIR_label_t sbr_done = mir_emit_string_builder_read_open(
             c->ctx, c->jit_func, dst, c->r_bool,
-            c->r_vm, c->r_js, c->helper1_proto, c->imp_str_read_value);
+            c->r_js, c->to_string_proto, c->imp_str_read_value);
         jit_emit_throw_if_error(c, dst);
         MIR_append_insn(c->ctx, c->jit_func, sbr_done);
       }
@@ -459,7 +459,7 @@ void jit_emit_locals(jit_compile_t *c) {
       if ((!c->builder_target_slots || c->builder_target_slots[c->param_count + idx]) && (!c->known_type_locals || c->known_type_locals[idx] != SV_TI_NUM)) {
         MIR_label_t sbr_done = mir_emit_string_builder_read_open(
             c->ctx, c->jit_func, dst, c->r_bool,
-            c->r_vm, c->r_js, c->helper1_proto, c->imp_str_read_value);
+            c->r_js, c->to_string_proto, c->imp_str_read_value);
         jit_emit_throw_if_error(c, dst);
         MIR_append_insn(c->ctx, c->jit_func, sbr_done);
       }
@@ -503,7 +503,7 @@ void jit_emit_locals(jit_compile_t *c) {
       if ((!c->builder_target_slots || c->builder_target_slots[c->param_count + idx]) && (!c->known_type_locals || c->known_type_locals[idx] != SV_TI_NUM)) {
         MIR_label_t sbr_done = mir_emit_string_builder_read_open(
             c->ctx, c->jit_func, dst, c->r_bool,
-            c->r_vm, c->r_js, c->helper1_proto, c->imp_str_read_value);
+            c->r_js, c->to_string_proto, c->imp_str_read_value);
         jit_emit_throw_if_error(c, dst);
         MIR_append_insn(c->ctx, c->jit_func, sbr_done);
       }

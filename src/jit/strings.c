@@ -88,8 +88,8 @@ bool jit_upvalue_is_builder_target(sv_func_t *func, uint32_t idx) {
 MIR_label_t mir_emit_string_builder_read_open(
     MIR_context_t ctx, MIR_item_t fn,
     MIR_reg_t value, MIR_reg_t scratch,
-    MIR_reg_t r_vm, MIR_reg_t r_js,
-    MIR_item_t helper1_proto, MIR_item_t imp_str_read_value) {
+    MIR_reg_t r_js,
+    MIR_item_t read_proto, MIR_item_t imp_str_read_value) {
   MIR_label_t done = MIR_new_label(ctx);
   MIR_append_insn(ctx, fn,
                   MIR_new_insn(ctx, MIR_AND,
@@ -112,11 +112,10 @@ MIR_label_t mir_emit_string_builder_read_open(
                                MIR_new_reg_op(ctx, scratch),
                                MIR_new_uint_op(ctx, JIT_STR_TAG)));
   MIR_append_insn(ctx, fn,
-                  MIR_new_call_insn(ctx, 6,
-                                    MIR_new_ref_op(ctx, helper1_proto),
+                  MIR_new_call_insn(ctx, 5,
+                                    MIR_new_ref_op(ctx, read_proto),
                                     MIR_new_ref_op(ctx, imp_str_read_value),
                                     MIR_new_reg_op(ctx, value),
-                                    MIR_new_reg_op(ctx, r_vm),
                                     MIR_new_reg_op(ctx, r_js),
                                     MIR_new_reg_op(ctx, value)));
   return done;
