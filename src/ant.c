@@ -18648,16 +18648,67 @@ static ant_value_t builtin_string_raw(ant_params_t) {
   return string_builder_finalize(js, &sb);
 }
 
+// Shortest radix digits that read back as the same double: fraction digits
+// stop once they are within half an ulp, and integer digits past 2^53 are
+// zeros, as V8 prints them (Number::toString leaves radix != 10
+// implementation-approximated).
+static size_t number_to_radix_string(double value, int radix, char *buf, size_t size) {
+  static const char chars[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+  size_t mid = size / 2, int_cursor = mid, frac_cursor = mid;
+  bool negative = value < 0;
+  if (negative) value = -value;
+
+  double integer = floor(value);
+  double fraction = value - integer;
+  double delta = fmax(0.5 * (nextafter(value, HUGE_VAL) - value), nextafter(0.0, 1.0));
+
+  if (fraction >= delta) {
+    buf[frac_cursor++] = '.';
+    do {
+      fraction *= radix;
+      delta *= radix;
+      int digit = (int)fraction;
+      buf[frac_cursor++] = chars[digit];
+      fraction -= digit;
+      if ((fraction > 0.5 || (fraction == 0.5 && (digit & 1))) && fraction + delta > 1) {
+        // round up, carrying through the digits already written
+        for (;;) {
+          if (--frac_cursor == mid) { integer += 1; break; }
+          char c = buf[frac_cursor];
+          int d = c > '9' ? c - 'a' + 10 : c - '0';
+          if (d + 1 < radix) { buf[frac_cursor++] = chars[d + 1]; break; }
+        }
+        break;
+      }
+    } while (fraction >= delta && frac_cursor < size - 1);
+  }
+
+  while (integer / radix >= 9007199254740992.0) {
+    integer /= radix;
+    buf[--int_cursor] = '0';
+  }
+  do {
+    double remainder = fmod(integer, radix);
+    buf[--int_cursor] = chars[(int)remainder];
+    integer = (integer - remainder) / radix;
+  } while (integer > 0);
+
+  if (negative) buf[--int_cursor] = '-';
+  memmove(buf, buf + int_cursor, frac_cursor - int_cursor);
+  return frac_cursor - int_cursor;
+}
+
 static ant_value_t builtin_number_toString(ant_params_t) {
   ant_value_t num = unwrap_primitive(js, js->this_val);
-  if (vtype(num) != kTypeNumber) return js_mkerr(js, "toString called on non-number");
+  if (vtype(num) != kTypeNumber) return js_mkerr_typed(js, JS_ERR_TYPE, "Number.prototype.toString requires that 'this' be a Number");
   
   int radix = 10;
-  if (nargs >= 1 && vtype(args[0]) == kTypeNumber) {
-    radix = (int)tod(args[0]);
-    if (radix < 2 || radix > 36) {
-      return js_mkerr(js, "radix must be between 2 and 36");
-    }
+  if (nargs >= 1 && vtype(args[0]) != kTypeUndefined) {
+    double r = js_to_number(js, args[0]);
+    if (Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
+    r = isnan(r) ? 0 : trunc(r);
+    if (r < 2 || r > 36) return js_mkerr_typed(js, JS_ERR_RANGE, "toString() radix must be between 2 and 36");
+    radix = (int)r;
   }
   
   if (radix == 10) return js_tostring_val(js, num);
@@ -18666,51 +18717,10 @@ static ant_value_t builtin_number_toString(ant_params_t) {
   if (isnan(val)) return js_mkstr(js, "NaN", 3);
   if (isinf(val)) return val > 0 ? js_mkstr(js, "Infinity", 8) : js_mkstr(js, "-Infinity", 9);
   
-  char buf[128];
-  char *p = buf + sizeof(buf) - 1;
-  *p = '\0';
-  
-  bool negative = val < 0;
-  if (negative) val = -val;
-  
-  long long int_part = (long long)val;
-  double frac_part = val - (double)int_part;
-  
-  if (int_part == 0) {
-    *--p = '0';
-  } else {
-    while (int_part > 0 && p > buf) {
-      int digit = int_part % radix;
-      *--p = (char)(digit < 10 ? '0' + digit : 'a' + (digit - 10));
-      int_part /= radix;
-    }
-  }
-  
-  if (negative && p > buf) {
-    *--p = '-';
-  }
-  
-  size_t int_len = strlen(p);
-  
-  if (frac_part > 0.0000001) {
-    char frac_buf[64];
-    int frac_pos = 0;
-    frac_buf[frac_pos++] = '.';
-    
-    for (int i = 0; i < 16 && frac_part > 0.0000001 && frac_pos < 63; i++) {
-      frac_part *= radix;
-      int digit = (int)frac_part;
-      frac_buf[frac_pos++] = (char)(digit < 10 ? '0' + digit : 'a' + (digit - 10));
-      frac_part -= digit;
-    }
-    frac_buf[frac_pos] = '\0';
-    
-    char result[192];
-    snprintf(result, sizeof(result), "%s%s", p, frac_buf);
-    return js_mkstr(js, result, strlen(result));
-  }
-  
-  return js_mkstr(js, p, int_len);
+  // 1024 integer digits for radix 2 either side of the point, plus sign
+  char buf[2200];
+  size_t len = number_to_radix_string(val, radix, buf, sizeof(buf));
+  return js_mkstr(js, buf, len);
 }
 
 static ant_value_t builtin_number_toFixed(ant_params_t) {
@@ -18852,14 +18862,18 @@ static ant_value_t builtin_parseInt(ant_params_t) {
   ant_offset_t str_len, str_off = vstr(js, str_val, &str_len);
   const char *str = (char *)(uintptr_t)(str_off);
   
+  // radix is ToInt32(ToNumber(radix)), so NaN and "16" are valid
   int radix = 0;
-  if (nargs >= 2 && vtype(args[1]) == kTypeNumber) {
-    radix = (int) tod(args[1]);
+  if (nargs >= 2 && vtype(args[1]) != kTypeUndefined) {
+    double r = js_to_number(js, args[1]);
+    if (Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
+    radix = js_to_int32(r);
     if (radix != 0 && (radix < 2 || radix > 36)) return tov(JS_NAN);
   }
   
+  // StrWhiteSpaceChar includes Unicode spaces and the BOM
   ant_offset_t i = 0;
-  while (i < str_len && is_space(str[i])) i++;
+  for (size_t n; i < str_len && (n = ant_js_trim_prefix_len(str + i, (size_t)(str_len - i))) > 0;) i += (ant_offset_t)n;
   
   if (i >= str_len) return tov(JS_NAN);
   
@@ -18880,6 +18894,7 @@ static ant_value_t builtin_parseInt(ant_params_t) {
   
   double result = 0;
   bool found_digit = false;
+  ant_offset_t digits_start = i;
   
   while (i < str_len) {
     char ch = str[i];
@@ -18901,6 +18916,13 @@ static ant_value_t builtin_parseInt(ant_params_t) {
   }
   
   if (!found_digit) return tov(JS_NAN);
+  
+  // past 2^53 the running product rounds at every step; decimal digits go
+  // through the correctly rounded parser instead
+  if (radix == 10 && i - digits_start > 15) {
+    double parsed = 0;
+    if (ant_number_parse(str + digits_start, (size_t)(i - digits_start), ANT_NUMBER_PARSE_DECIMAL, &parsed, NULL)) result = parsed;
+  }
   
   return tov(sign * result);
 }
@@ -18963,7 +18985,7 @@ static ant_value_t builtin_btoa(ant_params_t) {
   
   if (!bytes) return is_latin1
     ? Ant_Error_CreateOutOfMemory(js)
-    : js_mkerr(js, "btoa: string contains characters outside Latin1 range");
+    : js_throw(js, make_dom_exception(js, "Invalid character", "InvalidCharacterError"));
 
   size_t out_len;
   char *out = ant_base64_encode(bytes, bytes_len, &out_len);

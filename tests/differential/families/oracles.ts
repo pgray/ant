@@ -91,10 +91,9 @@ export const number = defineFamily({
   build({ doubles, strings }) {
     const formatted = doubles.map(({ value, radix, fixed, precision, exponential }, i) => {
       const x = numberSource(value);
-      // toString(radix) of a fraction is implementation-approximated
-      const radixRecord = Number.isInteger(value) ? `__record(${literal(`radix:${i}`)}, () => (${x}).toString(${radix}));` : '';
+      // toString(radix) is implementation-approximated; Ant uses V8's digits
       return `__record(${literal(`string:${i}`)}, () => String(${x}));
-${radixRecord}
+__record(${literal(`radix:${i}`)}, () => (${x}).toString(${radix}));
 __recordName(${literal(`fixed:${i}`)}, () => (${x}).toFixed(${fixed}));
 __recordName(${literal(`precision:${i}`)}, () => (${x}).toPrecision(${precision}));
 __recordName(${literal(`exponential:${i}`)}, () => (${x}).toExponential(${exponential}));
