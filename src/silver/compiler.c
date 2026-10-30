@@ -600,8 +600,6 @@ static uint32_t add_map_template_desc(
   return index;
 }
 
-static int sv_func_compute_max_stack(const sv_func_t *func);
-
 static bool sv_func_compute_has_try(const sv_func_t *func) {
   for (const uint8_t *ip = func->code, *end = func->code + func->code_len; ip < end;) {
     int sz = sv_op_size[*ip];
@@ -8737,7 +8735,7 @@ static int sv_func_stack_depths(const sv_func_t *func, int *depth) {
   return ok ? max : -1;
 }
 
-static int sv_func_compute_max_stack(const sv_func_t *func) {
+int sv_func_compute_max_stack(const sv_func_t *func) {
   if (func->code_len <= 0) return 0;
   int depth_small[STACK_DEPTH_SCRATCH];
   bool small = func->code_len <= STACK_DEPTH_SCRATCH;

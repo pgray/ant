@@ -14,6 +14,7 @@
 *.dll
 
 /build
+/build-fuzz
 /traces
 /result
 /result-*
@@ -21,6 +22,11 @@
 /docs/private
 
 /differential-output
+/fuzz-failure.bin
+/crash-*
+/leak-*
+/timeout-*
+/oom-*
 /node-compat-output
 
 /packages/sandbox/out
