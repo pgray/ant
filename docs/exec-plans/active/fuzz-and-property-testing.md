@@ -110,21 +110,20 @@ The runs were limited to one build: clang 19,
 
 At this checkpoint, with the build described under Open findings:
 
-- `meson test --suite fuzz` passes with the replay driver, as do 20,000 to
-  50,000 seeded mutations per target.
-- Under ASan and UBSan with libFuzzer: `http1` 443k runs, `websocket` 4.5M,
-  `numbers` 123k, `base64` 1.1M, `text` 463k (2 minutes each), `js` 333k and
-  `regexp` 417k (3 to 4 minutes) after the fixes above, with no remaining
-  failures.
+- `meson test`: 51 of 53 pass, including `--suite fuzz` (replay driver, 500
+  mutations each, and 20,000 to 50,000 when run by hand). The two failures,
+  `gc-uv-segments` and `isolate-code-arenas`, also fail on unmodified
+  18ecc93 (see tech-debt.md).
+- Under ASan and UBSan with libFuzzer, after the fixes: earlier runs of 2 to 4
+  minutes per target (443k to 4.5M executions), then one minute per target
+  on the final source (`http1` 195k, `websocket` 2.3M, `numbers` 70k,
+  `base64` 488k, `text` 215k, `regexp` 97k, `js` 95k), with no failures.
 - `node tests/differential/runner.test.ts` and `npx tsc -p tests/differential`
-  pass. The families ran with 3 to 25 cases per seed; the open findings above
-  are what they reported.
+  pass. Every family ran with 12 to 40 cases per seed; the remaining
+  mismatches are the open findings above (RegExp code units, Readable keys,
+  ada version differences) and, in `jit`, the optimizing-tier miscompile.
 - `examples/spec/run.js --all`: `temporal` fails because Temporal is disabled
-  in this build. `worker_threads` and `zlib` pass their own checks, but the
-  runner then fails reading `.length`. Those two also fail on unmodified
-  18ecc93 and pass with `ANT_DEBUG=opt:off`, so they come from the
-  optimizing-tier finding.
-- `meson test`: 49 of the 51 tests that build pass. `gc-uv-segments` and
-  `isolate-code-arenas` fail, and `shape-descriptor-oom` and
-  `shape-transition-identity` do not link (`js_mkundef` undefined); all four
-  behave the same on unmodified 18ecc93 in this build.
+  in this build, and `worker_threads` and `zlib` fail through the
+  optimizing-tier miscompile (they pass with `ANT_DEBUG=opt:off`), as on
+  unmodified 18ecc93.
+- Each fix's regression test passes under Node and Ant.
