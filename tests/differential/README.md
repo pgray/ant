@@ -7,7 +7,20 @@ for values that JSON normally loses, including `undefined`, non-finite numbers,
 BigInts, errors, functions, and cycles.
 
 The families cover property semantics, RegExp behavior, Promise and microtask
-timing, readable/writable stream property shape, and path resolution. Stream
+timing, readable/writable stream property shape, and path resolution.
+Property families in `oracles.mjs` generate random inputs for built-ins and
+compare the results: `json`, `number`, `string`, `structured-clone`,
+`textcodec`, `url`, and `buffer-base64`. They record error names only, since
+messages are engine-specific.
+
+The `jit` family (`jit.mjs`) generates arithmetic and control-flow kernels,
+calls them 3000 times to reach the template JIT and the optimizing tier, then
+with boundary and mistyped arguments that force bailouts. Each kernel runs
+under five Ant variants (default, `--jitless`, `ANT_DEBUG=opt:off`,
+`opt:force,verify`, `opt:verify`) and every variant must match Node. A
+mismatch that only the default and `opt:*` variants show points at the
+optimizing tier. These variants trace to stderr, so only stderr lines naming
+a codegen, verifier, or operand depth failure count as mismatches. Stream
 probes are atomic: each generated case checks one property or one target's own
 keys, so a broad mismatch does not contaminate unrelated generated cases. Path
 probes cover POSIX cwd resolution plus Win32 drive-relative, rooted, drive, and
@@ -40,3 +53,6 @@ not necessarily an Ant bug: Node version differences and intentionally
 unsupported surfaces still require classification.
 
 Run its Node-side unit checks with `node tests/differential/test.mjs`.
+
+C-level fuzz and property targets for parsers and codecs live in
+[tests/fuzz](../fuzz/README.md).

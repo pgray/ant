@@ -79,13 +79,15 @@ export function parseArgs(argv) {
 
 const normalizeNewlines = value => String(value || '').replace(/\r\n/g, '\n');
 
-export function runEngine(executable, sourceFile, timeout) {
-  const result = childProcess.spawnSync(executable, [sourceFile], {
+export function runEngine(executable, sourceFile, timeout, variant = {}) {
+  const env = { ...process.env, ...variant.env, NO_COLOR: '1', FORCE_COLOR: '0' };
+  if (!variant.env || !('ANT_DEBUG' in variant.env)) delete env.ANT_DEBUG;
+  const result = childProcess.spawnSync(executable, [...(variant.args || []), sourceFile], {
     cwd: repoRoot,
     encoding: 'utf8',
     timeout,
     maxBuffer: 4 * 1024 * 1024,
-    env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' }
+    env
   });
   return {
     status: result.status,
@@ -101,13 +103,31 @@ export function sameResult(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+// A variant with `stderrFailures` traces to stderr: its stderr is not compared,
+// but any line matching that pattern is a mismatch.
+export function sameVariantResult(node, ant, variant) {
+  if (!variant.stderrFailures) return sameResult(node, ant);
+  if (new RegExp(variant.stderrFailures, 'i').test(ant.stderr)) return false;
+  return sameResult({ ...node, stderr: '' }, { ...ant, stderr: '' });
+}
+
+// A case may list Ant variants (CLI flags, ANT_DEBUG modes); each must match Node.
+const defaultVariants = [{ name: 'default', args: [], env: {} }];
+
 function compareCase(testCase, params, options, tempDir) {
   const source = testCase.build(params);
   const sourceFile = path.join(tempDir, `${testCase.id}.cjs`);
   fs.writeFileSync(sourceFile, source);
   const node = runEngine(options.node, sourceFile, options.timeout);
-  const ant = runEngine(options.ant, sourceFile, options.timeout);
-  return { mismatch: !sameResult(node, ant), source, node, ant };
+  const variants = (testCase.variants || defaultVariants).map(variant => ({
+    name: variant.name,
+    result: runEngine(options.ant, sourceFile, options.timeout, variant)
+  }));
+  const failing = (testCase.variants || defaultVariants)
+    .filter((variant, index) => !sameVariantResult(node, variants[index].result, variant))
+    .map(variant => variant.name);
+  const ant = (variants.find(variant => failing.includes(variant.name)) || variants[0]).result;
+  return { mismatch: failing.length > 0, source, node, ant, failing };
 }
 
 export function minimizeArrays(testCase, initialParams, mismatchFor) {
@@ -152,6 +172,7 @@ function printRecord(record, json) {
   if (json) return console.log(JSON.stringify(record));
   console.log(`${record.match ? 'PASS' : 'MISMATCH'} ${record.family}/${record.id}`);
   if (!record.match) {
+    if (record.variants.length) console.log(`  ant variants: ${record.variants.join(', ')}`);
     console.log(`  node: ${JSON.stringify(record.node)}`);
     console.log(`  ant:  ${JSON.stringify(record.ant)}`);
     if (record.repro) console.log(`  repro: ${path.relative(repoRoot, record.repro)}`);
@@ -210,6 +231,7 @@ export function main(argv = process.argv.slice(2)) {
           match: !comparison.mismatch,
           node: compactResult(comparison.node),
           ant: compactResult(comparison.ant),
+          variants: comparison.failing,
           repro
         },
         options.json

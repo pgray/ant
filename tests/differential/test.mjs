@@ -5,9 +5,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
-import { minimizeArrays, parseArgs, runEngine, sameResult } from './runner.mjs';
+import { minimizeArrays, parseArgs, runEngine, sameResult, sameVariantResult } from './runner.mjs';
 
-assert.deepEqual(familyNames, ['property', 'regexp', 'promise', 'stream-shape', 'path']);
+assert.deepEqual(familyNames, [
+  'property', 'regexp', 'promise', 'stream-shape', 'path',
+  'json', 'number', 'string', 'structured-clone', 'textcodec', 'url', 'buffer-base64', 'jit'
+]);
 
 const first = generateCases({ families: familyNames, seed: 42, casesPerFamily: 2 });
 const second = generateCases({ families: familyNames, seed: 42, casesPerFamily: 2 });
@@ -27,6 +30,14 @@ for (const testCase of first.filter(testCase => testCase.family === 'path')) {
   assert.ok(testCase.params.scenarios.some(scenario => scenario.method === 'resolve'));
   assert.deepEqual(testCase.shrinkKeys, ['scenarios']);
 }
+for (const testCase of first.filter(testCase => testCase.family === 'jit')) {
+  assert.deepEqual(testCase.variants.map(variant => variant.name), ['default', 'jitless', 'opt:off', 'opt:force', 'opt:verify']);
+  assert.match(testCase.build(testCase.params), /function kernel\(a, b, c\)/);
+}
+for (const testCase of first) {
+  // generated probes must be valid scripts under the generating Node
+  assert.doesNotThrow(() => new Function(testCase.build(testCase.params)), `${testCase.id} must parse`);
+}
 const pathCases = first.filter(testCase => testCase.family === 'path');
 assert.notDeepEqual(
   pathCases[0].params.scenarios.slice(-400), pathCases[1].params.scenarios.slice(-400),
@@ -43,6 +54,10 @@ assert.equal(parsed.json, true);
 assert.throws(() => parseArgs(['--family', 'missing']), /unknown family/);
 assert.throws(() => parseArgs(['--cases', '0']), /valid integer/);
 
+const traced = { stderrFailures: 'codegen-failed' };
+assert.equal(sameVariantResult({ stdout: 'x', stderr: '' }, { stdout: 'x', stderr: 'jit: opt compiled' }, traced), true);
+assert.equal(sameVariantResult({ stdout: 'x', stderr: '' }, { stdout: 'x', stderr: 'codegen-failed func=f' }, traced), false);
+assert.equal(sameVariantResult({ stdout: 'x', stderr: '' }, { stdout: 'y', stderr: '' }, traced), false);
 assert.equal(sameResult({ stdout: 'x' }, { stdout: 'x' }), true);
 assert.equal(sameResult({ stdout: 'x' }, { stdout: 'y' }), false);
 
@@ -54,6 +69,15 @@ const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ant-differential-test-'))
 try {
   const probe = path.join(tempDir, 'probe.cjs');
   fs.writeFileSync(probe, "console.log('ok')\n");
+  const envProbe = path.join(tempDir, 'env.cjs');
+  fs.writeFileSync(envProbe, "console.log(process.env.PROBE_VARIANT, process.env.ANT_DEBUG ?? 'unset', process.execArgv.join(' '))\n");
+  process.env.ANT_DEBUG = 'leaked';
+  assert.equal(runEngine(process.execPath, envProbe, 1000).stdout, 'undefined unset \n', 'ANT_DEBUG must not leak into probes');
+  assert.equal(
+    runEngine(process.execPath, envProbe, 1000, { args: ['--no-warnings'], env: { PROBE_VARIANT: 'x', ANT_DEBUG: 'opt:off' } }).stdout,
+    'x opt:off --no-warnings\n'
+  );
+  delete process.env.ANT_DEBUG;
   assert.deepEqual(runEngine(process.execPath, probe, 1000), {
     status: 0,
     signal: null,
