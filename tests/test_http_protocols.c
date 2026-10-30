@@ -163,6 +163,21 @@ static void test_http1_body_limit(void) {
              parse_with_body_limit(declared, 0, &overflow) == ANT_HTTP1_PARSE_INCOMPLETE && !overflow, true);
 }
 
+static void test_http1_trailers_ignored(void) {
+  const char *raw =
+    "POST / HTTP/1.1\r\nHost: good.example\r\nTransfer-Encoding: chunked\r\n\r\n"
+    "1\r\na\r\n0\r\nHost: evil.example\r\nX-Late: 1\r\n\r\n";
+  ant_http1_parsed_request_t req;
+  check_bool("http1 chunked request with trailers parses",
+             ant_http1_parse_request(raw, strlen(raw), 0, &req, NULL, NULL) == ANT_HTTP1_PARSE_OK, true);
+  check_str("http1 trailer cannot replace host", req.host, "good.example");
+  size_t count = 0;
+  for (const ant_http_header_t *h = req.headers; h; h = h->next) count++;
+  check_size("http1 trailers stay out of headers", count, 2);
+  check_size("http1 chunked body kept beside trailers", req.body_len, 1);
+  ant_http1_free_parsed_request(&req);
+}
+
 static void test_remote_esm_downgrade(void) {
   char *same = esm_resolve(NULL, "./dep.js", "https://example.com/mod.js", NULL);
   check_str("https module resolves https dependency", same, "https://example.com/dep.js");
@@ -179,6 +194,7 @@ int main(void) {
   test_websocket_frames();
   test_websocket_frame_limit();
   test_http1_body_limit();
+  test_http1_trailers_ignored();
   test_remote_esm_downgrade();
   test_eventsource_format_and_parse();
 
