@@ -27,6 +27,12 @@ See [testing.md](../../repo/testing.md) for when to run them.
   and would mostly fuzz built-ins already covered elsewhere. It runs without
   LeakSanitizer, which does not scan the GC heap and reports storage owned by
   GC objects as leaked.
+- The differential runner is TypeScript run directly by Node, with
+  fast-check generating and shrinking params, so a mismatch reduces to a
+  small repro (for example a single statement and short expression in a JIT
+  kernel). Probes encode special values as strings rather than object
+  literals: their encoder runs hot, and an optimizing-tier literal bug was
+  otherwise reported by every family.
 - Node-oracle families record only error names. Messages, `stack` text and
   `Number.prototype.toString(radix)` of fractions are engine-specific.
 - The `jit` family compares five Ant variants with Node instead of with each
@@ -76,6 +82,13 @@ The runs behind these were limited to this checkpoint's build: clang 19,
   keys containing NUL when the object also has an integer key:
   `{ 'a\0b': 5, 1: 1 }` gives `{"1":1}`.
 - `new URL('http://xn--/')` parses; Node rejects the invalid Punycode label.
+- `parseInt` does not skip Unicode whitespace (`parseInt('\u00a012')` is
+  `NaN`), and treats a `NaN` radix as invalid instead of as 10.
+- RegExp without `u` matches code points rather than code units:
+  `'😀'.replace(/(?:)/g, '-')` gives `-😀-`; Node gives three dashes around
+  the two surrogates.
+- `Object.keys` of a `Readable` lists only `_read` (see
+  [stream-property-surface.md](stream-property-surface.md)).
 - `structuredClone` turns `Object(1n)` into a plain object, truncates property
   keys at an embedded NUL, and fills array holes with `undefined`.
 - `URLSearchParams` turns a lone surrogate into three U+FFFD instead of one.
@@ -107,8 +120,9 @@ At this checkpoint, with the build described under Open findings:
   `numbers` 123k, `base64` 1.1M, `text` 463k (2 minutes each), `js` 333k and
   `regexp` 417k (3 to 4 minutes) after the fixes above, with no remaining
   failures.
-- `node tests/differential/test.mjs` passes. The new families ran with 3 to 25
-  cases per seed; the open findings above are what they reported.
+- `node tests/differential/runner.test.ts` and `npx tsc -p tests/differential`
+  pass. The families ran with 3 to 25 cases per seed; the open findings above
+  are what they reported.
 - `examples/spec/run.js --all`: `temporal` fails because Temporal is disabled
   in this build. `worker_threads` and `zlib` pass their own checks, but the
   runner then fails reading `.length`. Those two also fail on unmodified

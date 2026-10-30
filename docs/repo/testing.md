@@ -94,8 +94,9 @@ This guide keeps validation proportional to the change while still protecting ru
   `src/utf8.c`, `src/modules/url/`, the RegExp translator, or the Silver
   parser and compiler. `maid fuzz_setup` and `maid fuzz <target> [seconds]`
   fuzz with clang, ASan and UBSan. See [tests/fuzz](../../tests/fuzz/README.md).
-- `node tests/differential/runner.mjs --family <name> --cases N --minimize`
-  compares generated JavaScript probes against Node. The `jit` family also
+- `node tests/differential/runner.ts --family <name> --cases N --minimize`
+  (after `npm install`) compares fast-check generated JavaScript probes
+  against Node and shrinks mismatches to minimal repros. The `jit` family also
   runs each probe under the interpreter and every `ANT_DEBUG=opt:` mode, so
   use it after JIT or optimizing-tier changes. A mismatch is a finding to
   classify, not automatically a bug. See
