@@ -9,6 +9,7 @@ Store in-progress execution plans here.
 ## Active
 
 - [Realms](realms.md)
+- [Fuzz and Property Testing](fuzz-and-property-testing.md)
 - [Per-Error Capture and Lazy Error Stacks](per-error-capture-lazy-stack.md)
 - [Per-Isolate Event Loops](per-isolate-event-loops.md)
 - [Worker Threads on In-Process Isolates](worker-threads-isolates.md)
