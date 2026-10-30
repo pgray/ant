@@ -147,8 +147,8 @@ static void gc_visit_isolate_values(ant_t *js, gc_root_visitor_t visitor) {
   #define ANT_MUTABLE_ROOT_ARR(name, n) gc_visit_value_slots(js, visitor, js->mutable_roots.name, n);
   #include "isolate_values.h"
 
-  for (uint32_t i = 0; i < js->libraries.cap; i++) {
-    ant_library_ns_t *lib = &js->libraries.entries[i];
+  for (uint32_t i = 0; i < ANT_LIBRARY_COUNT; i++) {
+    ant_library_ns_t *lib = &js->libraries[i];
     if (lib->ns) visitor(js, lib->ns);
     if (lib->esm_ns) visitor(js, lib->esm_ns);
   }

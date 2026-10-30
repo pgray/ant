@@ -22018,7 +22018,6 @@ void js_destroy(ant_t *js) {
   free(js->c_roots);
   js->c_roots = NULL;
   js->c_root_count = js->c_root_cap = 0;
-  ant_library_cache_free(js);
 
   ant_realm_destroy_all(js);
   if (!js->process_exiting) ant_shapes_destroy(js);

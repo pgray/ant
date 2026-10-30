@@ -1909,8 +1909,9 @@ esm_builtin_t esm_find_builtin(const char *specifier, size_t spec_len) {
   const ant_builtin_bundle_alias_t *alias = esm_lookup_builtin_alias(specifier, spec_len);
   if (alias) return (esm_builtin_t){ .alias = alias, .kind = alias->kind };
 
-  ant_library_entry_t *library = ant_library_find(specifier, spec_len);
-  if (library) return (esm_builtin_t){ .library = library, .kind = ant_library_kind(library) };
+  ant_builtin_name_kind_t kind;
+  const ant_library_entry_t *library = ant_library_find(specifier, spec_len, &kind);
+  if (library) return (esm_builtin_t){ .library = library, .kind = kind };
 
   return (esm_builtin_t){ .kind = ANT_BUILTIN_NAME_NONE };
 }

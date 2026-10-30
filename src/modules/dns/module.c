@@ -255,8 +255,7 @@ ant_value_t dns_library(ant_t *js) {
 }
 
 ant_value_t dns_promises_library(ant_t *js) {
-  ant_library_entry_t *entry = ant_library_find("dns", 3);
-  ant_value_t lib = entry ? ant_library_load(js, entry) : dns_library(js);
+  ant_value_t lib = ant_library_load(js, ant_library_find("dns", 3, NULL));
   return is_err(lib) ? lib : js_get(js, lib, "promises");
 }
 

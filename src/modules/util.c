@@ -869,8 +869,7 @@ ant_value_t util_types_library(ant_t *js) {
 }
 
 static ant_value_t util_get_types_object(ant_t *js) {
-  ant_library_entry_t *types = ant_library_find("util/types", 10);
-  return types ? ant_library_load(js, types) : util_types_library(js);
+  return ant_library_load(js, ant_library_find("util/types", 10, NULL));
 }
 
 static ant_value_t util_debuglog_call(ant_params_t) {

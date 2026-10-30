@@ -1365,7 +1365,6 @@ ant_value_t assert_library(ant_t *js) {
 }
 
 ant_value_t assert_strict_library(ant_t *js) {
-  ant_library_entry_t *entry = ant_library_find("assert", 6);
-  ant_value_t lib = entry ? ant_library_load(js, entry) : assert_library(js);
+  ant_value_t lib = ant_library_load(js, ant_library_find("assert", 6, NULL));
   return is_err(lib) ? lib : js_get(js, lib, "strict");
 }

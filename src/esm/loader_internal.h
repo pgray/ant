@@ -51,7 +51,7 @@ typedef struct {
 
 typedef struct {
   const ant_builtin_bundle_alias_t *alias;
-  ant_library_entry_t *library;
+  const ant_library_entry_t *library;
   ant_builtin_name_kind_t kind;
 } esm_builtin_t;
 

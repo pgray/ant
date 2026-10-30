@@ -17,11 +17,9 @@
 #include "runtime.h"
 #include "isolate.h"
 #include "inspector.h"
-#include "esm/library.h"
 #include "esm/remote.h"
 #include "silver/vm.h"
 #include "messages.h"
-
 #include "cli/commands.h"
 #include "cli/daemon.h"
 #include "cli/entry.h"
@@ -33,7 +31,6 @@
 #include "sandbox/transport.h"
 #include "sandbox/vm.h"
 #include "modules/process.h"
-#include "modules/sandbox.h"
 #include "modules/url.h"
 
 typedef enum {
@@ -225,7 +222,6 @@ static int run_runtime(const ant_cli_t *cli, run_plan_t *plan, bool crash_report
   if (plan->mode == RUN_SANDBOX) ant_cli_daemon_terminal(js, &plan->sandbox);
 
   ant_bootstrap_modules(js);
-  ant_register_library(sandbox_library, "ant:sandbox");
 
   if (watch) ant_watch_attach(watch, js);
   int code = run_in_runtime(js, cli, plan, crash_report, watch);

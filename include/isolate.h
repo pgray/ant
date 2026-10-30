@@ -15,6 +15,7 @@
 #include "silver/code_unit.h"
 
 #include "esm/loader.h"
+#include "esm/library.h"
 #include "modules/json.h"
 #include "modules/math.h"
 #include "modules/timer.h"
@@ -221,10 +222,7 @@ struct ant_isolate_t {
   size_t c_root_count;
   size_t c_root_cap;
 
-  struct {
-    struct ant_library_ns *entries;
-    uint32_t cap;
-  } libraries;
+  ant_library_ns_t libraries[ANT_LIBRARY_COUNT];
 
   struct {
     ant_shape_t *roots[ANT_INOBJ_MAX_SLOTS + 1];

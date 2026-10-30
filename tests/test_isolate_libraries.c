@@ -10,22 +10,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-static int init_calls = 0;
 static ant_value_t foreign_ns;
 static bool saw_foreign;
-
-static ant_value_t TestLibrary(ant_t *js) {
-  init_calls++;
-  ant_value_t lib = Ant_Object_CreateBare(js);
-  js_set(js, lib, "id", js_mknum(init_calls));
-  return lib;
-}
-
-static ant_value_t OtherLibrary(ant_t *js) {
-  (void)js;
-  fputs("re-registration replaced the first init function\n", stderr);
-  abort();
-}
 
 static void CheckRoot(ant_t *js, ant_value_t value) {
   (void)js;
@@ -44,10 +30,14 @@ static ant_t *Create(void) {
   return js;
 }
 
-static ant_library_entry_t *Find(void) {
-  const char *name = "ant:test/isolate-library";
-  ant_library_entry_t *lib = ant_library_find(name, strlen(name));
-  assert(lib);
+static const ant_library_entry_t *Find(void) {
+  const char *name = "node:string_decoder";
+  ant_builtin_name_kind_t kind = ANT_BUILTIN_NAME_NONE;
+  const ant_library_entry_t *lib = ant_library_find(name, strlen(name), &kind);
+  assert(lib && kind == ANT_BUILTIN_NAME_NODE);
+  assert(ant_library_find("string_decoder", 14, NULL) == lib);
+  assert(ant_library_find("ant:string_decoder", 18, NULL) == lib);
+  assert(!ant_library_find("node:ffi", 8, NULL));
   return lib;
 }
 
@@ -62,17 +52,12 @@ static ant_value_t Load(ant_t *js) {
 }
 
 int main(void) {
-  ant_register_library(TestLibrary, "ant:test/isolate-library");
-  ant_register_library(OtherLibrary, "ant:test/isolate-library");
-
   for (int destroy_first = 0; destroy_first < 2; destroy_first++) {
     ant_t *first = Create();
     ant_t *second = Create();
 
-    int before = init_calls;
     ant_value_t a = Load(first);
     ant_value_t b = Load(second);
-    assert(init_calls == before + 2);
     assert(a != b);
 
     foreign_ns = b;
@@ -86,7 +71,6 @@ int main(void) {
     gc_run(survivor);
     gc_run(survivor);
     assert(Load(survivor) == kept);
-    assert(js_getnum(js_get(survivor, kept, "id")) == (destroy_first ? before + 2 : before + 1));
     js_destroy(survivor);
   }
 
