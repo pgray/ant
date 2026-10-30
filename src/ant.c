@@ -23003,7 +23003,7 @@ static ant_value_t execute_top_level(
   ant_value_t this_val, coroutine_t **async_coro_out
 ) {
   if (async_coro_out) *async_coro_out = NULL;
-  if (sv_dump_bytecode_unlikely) sv_disasm(js, func, js->filename);
+  if (sv_debug_unlikely(SV_DEBUG_DUMP_BC)) sv_disasm(js, func, js->filename);
   if (func->is_tla) return sv_start_tla(js, func, this_val, async_coro_out);
   return sv_execute_entry(js->vm, func, this_val, NULL, 0);
 }
@@ -23038,7 +23038,7 @@ static ant_value_t js_execute_compiled_eval_bytecode(
   ant_t *js, sv_func_t *func,
   ant_value_t this_val, ant_value_t eval_env, ant_value_t new_target
 ) {
-  if (sv_dump_bytecode_unlikely) sv_disasm(js, func, js->filename);
+  if (sv_debug_unlikely(SV_DEBUG_DUMP_BC)) sv_disasm(js, func, js->filename);
   GC_ROOT_SAVE(mark, js);
 
   ant_value_t compiled = mkref(kTypeFunctionInfo, func);

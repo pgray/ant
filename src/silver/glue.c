@@ -1384,7 +1384,7 @@ ant_value_t jit_helper_bailout_resume(
     if (!fn->jit_code) fn->jit_code_cold = false;
     sv_jit_prime_osr(fn);
     
-    if (sv_jit_warn_unlikely) fprintf(
+    if (sv_debug_unlikely(SV_DEBUG_JIT_WARN)) fprintf(
       stderr, "jit: stale-exit func=%s at bc=%d\n",
       fn->debug->name ? fn->debug->name : "<anonymous>", (int)bc_offset
     );
@@ -1418,7 +1418,7 @@ ant_value_t jit_helper_promote_resume(
 
   if (fn->jit_code_cold) {
     fn->jit_code = NULL;
-    if (sv_jit_warn_unlikely) fprintf(
+    if (sv_debug_unlikely(SV_DEBUG_JIT_WARN)) fprintf(
       stderr, "jit: promote func=%s at bc=%d\n", 
       fn->debug->name ? fn->debug->name : "<anonymous>", (int)bc_offset
     );

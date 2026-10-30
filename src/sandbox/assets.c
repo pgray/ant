@@ -1,6 +1,7 @@
 #include <compat.h> // IWYU pragma: keep
 
 #include "assets.h"
+#include "debug.h"
 #include "download.h"
 #include "modules/http.h"
 #include "progress.h"
@@ -29,7 +30,6 @@
 #endif
 
 #define ANT_SANDBOX_MANIFEST_URL "https://manifest.antjs.org/v1/latest"
-bool ant_sandbox_assets_bypass_manifest = false;
 
 typedef struct {
   char *data;
@@ -628,7 +628,7 @@ static uint64_t sandbox_manifest_gzip_size(yyjson_val *entry) {
 static int sandbox_manifest_url(char *out, size_t out_len) {
   const char *base = getenv("ANT_SANDBOX_MANIFEST_URL");
   const char *branch = getenv("ANT_SANDBOX_MANIFEST_BRANCH");
-  const char *revision = ant_sandbox_assets_bypass_manifest ? NULL : ANT_GIT_LONGHASH;
+  const char *revision = sv_debug_enabled(SV_DEBUG_SANDBOX_BYPASS_MANIFEST) ? NULL : ANT_GIT_LONGHASH;
 
   if (!base || !base[0]) base = ANT_SANDBOX_MANIFEST_URL;
 
@@ -719,7 +719,7 @@ static int sandbox_manifest_select(
   yyjson_val *kernel_source = yyjson_obj_get(kernel, "source");
   
   const char *ant_revision = sandbox_json_string(ant, "revision");
-  bool bypass_manifest = ant_sandbox_assets_bypass_manifest;
+  bool bypass_manifest = sv_debug_enabled(SV_DEBUG_SANDBOX_BYPASS_MANIFEST);
 
   if (!bypass_manifest && (!ant_revision || strcmp(ant_revision, ANT_GIT_LONGHASH) != 0)) {
     sandbox_asset_error(err, err_len,
@@ -975,7 +975,7 @@ static int sandbox_assets_download_missing_direct(
   rc = sandbox_http_get(manifest_url, NULL, NULL, 0, progress_ptr, &manifest, &manifest_len, err, err_len);
   if (progress_ptr) progress_stop(progress_ptr);
   if (rc != 0) {
-    if (!ant_sandbox_assets_bypass_manifest && err && strstr(err, "HTTP 404"))
+    if (!sv_debug_enabled(SV_DEBUG_SANDBOX_BYPASS_MANIFEST) && err && strstr(err, "HTTP 404"))
       sandbox_asset_error(err, err_len, "%s", ANT_UNPUBLISHED_BUILD_HINT);
     return rc;
   }

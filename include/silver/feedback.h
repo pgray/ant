@@ -119,7 +119,7 @@ static inline void sv_jit_on_bailout_at(sv_func_t *fn, const char *reason, int b
   fn->jit_code_retier = false;
   fn->back_edge_count = 0;
 
-  if (sv_jit_warn_unlikely) {
+  if (sv_debug_unlikely(SV_DEBUG_JIT_WARN)) {
     const char *op_name = "entry";
     if (bc_off >= 0 && bc_off < fn->code_len) {
       uint8_t op = fn->code[bc_off];
@@ -141,7 +141,7 @@ static inline void sv_jit_on_bailout_at(sv_func_t *fn, const char *reason, int b
   if (fn->jit_bailout_count >= SV_JIT_BAILOUT_LIMIT) {
     fn->jit_compile_failed = true;
     fn->call_count = 0;
-    if (sv_jit_warn_unlikely) fprintf(
+    if (sv_debug_unlikely(SV_DEBUG_JIT_WARN)) fprintf(
       stderr, "jit: disabling %s after %u bailouts at tfb=%u\n",
       fn->debug->name ? fn->debug->name : "<anonymous>",
       (unsigned)fn->jit_bailout_count, fn->tfb_version

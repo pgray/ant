@@ -3037,7 +3037,7 @@ static sv_ast_t *parse_program(
 
   sv_ast_t *program = mk(N_PROGRAM);
   sv_parse_stmt_list(p, &program->args, false, true, true);
-  if (sv_parse_trace_unlikely) fprintf(
+  if (sv_debug_unlikely(SV_DEBUG_PARSE)) fprintf(
     stderr, "[parse] after-stmt-list thrown=%d strict=%d body=%d\n",
     Ant_Exception_Pending(js) ? 1 : 0,
     p->lx.strict ? 1 : 0,
@@ -3077,7 +3077,7 @@ static sv_ast_t *parse_detect(ant_t *js, const char *code, ant_offset_t clen, bo
 }
 
 sv_ast_t *sv_parse(ant_t *js, const char *code, ant_offset_t clen, sv_parse_goal_t goal, bool strict) {
-  if (sv_parse_trace_unlikely) fprintf(
+  if (sv_debug_unlikely(SV_DEBUG_PARSE)) fprintf(
     stderr, "[parse] start len=%u goal=%d strict=%d\n",
     (unsigned)clen, (int)goal, strict ? 1 : 0
   );
@@ -3086,7 +3086,7 @@ sv_ast_t *sv_parse(ant_t *js, const char *code, ant_offset_t clen, sv_parse_goal
     ? parse_detect(js, code, clen, strict)
     : parse_program(js, code, clen, goal, strict, NULL, false);
 
-  if (sv_parse_trace_unlikely) fprintf(stderr,
+  if (sv_debug_unlikely(SV_DEBUG_PARSE)) fprintf(stderr,
     "[parse] return %s body=%d\n", program ? "program" : "null",
     program ? program->args.count : -1
   );

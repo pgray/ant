@@ -1,6 +1,7 @@
 // meson test -C build error-handoffs
 #include "internal.h"
 #include "cfunc.h"
+#include "debug.h"
 #include "errors.h"
 #include "gc/objects.h"
 #include "gc/roots.h"
@@ -93,8 +94,8 @@ static void CheckFunctionAllocationFailure(ant_t *js) {
   // Force arena exhaustion without allocating large amounts of memory or
   // adding an allocation-failure hook to the runtime. GC must not reuse slots
   // or inspect the temporarily restricted arenas.
-  bool saved_gc_disabled = gc_disabled;
-  gc_disabled = true;
+  bool saved_gc_disabled = sv_debug_enabled(SV_DEBUG_GC_DISABLE);
+  sv_debug_enable(SV_DEBUG_GC_DISABLE);
   ant_fixed_arena_t closures = ExhaustArena(&js->closure_arena);
   for (int has_oom = 0; has_oom < 2; has_oom++) {
     js->exception_oom = has_oom ? oom : js_mkundef();
@@ -133,7 +134,7 @@ static void CheckFunctionAllocationFailure(ant_t *js) {
   }
   js->this_val = saved_this;
   js->closure_arena = closures;
-  gc_disabled = saved_gc_disabled;
+  if (!saved_gc_disabled) sv_debug_disable(SV_DEBUG_GC_DISABLE);
   assert(vtype(js_obj_to_func_ex(js, obj, 0)) == kTypeFunction);
   assert(!Ant_Exception_Pending(js));
   GC_ROOT_RESTORE(js, mark);

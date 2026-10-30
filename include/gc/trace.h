@@ -4,9 +4,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "debug.h"
 #include "gc/objects.h"
-
-extern bool gc_trace_enabled;
 
 typedef struct {
   bool on;
@@ -20,7 +19,7 @@ void gc_trace_major_print(ant_t *js, const gc_trace_major_t *trace);
 void gc_trace_minor_print(ant_t *js, uint64_t start_ns, size_t young, size_t survivors);
 
 static inline gc_trace_major_t gc_trace_major_begin(ant_t *js, uint64_t start_ns) {
-  gc_trace_major_t trace = {.on = __builtin_expect(gc_trace_enabled, 0), .start_ns = start_ns};
+  gc_trace_major_t trace = {.on = sv_debug_unlikely(SV_DEBUG_GC_TRACE), .start_ns = start_ns};
   if (trace.on) gc_trace_major_snapshot(js, &trace);
   return trace;
 }
@@ -46,7 +45,7 @@ static inline void gc_trace_major_end(ant_t *js, gc_trace_major_t *trace, uint64
 }
 
 static inline void gc_trace_minor_end(ant_t *js, uint64_t start_ns, size_t young, size_t survivors) {
-  if (__builtin_expect(gc_trace_enabled, 0)) gc_trace_minor_print(js, start_ns, young, survivors);
+  if (sv_debug_unlikely(SV_DEBUG_GC_TRACE)) gc_trace_minor_print(js, start_ns, young, survivors);
 }
 
 #endif

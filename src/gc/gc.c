@@ -11,13 +11,13 @@
 #include "gc/strings.h"
 #include "gc/ropes.h"
 #include "gc/trace.h"
+#include "debug.h"
 #include "silver/engine.h"
 
 #ifdef ANT_WASM_EMBED
 #include "wasm_embed.h"
 #endif
 
-bool gc_disabled = false;
 void gc_state_init(ant_t *js) {
   js->gc.nursery_threshold = GC_NURSERY_THRESHOLD;
   js->gc.major_every_n = GC_MAJOR_EVERY_N_MINOR;
@@ -298,7 +298,7 @@ static void gc_clear_remembered_builders(ant_t *js) {
 }
 
 void gc_run(ant_t *js) {
-  if (__builtin_expect(gc_disabled, 0)) return;
+  if (sv_debug_unlikely(SV_DEBUG_GC_DISABLE)) return;
   js->gc_running = true;
   
   uint64_t start_ns = gc_now_ns();
@@ -379,7 +379,7 @@ void gc_run(ant_t *js) {
 }
 
 void gc_run_minor(ant_t *js) {
-  if (__builtin_expect(gc_disabled, 0)) return;
+  if (sv_debug_unlikely(SV_DEBUG_GC_DISABLE)) return;
   js->gc_running = true;
   uint64_t start_ns = gc_now_ns();
 
@@ -428,7 +428,7 @@ void gc_run_minor(ant_t *js) {
 }
 
 void gc_pressure(ant_t *js) {
-  if (__builtin_expect(gc_disabled, 0)) return;
+  if (sv_debug_unlikely(SV_DEBUG_GC_DISABLE)) return;
   js->gc.tick = GC_MIN_TICK;
   gc_safepoint(js);
 }
@@ -587,12 +587,12 @@ void gc_array_grew(ant_t *js) {
 }
 
 bool gc_alloc_due(ant_t *js) {
-  if (__builtin_expect(gc_disabled, 0)) return false;
+  if (sv_debug_unlikely(SV_DEBUG_GC_DISABLE)) return false;
   return js->obj_arena.live_count >= js->gc.alloc_limit;
 }
 
 __attribute__((noinline)) bool gc_reclaim_arena(ant_t *js, const ant_fixed_arena_t *arena) {
-  if (__builtin_expect(gc_disabled, 0) || js->gc_running) return false;
+  if (sv_debug_unlikely(SV_DEBUG_GC_DISABLE) || js->gc_running) return false;
   gc_run(js);
   size_t capacity = arena->limit / arena->elem_size;
   return arena->live_count + capacity / GC_RECLAIM_MIN_FREE_DIVISOR < capacity;
@@ -607,7 +607,7 @@ bool gc_safepoint(ant_t *js) {
   if (++js->gc.tick < GC_MIN_TICK) return false;
   if (js_interrupt_pending(js)) return true;
   
-  if (__builtin_expect(gc_disabled, 0)) {
+  if (sv_debug_unlikely(SV_DEBUG_GC_DISABLE)) {
     js->gc.tick = 0;
     return false;
   }
@@ -630,7 +630,7 @@ static bool gc_idle_major_due(ant_t *js) {
 }
 
 bool gc_idle_wanted(ant_t *js) {
-  if (__builtin_expect(gc_disabled, 0) || js->gc_running) return false;
+  if (sv_debug_unlikely(SV_DEBUG_GC_DISABLE) || js->gc_running) return false;
   if (gc_alloc_marker(js) < js->gc.idle_retry_at) return false;
   return gc_idle_major_due(js) || gc_young_count(js) >= js->gc.nursery_threshold / 4;
 }

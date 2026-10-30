@@ -1,0 +1,23 @@
+#ifdef SV_DEBUG
+SV_DEBUG(GC_DISABLE,              "gc",            "disable",         false)
+SV_DEBUG(GC_TRACE,                "gc",            "trace",           false)
+SV_DEBUG(PARSE,                   "dump/parse",    "trace",           false)
+SV_DEBUG(COMPILE,                 "dump/compile",  "trace",           false)
+SV_DEBUG(DUMP_SHELL,              "dump/compile",  "shell",           false)
+SV_DEBUG(CRPRINTF_BC,             "dump/crprintf", "bytecode",        true)
+SV_DEBUG(CRPRINTF_HEX,            "dump/crprintf", "hex",             true)
+SV_DEBUG(DUMP_BC,                 "dump/vm",       "bytecode",        true)
+SV_DEBUG(DUMP_JIT,                "dump/vm",       "jit",             true)
+SV_DEBUG(JIT_WARN,                "dump/vm",       "op-warn",         true)
+SV_DEBUG(DUMP_OPT_GRAPH,          "dump/opt",      "graph",           true)
+SV_DEBUG(DUMP_OPT_STATS,          "dump/opt",      "stats",           true)
+SV_DEBUG(PERF_MAP,                "jit",           "perf-map",        false)
+SV_DEBUG(SHAPE_VERIFY,            "shape",         "verify",          false)
+SV_DEBUG(OPT_OFF,                 "opt",           "off",             false)
+SV_DEBUG(OPT_FORCE,               "opt",           "force",           false)
+SV_DEBUG(OPT_VERIFY,              "opt",           "verify",          false)
+SV_DEBUG(SANDBOX_BYPASS_MANIFEST, "sandbox",       "bypass-manifest", false)
+SV_DEBUG(COMPILE_BYPASS_ABI,      "compile",       "bypass-abi",      false)
+SV_DEBUG(JITLESS,                 NULL,            NULL,              false)
+#undef SV_DEBUG
+#endif

@@ -1,6 +1,7 @@
 #include <compat.h> // IWYU pragma: keep
 
 #include "cli/compile.h"
+#include "debug.h"
 #include "cli/version.h"
 #include "download.h"
 #include "cli/misc.h"
@@ -30,8 +31,6 @@
 #include <process.h>
 #define getpid _getpid
 #endif
-
-bool ant_compile_bypass_revision = false;
 
 typedef struct {
   char download_url[2048];
@@ -76,7 +75,7 @@ static int compile_manifest_select_runtime(const char *json, size_t json_len, co
       if (available && yyjson_is_bool(available) && !yyjson_get_bool(available)) continue;
 
       const char *revision = compile_json_string(item, "revision");
-      if (!ant_compile_bypass_revision && (!revision || strcmp(revision, ANT_GIT_LONGHASH) != 0)) {
+      if (!sv_debug_enabled(SV_DEBUG_COMPILE_BYPASS_ABI) && (!revision || strcmp(revision, ANT_GIT_LONGHASH) != 0)) {
         wrong_revision = true;
         continue;
       }
@@ -144,7 +143,7 @@ static int compile_download_runtime(FILE *dst, char *err, size_t err_len) {
   char *manifest = NULL;
   size_t manifest_len = 0;
   
-  const char *revision = ant_compile_bypass_revision ? NULL : ANT_GIT_LONGHASH;
+  const char *revision = sv_debug_enabled(SV_DEBUG_COMPILE_BYPASS_ABI) ? NULL : ANT_GIT_LONGHASH;
   if (ant_manifest_fetch(revision, &manifest, &manifest_len, err, err_len) != 0) return -1;
 
   compile_runtime_info_t info;

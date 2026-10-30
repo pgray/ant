@@ -3,6 +3,7 @@
 #ifdef ANT_GC_VERIFY
 
 #include "gc.h"
+#include "debug.h"
 #include "silver/engine.h"
 #include <stdlib.h>
 #include <stdio.h>
@@ -16,7 +17,7 @@ void gc_verify_stress(ant_t *js) {
     every = v ? atol(v) : 0;
   }
   
-  if (every <= 0 || gc_disabled || js->gc_running || js->gc_objects_running || !js->cstk.base) return;
+  if (every <= 0 || sv_debug_enabled(SV_DEBUG_GC_DISABLE) || js->gc_running || js->gc_objects_running || !js->cstk.base) return;
   if (++tick % every != 0) return;
   
   gc_run(js);

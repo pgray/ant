@@ -574,7 +574,7 @@ bool jit_is_eligible(sv_func_t *func) {
   if (func->is_generator) return false;
   
   if (func->code_len > SV_JIT_MAX_CODE_BYTES) {
-    if (sv_jit_warn_unlikely) fprintf(
+    if (sv_debug_unlikely(SV_DEBUG_JIT_WARN)) fprintf(
       stderr, "jit: %s too large (%d bytes > %d)\n",
       func->debug->name ? func->debug->name : "<anonymous>",
       func->code_len, SV_JIT_MAX_CODE_BYTES
@@ -591,7 +591,7 @@ bool jit_is_eligible(sv_func_t *func) {
     if (sz == 0) return false;
     if ((sv_op_flags[op] & SV_OPF_JIT_ELIGIBLE) == 0) {
       if ((sv_op_flags[op] & SV_OPF_JIT_QUIET_INELIGIBLE) == 0) {
-        if (sv_jit_warn_unlikely)
+        if (sv_debug_unlikely(SV_DEBUG_JIT_WARN))
           fprintf(stderr, "jit: ineligible op %s in %s\n",
                   (op < OP__COUNT && sv_op_names[op]) ? sv_op_names[op] : "???",
                   func->debug->name ? func->debug->name : "<anonymous>");
@@ -604,7 +604,7 @@ bool jit_is_eligible(sv_func_t *func) {
       if (vtype(cv) != kTypeFunctionInfo) return false;
     } else if (op == OP_SPECIAL_OBJ) {
       if (sv_get_u8(ip + 1) == SV_SPECIAL_ARGUMENTS && !func->is_strict) {
-        if (sv_jit_warn_unlikely)
+        if (sv_debug_unlikely(SV_DEBUG_JIT_WARN))
           fprintf(stderr, "jit: ineligible op SPECIAL_OBJ(%d) in %s\n",
                   sv_get_u8(ip + 1),
                   func->debug->name ? func->debug->name : "<anonymous>");

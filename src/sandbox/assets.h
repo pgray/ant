@@ -11,6 +11,5 @@ int ant_sandbox_assets_download_missing(
   size_t err_len
 );
 
-extern bool ant_sandbox_assets_bypass_manifest;
 
 #endif

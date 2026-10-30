@@ -3041,7 +3041,7 @@ static const char *opt_not_inlineable(const opt_builder_t *b, sv_func_t *target,
 }
 
 static void opt_inline_refused(const opt_builder_t *b, sv_func_t *target, const char *reason) {
-  if (!sv_jit_warn_unlikely || !target) return;
+  if (!sv_debug_unlikely(SV_DEBUG_JIT_WARN) || !target) return;
   fprintf(stderr, "jit: opt inline-refused caller=%s callee=%s bc=%u reason=%s\n",
     b->func->debug && b->func->debug->name ? b->func->debug->name : "<anonymous>",
     target->debug && target->debug->name ? target->debug->name : "<anonymous>", b->pc, reason);

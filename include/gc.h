@@ -67,7 +67,6 @@ size_t gc_code_major_threshold(ant_t *js);
 void gc_func_mark_profile_enable(ant_t *js, bool enabled);
 void gc_func_mark_profile_reset(ant_t *js);
 
-extern bool gc_disabled;
 gc_func_mark_profile_t gc_func_mark_profile_get(ant_t *js);
 
 static inline bool gc_value_is_heap_ref(ant_value_t v) {

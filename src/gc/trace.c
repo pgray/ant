@@ -3,8 +3,6 @@
 #include <stdio.h>
 #include "gc/trace.h"
 
-bool gc_trace_enabled = false;
-
 static _Thread_local uint64_t gc_trace_origin_ns;
 static _Thread_local uint64_t gc_trace_majors, gc_trace_minors;
 

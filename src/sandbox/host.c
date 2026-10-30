@@ -2,6 +2,7 @@
 
 #include "sandbox/host.h"
 #include "assets.h"
+#include "debug.h"
 #include "modules/io.h"
 #include "sandbox/sandbox.h"
 #include "utils.h"
@@ -194,7 +195,7 @@ int ant_sandbox_assets_resolve(ant_sandbox_assets_t *assets, char *err, size_t e
   const char *kernel_override = getenv("ANT_SANDBOX_KERNEL");
   bool using_overrides = (image_override && image_override[0]) || (kernel_override && kernel_override[0]);
 
-  if (!using_overrides && ant_sandbox_assets_bypass_manifest)
+  if (!using_overrides && sv_debug_enabled(SV_DEBUG_SANDBOX_BYPASS_MANIFEST))
     return sandbox_resolve_latest_cache_dir(assets, image_name, kernel_name, err, err_len);
 
   int rc = sandbox_cache_dir(assets->cache_dir, sizeof(assets->cache_dir));

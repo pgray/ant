@@ -399,7 +399,7 @@ static void opt_drop_code(opt_code_t *code);
 static void opt_drop_dead(opt_func_state_t *state, opt_code_t *code) {
   if (code->func->jit_code != code->entry) return;
   if (state) state->fruitless++;
-  if (sv_jit_warn_unlikely) fprintf(stderr, "jit: opt dropped func=%s reason=dead-value\n", opt_func_name(code->func));
+  if (sv_debug_unlikely(SV_DEBUG_JIT_WARN)) fprintf(stderr, "jit: opt dropped func=%s reason=dead-value\n", opt_func_name(code->func));
   opt_drop_code(code);
 }
 
@@ -684,7 +684,7 @@ ant_value_t opt_rt_exit(
   }
   opt_stats.exits++;
   opt_drop_code(code);
-  if (sv_jit_warn_unlikely) opt_warn_exit(state, func, site->bc_off, site->kind, site->slot, code, 0);
+  if (sv_debug_unlikely(SV_DEBUG_JIT_WARN)) opt_warn_exit(state, func, site->bc_off, site->kind, site->slot, code, 0);
   return opt_rt_resume(vm, code, entry, site->bc_off, site->depth, params, locals, stack, finally);
 }
 
@@ -746,7 +746,7 @@ ant_value_t opt_rt_exit_frames(sv_vm_t *vm, opt_code_t *code, const opt_site_t *
   opt_stats.exits++;
   opt_stats.inline_exits++;
   opt_drop_code(code);
-  if (sv_jit_warn_unlikely) opt_warn_exit(state, frames[0].func, inner->bc_off, site->kind, site->slot, code, count - 1);
+  if (sv_debug_unlikely(SV_DEBUG_JIT_WARN)) opt_warn_exit(state, frames[0].func, inner->bc_off, site->kind, site->slot, code, count - 1);
 
   opt_exit_frame_t *root = &frames[count - 1];
   uint32_t params = code->param_count, locals = code->local_count;
@@ -1210,7 +1210,7 @@ static void opt_catch_missed(ant_t *js, opt_code_t *code, uint32_t catch_off) {
   if (++code->catch_misses < OPT_CATCH_MISS_LIMIT || code->dropped) return;
   opt_note_discard(opt_func_state(js, code->func, true), code, true);
   opt_drop_code(code);
-  if (sv_jit_warn_unlikely)
+  if (sv_debug_unlikely(SV_DEBUG_JIT_WARN))
     fprintf(stderr, "jit: opt dropped func=%s reason=catch-without-entry catch=%u line=%u\n", opt_func_name(code->func), catch_off,
       opt_func_line(code->func));
 }
@@ -1280,7 +1280,7 @@ void opt_rt_slow_paths_hot(sv_vm_t *vm, opt_code_t *code, sv_func_t *func, uint6
   }
   opt_note_discard(opt_func_state(vm->js, code->func, true), code, learned);
   opt_drop_code(code);
-  if (sv_jit_warn_unlikely)
+  if (sv_debug_unlikely(SV_DEBUG_JIT_WARN))
     fprintf(stderr, "jit: opt dropped func=%s reason=slow-paths runs=%llu line=%u\n", opt_func_name(code->func),
       (unsigned long long)code->slow_path_runs, opt_func_line(code->func));
 }
@@ -1357,7 +1357,7 @@ sv_jit_func_t opt_tier_compile(ant_t *js, sv_func_t *func, sv_closure_t *closure
   if (!state || state->disabled) return NULL;
   if (state->compiles >= OPT_MAX_LEARNING_COMPILES || state->fruitless >= opt_max_compiles(func)) {
     state->disabled = true;
-    if (sv_jit_warn_unlikely) fprintf(stderr, "jit: opt disabled func=%s after %u compiles\n", opt_func_name(func), state->compiles);
+    if (sv_debug_unlikely(SV_DEBUG_JIT_WARN)) fprintf(stderr, "jit: opt disabled func=%s after %u compiles\n", opt_func_name(func), state->compiles);
     return NULL;
   }
 
@@ -1372,7 +1372,7 @@ sv_jit_func_t opt_tier_compile(ant_t *js, sv_func_t *func, sv_closure_t *closure
   opt_build_failure_t failure;
   opt_build_stats_t build_stats = {0};
   if (!opt_build_graph(js, func, closure, opt_exit_sites_of, &graph, &layout, &failure, &build_stats)) {
-    if (sv_jit_warn_unlikely) {
+    if (sv_debug_unlikely(SV_DEBUG_JIT_WARN)) {
       sv_func_t *at = failure.func ? failure.func : func;
       uint32_t off = failure.bc_off;
       uint8_t op = off < (uint32_t)at->code_len ? at->code[off] : OP__COUNT;
@@ -1403,7 +1403,7 @@ sv_jit_func_t opt_tier_compile(ant_t *js, sv_func_t *func, sv_closure_t *closure
   }
   uint32_t nodes = ir_node_count(&graph);
   if (unprofitable) {
-    if (sv_jit_warn_unlikely) {
+    if (sv_debug_unlikely(SV_DEBUG_JIT_WARN)) {
       uint16_t op = counts.first;
       fprintf(stderr, "jit: opt rejected func=%s op=%s generics=%u in_loops=%u reason=%s line=%u\n", opt_func_name(func),
         op < OP__COUNT && sv_op_names[op] ? sv_op_names[op] : "-", counts.primary, counts.in_loops, unprofitable, opt_func_line(func));
@@ -1438,7 +1438,7 @@ sv_jit_func_t opt_tier_compile(ant_t *js, sv_func_t *func, sv_closure_t *closure
   if (!code) opt_build_release(js, &graph);
   ir_graph_free(&graph);
   if (!code) {
-    if (sv_jit_warn_unlikely)
+    if (sv_debug_unlikely(SV_DEBUG_JIT_WARN))
       fprintf(stderr, "jit: opt codegen-failed func=%s reason=%s line=%u\n", opt_func_name(func),
         codegen_failure ? codegen_failure : "-", opt_func_line(func));
     state->disabled = true;
@@ -1460,7 +1460,7 @@ sv_jit_func_t opt_tier_compile(ant_t *js, sv_func_t *func, sv_closure_t *closure
     asm_code_heap_stats_t heap = asm_code_heap_stats(codes->heap);
     if (heap.mapped > opt_stats.mapped) opt_stats.mapped = heap.mapped;
   }
-  if (sv_jit_warn_unlikely) fprintf(
+  if (sv_debug_unlikely(SV_DEBUG_JIT_WARN)) fprintf(
     stderr, "jit: opt compiled func=%s nodes=%u generics=%u slow_paths=%u inlined=%u code_bytes=%zu ms=%.3f line=%u\n",
     opt_func_name(func), nodes, counts.primary, counts.total - counts.primary,
     build_stats.inlined_calls, code->code_bytes,

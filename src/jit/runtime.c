@@ -309,7 +309,7 @@ sv_jit_func_t sv_jit_tier_up(ant_t *js, sv_func_t *func, sv_closure_t *closure) 
   func->jit_code_retier = false;
   sv_jit_func_t hot = sv_jit_compile_tier(js, func, closure, SV_JIT_TIER_HOT);
   
-  if (sv_jit_warn_unlikely) fprintf(
+  if (sv_debug_unlikely(SV_DEBUG_JIT_WARN)) fprintf(
     stderr, "jit: tier-up %s func=%s code_len=%d\n",
     hot ? "compiled" : "compile-failed",
     func->debug->name ? func->debug->name : "<anonymous>", func->code_len
@@ -400,7 +400,7 @@ __attribute__((noinline)) ant_value_t sv_jit_try_osr(
     jit_osr_seed_invariant_locals(func, frame);
     jit = sv_jit_compile_tier(js, func, closure, tier);
     
-    if (sv_jit_warn_unlikely) fprintf(
+    if (sv_debug_unlikely(SV_DEBUG_JIT_WARN)) fprintf(
       stderr, "jit: osr %s func=%s code_len=%d threshold=%u tier=%s\n",
       jit ? "compiled" : "compile-failed",
       func->debug->name ? func->debug->name : "<anonymous>",
@@ -464,7 +464,7 @@ __attribute__((noinline)) ant_value_t sv_jit_try_osr(
   
   if (synthetic_closure) gc_pop_roots(js, root_mark);
 
-  if (result == SV_JIT_RETRY_INTERP && sv_jit_warn_unlikely) fprintf(
+  if (result == SV_JIT_RETRY_INTERP && sv_debug_unlikely(SV_DEBUG_JIT_WARN)) fprintf(
     stderr, "jit: osr entry-rejected func=%s offset=%d\n",
     func->debug->name ? func->debug->name : "<anonymous>", bc_offset
   );
@@ -558,7 +558,7 @@ __attribute__((noinline)) ant_value_t sv_jit_await_resume(
   vm->jit.osr_marks = osr_mark.prev;
   vm->jit.osr = (sv_jit_osr_t){0};
 
-  if (result == SV_JIT_RETRY_INTERP && sv_jit_warn_unlikely) fprintf(
+  if (result == SV_JIT_RETRY_INTERP && sv_debug_unlikely(SV_DEBUG_JIT_WARN)) fprintf(
     stderr, "jit: await-resume rejected func=%s offset=%d\n",
     func->debug->name ? func->debug->name : "<anonymous>", resume_off
   );

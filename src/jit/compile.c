@@ -345,7 +345,7 @@ static void jit_note_module(sv_func_t *func, MIR_context_t ctx, MIR_module_t mod
 }
 
 static sv_jit_func_t jit_compile_tier(ant_t *js, sv_func_t *func, sv_closure_t *hint_closure, sv_jit_tier_t tier) {
-  if (sv_jitless_unlikely) {
+  if (sv_debug_unlikely(SV_DEBUG_JITLESS)) {
     func->jit_compile_failed = true;
     return NULL;
   }
@@ -783,7 +783,7 @@ static sv_jit_func_t jit_compile_tier(ant_t *js, sv_func_t *func, sv_closure_t *
   MIR_finish_func(c->ctx);
   MIR_finish_module(c->ctx);
   
-  if (sv_dump_jit_unlikely) MIR_output_module(c->ctx, stderr, c->mod);
+  if (sv_debug_unlikely(SV_DEBUG_DUMP_JIT)) MIR_output_module(c->ctx, stderr, c->mod);
 
   vstack_free(&c->vs);
   free(c->local_regs);
@@ -814,7 +814,7 @@ static sv_jit_func_t jit_compile_tier(ant_t *js, sv_func_t *func, sv_closure_t *
   free(c->finally_landings);
 
   if (!c->ok) {
-    if (sv_jit_warn_unlikely) fprintf(
+    if (sv_debug_unlikely(SV_DEBUG_JIT_WARN)) fprintf(
       stderr, "jit: compile-failed func=%s code_len=%d%s\n",
       c->func->debug->name ? c->func->debug->name : "<anonymous>",
       c->func->code_len, c->vs.overflow ? " reason=vstack-overflow" : ""
@@ -829,7 +829,7 @@ static sv_jit_func_t jit_compile_tier(ant_t *js, sv_func_t *func, sv_closure_t *
   }
 
   int insns = 0;
-  if (hot_ctx || sv_jit_warn_unlikely)
+  if (hot_ctx || sv_debug_unlikely(SV_DEBUG_JIT_WARN))
     for (MIR_insn_t insn = DLIST_HEAD(MIR_insn_t, c->jit_func->u.func->insns); insn; insn = DLIST_NEXT(MIR_insn_t, insn))
       insns++;
   MIR_gen_set_optimize_level(c->ctx, !hot_ctx ? JIT_BASE_OPT_LEVEL
@@ -863,7 +863,7 @@ static sv_jit_func_t jit_compile_tier(ant_t *js, sv_func_t *func, sv_closure_t *
     (compile_t1.tv_nsec - compile_t0.tv_nsec);
 
   if (!generated || unregistered) {
-    if (unregistered && sv_jit_warn_unlikely) fprintf(
+    if (unregistered && sv_debug_unlikely(SV_DEBUG_JIT_WARN)) fprintf(
       stderr, "jit: compile-failed func=%s reason=unregistered\n",
       c->func->debug->name ? c->func->debug->name : "<anonymous>"
     );
@@ -883,7 +883,7 @@ static sv_jit_func_t jit_compile_tier(ant_t *js, sv_func_t *func, sv_closure_t *
     ((int64_t *)c->cold_ns_item->addr)[1] = JIT_COLD_PROMOTE_COMPILE_MULTIPLE * JIT_HOT_COMPILE_COLD_RATIO * compile_ns;
   }
   
-  if (sv_jit_warn_unlikely) fprintf(
+  if (sv_debug_unlikely(SV_DEBUG_JIT_WARN)) fprintf(
     stderr, "jit: compiled func=%s code_len=%d max_stack=%d locals=%d insns=%d tier=%s ms=%.1f\n",
     c->func->debug->name ? c->func->debug->name : "<anonymous>",
     c->func->code_len, c->func->max_stack, c->func->max_locals, insns,

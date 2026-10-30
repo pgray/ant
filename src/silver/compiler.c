@@ -649,7 +649,7 @@ static void sv_func_init_code_and_map_templates(
 
   int max_stack = sv_func_compute_max_stack(func);
   if (max_stack < 0) {
-    if (sv_jit_warn_unlikely) fprintf(
+    if (sv_debug_unlikely(SV_DEBUG_JIT_WARN)) fprintf(
       stderr, "jit: operand depth analysis failed for %s\n",
       func->debug && func->debug->name ? func->debug->name : "<anonymous>"
     );
@@ -9070,7 +9070,7 @@ sv_func_t *sv_compile(
     }
   }
   
-  if (sv_compile_trace_unlikely) fprintf(
+  if (sv_debug_unlikely(SV_DEBUG_COMPILE)) fprintf(
     stderr, "[compile] start kind=program mode=%d len=%u body=%d strict=%d\n",
     (int)mode, (unsigned)source_len,
     program->args.count, (program->flags & FN_PARSE_STRICT) != 0 ? 1 : 0
@@ -9136,7 +9136,7 @@ sv_func_t *sv_compile(
   sv_compile_ctx_free_line_table(root.line_table);
   sv_code_unit_finish(unit);
   
-  if (sv_compile_trace_unlikely) fprintf(
+  if (sv_debug_unlikely(SV_DEBUG_COMPILE)) fprintf(
     stderr, "[compile] end kind=program mode=%d thrown=%d func=%p\n",
     (int)mode, Ant_Exception_Pending(js) ? 1 : 0, (void *)func
   );
@@ -9149,7 +9149,7 @@ sv_func_t *sv_compile(
 }
 
 sv_func_t *sv_compile_function(ant_t *js, const sv_function_parts_t *parts) {
-  if (sv_compile_trace_unlikely) fprintf(
+  if (sv_debug_unlikely(SV_DEBUG_COMPILE)) fprintf(
     stderr, "[compile] start kind=function len=%u async=%d generator=%d\n",
     (unsigned)parts->len, parts->is_async ? 1 : 0, parts->is_generator ? 1 : 0
   );
@@ -9183,7 +9183,7 @@ sv_func_t *sv_compile_function(ant_t *js, const sv_function_parts_t *parts) {
   sv_code_unit_finish(unit);
   parse_arena_rewind(js, parse_mark);
 
-  if (sv_compile_trace_unlikely) fprintf(
+  if (sv_debug_unlikely(SV_DEBUG_COMPILE)) fprintf(
     stderr, "[compile] end kind=function thrown=%d func=%p\n",
     Ant_Exception_Pending(js) ? 1 : 0, (void *)func
   );
@@ -9203,7 +9203,7 @@ sv_func_t *sv_compile_function_with_params(
   size_t body_len,
   bool is_async
 ) {
-  if (sv_compile_trace_unlikely) fprintf(
+  if (sv_debug_unlikely(SV_DEBUG_COMPILE)) fprintf(
     stderr, "[compile] start kind=function-with-params len=%u params=%d async=%d\n",
     (unsigned)body_len, param_count, is_async ? 1 : 0
   );
@@ -9292,7 +9292,7 @@ sv_func_t *sv_compile_function_with_params(
   sv_compile_ctx_free_line_table(root.line_table);
   parse_arena_rewind(js, parse_mark);
   
-  if (sv_compile_trace_unlikely) fprintf(
+  if (sv_debug_unlikely(SV_DEBUG_COMPILE)) fprintf(
     stderr, "[compile] end kind=function-with-params thrown=%d func=%p\n",
     Ant_Exception_Pending(js) ? 1 : 0, (void *)func
   );
