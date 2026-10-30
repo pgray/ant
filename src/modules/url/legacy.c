@@ -243,23 +243,43 @@ static ant_value_t lp_to_lower(lp_state_t *st, ant_value_t hostname, lp_slice_t 
   if (lp_is_ascii(s)) {
     url_fmt_buf_t *b = &st->bufs[4];
     b->len = 0;
+    
     if (!url_fmt_reserve(b, s.len)) return lp_oom(st);
     for (size_t i = 0; i < s.len; i++) b->buf[i] = (char)ant_ascii_to_lower((unsigned char)s.ptr[i]);
+    
     b->len = s.len;
     return js_mkstr(st->js, b->buf, b->len);
   }
+  
   ant_value_t fn = js_get(st->js, st->js->sym.string_proto, "toLowerCase");
   if (is_err(fn)) return fn;
+  
   return sv_vm_call_explicit_this(st->js->vm, st->js, fn, hostname, NULL, 0);
+}
+
+static bool lp_idna_identity(lp_slice_t s) {
+  bool label_start = true;
+  
+  for (size_t i = 0; i < s.len; i++) {
+    unsigned char c = (unsigned char)s.ptr[i];
+    if (label_start && s.len - i >= 4 && memcmp(s.ptr + i, "xn--", 4) == 0) return false;
+    if (!ant_ascii_is_lower(c) && !ant_ascii_is_digit(c) && c != '-' && c != '.') return false;
+    label_start = c == '.';
+  }
+  
+  return true;
 }
 
 static ant_value_t lp_to_ascii(ant_t *js, lp_slice_t s) {
   size_t len = s.len;
   char *utf8 = wtf8_to_utf8_dup(s.ptr, &len);
+  
   ada_owned_string ascii = ada_idna_to_ascii(utf8 ? utf8 : s.ptr, len);
   free(utf8);
+  
   ant_value_t out = js_mkstr(js, ascii.data ? ascii.data : "", ascii.data ? ascii.length : 0);
   ada_free_owned_string(ascii);
+  
   return out;
 }
 
@@ -282,6 +302,7 @@ static bool lp_match_simple(lp_slice_t rest, size_t *pathname_end) {
 
 static ant_value_t lp_parse_simple(lp_state_t *st, lp_slice_t rest, size_t pathname_end, bool parse_query) {
   ant_value_t whole = js_mkstr(st->js, rest.ptr, rest.len);
+  
   lp_assign(st, LP_PATH, whole);
   lp_assign(st, LP_HREF, whole);
   lp_assign_slice(st, LP_PATHNAME, lp_sub(rest, 0, pathname_end));
@@ -317,18 +338,23 @@ static ant_value_t lp_parse_host(lp_state_t *st, lp_slice_t *rest_io) {
     url_fmt_buf_t *b = &st->bufs[2];
     b->len = 0;
     if (!url_fmt_reserve(b, rest.len)) return lp_oom(st);
+    
     at_sign = -1;
     non_host = -1;
     size_t i = 0;
+    
     for (; i < rest.len; i++) {
       uint8_t c = (uint8_t)rest.ptr[i];
       if (c == '\t' || c == '\n' || c == '\r') continue;
+      
       ssize_t w = (ssize_t)b->len;
       b->buf[b->len++] = (char)c;
+      
       if (lp_is_host_ending(c)) { if (non_host == -1) non_host = w; i++; break; }
       if (c == '@') { at_sign = w; non_host = -1; }
       else if (lp_is_non_host(c) && non_host == -1) non_host = w;
     }
+    
     memcpy(b->buf + b->len, rest.ptr + i, rest.len - i);
     b->len += rest.len - i;
     rest = lp_slice(b->buf, b->len);
@@ -391,7 +417,7 @@ static ant_value_t lp_parse_host(lp_state_t *st, lp_slice_t *rest_io) {
   name = lp_string_slice(js, hostname);
 
   if (name.len) {
-    if (!ipv6) {
+    if (!ipv6 && !lp_idna_identity(name)) {
       hostname = lp_to_ascii(js, name);
       lp_assign(st, LP_HOSTNAME, hostname);
       name = lp_string_slice(js, hostname);

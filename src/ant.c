@@ -3423,6 +3423,14 @@ ant_value_t js_mkstr_permanent(ant_t *js, const void *ptr, size_t len) {
   return mkref(kTypeString, flat);
 }
 
+static bool rope_part_ascii(ant_value_t part) {
+  if (str_is_heap_rope(part)) return (ant_str_rope_ptr(part)->flags & ANT_ROPE_FLAG_ASCII) != 0;
+  if (str_is_heap_builder(part)) return false;
+  
+  ant_flat_string_t *flat = ant_str_flat_ptr(part);
+  return flat && str_flat_ascii_state(flat) == STR_ASCII_YES;
+}
+
 static ant_value_t js_mkrope(ant_t *js, ant_value_t left, ant_value_t right, ant_offset_t total_len, uint16_t depth) {
   if (js->rope_gc.young_alloc >= GC_ROPE_NURSERY_THRESHOLD) {
     GC_ROOT_SAVE(root_mark, js);
@@ -3434,13 +3442,15 @@ static ant_value_t js_mkrope(ant_t *js, ant_value_t left, ant_value_t right, ant
 
   ant_rope_heap_t *rope = js_rope_alloc(js);
   if (!rope) return js_mkerr(js, "oom");
+  
   rope->len = total_len;
   rope->depth = depth;
-  rope->flags = ANT_ROPE_FLAG_YOUNG;
+  rope->flags = ANT_ROPE_FLAG_YOUNG | (rope_part_ascii(left) && rope_part_ascii(right) ? ANT_ROPE_FLAG_ASCII : 0);
   rope->mark_epoch = 0;
   rope->left = left;
   rope->right = right;
   rope->cached = js_mkundef();
+  
   return ant_mkrope_value(rope);
 }
 
@@ -6186,14 +6196,14 @@ static ant_offset_t rope_utf16_len_lazy(ant_t *js, ant_value_t root) {
   ant_offset_t result = 0;
 
   for (;;) {
-  if (!str_is_heap_rope(current)) {
-    result = str_utf16_len(js, current);
-  } else {
+  if (!str_is_heap_rope(current)) result = str_utf16_len(js, current); else {
     ant_rope_heap_t *rope = assert_rope_ptr(current);
     ant_value_t cached = rope->cached;
     
-    if (vtype(cached) == kTypeNumber) result = (ant_offset_t)tod(cached);
+    if (rope->flags & ANT_ROPE_FLAG_ASCII) result = rope->len;
+    else if (vtype(cached) == kTypeNumber) result = (ant_offset_t)tod(cached);
     else if (vtype(cached) == kTypeString) result = str_utf16_len(js, cached);
+    
     else {
       if (sp == frame_cap) {
         size_t next_cap = frame_cap * 2u;
@@ -6242,9 +6252,13 @@ ant_offset_t str_utf16_len(ant_t *js, ant_value_t str) {
   if (vtype(str) != kTypeString) return 0;
   
   if (str_is_heap_rope(str)) {
+    ant_rope_heap_t *rope = ant_str_rope_ptr(str);
+    if (rope->flags & ANT_ROPE_FLAG_ASCII) return rope->len;
+    
     ant_value_t cached = rope_cached_flat(str);
     if (vtype(cached) == kTypeNumber) return (ant_offset_t)tod(cached);
     if (vtype(cached) == kTypeString) return str_utf16_len(js, cached);
+    
     return rope_utf16_len_lazy(js, str);
   }
   

@@ -1,13 +1,10 @@
 // TODO: split into multiple module files
 
+#include "gc.h"
 #include "tier.h"
 #include "build/build.h"
 #include "codegen/codegen.h"
-#include "ir/ir_value.h"
 #include "passes/passes.h"
-
-#include "../jit_internal.h"
-#include "gc.h"
 #include "internal.h"
 #include "proto_watch.h"
 #include "silver/call.h"
@@ -18,7 +15,9 @@
 #include "silver/vm.h"
 #include "silver/jit.h"
 #include "gc/objects.h"
+#include "modules/collections.h"
 #include "modules/regex.h"
+#include "../jit_internal.h"
 
 #include "debug.h"
 #include <time.h>
@@ -1148,11 +1147,30 @@ ant_value_t opt_rt_get_length(sv_vm_t *vm, ant_value_t object, ant_value_t unuse
   return jit_helper_get_length(vm->js, object);
 }
 
+ant_value_t opt_rt_set_has(sv_vm_t *vm, ant_value_t set, ant_value_t value, ant_value_t *args, int64_t argc, int64_t unused) {
+  return collections_set_has(vm->js, set, value);
+}
+
+ant_value_t opt_rt_map_has(sv_vm_t *vm, ant_value_t map, ant_value_t key, ant_value_t *args, int64_t argc, int64_t unused) {
+  return collections_map_has(vm->js, map, key);
+}
+
+ant_value_t opt_rt_map_get(sv_vm_t *vm, ant_value_t map, ant_value_t key, ant_value_t *args, int64_t argc, int64_t unused) {
+  return collections_map_get(vm->js, map, key);
+}
+
 static void opt_count_slow_call(const opt_rt_site_t *site) {
   opt_count_step(site->func, site->func->code + site->bc_off);
 }
 
-typedef ant_value_t (*opt_rt_access_fn)(sv_vm_t *vm, ant_value_t object, ant_value_t operand, ant_value_t *args, int64_t argc, const opt_rt_site_t *site);
+typedef ant_value_t (*opt_rt_access_fn)(
+  sv_vm_t *vm, 
+  ant_value_t object, 
+  ant_value_t operand, 
+  ant_value_t *args, 
+  int64_t argc, 
+  const opt_rt_site_t *site
+);
 
 static opt_rt_access_fn opt_access_helper_of(sv_op_t op) {
   switch (op) {

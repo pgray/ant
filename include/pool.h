@@ -29,6 +29,7 @@ static constexpr size_t ANT_POOL_BIGINT_BLOCK_SIZE = 64u * 1024u;
 static constexpr size_t ANT_POOL_STRING_BLOCK_SIZE = 128u * 1024u;
 
 static constexpr uint16_t ANT_ROPE_FLAG_YOUNG = 1u;
+static constexpr uint16_t ANT_ROPE_FLAG_ASCII = 2u;
 static constexpr uint16_t ANT_ROPE_DEPTH_SATURATED = UINT16_MAX;
 
 typedef struct {

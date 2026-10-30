@@ -497,6 +497,40 @@ static void mir_emit_short_string_concat(
   MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_OR, MIR_new_reg_op(ctx, dst), MIR_new_reg_op(ctx, dst), MIR_new_uint_op(ctx, mkval(kTypeString, STR_HEAP_TAG_FLAT))));
 }
 
+static void mir_emit_string_concat_ascii_side(
+    MIR_context_t ctx, MIR_item_t fn, MIR_reg_t ptr, MIR_reg_t depth, MIR_reg_t tmp) {
+  MIR_label_t flat = MIR_new_label(ctx);
+  MIR_label_t done = MIR_new_label(ctx);
+  MIR_append_insn(ctx, fn,
+                  MIR_new_insn(ctx, MIR_BEQ, MIR_new_label_op(ctx, flat),
+                               MIR_new_reg_op(ctx, depth), MIR_new_int_op(ctx, 0)));
+  MIR_append_insn(ctx, fn,
+                  MIR_new_insn(ctx, MIR_MOV, MIR_new_reg_op(ctx, depth),
+                               MIR_new_mem_op(ctx, MIR_T_U16,
+                                              (MIR_disp_t)offsetof(ant_rope_heap_t, flags), ptr, 0, 1)));
+  MIR_append_insn(ctx, fn,
+                  MIR_new_insn(ctx, MIR_AND, MIR_new_reg_op(ctx, depth),
+                               MIR_new_reg_op(ctx, depth), MIR_new_uint_op(ctx, ANT_ROPE_FLAG_ASCII)));
+  MIR_append_insn(ctx, fn,
+                  MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, done)));
+  MIR_append_insn(ctx, fn, flat);
+  MIR_append_insn(ctx, fn,
+                  MIR_new_insn(ctx, MIR_MOV, MIR_new_reg_op(ctx, tmp),
+                               MIR_new_mem_op(ctx, MIR_T_U8,
+                                              (MIR_disp_t)offsetof(ant_flat_string_t, meta) + 7, ptr, 0, 1)));
+  MIR_append_insn(ctx, fn,
+                  MIR_new_insn(ctx, MIR_AND, MIR_new_reg_op(ctx, tmp),
+                               MIR_new_reg_op(ctx, tmp),
+                               MIR_new_uint_op(ctx, STR_META_FIELD_MASK << (STR_META_ASCII_SHIFT - 56))));
+  mir_load_imm(ctx, fn, depth, 0);
+  MIR_append_insn(ctx, fn,
+                  MIR_new_insn(ctx, MIR_BNE, MIR_new_label_op(ctx, done),
+                               MIR_new_reg_op(ctx, tmp),
+                               MIR_new_uint_op(ctx, (uint64_t)STR_ASCII_YES << (STR_META_ASCII_SHIFT - 56))));
+  mir_load_imm(ctx, fn, depth, ANT_ROPE_FLAG_ASCII);
+  MIR_append_insn(ctx, fn, done);
+}
+
 void mir_emit_string_concat_fastpath(
     MIR_context_t ctx, MIR_item_t fn,
     MIR_reg_t r_js, MIR_reg_t lhs, MIR_reg_t rhs, MIR_reg_t dst,
@@ -638,11 +672,19 @@ void mir_emit_string_concat_fastpath(
                                  MIR_new_mem_op(ctx, MIR_T_U16,
                                                 (MIR_disp_t)offsetof(ant_rope_heap_t, depth), ptr, 0, 1),
                                  MIR_new_reg_op(ctx, depth)));
+    mir_emit_string_concat_ascii_side(ctx, fn, lp, ldepth, tmp);
+    mir_emit_string_concat_ascii_side(ctx, fn, rp, rdepth, tmp);
+    MIR_append_insn(ctx, fn,
+                    MIR_new_insn(ctx, MIR_AND, MIR_new_reg_op(ctx, ldepth),
+                                 MIR_new_reg_op(ctx, ldepth), MIR_new_reg_op(ctx, rdepth)));
+    MIR_append_insn(ctx, fn,
+                    MIR_new_insn(ctx, MIR_OR, MIR_new_reg_op(ctx, ldepth),
+                                 MIR_new_reg_op(ctx, ldepth), MIR_new_uint_op(ctx, ANT_ROPE_FLAG_YOUNG)));
     MIR_append_insn(ctx, fn,
                     MIR_new_insn(ctx, MIR_MOV,
                                  MIR_new_mem_op(ctx, MIR_T_U16,
                                                 (MIR_disp_t)offsetof(ant_rope_heap_t, flags), ptr, 0, 1),
-                                 MIR_new_uint_op(ctx, ANT_ROPE_FLAG_YOUNG)));
+                                 MIR_new_reg_op(ctx, ldepth)));
     MIR_append_insn(ctx, fn,
                     MIR_new_insn(ctx, MIR_MOV,
                                  MIR_new_mem_op(ctx, MIR_T_U32,

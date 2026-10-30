@@ -14,11 +14,11 @@
 #include "gc/objects.h"
 #include "pool.h"
 #include "object.h"
+#include "realm.h"
 #include "shapes.h"
 #include "silver/engine.h"
 #include "silver/feedback.h"
 #include "protectors.h"
-#include "realm.h"
 #include "silver/glue.h"
 #include "modules/math.h"
 
@@ -944,18 +944,29 @@ static void opt_cg_branch(opt_cg_t *cg, ir_node_id_t node, ir_condition_t condit
       masm_branch64_imm(m, cond, opt_cg_input(cg, node, 0), (int64_t)IR_VALUE_UNDEFINED, target);
       break;
     }
-    case IR_COND_RESOLVED_STRING:
     case IR_COND_ASCII_STRING: {
+      asm_gpr_t scratch = cg->pinned.scratch, string = opt_cg_input(cg, node, 0);
+      asm_label_t no = opt_cg_label(cg, if_false), rope = masm_new_label(m);
+      masm_branch_test64(m, ASM_COND_NON_ZERO, string, (int64_t)STR_HEAP_TAG_MASK, rope);
+      masm_load64(m, scratch, asm_addr(string, (int32_t)offsetof(ant_flat_string_t, meta)));
+      masm_and64_imm(m, scratch, scratch, (int64_t)STR_META_ASCII_MASK);
+      masm_branch64_imm(m, ASM_COND_NOT_EQUAL, scratch, (int64_t)((uint64_t)STR_ASCII_YES << STR_META_ASCII_SHIFT), no);
+      opt_cg_jump_to(cg, if_true);
+      masm_bind(m, rope);
+      masm_and64_imm(m, scratch, string, (int64_t)STR_HEAP_TAG_MASK);
+      masm_branch64_imm(m, ASM_COND_NOT_EQUAL, scratch, (int64_t)STR_HEAP_TAG_ROPE, no);
+      masm_load16(m, scratch, asm_addr(string, (int32_t)offsetof(ant_rope_heap_t, flags) - (int32_t)STR_HEAP_TAG_ROPE));
+      masm_branch_test32(m, ASM_COND_ZERO, scratch, ANT_ROPE_FLAG_ASCII, no);
+      opt_cg_jump_to(cg, if_true);
+      return;
+    }
+    case IR_COND_RESOLVED_STRING: {
       asm_gpr_t scratch = cg->pinned.scratch, string = opt_cg_input(cg, node, 0);
       asm_label_t no = opt_cg_label(cg, if_false);
       masm_branch_test64(m, ASM_COND_NON_ZERO, string, (int64_t)STR_HEAP_TAG_MASK, no);
       masm_load64(m, scratch, asm_addr(string, (int32_t)offsetof(ant_flat_string_t, meta)));
       masm_and64_imm(m, scratch, scratch, (int64_t)STR_META_ASCII_MASK);
       masm_branch64_imm(m, ASM_COND_NOT_EQUAL, scratch, (int64_t)((uint64_t)STR_ASCII_YES << STR_META_ASCII_SHIFT), no);
-      if (condition.kind == IR_COND_ASCII_STRING) {
-        opt_cg_jump_to(cg, if_true);
-        return;
-      }
       masm_load64(m, scratch, asm_addr(cg->pinned.vm, (int32_t)offsetof(sv_vm_t, js)));
       masm_load32(m, scratch, asm_addr(scratch, (int32_t)offsetof(ant_t, vm_exec_depth)));
       masm_branch32_imm(m, ASM_COND_EQUAL, scratch, 0, no);
@@ -2312,6 +2323,28 @@ static void opt_cg_concat_depth(opt_cg_t *cg, const opt_cg_concat_side_t *side, 
   masm_bind(m, flat);
 }
 
+static void opt_cg_concat_ascii_flag(opt_cg_t *cg, const opt_cg_concat_side_t *side, asm_gpr_t pointer) {
+  masm_t *m = &cg->masm;
+  asm_gpr_t scratch = cg->pinned.scratch;
+  if (side->constant) {
+    masm_move_imm32(m, pointer, opt_cg_concat_ascii(side) ? (int32_t)ANT_ROPE_FLAG_ASCII << 16 : 0);
+    return;
+  }
+  asm_label_t rope = masm_new_label(m), done = masm_new_label(m);
+  masm_branch_test64(m, ASM_COND_NON_ZERO, pointer, (int64_t)STR_HEAP_TAG_ROPE, rope);
+  masm_load8(m, scratch, asm_addr(pointer, (int32_t)offsetof(ant_flat_string_t, meta) + 7));
+  masm_and32_imm(m, scratch, scratch, (int32_t)(STR_META_FIELD_MASK << (STR_META_ASCII_SHIFT - 56)));
+  masm_move_imm32(m, pointer, 0);
+  masm_branch32_imm(m, ASM_COND_NOT_EQUAL, scratch, (int32_t)((uint32_t)STR_ASCII_YES << (STR_META_ASCII_SHIFT - 56)), done);
+  masm_move_imm32(m, pointer, (int32_t)ANT_ROPE_FLAG_ASCII << 16);
+  masm_jump(m, done);
+  masm_bind(m, rope);
+  masm_load16(m, pointer, asm_addr(pointer, (int32_t)offsetof(ant_rope_heap_t, flags) - (int32_t)STR_HEAP_TAG_ROPE));
+  masm_and32_imm(m, pointer, pointer, (int32_t)ANT_ROPE_FLAG_ASCII);
+  masm_shl32_imm(m, pointer, pointer, 16);
+  masm_bind(m, done);
+}
+
 static void opt_cg_concat_strings(opt_cg_t *cg, const opt_cg_concat_t *c, const opt_cg_concat_side_t *lhs, const opt_cg_concat_side_t *rhs) {
   static_assert(offsetof(ant_rope_heap_t, flags) == offsetof(ant_rope_heap_t, depth) + 2, "rope header word");
   static_assert(offsetof(ant_rope_heap_t, mark_epoch) == offsetof(ant_rope_heap_t, depth) + 4, "rope header word");
@@ -2357,6 +2390,10 @@ static void opt_cg_concat_strings(opt_cg_t *cg, const opt_cg_concat_t *c, const 
   masm_branch32_imm(m, ASM_COND_EQUAL, left_len, ANT_ROPE_DEPTH_SATURATED, saturated);
   masm_add32_imm(m, left_len, left_len, 1);
   masm_bind(m, saturated);
+  opt_cg_concat_ascii_flag(cg, lhs, left);
+  opt_cg_concat_ascii_flag(cg, rhs, right);
+  masm_and32(m, left, left, right);
+  masm_or32(m, left_len, left_len, left);
   masm_load64(m, scratch, asm_addr(cg->pinned.vm, (int32_t)offsetof(sv_vm_t, js)));
   masm_branch64_memory_imm(m, ASM_COND_ABOVE_OR_EQUAL, asm_addr(scratch, (int32_t)offsetof(ant_t, rope_gc.young_alloc)), (int64_t)GC_ROPE_NURSERY_THRESHOLD, slow);
   masm_load64(m, out, asm_addr(scratch, (int32_t)offsetof(ant_t, rope_gc.young.head)));
@@ -3238,7 +3275,9 @@ static bool opt_cg_string_code(opt_cg_t *cg, ir_node_id_t node_id, const ir_node
   asm_gpr_t scratch = cg->pinned.scratch;
   switch (node->op.code) {
     case IR_OP_STRING_LENGTH:
-      masm_load32(m, opt_cg_output(cg, node_id), asm_addr(opt_cg_input(cg, node_id, 0), (int32_t)offsetof(ant_flat_string_t, len)));
+      static_assert(offsetof(ant_flat_string_t, len) == 0 && offsetof(ant_rope_heap_t, len) == 0);
+      masm_and64_imm(m, scratch, opt_cg_input(cg, node_id, 0), ~(int64_t)STR_HEAP_TAG_MASK);
+      masm_load32(m, opt_cg_output(cg, node_id), asm_addr(scratch, 0));
       break;
     case IR_OP_LOAD_STRING_CODE_UNIT:
       masm_move32(m, scratch, opt_cg_input(cg, node_id, 1));

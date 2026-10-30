@@ -9,11 +9,12 @@
 #include "internal.h"
 #include "protectors.h"
 #include "proto_watch.h"
-#include "gc/objects.h"
-#include "gc/object_arenas.h"
-#include "modules/math.h"
 #include "runtime.h"
 #include "shapes.h"
+#include "gc/objects.h"
+#include "gc/object_arenas.h"
+#include "modules/collections.h"
+#include "modules/math.h"
 #include "silver/call.h"
 #include "silver/feedback.h"
 #include "silver/generic_step.h"
@@ -3991,11 +3992,27 @@ static bool opt_try_builtin_call(opt_builder_t *b, ir_node_id_t *inputs, uint32_
   return true;
 }
 
+static bool opt_try_collection_lookup(opt_builder_t *b, const ir_node_id_t *inputs, uint32_t argc, ir_node_id_t *result) {
+  if (!argc) return false;
+  
+  uintptr_t helper =
+    opt_expect_builtin(b, inputs[0], collections_is_set_has_builtin) ? (uintptr_t)opt_rt_set_has :
+    opt_expect_builtin(b, inputs[0], collections_is_map_get_builtin) ? (uintptr_t)opt_rt_map_get :
+    opt_expect_builtin(b, inputs[0], collections_is_map_has_builtin) ? (uintptr_t)opt_rt_map_has : 0;
+  
+  if (!helper) return false;
+  *result = opt_runtime_call(b, helper, 0, (ir_node_id_t[]){inputs[1], inputs[2]}, 2, false, false);
+  
+  return true;
+}
+
 static bool opt_uncurry_call(opt_builder_t *b, ir_node_id_t *inputs, uint32_t *argc) {
   ant_value_t bound = opt_likely_value(b, inputs[0]);
   ant_value_t builtin = opt_uncurried_builtin(bound);
+  
   if (!builtin || !opt_retain(b, bound) || !opt_retain(b, builtin)) return false;
   uint64_t bits;
+  
   if (!ir_constant_value(b->graph, inputs[0], &bits)) {
     if (!opt_may_speculate(b, OPT_EXIT_BAD_CALL_TARGET)) return false;
     ir_op_t check = ir_op(IR_OP_CHECK_VALUE);
@@ -4003,10 +4020,13 @@ static bool opt_uncurry_call(opt_builder_t *b, ir_node_id_t *inputs, uint32_t *a
     check.check_value.kind = OPT_EXIT_BAD_CALL_TARGET;
     opt_emit_checked(b, check, &inputs[0], 1, OPT_REPR_NONE);
   }
+  
   inputs[0] = opt_constant(b, builtin);
   inputs[1] = *argc ? inputs[2] : opt_constant(b, IR_VALUE_UNDEFINED);
+  
   if (*argc) (*argc)--;
   for (uint32_t i = 0; i < *argc; i++) inputs[2 + i] = inputs[3 + i];
+  
   return true;
 }
 
@@ -4056,6 +4076,7 @@ static opt_flow_t opt_build_call(opt_builder_t *b, const uint8_t *ip, sv_op_t op
     inputs[1] = second;
     target = opt_known_target(b, callee);
   }
+  
   if (!construct && method && argc <= 1) {
     bool push = argc == 1 && opt_expect_builtin(b, callee, js_is_array_push_builtin);
     if (push || (!argc && opt_expect_builtin(b, callee, js_is_array_pop_builtin))) return opt_build_push_pop(b, push, inputs, operands, tail);
@@ -4068,6 +4089,7 @@ static opt_flow_t opt_build_call(opt_builder_t *b, const uint8_t *ip, sv_op_t op
 
   ir_node_id_t math;
   if (!construct && opt_try_math(b, callee, argc, inputs + 2, &math)) return opt_finish_call(b, operands, math, tail);
+  if (method && opt_try_collection_lookup(b, inputs, argc, &math)) return opt_finish_call(b, operands, math, tail);
   opt_flow_t flow;
   if (!construct && opt_try_builtin_call(b, inputs, argc, operands, tail, &flow)) return flow;
   if (!construct && opt_try_polymorphic_call(b, op, argc, operands, inputs, &flow)) return flow;

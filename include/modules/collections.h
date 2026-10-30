@@ -190,6 +190,7 @@ bool advance_map(ant_t *js, iterator_t *it, ant_value_t *out);
 bool advance_set(ant_t *js, iterator_t *it, ant_value_t *out);
 bool collections_is_map_get_builtin(ant_value_t func);
 bool collections_is_map_has_builtin(ant_value_t func);
+bool collections_is_set_has_builtin(ant_value_t func);
 bool js_weakref_target(ant_value_t ref, ant_value_t *target);
 bool weakmap_table_delete(weakmap_table_t *table, ant_value_t key);
 
@@ -198,6 +199,9 @@ weakmap_entry_t *weakmap_table_find(weakmap_table_t *table, ant_value_t key);
 
 ant_value_t collections_map_create(ant_t *js, map_entry_t ***out_map);
 ant_value_t collections_set_create(ant_t *js, set_entry_t ***out_set);
+ant_value_t collections_map_get(ant_t *js, ant_value_t map, ant_value_t key);
+ant_value_t collections_map_has(ant_t *js, ant_value_t map, ant_value_t key);
+ant_value_t collections_set_has(ant_t *js, ant_value_t set, ant_value_t value);
 bool collections_set_store_cloned_entry(ant_t *js, set_entry_t **set_ptr, ant_value_t value);
 
 bool collections_map_store_cloned_entry(

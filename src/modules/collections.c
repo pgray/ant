@@ -95,8 +95,11 @@ static bool can_be_held_weakly(ant_value_t value) {
 
 typedef struct {
   unsigned char stack[32];
-  unsigned char *bytes;
+  unsigned char *heap;
+  const unsigned char *payload;
   size_t len;
+  unsigned hash;
+  uint8_t tag;
 } collection_key_t;
 
 static ant_value_t normalize_map_key(ant_value_t key) {
@@ -107,84 +110,93 @@ static ant_value_t normalize_map_key(ant_value_t key) {
   return key;
 }
 
-static void collection_key_reset(collection_key_t *key) {
-  key->bytes = key->stack;
-  key->len = 0;
+static inline unsigned collection_hash(uint8_t tag, const unsigned char *payload, size_t len) {
+  return (unsigned)(hash_key((const char *)payload, len) ^ ((uint64_t)tag * UINT64_C(0x9e3779b97f4a7c15)));
 }
 
 static void collection_key_free(collection_key_t *key) {
-  if (key->bytes != key->stack) free(key->bytes);
-  collection_key_reset(key);
+  if (!key->heap) return;
+  free(key->heap);
+  key->heap = NULL;
 }
 
-static bool collection_key_reserve(collection_key_t *key, size_t len) {
-  if (len <= sizeof(key->stack)) return true;
-  unsigned char *heap = malloc(len);
-  if (!heap) return false;
-  key->bytes = heap;
-  return true;
+static unsigned char *collection_key_reserve(collection_key_t *key, size_t len) {
+  if (len <= sizeof(key->stack)) return key->stack;
+  return key->heap = malloc(len);
 }
 
 static bool collection_key_init(ant_t *js, ant_value_t input, collection_key_t *out) {
-  collection_key_reset(out);
-
   ant_value_t key = normalize_map_key(input);
-  uint8_t tag = (uint8_t)vtype(key);
+  out->heap = NULL;
+  out->tag = (uint8_t)vtype(key);
 
-  if (vtype(key) == kTypeString) {
-    size_t str_len = 0;
-    const char *str = js_getstr(js, key, &str_len);
-    out->len = 1 + str_len;
-    if (!collection_key_reserve(out, out->len)) return false;
-    out->bytes[0] = tag;
-    if (str_len > 0) memcpy(out->bytes + 1, str, str_len);
+  if (out->tag == kTypeString) {
+    ant_flat_string_t *flat = ant_str_flat_ptr(key);
+    if (flat) {
+      out->payload = (const unsigned char *)flat->bytes;
+      out->len = (size_t)flat->len;
+    } else out->payload = (const unsigned char *)js_getstr(js, key, &out->len);
+  } else if (out->tag == kTypeBigInt) {
+    out->len = bigint_digits_len(js, key) + (bigint_is_negative(js, key) ? 1 : 0);
+    unsigned char *digits = collection_key_reserve(out, out->len + 1);
+    if (!digits) return false;
+    if (out->len > 0) strbigint(js, key, (char *)digits, out->len + 1);
+    out->payload = digits;
+  } else {
+    memcpy(out->stack, &key, sizeof(ant_value_t));
+    out->payload = out->stack;
+    out->len = sizeof(ant_value_t);
+    out->hash = (unsigned)ant_hash_mix(key ^ ant_hash_secret[0], ant_hash_secret[1] ^ out->tag);
     return true;
   }
 
-  if (vtype(key) == kTypeBigInt) {
-    size_t str_len = bigint_digits_len(js, key) + (bigint_is_negative(js, key) ? 1 : 0);
-    out->len = 1 + str_len;
-    if (!collection_key_reserve(out, out->len)) return false;
-    out->bytes[0] = tag;
-    if (str_len > 0) strbigint(js, key, (char *)(out->bytes + 1), str_len + 1);
-    return true;
-  }
-
-  out->len = 1 + sizeof(ant_value_t);
-  if (!collection_key_reserve(out, out->len)) return false;
-  out->bytes[0] = tag;
-  memcpy(out->bytes + 1, &key, sizeof(ant_value_t));
-
+  out->hash = collection_hash(out->tag, out->payload, out->len);
   return true;
 }
 
-static inline unsigned collection_key_hash(const collection_key_t *key) {
-  return (unsigned)hash_key((const char *)key->bytes, key->len);
+static inline bool collection_payload_equal(const unsigned char *bytes, const collection_key_t *key) {
+  if (key->len == sizeof(uint64_t)) {
+    uint64_t a, b;
+    memcpy(&a, bytes, sizeof(a));
+    memcpy(&b, key->payload, sizeof(b));
+    return a == b;
+  }
+  return key->len == 0 || memcmp(bytes, key->payload, key->len) == 0;
+}
+
+static void *collection_find(const UT_hash_table *tbl, const collection_key_t *key) {
+  if (!tbl) return NULL;
+  const UT_hash_handle *hh = tbl->buckets[key->hash & (tbl->num_buckets - 1U)].hh_head;
+  
+  for (; hh; hh = hh->hh_next) {
+    const unsigned char *bytes = hh->key;
+    if (
+      hh->hashv == key->hash && hh->keylen == key->len + 1 && bytes[0] == key->tag &&
+      collection_payload_equal(bytes + 1, key)
+    ) return ELMT_FROM_HH(tbl, hh);
+  }
+  
+  return NULL;
+}
+
+static void collection_key_copy(unsigned char *dst, const collection_key_t *key) {
+  dst[0] = key->tag;
+  if (key->len > 0) memcpy(dst + 1, key->payload, key->len);
 }
 
 map_entry_t *Ant_Map_Find(ant_t *js, map_entry_t **map_ptr, ant_value_t key_val) {
   collection_key_t key;
   if (!collection_key_init(js, key_val, &key)) return NULL;
-
-  map_entry_t *entry = NULL;
-  unsigned key_hash = collection_key_hash(&key);
-  
-  HASH_FIND_BYHASHVALUE(hh, *map_ptr, key.bytes, key.len, key_hash, entry);
+  map_entry_t *entry = collection_find(*map_ptr ? (*map_ptr)->hh.tbl : NULL, &key);
   collection_key_free(&key);
-  
   return entry;
 }
 
 set_entry_t *Ant_Set_Find(ant_t *js, set_entry_t **set_ptr, ant_value_t value) {
   collection_key_t key;
   if (!collection_key_init(js, value, &key)) return NULL;
-  
-  set_entry_t *entry = NULL;
-  unsigned key_hash = collection_key_hash(&key);
-  
-  HASH_FIND_BYHASHVALUE(hh, *set_ptr, key.bytes, key.len, key_hash, entry);
+  set_entry_t *entry = collection_find(*set_ptr ? (*set_ptr)->hh.tbl : NULL, &key);
   collection_key_free(&key);
-  
   return entry;
 }
 
@@ -533,19 +545,12 @@ ant_value_t collections_entry_pair(ant_t *js, ant_value_t first, ant_value_t sec
 }
 
 static bool map_store_entry(
-  ant_t *js,
-  map_entry_t **map_ptr,
-  ant_value_t raw_key,
-  ant_value_t key_val,
-  ant_value_t value
+  ant_t *js, map_entry_t **map_ptr, ant_value_t raw_key, ant_value_t key_val, ant_value_t value
 ) {
   collection_key_t key;
   if (!collection_key_init(js, raw_key, &key)) return false;
 
-  map_entry_t *entry = NULL;
-  unsigned key_hash = collection_key_hash(&key);
-  HASH_FIND_BYHASHVALUE(hh, *map_ptr, key.bytes, key.len, key_hash, entry);
-  
+  map_entry_t *entry = collection_find(*map_ptr ? (*map_ptr)->hh.tbl : NULL, &key);
   if (entry) {
     entry->key_val = key_val;
     entry->value = value;
@@ -553,21 +558,23 @@ static bool map_store_entry(
     return true;
   }
 
-  entry = collection_alloc(sizeof(map_entry_t) + key.len);
+  entry = collection_alloc(sizeof(map_entry_t) + key.len + 1);
   if (!entry) {
     collection_key_free(&key);
     return false;
   }
 
   entry->key = (unsigned char *)(entry + 1);
-  memcpy(entry->key, key.bytes, key.len);
-  entry->key_len = (uint32_t)key.len;
+  collection_key_copy(entry->key, &key);
+  
+  entry->key_len = (uint32_t)key.len + 1;
   entry->cursored = 0;
   entry->key_val = key_val;
   entry->value = value;
   
-  HASH_ADD_KEYPTR_BYHASHVALUE(hh, *map_ptr, entry->key, entry->key_len, key_hash, entry);
+  HASH_ADD_KEYPTR_BYHASHVALUE(hh, *map_ptr, entry->key, entry->key_len, key.hash, entry);
   map_store_t *store = map_store_of(map_ptr);
+  
   if (store->cursors.end) cursors_resume(&store->cursors, entry);
   collection_key_free(&key);
   
@@ -580,28 +587,25 @@ static bool set_store_entry(ant_t *js, set_entry_t **set_ptr, ant_value_t value)
   collection_key_t key;
   if (!collection_key_init(js, stored_value, &key)) return false;
 
-  set_entry_t *entry = NULL;
-  unsigned key_hash = collection_key_hash(&key);
-  HASH_FIND_BYHASHVALUE(hh, *set_ptr, key.bytes, key.len, key_hash, entry);
-  
+  set_entry_t *entry = collection_find(*set_ptr ? (*set_ptr)->hh.tbl : NULL, &key);
   if (entry) {
     collection_key_free(&key);
     return true;
   }
 
-  entry = collection_alloc(sizeof(set_entry_t) + key.len);
+  entry = collection_alloc(sizeof(set_entry_t) + key.len + 1);
   if (!entry) {
     collection_key_free(&key);
     return false;
   }
 
   entry->key = (unsigned char *)(entry + 1);
-  memcpy(entry->key, key.bytes, key.len);
-  entry->key_len = (uint32_t)key.len;
+  collection_key_copy(entry->key, &key);
+  entry->key_len = (uint32_t)key.len + 1;
   entry->cursored = 0;
   entry->value = stored_value;
   
-  HASH_ADD_KEYPTR_BYHASHVALUE(hh, *set_ptr, entry->key, entry->key_len, key_hash, entry);
+  HASH_ADD_KEYPTR_BYHASHVALUE(hh, *set_ptr, entry->key, entry->key_len, key.hash, entry);
   set_store_t *store = set_store_of(set_ptr);
   if (store->cursors.end) cursors_resume(&store->cursors, entry);
   collection_key_free(&key);
@@ -859,14 +863,15 @@ static ant_value_t map_set(ant_params_t) {
   return this_val;
 }
 
-static ant_value_t map_get(ant_params_t) {
-  ant_value_t this_val = js->this_val;
-  map_entry_t **map_ptr = get_map_from_obj(this_val);
-  
+ant_value_t collections_map_get(ant_t *js, ant_value_t map, ant_value_t key) {
+  map_entry_t **map_ptr = get_map_from_obj(map);
   if (!map_ptr) return collection_receiver_error(js, "Map.prototype.get");
-  map_entry_t *entry = Ant_Map_Find(js, map_ptr, collection_arg(args, nargs, 0));
-  
+  map_entry_t *entry = Ant_Map_Find(js, map_ptr, key);
   return entry ? entry->value : js_mkundef();
+}
+
+static ant_value_t map_get(ant_params_t) {
+  return collections_map_get(js, js->this_val, collection_arg(args, nargs, 0));
 }
 
 bool collections_is_map_get_builtin(ant_value_t func) {
@@ -922,21 +927,21 @@ __attribute__((aligned(64))) ant_value_t collections_map_get_numeric_pair(
   if (!right_inline) memcpy(key + 1 + left_len + separator_len, right_buf, right_len);
   map_entry_t *entry = NULL;
   
-  unsigned key_hash = (unsigned)hash_key((const char *)key, key_len);
+  unsigned key_hash = collection_hash((uint8_t)kTypeString, key + 1, key_len - 1);
   HASH_FIND_BYHASHVALUE(hh, *map_ptr, key, key_len, key_hash, entry);
   
   if (key != inline_key) free(key);
   return entry ? entry->value : js_mkundef();
 }
 
-static ant_value_t map_has(ant_params_t) {
-  ant_value_t this_val = js->this_val;
-  map_entry_t **map_ptr = get_map_from_obj(this_val);
-
+ant_value_t collections_map_has(ant_t *js, ant_value_t map, ant_value_t key) {
+  map_entry_t **map_ptr = get_map_from_obj(map);
   if (!map_ptr) return collection_receiver_error(js, "Map.prototype.has");
-  map_entry_t *entry = Ant_Map_Find(js, map_ptr, collection_arg(args, nargs, 0));
-  
-  return js_bool(entry != NULL);
+  return js_bool(Ant_Map_Find(js, map_ptr, key) != NULL);
+}
+
+static ant_value_t map_has(ant_params_t) {
+  return collections_map_has(js, js->this_val, collection_arg(args, nargs, 0));
 }
 
 bool collections_is_map_has_builtin(ant_value_t func) {
@@ -991,7 +996,7 @@ static ant_value_t map_numeric_template_general(
   if (tail->len > 0) memcpy(out, tail->str, tail->len);
 
   map_entry_t *entry = NULL;
-  unsigned key_hash = (unsigned)hash_key((const char *)key, key_len);
+  unsigned key_hash = collection_hash((uint8_t)kTypeString, key + 1, key_len - 1);
   
   HASH_FIND_BYHASHVALUE(hh, *map_ptr, key, key_len, key_hash, entry);
   if (key != inline_key) free(key);
@@ -1219,13 +1224,18 @@ static ant_value_t set_add(ant_params_t) {
   return this_val;
 }
 
-static ant_value_t set_has(ant_params_t) {
-  ant_value_t this_val = js->this_val;
-  set_entry_t **set_ptr = get_set_from_obj(this_val);
+ant_value_t collections_set_has(ant_t *js, ant_value_t set, ant_value_t value) {
+  set_entry_t **set_ptr = get_set_from_obj(set);
   if (!set_ptr) return collection_receiver_error(js, "Set.prototype.has");
+  return js_bool(Ant_Set_Find(js, set_ptr, value) != NULL);
+}
 
-  set_entry_t *entry = Ant_Set_Find(js, set_ptr, collection_arg(args, nargs, 0));
-  return js_bool(entry != NULL);
+static ant_value_t set_has(ant_params_t) {
+  return collections_set_has(js, js->this_val, collection_arg(args, nargs, 0));
+}
+
+bool collections_is_set_has_builtin(ant_value_t func) {
+  return vtype(func) == kTypeBuiltin && js_cfunc_same_entrypoint(func, set_has);
 }
 
 static ant_value_t set_delete(ant_params_t) {
