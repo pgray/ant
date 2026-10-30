@@ -12,6 +12,12 @@ static MIR_op_t sv_asm_mem(const sv_asm_t *a, MIR_type_t type, MIR_reg_t base, M
   return MIR_new_mem_op(a->ctx, type, disp, base, 0, 1);
 }
 
+static MIR_op_t sv_asm_mem_index(
+  const sv_asm_t *a, MIR_type_t type, MIR_reg_t base, MIR_disp_t disp, MIR_reg_t index, MIR_scale_t scale
+) {
+  return MIR_new_mem_op(a->ctx, type, disp, base, index, scale);
+}
+
 static MIR_insn_code_t sv_asm_move_code(MIR_type_t type) {
   if (type == MIR_T_D) return MIR_DMOV;
   if (type == MIR_T_F) return MIR_FMOV;
@@ -74,6 +80,20 @@ void sv_asm_store(const sv_asm_t *a, MIR_type_t type, MIR_reg_t base, MIR_disp_t
 
 void sv_asm_store_imm(const sv_asm_t *a, MIR_type_t type, MIR_reg_t base, MIR_disp_t disp, uint64_t imm) {
   sv_asm_emit(a, MIR_MOV, sv_asm_mem(a, type, base, disp), MIR_new_uint_op(a->ctx, imm));
+}
+
+void sv_asm_load_index(
+  const sv_asm_t *a, MIR_type_t type, MIR_reg_t dst,
+  MIR_reg_t base, MIR_disp_t disp, MIR_reg_t index, MIR_scale_t scale
+) {
+  sv_asm_emit(a, sv_asm_move_code(type), sv_asm_r(a, dst), sv_asm_mem_index(a, type, base, disp, index, scale));
+}
+
+void sv_asm_store_index(
+  const sv_asm_t *a, MIR_type_t type, MIR_reg_t base,
+  MIR_disp_t disp, MIR_reg_t index, MIR_scale_t scale, MIR_reg_t src
+) {
+  sv_asm_emit(a, sv_asm_move_code(type), sv_asm_mem_index(a, type, base, disp, index, scale), sv_asm_r(a, src));
 }
 
 #define SV_ASM_BINARY(name, code, imm_t, imm_op)                                       \

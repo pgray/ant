@@ -31,6 +31,16 @@ void sv_asm_load(const sv_asm_t *a, MIR_type_t type, MIR_reg_t dst, MIR_reg_t ba
 void sv_asm_store(const sv_asm_t *a, MIR_type_t type, MIR_reg_t base, MIR_disp_t disp, MIR_reg_t src);
 void sv_asm_store_imm(const sv_asm_t *a, MIR_type_t type, MIR_reg_t base, MIR_disp_t disp, uint64_t imm);
 
+void sv_asm_load_index(
+  const sv_asm_t *a, MIR_type_t type, MIR_reg_t dst,
+  MIR_reg_t base, MIR_disp_t disp, MIR_reg_t index, MIR_scale_t scale
+);
+
+void sv_asm_store_index(
+  const sv_asm_t *a, MIR_type_t type, MIR_reg_t base,
+  MIR_disp_t disp, MIR_reg_t index, MIR_scale_t scale, MIR_reg_t src
+);
+
 #define SV_ASM_BINARY(name, code, imm_t, imm_op)                                  \
   void sv_asm_##name(const sv_asm_t *a, MIR_reg_t dst, MIR_reg_t x, MIR_reg_t y); \
   void sv_asm_##name##_imm(const sv_asm_t *a, MIR_reg_t dst, MIR_reg_t x, imm_t imm);

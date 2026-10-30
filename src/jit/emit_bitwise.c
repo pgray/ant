@@ -2,25 +2,21 @@
 #include "silver/feedback.h"
 
 void jit_emit_bitwise(jit_compile_t *c) {
+  const sv_asm_t *a = &c->as;
   switch (c->op) {
     case OP_IS_UNDEF:
     case OP_IS_NULL: {
       vstack_ensure_boxed(&c->vs, c->vs.sp - 1, c->ctx, c->jit_func, c->r_d_slot);
       MIR_reg_t rs = vstack_top(&c->vs);
       uint64_t cmp_val = (c->op == OP_IS_UNDEF) ? mkval(kTypeUndefined, 0) : mkval(kTypeNull, 0);
-      MIR_label_t is_true = MIR_new_label(c->ctx);
-      MIR_label_t is_done = MIR_new_label(c->ctx);
-      MIR_append_insn(c->ctx, c->jit_func,
-                      MIR_new_insn(c->ctx, MIR_BEQ,
-                                   MIR_new_label_op(c->ctx, is_true),
-                                   MIR_new_reg_op(c->ctx, rs),
-                                   MIR_new_uint_op(c->ctx, cmp_val)));
+      sv_asm_label_t is_true = sv_asm_new_label(a);
+      sv_asm_label_t is_done = sv_asm_new_label(a);
+      sv_asm_i64_beq_imm(a, is_true, rs, cmp_val);
       mir_load_imm(c->ctx, c->jit_func, rs, js_false);
-      MIR_append_insn(c->ctx, c->jit_func,
-                      MIR_new_insn(c->ctx, MIR_JMP, MIR_new_label_op(c->ctx, is_done)));
-      MIR_append_insn(c->ctx, c->jit_func, is_true);
+      sv_asm_jump(a, is_done);
+      sv_asm_bind(a, is_true);
       mir_load_imm(c->ctx, c->jit_func, rs, js_true);
-      MIR_append_insn(c->ctx, c->jit_func, is_done);
+      sv_asm_bind(a, is_done);
       vstack_clear_value_info(&c->vs, c->vs.sp - 1);
       if (c->vs.known_bool) c->vs.known_bool[c->vs.sp - 1] = 1;
       break;
@@ -29,24 +25,15 @@ void jit_emit_bitwise(jit_compile_t *c) {
     case OP_IS_UNDEF_OR_NULL: {
       vstack_ensure_boxed(&c->vs, c->vs.sp - 1, c->ctx, c->jit_func, c->r_d_slot);
       MIR_reg_t rs = vstack_top(&c->vs);
-      MIR_label_t is_true = MIR_new_label(c->ctx);
-      MIR_label_t is_done = MIR_new_label(c->ctx);
-      MIR_append_insn(c->ctx, c->jit_func,
-                      MIR_new_insn(c->ctx, MIR_BEQ,
-                                   MIR_new_label_op(c->ctx, is_true),
-                                   MIR_new_reg_op(c->ctx, rs),
-                                   MIR_new_uint_op(c->ctx, mkval(kTypeUndefined, 0))));
-      MIR_append_insn(c->ctx, c->jit_func,
-                      MIR_new_insn(c->ctx, MIR_BEQ,
-                                   MIR_new_label_op(c->ctx, is_true),
-                                   MIR_new_reg_op(c->ctx, rs),
-                                   MIR_new_uint_op(c->ctx, mkval(kTypeNull, 0))));
+      sv_asm_label_t is_true = sv_asm_new_label(a);
+      sv_asm_label_t is_done = sv_asm_new_label(a);
+      sv_asm_i64_beq_imm(a, is_true, rs, mkval(kTypeUndefined, 0));
+      sv_asm_i64_beq_imm(a, is_true, rs, mkval(kTypeNull, 0));
       mir_load_imm(c->ctx, c->jit_func, rs, js_false);
-      MIR_append_insn(c->ctx, c->jit_func,
-                      MIR_new_insn(c->ctx, MIR_JMP, MIR_new_label_op(c->ctx, is_done)));
-      MIR_append_insn(c->ctx, c->jit_func, is_true);
+      sv_asm_jump(a, is_done);
+      sv_asm_bind(a, is_true);
       mir_load_imm(c->ctx, c->jit_func, rs, js_true);
-      MIR_append_insn(c->ctx, c->jit_func, is_done);
+      sv_asm_bind(a, is_done);
       vstack_clear_value_info(&c->vs, c->vs.sp - 1);
       if (c->vs.known_bool) c->vs.known_bool[c->vs.sp - 1] = 1;
       break;
@@ -78,8 +65,8 @@ void jit_emit_bitwise(jit_compile_t *c) {
         MIR_reg_t rr = vstack_pop(&c->vs);
         MIR_reg_t rl = vstack_pop(&c->vs);
         MIR_reg_t rd = vstack_push(&c->vs);
-        MIR_label_t bail_direct = MIR_new_label(c->ctx);
-        MIR_label_t done = MIR_new_label(c->ctx);
+        sv_asm_label_t bail_direct = sv_asm_new_label(a);
+        sv_asm_label_t done = sv_asm_new_label(a);
         int left_site = mir_next_reg_site(&c->reg_site_n);
         int right_site = mir_next_reg_site(&c->reg_site_n);
         int result_site = mir_next_reg_site(&c->reg_site_n);
@@ -93,13 +80,12 @@ void jit_emit_bitwise(jit_compile_t *c) {
             c->ctx, c->jit_func, c->op, left, right, rd, 0, false, result_site);
         c->vs.slot_type[c->vs.sp - 1] = SLOT_I32;
         c->vs.integer_range[c->vs.sp - 1] = result_range;
-        MIR_append_insn(c->ctx, c->jit_func,
-                        MIR_new_insn(c->ctx, MIR_JMP, MIR_new_label_op(c->ctx, done)));
-        MIR_append_insn(c->ctx, c->jit_func, bail_direct);
+        sv_asm_jump(a, done);
+        sv_asm_bind(a, bail_direct);
         mir_emit_bailout_jump_typed(
             c->ctx, c->jit_func, c->bc_off, c->vs.sp + 1, &c->bailout_ctx,
             c->vs.sp - 1, l_type, c->vs.sp, r_type);
-        MIR_append_insn(c->ctx, c->jit_func, done);
+        sv_asm_bind(a, done);
         break;
       }
 
@@ -129,10 +115,7 @@ void jit_emit_bitwise(jit_compile_t *c) {
           imp = c->imp_ushr;
           break;
       }
-      MIR_append_insn(c->ctx, c->jit_func,
-                      MIR_new_insn(c->ctx, MIR_MOV,
-                                   MIR_new_reg_op(c->ctx, c->r_bailout_val),
-                                   MIR_new_reg_op(c->ctx, rl)));
+      sv_asm_mov(a, c->r_bailout_val, rl);
       mir_call_helper2(c->ctx, c->jit_func, rd,
                        c->helper2_proto, imp, c->r_vm, c->r_js, rl, rr);
       mir_emit_bailout_check(c->ctx, c->jit_func, rd,
@@ -155,47 +138,29 @@ void jit_emit_bitwise(jit_compile_t *c) {
 
       if (specialize) {
         MIR_reg_t value = vstack_top(&c->vs);
-        MIR_label_t bail_direct = MIR_new_label(c->ctx);
-        MIR_label_t done = MIR_new_label(c->ctx);
+        sv_asm_label_t bail_direct = sv_asm_new_label(a);
+        sv_asm_label_t done = sv_asm_new_label(a);
         int input_site = mir_next_reg_site(&c->reg_site_n);
         MIR_reg_t integer = mir_emit_word32_guard(
             c->ctx, c->jit_func, value, c->vs.d_regs[c->vs.sp - 1],
             input_is_num, input_is_i32,
             c->r_d_slot, bail_direct, input_site);
-        MIR_append_insn(c->ctx, c->jit_func,
-                        MIR_new_insn(c->ctx, MIR_XORS,
-                                     MIR_new_reg_op(c->ctx, value),
-                                     MIR_new_reg_op(c->ctx, integer),
-                                     MIR_new_int_op(c->ctx, -1)));
-        MIR_append_insn(c->ctx, c->jit_func,
-                        MIR_new_insn(c->ctx, MIR_EXT32,
-                                     MIR_new_reg_op(c->ctx, value),
-                                     MIR_new_reg_op(c->ctx, value)));
+        sv_asm_i32_xor_imm(a, value, integer, -1);
+        sv_asm_ext32(a, value, value);
         c->vs.slot_type[c->vs.sp - 1] = SLOT_I32;
-        MIR_append_insn(c->ctx, c->jit_func,
-                        MIR_new_insn(c->ctx, MIR_JMP, MIR_new_label_op(c->ctx, done)));
-        MIR_append_insn(c->ctx, c->jit_func, bail_direct);
+        sv_asm_jump(a, done);
+        sv_asm_bind(a, bail_direct);
         mir_emit_bailout_jump_typed(
             c->ctx, c->jit_func, c->bc_off, c->vs.sp, &c->bailout_ctx,
             c->vs.sp - 1, input_type, -1, SLOT_BOXED);
-        MIR_append_insn(c->ctx, c->jit_func, done);
+        sv_asm_bind(a, done);
         break;
       }
 
       vstack_ensure_boxed(&c->vs, c->vs.sp - 1, c->ctx, c->jit_func, c->r_d_slot);
       MIR_reg_t rs = vstack_top(&c->vs);
-      MIR_append_insn(c->ctx, c->jit_func,
-                      MIR_new_insn(c->ctx, MIR_MOV,
-                                   MIR_new_reg_op(c->ctx, c->r_bailout_val),
-                                   MIR_new_reg_op(c->ctx, rs)));
-      MIR_append_insn(c->ctx, c->jit_func,
-                      MIR_new_call_insn(c->ctx, 6,
-                                        MIR_new_ref_op(c->ctx, c->helper1_proto),
-                                        MIR_new_ref_op(c->ctx, c->imp_bnot),
-                                        MIR_new_reg_op(c->ctx, rs),
-                                        MIR_new_reg_op(c->ctx, c->r_vm),
-                                        MIR_new_reg_op(c->ctx, c->r_js),
-                                        MIR_new_reg_op(c->ctx, rs)));
+      sv_asm_mov(a, c->r_bailout_val, rs);
+      sv_asm_append(a, MIR_new_call_insn(c->ctx, 6, MIR_new_ref_op(c->ctx, c->helper1_proto), MIR_new_ref_op(c->ctx, c->imp_bnot), MIR_new_reg_op(c->ctx, rs), MIR_new_reg_op(c->ctx, c->r_vm), MIR_new_reg_op(c->ctx, c->r_js), MIR_new_reg_op(c->ctx, rs)));
       mir_emit_bailout_check(c->ctx, c->jit_func, rs,
                              c->r_bailout_val, c->bc_off, c->vs.sp,
                              &c->bailout_ctx);
@@ -206,16 +171,15 @@ void jit_emit_bitwise(jit_compile_t *c) {
     case OP_NOT: {
       vstack_ensure_boxed(&c->vs, c->vs.sp - 1, c->ctx, c->jit_func, c->r_d_slot);
       MIR_reg_t rs = vstack_top(&c->vs);
-      MIR_label_t falsy = MIR_new_label(c->ctx);
-      MIR_label_t done = MIR_new_label(c->ctx);
+      sv_asm_label_t falsy = sv_asm_new_label(a);
+      sv_asm_label_t done = sv_asm_new_label(a);
       mir_emit_truthy_branch(c->ctx, c->jit_func, rs, c->r_bool, c->r_js,
           c->truthy_proto, c->imp_is_truthy, true, falsy);
       mir_load_imm(c->ctx, c->jit_func, rs, js_false);
-      MIR_append_insn(c->ctx, c->jit_func,
-          MIR_new_insn(c->ctx, MIR_JMP, MIR_new_label_op(c->ctx, done)));
-      MIR_append_insn(c->ctx, c->jit_func, falsy);
+      sv_asm_jump(a, done);
+      sv_asm_bind(a, falsy);
       mir_load_imm(c->ctx, c->jit_func, rs, js_true);
-      MIR_append_insn(c->ctx, c->jit_func, done);
+      sv_asm_bind(a, done);
       vstack_clear_value_info(&c->vs, c->vs.sp - 1);
       if (c->vs.known_bool) c->vs.known_bool[c->vs.sp - 1] = 1;
       break;
@@ -224,14 +188,7 @@ void jit_emit_bitwise(jit_compile_t *c) {
     case OP_TYPEOF: {
       vstack_ensure_boxed(&c->vs, c->vs.sp - 1, c->ctx, c->jit_func, c->r_d_slot);
       MIR_reg_t rs = vstack_top(&c->vs);
-      MIR_append_insn(c->ctx, c->jit_func,
-                      MIR_new_call_insn(c->ctx, 6,
-                                        MIR_new_ref_op(c->ctx, c->helper1_proto),
-                                        MIR_new_ref_op(c->ctx, c->imp_typeof),
-                                        MIR_new_reg_op(c->ctx, rs),
-                                        MIR_new_reg_op(c->ctx, c->r_vm),
-                                        MIR_new_reg_op(c->ctx, c->r_js),
-                                        MIR_new_reg_op(c->ctx, rs)));
+      sv_asm_append(a, MIR_new_call_insn(c->ctx, 6, MIR_new_ref_op(c->ctx, c->helper1_proto), MIR_new_ref_op(c->ctx, c->imp_typeof), MIR_new_reg_op(c->ctx, rs), MIR_new_reg_op(c->ctx, c->r_vm), MIR_new_reg_op(c->ctx, c->r_js), MIR_new_reg_op(c->ctx, rs)));
       vstack_clear_value_info(&c->vs, c->vs.sp - 1);
       break;
     }
