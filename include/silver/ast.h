@@ -172,6 +172,7 @@ bool sv_ast_list_push(ant_t *js, sv_ast_list_t *list, sv_ast_t *node);
 bool sv_ast_can_be_expression_statement(const sv_ast_t *node);
 bool ast_references_arguments(const sv_ast_t *node);
 bool ast_is_arguments_length(const sv_ast_t *node);
+bool ast_arguments_length_only(const sv_ast_t *node, bool write, bool arrow);
 bool ast_references_new_target(const sv_ast_t *node);
 bool ast_contains_direct_eval(const sv_ast_t *node);
 bool ast_closure_captures_name(const sv_ast_t *node, const char *name, uint32_t len);
@@ -201,6 +202,12 @@ sv_ast_t *sv_ast_new(ant_t *js, sv_node_type_t type);
 sv_ast_t *sv_parse_function_parts(ant_t *js, const sv_function_parts_t *parts);
 sv_ast_t *sv_parse(ant_t *js, const char *code, ant_offset_t clen, sv_parse_goal_t goal, bool strict);
 sv_ast_t *sv_parse_function_body(ant_t *js, const char *code, ant_offset_t clen, bool strict);
+
+static inline bool ast_is_ident(const sv_ast_t *node, const char *name, uint32_t len) {
+  return 
+    node && node->type == N_IDENT && 
+    node->len == len && memcmp(node->str, name, len) == 0;
+}
 
 static inline bool sv_ast_is_proto_key(const sv_ast_t *k) {
   static const char name[] = "__proto__";

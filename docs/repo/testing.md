@@ -101,4 +101,5 @@ $ tools/check_stack_depth.sh /path/ant  # or another binary
 ```
 
 Run it after touching `include/silver/opcode.h`, an interpreter handler in
-`src/silver/ops/`, or the loop/try emitters in `src/silver/compiler.c`.
+`src/silver/ops/`, or the loop/try emitters in `src/silver/compiler/loop.c`
+and `src/silver/compiler/stmt.c`.

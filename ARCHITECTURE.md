@@ -33,7 +33,11 @@ meant to answer "where should this change live?" before anyone starts editing.
 ### JavaScript engine
 
 - `src/silver/` contains the language pipeline: lexer, parser, compiler,
-  directives, VM glue, and bytecode operations.
+  directives, VM glue, and bytecode operations. `src/silver/ast.c` owns AST
+  nodes and the AST queries the compiler shares; the parser lives in
+  `src/silver/parser/` and the bytecode compiler in `src/silver/compiler/`,
+  each with a private `*_internal.h` for state and helpers shared between its
+  files.
 - `src/jit/` contains Silver's native JIT compiler, MIR emission, and JIT/OSR
   runtime entrypoints. Its Silver-facing interface is `include/silver/jit.h`.
 - `src/gc/` contains memory management primitives and object/string handling.

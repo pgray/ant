@@ -155,7 +155,7 @@ The `n_pop` / `n_push` columns of `OP_DEF` in
 [opcode.h](../../include/silver/opcode.h) are the authoritative operand-stack
 effect of every op, including the count operand its format declares. They
 feed `sv_func_t.max_stack` through `sv_op_stack_effect()` and
-`sv_func_compute_max_stack()` in [compiler.c](../../src/silver/compiler.c),
+`sv_func_compute_max_stack()` in [finalize.c](../../src/silver/compiler/finalize.c),
 which sizes the interpreter's frame reservation and the JIT virtual stack.
 Change a handler's stack behaviour and the row together, then run
 `tools/check_stack_depth.sh` (see [testing.md](testing.md)); it fails if the

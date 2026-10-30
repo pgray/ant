@@ -3,7 +3,8 @@
 # ANT_DEBUG=dump/vm:op-warn and fails if the bytecode compiler's operand-depth
 # analysis rejected any function or a JIT compile overflowed its virtual
 # stack. Run after touching include/silver/opcode.h, a handler in
-# src/silver/ops/, or the loop/try emitters in src/silver/compiler.c.
+# src/silver/ops/, or the loop/try emitters in src/silver/compiler/loop.c and
+# src/silver/compiler/stmt.c.
 #
 # usage: tools/check_stack_depth.sh [path/to/ant]
 # exit:  0 clean, 1 analysis rejected a function or a compile overflowed,
