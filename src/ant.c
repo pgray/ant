@@ -18892,6 +18892,69 @@ static ant_value_t builtin_boolean_toString(ant_params_t) {
   return vdata(b) ? js_mkstr(js, "true", 4) : js_mkstr(js, "false", 5);
 }
 
+static inline int radix_digit_value(char ch, int radix) {
+  int digit = -1;
+  if (ch >= '0' && ch <= '9') digit = ch - '0';
+  else if (ch >= 'a' && ch <= 'z') digit = ch - 'a' + 10;
+  else if (ch >= 'A' && ch <= 'Z') digit = ch - 'A' + 10;
+  return digit < radix ? digit : -1;
+}
+
+// The value of a run of radix digits: correctly rounded for radix 10 and
+// powers of two, as the spec requires (and as V8 does); other radices
+// accumulate 32-bit parts, an approximation the spec allows, whose last
+// digits can differ from V8's past 2^53.
+static double parse_int_digits(const char *digits, size_t len, int radix) {
+  if (radix == 10) {
+    double value = 0;
+    if (len <= 15) {
+      for (size_t i = 0; i < len; i++) value = value * 10 + (digits[i] - '0');
+      return value;
+    }
+    return ant_number_parse(digits, len, ANT_NUMBER_PARSE_DECIMAL, &value, NULL) ? value : JS_NAN;
+  }
+
+  if ((radix & (radix - 1)) == 0) {
+    int bits = __builtin_ctz((unsigned)radix);
+    int64_t number = 0;
+    int exponent = 0;
+    for (size_t i = 0; i < len; i++) {
+      number = number * radix + radix_digit_value(digits[i], radix);
+      int overflow = (int)(number >> 53);
+      if (!overflow) continue;
+
+      // round the dropped bits to nearest, ties to even, with the rest of
+      // the digits as a sticky tail
+      int dropped_count = 1;
+      while (overflow > 1) { dropped_count++; overflow >>= 1; }
+      int dropped = (int)(number & ((1 << dropped_count) - 1));
+      number >>= dropped_count;
+      exponent = dropped_count + (int)(len - i - 1) * bits;
+      bool zero_tail = true;
+      for (size_t k = i + 1; k < len; k++) zero_tail = zero_tail && digits[k] == '0';
+      int half = 1 << (dropped_count - 1);
+      if (dropped > half || (dropped == half && ((number & 1) || !zero_tail))) number++;
+      if (number & (INT64_C(1) << 53)) { exponent++; number >>= 1; }
+      break;
+    }
+    return ldexp((double)number, exponent);
+  }
+
+  double value = 0;
+  for (size_t i = 0; i < len;) {
+    uint32_t part = 0, multiplier = 1;
+    while (i < len) {
+      uint32_t next = multiplier * (uint32_t)radix;
+      if (next > 0xFFFFFFFFu / 36) break;
+      part = part * (uint32_t)radix + (uint32_t)radix_digit_value(digits[i], radix);
+      multiplier = next;
+      i++;
+    }
+    value = value * multiplier + part;
+  }
+  return value;
+}
+
 static ant_value_t builtin_parseInt(ant_params_t) {
   if (nargs < 1) return tov(JS_NAN);
   
@@ -18934,39 +18997,11 @@ static ant_value_t builtin_parseInt(ant_params_t) {
   
   if (radix == 0) radix = 10;
   
-  double result = 0;
-  bool found_digit = false;
   ant_offset_t digits_start = i;
+  while (i < str_len && radix_digit_value(str[i], radix) >= 0) i++;
+  if (i == digits_start) return tov(JS_NAN);
   
-  while (i < str_len) {
-    char ch = str[i];
-    int digit = -1;
-    
-    if (ch >= '0' && ch <= '9') {
-      digit = ch - '0';
-    } else if (ch >= 'a' && ch <= 'z') {
-      digit = ch - 'a' + 10;
-    } else if (ch >= 'A' && ch <= 'Z') {
-      digit = ch - 'A' + 10;
-    }
-    
-    if (digit < 0 || digit >= radix) break;
-    
-    result = result * radix + digit;
-    found_digit = true;
-    i++;
-  }
-  
-  if (!found_digit) return tov(JS_NAN);
-  
-  // past 2^53 the running product rounds at every step; decimal digits go
-  // through the correctly rounded parser instead
-  if (radix == 10 && i - digits_start > 15) {
-    double parsed = 0;
-    if (ant_number_parse(str + digits_start, (size_t)(i - digits_start), ANT_NUMBER_PARSE_DECIMAL, &parsed, NULL)) result = parsed;
-  }
-  
-  return tov(sign * result);
+  return tov(sign * parse_int_digits(str + digits_start, (size_t)(i - digits_start), radix));
 }
 
 static ant_value_t builtin_parseFloat(ant_params_t) {

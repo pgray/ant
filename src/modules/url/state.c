@@ -97,9 +97,12 @@ static char *url_decoded_utf8(char *out, size_t len, size_t *out_len) {
 }
 
 char *form_urldecode_len(const char *str, size_t *out_len) {
+  return form_urldecode_n(str, str ? strlen(str) : 0, out_len);
+}
+
+char *form_urldecode_n(const char *str, size_t len, size_t *out_len) {
   if (out_len) *out_len = 0;
   if (!str) return strdup("");
-  size_t len = strlen(str);
   char *out = malloc(len + 1);
 
   if (!out) return strdup("");

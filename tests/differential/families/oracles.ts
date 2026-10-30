@@ -62,6 +62,8 @@ __recordName(${literal(`edited:${i}`)}, () => { let t = JSON.stringify(v) ?? '';
   }
 });
 
+const exactRadix = (radix: number | undefined): boolean => radix === undefined || [0, 2, 4, 8, 10, 16, 32].includes(radix);
+
 const numericStringParts = [
   '', ' ', '\t', '\n', '\u00a0', '\ufeff', '\u2028', '\u3000', '\u180e', '+', '-', '0', '1', '7', '9', '00', '0x', '0X', '0b', '0o',
   'f', 'F', '.', 'e', 'E', 'e+', 'e-', '5', '308', '400', 'Infinity', 'infinity', 'NaN', '_', '1_0', 'n', 'x', ','
@@ -103,10 +105,12 @@ __record(${literal(`int32:${i}`)}, () => [(${x}) | 0, (${x}) >>> 0, Math.round($
       const s = literal(text);
       return `__record(${literal(`Number:${i}`)}, () => Number(${s}));
 __record(${literal(`parseFloat:${i}`)}, () => parseFloat(${s}));
-__record(${literal(`parseInt:${i}`)}, () => parseInt(${s}, ${radix === undefined ? 'undefined' : radix}));
+__record(${literal(`parseInt:${i}`)}, () => ${exactRadix(radix) ? '' : 'approximate'}(parseInt(${s}, ${radix === undefined ? 'undefined' : radix})));
 __recordName(${literal(`BigInt:${i}`)}, () => String(BigInt(${s})));`;
     });
-    return finish(formatted.concat(parsed).join('\n'));
+    // parseInt may approximate past 2^53 unless the radix is 10 or a power of two
+    const helper = 'function approximate(v) { return Math.abs(v) > 2 ** 53 ? "$approximate" : v; }';
+    return finish([helper, ...formatted, ...parsed].join('\n'));
   }
 });
 
@@ -266,6 +270,8 @@ const urlParts = [
   ['', '?', '?a=1&b=2', '?q=ä ö', '?%zz', "?'\"", '?a=1&a=2&=&x'],
   ['', '#', '#frag', '#ä x', '#%00']
 ];
+// Ant vendors ada 4.0.0 and Node 22 ada 2.9.2, so some mismatches are
+// version differences (opaque-path bases, xn-- labels); see tech-debt.md.
 const urlInput = fc.tuple(...urlParts.map(values => fc.constantFrom(...values))).map(parts => parts.join(''));
 
 export const url = defineFamily({

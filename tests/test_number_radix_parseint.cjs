@@ -26,6 +26,12 @@ same(parseInt('10', NaN), 10, 'NaN radix is 10');
 same(parseInt('ff', '16'), 255, 'string radix');
 same(parseInt('11', 2.9), 3, 'radix is truncated');
 same(parseInt('123456789012345678901234'), 1.2345678901234568e23, 'long decimal is correctly rounded');
+// powers of two round to nearest, ties to even, with a sticky tail
+same(parseInt('1' + '0'.repeat(52) + '1', 2), 2 ** 53, 'binary tie rounds to even');
+same(parseInt('1' + '0'.repeat(52) + '11', 2), 2 ** 54 + 4, 'binary above half rounds up');
+same(parseInt('1' + '0'.repeat(52) + '1' + '0'.repeat(10) + '1', 2), 2 ** 64 + 2 ** 12, 'sticky tail rounds up');
+same(parseInt('fffffffffffff800', 16), 18446744073709550000, 'hex tie');
+same(parseInt('0x20000000000001'), 2 ** 53, 'hex prefix');
 
 let error = null;
 try { btoa('Ā'); } catch (e) { error = e; }

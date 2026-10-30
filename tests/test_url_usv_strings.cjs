@@ -13,6 +13,7 @@ same(p.toString(), 'a=%EF%BF%BD&%EF%BF%BDb=1&c%00d=%00&x%EF%BF%BD=y%EF%BF%BDz&pa
 same(p.has('x\uFFFD'), true, 'lookup by replaced key');
 same(new URLSearchParams({ 'k\uD800': 'v' }).toString(), 'k%EF%BF%BD=v', 'record keys');
 same(new URLSearchParams([['\uD800', '\uDC00']]).toString(), '%EF%BF%BD=%EF%BF%BD', 'sequence pairs');
+same(JSON.stringify([...new URLSearchParams('a=1\0b&\0=\0')]), '[["a","1\\u0000b"],["\\u0000","\\u0000"]]', 'raw NULs in the query');
 same(new URL('http://h/\uD800?q=\uDC00#\uD800').href, 'http://h/%EF%BF%BD?q=%EF%BF%BD#%EF%BF%BD', 'URL input');
 
 console.log('url usv strings ok');

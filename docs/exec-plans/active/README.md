@@ -10,6 +10,7 @@ Store in-progress execution plans here.
 
 - [Realms](realms.md)
 - [Fuzz and Property Testing](fuzz-and-property-testing.md)
+- [Optimizing-Tier Object Literal Miscompile](opt-tier-object-literal-miscompile.md)
 - [Per-Error Capture and Lazy Error Stacks](per-error-capture-lazy-stack.md)
 - [Per-Isolate Event Loops](per-isolate-event-loops.md)
 - [Worker Threads on In-Process Isolates](worker-threads-isolates.md)

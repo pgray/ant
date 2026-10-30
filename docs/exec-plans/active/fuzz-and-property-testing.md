@@ -56,59 +56,55 @@ Each fix has a regression test or seed.
   matched, or matched the wrong thing (`fuzz_regexp`,
   `tests/test_regexp_annex_b_escapes.cjs`):
   - `\N` past the last group was not a legacy octal escape (`/a\2/`);
-  - surrogate pair escapes never matched (`/\uD83D\uDE00/`);
+  - surrogate pair escapes never matched (`/😀/`);
   - without `u` or `v`, `\p{...}` and `\u{...}` were read as a property and a
     code point instead of identity escapes;
   - `[` nested in a non-`v` class, `[:`, `[.` and `[=` (POSIX syntax only in
     PCRE2), `\B` in a class, and `{,n}` (a quantifier only in PCRE2);
     identity escapes of punctuation now keep their backslash.
+- WebSocket frames with reserved opcodes were accepted and ignored; they now
+  fail the connection (RFC 6455 section 5.2; `tests/test_http_protocols.c`).
+- From the differential families (`tests/test_json_property_list.cjs`,
+  `tests/test_number_radix_parseint.cjs`, `tests/test_structured_clone_shapes.cjs`,
+  `tests/test_url_usv_strings.cjs`, `tests/test_string_normalize_surrogates.cjs`):
+  - `JSON.stringify` replacer arrays filtered own keys instead of reading the
+    PropertyList with `[[Get]]` in list order, and keys containing NUL were
+    truncated or dropped (stringify, `toJSON`, replacers, revivers);
+  - `Number.prototype.toString(radix)` was wrong from 2^53 up (undefined
+    behavior from 2^63); it now prints V8's shortest round-trip digits;
+  - `parseInt` ignored Unicode whitespace and a `NaN` or string radix;
+  - `btoa` threw `TypeError` instead of `InvalidCharacterError`;
+  - `structuredClone` turned primitive wrappers into plain objects, filled
+    array holes, dropped named array properties, and truncated NUL keys;
+  - URL and URLSearchParams turned a lone surrogate into three U+FFFD
+    instead of one, and decoded `%00` truncated keys;
+  - `String.prototype.normalize` skipped strings containing a lone surrogate.
+- The standalone shape tests (`shape-descriptor-oom`,
+  `shape-transition-identity`) did not link; they do again.
 
 ## Open findings
 
-The runs behind these were limited to this checkpoint's build: clang 19,
-`-Db_lto=false -Dpgo=disabled -Dtemporal=disabled`, Linux x86-64.
+Larger issues are written up where they will be scheduled:
 
-- Optimizing tier: a hot function returning an object literal returns `{}`,
-  and choosing between two literals with `?:` yields the wrong one. For
-  example, `function f(v) { if (v === undefined) return { t: 'u' }; return v; }`
-  called 3000 times returns `{}`. `opt:off` and `--jitless` are correct, and
-  `tests/test_opt_alloc.cjs` fails in this build. Reproduced at 18ecc93 and
-  its two parents with no other changes; not yet checked with the release
-  toolchain or LTO and PGO enabled. Through the probe prelude, this bug also
-  shows up as `{}` results in the `string` and `number` families.
-- `Number.prototype.toString(radix)` is wrong for integers of 2^53 and above:
-  `(1e21).toString(16)` gives `".0000000000000000"`.
-- `JSON.stringify` with a replacer array skips inherited properties, and drops
-  keys containing NUL when the object also has an integer key:
-  `{ 'a\0b': 5, 1: 1 }` gives `{"1":1}`.
-- `new URL('http://xn--/')` parses; Node rejects the invalid Punycode label.
-- `parseInt` does not skip Unicode whitespace (`parseInt('\u00a012')` is
-  `NaN`), and treats a `NaN` radix as invalid instead of as 10.
-- RegExp without `u` matches code points rather than code units:
-  `'😀'.replace(/(?:)/g, '-')` gives `-😀-`; Node gives three dashes around
-  the two surrogates.
-- `Object.keys` of a `Readable` lists only `_read` (see
-  [stream-property-surface.md](stream-property-surface.md)).
-- `structuredClone` turns `Object(1n)` into a plain object, truncates property
-  keys at an embedded NUL, and fills array holes with `undefined`.
-- `URLSearchParams` turns a lone surrogate into three U+FFFD instead of one.
-- `btoa` throws `TypeError` instead of a `DOMException` named
-  `InvalidCharacterError`.
-- `String.prototype.normalize` returns a string containing a lone surrogate
-  unchanged instead of normalizing the rest of it.
-- RegExp: lone surrogate escapes cannot match (PCRE2's UTF mode has no
-  surrogates); `v`-flag set operations whose operand is itself a class are
-  not translated (`/[\p{L}--[a--z]]/v`); group names with `$` or escapes
-  fail to compile, so `/(?<a$>x)/` never matches. `fuzz_regexp` skips all
-  three.
-- `console.log` of a RegExp exec result prints `groups: undefined` even
-  though `match.groups` holds the named groups.
-- WebSocket frames with reserved opcodes are ignored instead of failing the
-  connection (RFC 6455 section 5.2).
-- `js_destroy` does not free property and slot storage that `ant_create`
-  allocates (about 7 KB per isolate).
-- Vendored libbase64 shifts 1 into the sign bit in CPU feature detection,
-  which UBSan reports (`tests/fuzz/ubsan.supp`).
+- [Optimizing-tier object literal miscompile](opt-tier-object-literal-miscompile.md):
+  hot functions return object literals without their properties. The most
+  serious finding; it also breaks `tests/test_opt_alloc.cjs` and the spec
+  runner's `worker_threads` and `zlib` reports in this build.
+- [tech-debt.md](../tech-debt.md):
+  - RegExp: exec-result `groups` is an accessor (so `console.log` shows
+    `groups: undefined`), non-`u` matching works on code points, lone
+    surrogate escapes cannot match, `v`-flag set operations with class
+    operands are not translated, and group names with `$` or escapes fail;
+  - isolate teardown leaks the property storage `ant_create` allocates;
+  - URL: `xn--` hosts parse with ada 4.0.0 but not in Node 22 (ada 2.9.2);
+  - vendored libbase64 UB in CPU feature detection
+    (`tests/fuzz/ubsan.supp`);
+  - `gc-uv-segments` and `isolate-code-arenas` fail in this build.
+- `Object.keys` of a `Readable` lists only `_read`
+  ([stream-property-surface.md](stream-property-surface.md)).
+
+The runs were limited to one build: clang 19,
+`-Db_lto=false -Dpgo=disabled -Dtemporal=disabled`, Linux x86-64.
 
 ## Validation
 
