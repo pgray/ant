@@ -18470,6 +18470,48 @@ static ant_value_t builtin_string_toWellFormed(ant_params_t) {
   return result;
 }
 
+// Lone surrogates (WTF-8 ED A0-BF xx) are starters with no decomposition,
+// so the well-formed runs between them normalize independently.
+static ant_value_t normalize_with_surrogates(ant_t *js, const char *str, size_t len, utf8proc_option_t opts) {
+  size_t cap = len + 16, out_len = 0;
+  char *out = malloc(cap);
+  if (!out) return js_mkerr(js, "oom");
+
+  for (size_t i = 0, start = 0; i <= len;) {
+    bool surrogate = i + 3 <= len && (uint8_t)str[i] == 0xED && (uint8_t)str[i + 1] >= 0xA0;
+    if (i < len && !surrogate) { i++; continue; }
+
+    utf8proc_uint8_t *mapped = NULL;
+    utf8proc_ssize_t mapped_len = 0;
+    if (i > start) {
+      mapped_len = utf8proc_map((const utf8proc_uint8_t *)str + start, (utf8proc_ssize_t)(i - start), &mapped, opts);
+      if (mapped_len < 0) { free(mapped); mapped = NULL; }
+    }
+    const char *piece = mapped ? (const char *)mapped : str + start;
+    size_t piece_len = mapped ? (size_t)mapped_len : i - start;
+    size_t need = out_len + piece_len + (surrogate ? 3 : 0);
+    if (need > cap) {
+      cap = need * 2;
+      char *grown = realloc(out, cap);
+      if (!grown) { free(mapped); free(out); return js_mkerr(js, "oom"); }
+      out = grown;
+    }
+    memcpy(out + out_len, piece, piece_len);
+    out_len += piece_len;
+    free(mapped);
+
+    if (!surrogate) break;
+    memcpy(out + out_len, str + i, 3);
+    out_len += 3;
+    i += 3;
+    start = i;
+  }
+
+  ant_value_t result = js_mkstr(js, out, out_len);
+  free(out);
+  return result;
+}
+
 static ant_value_t builtin_string_normalize(ant_params_t) {
   ant_value_t str = Ant_String_CoerceThis(js, "normalize");
   if (is_err(str)) return str;
@@ -18504,7 +18546,7 @@ static ant_value_t builtin_string_normalize(ant_params_t) {
 
   if (rlen < 0 || !result) {
     if (result) free(result);
-    return js_mkstr(js, str_ptr, str_len);
+    return normalize_with_surrogates(js, str_ptr, (size_t)str_len, opts);
   }
 
   ant_value_t ret = js_mkstr(js, (const char *)result, (ant_offset_t)rlen);

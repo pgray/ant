@@ -5,8 +5,8 @@
 //   - parsing is prefix-stable: a prefix of the input never yields a result
 //     other than INCOMPLETE or the full input's result, and every prefix of
 //     an accepted frame is INCOMPLETE;
-//   - in-place and copying parses agree, and accepted control frames obey
-//     RFC 6455 (FIN set, payload <= 125);
+//   - in-place and copying parses agree, and accepted frames obey RFC 6455
+//     (known opcodes; control frames have FIN set and payload <= 125);
 //   - ant_ws_unmask matches a per-byte XOR at any alignment and undoes itself;
 //   - ant_ws_encode_frame output parses back to the same frame.
 #include "fuzz.h"
@@ -45,6 +45,7 @@ static void check_parse(const uint8_t *data, size_t len, uint8_t flags, size_t m
     FUZZ_CHECK(copied.payload_len == 0 || memcmp(copied.payload, inplace.payload, copied.payload_len) == 0);
     FUZZ_CHECK(inplace.payload >= inplace_buf && inplace.payload + inplace.payload_len <= inplace_buf + len);
     if (copied.opcode >= 0x8) FUZZ_CHECK(copied.fin && copied.payload_len <= 125 && !copied.rsv1);
+    FUZZ_CHECK(copied.opcode <= ANT_WS_OPCODE_BINARY || (copied.opcode >= ANT_WS_OPCODE_CLOSE && copied.opcode <= ANT_WS_OPCODE_PONG));
   }
 
   // every result is decided by bytes the frame has already delivered

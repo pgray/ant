@@ -124,6 +124,16 @@ static void test_eventsource_format_and_parse(void) {
   ant_sse_parser_free(&parser);
 }
 
+static void test_websocket_reserved_opcodes(void) {
+  for (uint8_t opcode = 0; opcode < 16; opcode++) {
+    uint8_t frame[2] = { (uint8_t)(0x80u | opcode), 0 };
+    ant_ws_frame_t parsed;
+    bool known = opcode <= ANT_WS_OPCODE_BINARY || (opcode >= ANT_WS_OPCODE_CLOSE && opcode <= ANT_WS_OPCODE_PONG);
+    check_bool("websocket accepts only known opcodes",
+               ant_ws_parse_frame(frame, sizeof(frame), false, false, true, 1024, &parsed) == ANT_WS_FRAME_OK, known);
+  }
+}
+
 static void test_websocket_frame_limit(void) {
   uint8_t header[] = { 0x82, 0xff, 0, 0, 0, 0, 0, 0x10, 0, 0, 0x01, 0x02, 0x03, 0x04 };
   ant_ws_frame_t frame = {0};
@@ -193,6 +203,7 @@ int main(void) {
   test_websocket_handshake();
   test_websocket_frames();
   test_websocket_frame_limit();
+  test_websocket_reserved_opcodes();
   test_http1_body_limit();
   test_http1_trailers_ignored();
   test_remote_esm_downgrade();
