@@ -27,12 +27,12 @@ family's bookkeeping.
   per probe, each called 3000 times to reach the template JIT and the
   optimizing tier, then with boundary and mistyped arguments that force
   bailouts. Shrinking drops the kernels, statements and calls a mismatch
-  does not need. Each kernel runs under
-  five Ant variants (default, `--jitless`, `ANT_DEBUG=opt:off`,
-  `opt:force,verify`, `opt:verify`) and every variant must match Node. A
-  mismatch only the default and `opt:*` variants show points at the
-  optimizing tier. These variants trace to stderr, so only stderr lines
-  naming a codegen, verifier, or operand depth failure count.
+  does not need. Each probe runs under five Ant variants (default,
+  `--jitless`, `ANT_DEBUG=opt:off`, `opt:force,verify`, `opt:verify`) and
+  every variant must match Node. A mismatch only the default and `opt:*`
+  variants show points at the optimizing tier. These variants trace to
+  stderr, so only stderr lines naming a codegen, verifier, or operand depth
+  failure count.
 
 ## Running
 
