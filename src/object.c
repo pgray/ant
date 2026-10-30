@@ -290,11 +290,11 @@ ant_object_t *obj_alloc_shaped(ant_t *js, uint8_t type_tag, ant_shape_t *shape) 
   obj->type_tag = type_tag;
   obj->proto = js_mkundef();
   
-  if (type_tag == kTypeArray) obj->u.array.data = NULL;
-  else obj->u.data.value = js_mkundef();
-  
   obj->u.array.len = 0;
   obj->u.array.cap = 0;
+  
+  if (type_tag == kTypeArray) obj->u.array.data = NULL;
+  else obj->u.data.value = js_mkundef();
   
   obj->shape = shape;
   obj->inobj_limit = inobj_limit;

@@ -1,49 +1,16 @@
 #include <compat.h> // IWYU pragma: keep
-
 #include <float.h>
-#include <limits.h>
-#include <uv.h>
-#include <assert.h>
-#include <pcre2.h>
-#include <stdio.h>
-#include <time.h>
-#include <utarray.h>
-#include <uthash.h>
-#include <tlsuv/tlsuv.h>
-#include <tlsuv/http.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <sys/stat.h>
-#include <sys/resource.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "utf8.h"
 #include "ptr.h"
 #include "cfunc.h"
-#include "debug.h"
-#include "common.h"
-#include "sugar.h"
-#include "runtime.h"
-#include "utf8.h"
 #include "output.h"
 #include "utils.h"
 #include "builder.h"
 #include "list.h"
-#include "loop.h"
 #include "props.h"
-#include "internal.h"
-#include "watch.h"
-#include "interrupt.h"
-#include "errors.h"
-#include "descriptors.h"
-#include "shapes.h"
-#include "gc.h"
-#include "gc/objects.h"
-#include "gc/roots.h"
-#include "realm.h"
-#include "gc/weak.h"
-#include "esm/loader.h"
-#include "wasm/wasm.h"
 #include "gc/bigints.h"
 #include "esm/exports.h"
 
@@ -51,42 +18,11 @@
 #include "silver/call.h"
 #include "silver/jit.h"
 #include "silver/ops/eval_env.h"
-#include "silver/ops/async.h"
 
-#include "modules/regex.h"
-#include "modules/json.h"
-#include "modules/timer.h"
-#include "modules/promise.h"
-#include "modules/buffer.h"
-#include "modules/regex.h"
-#include "modules/globals.h"
-#include "modules/process.h"
-#include "modules/abort.h"
-#include "modules/eventsource.h"
-#include "modules/websocket.h"
-#include "modules/dns.h"
+#include "modules/host.h"
 #include "modules/function.h"
-#include "modules/atomics.h"
 #include "modules/symbol.h"
 #include "modules/iterator.h"
-#include "modules/events.h"
-#include "modules/cron.h"
-#include "modules/lmdb.h"
-#include "modules/rpc.h"
-#include "modules/navigator.h"
-#include "modules/isolate.h"
-#include "modules/worker_threads.h"
-#include "modules/message_port.h"
-#include "modules/performance.h"
-#include "modules/napi.h"
-#include "modules/readline.h"
-#include "modules/server.h"
-#include "modules/fs.h"
-#include "modules/child_process.h"
-#include "modules/fetch.h"
-#include "modules/http.h"
-#include "modules/net.h"
-#include "modules/tls.h"
 
 static_assert(sizeof(double) == 8, "NaN-boxing requires 64-bit IEEE 754 doubles");
 static_assert(sizeof(uint64_t) == 8, "NaN-boxing requires 64-bit integers");
@@ -185,7 +121,7 @@ static ant_t *isolate_init(void *buf, size_t len, const ant_isolate_options_t *o
   js->defaults.net_auto_select_family = true;
   
   if (!isolate_arenas_init(js, options)) return NULL;
-  if (!Ant_Loop_Init(js)) return NULL;
+  if (!Ant_Host_Init(js)) return NULL;
 
   js->young_closure_trigger = GC_CLOSURE_NURSERY_THRESHOLD;
   js->c_root_cap = 64;
@@ -272,38 +208,12 @@ void Ant_Destroy(ant_t *js) {
   if (js == NULL) return;
   js->destroying = true;
   
-  cleanup_isolate_module(js);
-  cleanup_worker_threads_module(js);
-  cleanup_timer_module(js);
+  Ant_Host_Stop(js);
   json_layout_cache_clear(js);
   
   if (js->index_layout_shape) ant_shape_release(js->index_layout_shape);
   js->index_layout_shape = NULL;
   
-  cleanup_cron_module(js);
-  cleanup_abort_module(js);
-  cleanup_eventsource_module(js);
-  cleanup_websocket_module(js);
-  cleanup_dns_module(js);
-  cleanup_net_module(js);
-  cleanup_tls_module(js);
-  cleanup_server_module(js);
-  cleanup_fetch_module(js);
-  
-  ant_http_pool_free(js->http_pool);
-  js->http_pool = NULL;
-  
-  cleanup_child_process_module(js);
-  cleanup_fs_module(js);
-  cleanup_readline_module(js);
-  cleanup_napi_module(js);
-  cleanup_message_port_module(js);
-  cleanup_navigator_module(js);
-  cleanup_performance_module(js);
-  cleanup_process_module(js);
-
-  Ant_Loop_Drain(js);
-  cleanup_timer_module(js);
   gc_weak_cleanup(js);
 
   if (js->vm) {
@@ -329,8 +239,7 @@ void Ant_Destroy(ant_t *js) {
   js->ic.gf_mega_keyed = NULL;
   
   code_arenas_destroy(js);
-  cleanup_rpc_module(js);
-  cleanup_lmdb_module(js);
+  Ant_Host_Close(js);
   js_descriptor_registry_cleanup(js);
   cleanup_iterator_module(js);
 
@@ -353,14 +262,8 @@ void Ant_Destroy(ant_t *js) {
     }
   }
   
-  cleanup_buffer_module(js);
-  cleanup_atomics_module(js);
-  cleanup_events_module(js);
   cleanup_regex_module(js);
-  free_process_module(js);
-  free_napi_module(js);
-  
-  Ant_Loop_Destroy(js);
+  Ant_Host_Free(js);
   gc_array_storage_cache_destroy(js);
   
   coroutine_pool_destroy(js);
@@ -426,7 +329,6 @@ void Ant_Destroy(ant_t *js) {
 
   ant_ptr_pair_free(&js->cfunc_promoted);
   ant_ptr_pair_free(&js->cfunc_named);
-  wasm_isolate_destroy(js);
 
   js_pool_destroy(&js->pool.rope);
   js_pool_destroy(&js->rope_gc.young);
@@ -724,72 +626,4 @@ ant_value_t sv_call_native(ant_t *js, ant_value_t func, ant_value_t this_val, an
   }
 
   return js_mkerr_typed(js, JS_ERR_TYPE, "%s is not a function", typestr(vtype(func)));
-}
-
-static void report_unhandled_rejection(ant_t *js, ant_value_t promise, ant_value_t reason) {
-  if (process_has_event_listeners(js, "unhandledRejection")) {
-    ant_value_t event_args[2] = { reason, promise };
-    emit_process_event(js, "unhandledRejection", event_args, 2);
-    process_report_uncaught_exception_if_pending(js);
-    return;
-  }
-
-  if (js_fire_unhandled_rejection(js, promise, reason)) return;
-
-  if (process_has_event_listeners(js, "uncaughtException")) {
-    ant_value_t event_args[2] = { reason, js_mkstr(js, "unhandledRejection", 18) };
-    emit_process_event(js, "uncaughtException", event_args, 2);
-    
-    if (Ant_Exception_Pending(js)) {
-      ant_value_t thrown = js_take_thrown(js, js_mkundef());
-      if (js->worker) ant_worker_report_uncaught(js, thrown);
-      else if (ant_watch_supervises(js)) ant_watch_exit(js);
-      else if (!js->uncaught_nonfatal) exit(7);
-    }
-    
-    return;
-  }
-
-  if (js->worker) {
-    ant_worker_report_uncaught(js, reason);
-    return;
-  }
-
-  print_unhandled_promise_rejection(js, reason);
-  if (!js->uncaught_nonfatal) process_exit_with(js, EXIT_FAILURE);
-}
-
-void js_check_unhandled_rejections(ant_t *js) {
-  size_t keep = 0;
-  
-  for (size_t i = 0; i < js->pending_rejections.len; i++) {
-    ant_value_t p = js->pending_rejections.items[i];
-    ant_promise_state_t *pd = js_promise_data(js, p, false);
-    if (!pd || pd->has_rejection_handler || pd->unhandled_reported) continue;
-    
-    if (vtype(pd->trigger_parent) == kTypePromise) {
-      ant_promise_state_t *parent = js_promise_data(js, pd->trigger_parent, false);
-      if (parent && parent->has_rejection_handler) continue;
-    }
-    
-    if (js->fatal_error) {
-      js_throw(js, pd->value);
-      print_uncaught_throw(js);
-      int status = process_run_exit_handlers(js, EXIT_FAILURE);
-      js->process_exiting = true;
-      Ant_Destroy(js); exit(status);
-    }
-
-    if (js_is_termination(pd->value)) continue;
-
-    GC_ROOT_SAVE(root_mark, js);
-    ant_value_t reason = pd->value;
-    GC_ROOT_PIN(js, p); GC_ROOT_PIN(js, reason);
-    
-    pd->unhandled_reported = true;
-    report_unhandled_rejection(js, p, reason);
-    GC_ROOT_RESTORE(js, root_mark);
-  }
-  
-  js->pending_rejections.len = keep;
 }

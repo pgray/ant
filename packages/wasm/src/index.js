@@ -648,7 +648,7 @@ export class Ant {
     exports = instance.exports;
     exports._initialize?.();
 
-    const handle = exports.Ant_Create();
+    const handle = exports.ant_create();
     if (!handle) throw new WebAssembly.RuntimeError('Unable to initialize Ant');
 
     const ant = new Ant(Ant, exports, memory, handle, timeout, hostFunctions);

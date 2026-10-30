@@ -23,6 +23,8 @@
 #include "gc/roots.h"
 #include "gc/weak.h"
 #include "gc/modules.h"
+#include "modules/host.h"
+#include "modules/microtasks.h"
 #include "gc/object_arenas.h"
 
 #include <stdlib.h>
@@ -866,10 +868,8 @@ static void gc_scan_obj(ant_t *js, ant_object_t *obj) {
     ant_value_t value = js_obj_from_ptr(obj);
     sv_eval_env_gc_mark(js, obj);
     if (obj->flags.arguments_object) gc_mark_arguments_cells(js, value);
-    gc_mark_abort_signal_object(js, value, gc_mark_value);
     gc_mark_error_record(js, value, gc_mark_value);
-    gc_mark_eventemitter_object(js, value, gc_mark_value);
-    gc_mark_stream_object(js, value, gc_mark_value);
+    gc_mark_host_natives(js, value, gc_mark_value);
   }
 }
 
@@ -1471,33 +1471,10 @@ static void gc_mark_roots(ant_t *js) {
   gc_visit_roots(js, gc_mark_value);
   gc_mark_permanent_roots(js);
   gc_mark_code_units(js);
-  gc_mark_timers(js, gc_mark_value);
-  gc_mark_cron(js, gc_mark_value);
-  gc_mark_atomics(js, gc_mark_value);
-  gc_mark_fetch(js, gc_mark_value);
-  gc_mark_fs(js, gc_mark_value);
-  gc_mark_child_process(js, gc_mark_value);
-  gc_mark_dns(js, gc_mark_value);
-  gc_mark_readline(js, gc_mark_value);
-  gc_mark_process(js, gc_mark_value);
-  gc_mark_navigator(js, gc_mark_value);
-  gc_mark_message_ports(js, gc_mark_value);
-  gc_mark_net(js, gc_mark_value);
-  gc_mark_tls(js, gc_mark_value);
-  gc_mark_server(js, gc_mark_value);
-  gc_mark_websocket(js, gc_mark_value);
-  gc_mark_eventsource(js, gc_mark_value);
-  gc_mark_events(js, gc_mark_value);
+  gc_mark_microtasks(js, gc_mark_value);
+  gc_mark_host_modules(js, gc_mark_value);
   gc_mark_symbols(js, gc_mark_value);
   gc_mark_iterators(js, gc_mark_value);
-  gc_mark_esm(js, gc_mark_value);
-  gc_mark_worker_threads(js, gc_mark_value);
-  gc_mark_isolates(js, gc_mark_value);
-  gc_mark_sandbox(js, gc_mark_value);
-  gc_mark_abort(js, gc_mark_value);
-  gc_mark_wasm(js, gc_mark_value);
-  gc_mark_napi(js, gc_mark_value);
-  gc_mark_rpc(js, gc_mark_value);
 
   gc_grey_pending_promises(js, js->pending_promises_young);
   if (!js->gc.minor) gc_grey_pending_promises(js, js->pending_promises_old);
@@ -1676,10 +1653,8 @@ void gc_object_free(ant_t *js, ant_object_t *obj) {
 
   if (obj->finalizer) obj->finalizer(js, obj);
   
-  if (obj->native_tag != 0 || ant_object_has_sidecar(obj)) {
-    gc_finalize_stream_object(js, js_obj_from_ptr(obj));
-    gc_finalize_events_object(js, js_obj_from_ptr(obj));
-  }
+  if (obj->native_tag != 0 || ant_object_has_sidecar(obj))
+    gc_finalize_host_natives(js, js_obj_from_ptr(obj));
   
   obj->mark_epoch = ANT_GC_DEAD;
 
@@ -2002,7 +1977,7 @@ uint64_t gc_objects_run(ant_t *js, gc_extra_roots_fn extra_roots) {
   );
   
   opt_tier_gc_weak(js);
-  gc_clear_napi_weak_refs(js, gc_weak_key_alive);
+  gc_clear_host_weak_refs(js, gc_weak_key_alive);
   gc_age_regex_cache(js, false);
   ant_realm_collect(js);
   
@@ -2126,7 +2101,7 @@ void gc_objects_run_minor(ant_t *js) {
     gc_weak_key_alive, gc_weak_collection_live
   );
   
-  gc_clear_napi_weak_refs(js, gc_weak_key_alive);
+  gc_clear_host_weak_refs(js, gc_weak_key_alive);
   js->gc.minor = false;
 
   gc_age_regex_cache(js, true);

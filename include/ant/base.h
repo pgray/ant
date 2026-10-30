@@ -17,6 +17,7 @@ static constexpr uint8_t CFUNC_IS_CONSTRUCTOR = 0x02u;
 static constexpr uint8_t CFUNC_NATIVE_GETTER  = 0x04u;
 static constexpr uint8_t CFUNC_REALM_FREE     = 0x08u;
 
+// TODO: cleanup
 #define ANT_ASSERT(cond, msg) ({                                        \
 if (!(cond)) {                                                          \
   fprintf(stderr, "ANT FATAL: %s\n  %s:%d\n", msg, __FILE__, __LINE__); \

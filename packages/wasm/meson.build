@@ -44,6 +44,14 @@ crprintf_dep = subproject('crprintf').get_variable('crprintf_dep')
 double_conversion_dep = subproject('double-conversion').get_variable('double_conversion_dep')
 yyjson_dep = subproject('yyjson').get_variable('yyjson_dep')
 
+python = find_program('python3')
+unicode_tables = files('../../meson/unicode_tables.py')
+unicode_data_h = custom_target('unicode_data_h',
+  output: 'unicode_data.h',
+  command: [python, unicode_tables, meson.current_source_dir() / 'vendor/utf8proc-2.10.0', '@OUTPUT@'],
+  depend_files: unicode_tables,
+)
+
 core_sources = files(
   '../../src/ant.c',
   '../../src/arguments.c',
@@ -60,6 +68,7 @@ core_sources = files(
   '../../src/exceptions.c',
   '../../src/escape.c',
   '../../src/handles.c',
+  '../../src/index.c',
   '../../src/numbers.cc',
   '../../src/output.c',
   '../../src/pool.c',
@@ -73,18 +82,23 @@ core_sources = files(
   '../../src/props_get.c',
   '../../src/props_set.c',
   '../../src/proto.c',
+  '../../src/proto_watch.c',
   '../../src/realm.c',
   '../../src/runtime.c',
   '../../src/shapes.c',
   '../../src/sugar.c',
+  '../../src/stringify.c',
+  '../../src/unicode.c',
   '../../src/utf8.c',
   '../../src/utils_portable.c',
+  '../../src/gc/arena.c',
   '../../src/gc/bigints.c',
   '../../src/gc/gc.c',
   '../../src/gc/objects.c',
   '../../src/gc/roots.c',
   '../../src/gc/ropes.c',
   '../../src/gc/strings.c',
+  '../../src/gc/trace.c',
   '../../src/gc/weak.c',
   '../../src/esm/import.c',
   '../../src/silver/ast.c',
@@ -101,8 +115,11 @@ core_sources = files(
   '../../src/silver/stack_trace.c',
   '../../src/modules/array.c',
   '../../src/modules/bigint.c',
+  '../../src/modules/buffer.c',
   '../../src/modules/boolean.c',
   '../../src/modules/collections.c',
+  '../../src/modules/date.c',
+  '../../src/modules/domexception.c',
   '../../src/modules/disposable.c',
   '../../src/modules/function.c',
   '../../src/modules/generator.c',
@@ -110,15 +127,20 @@ core_sources = files(
   '../../src/modules/json.c',
   '../../src/modules/iterator.c',
   '../../src/modules/math.c',
+  '../../src/modules/microtasks.c',
   '../../src/modules/number.c',
   '../../src/modules/object.c',
+  '../../src/modules/promise.c',
   '../../src/modules/proxy.c',
   '../../src/modules/regex.c',
+  '../../src/modules/regex_syntax.c',
   '../../src/modules/string.c',
   '../../src/modules/symbol.c',
   'src/bridge.c',
   'src/stubs.c',
+  'src/host_stub.c',
   'src/jit_stub.c',
+  'src/platform.c',
   'src/utils.c',
 )
 
@@ -139,7 +161,7 @@ add_project_arguments(
   language: 'c',
 )
 
-executable('ant', core_sources,
+executable('ant', core_sources, unicode_data_h,
   include_directories: inc,
   dependencies: [
     base64_dep,

@@ -1,19 +1,18 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "ant.h"
 #include "cfunc.h"
 #include "errors.h"
 #include "internal.h"
 #include "sugar.h"
+#include "protectors.h"
 #include "gc/roots.h"
 #include "silver/call.h"
 #include "silver/engine.h"
 #include "silver/glue.h"
 #include "modules/globals.h"
-#include "modules/timer.h"
 #include "modules/promise.h"
-#include "protectors.h"
+#include "modules/process.h"
 
 static const UT_icd promise_handler_icd = {
   .sz = sizeof(promise_handler_t),
@@ -2165,4 +2164,45 @@ void js_promise_init_constructor(ant_t *js, ant_value_t ctor_obj) {
   defmethod(js, ctor_obj, "allSettled", 10, Ant_Function_CreateWithArity(builtin_Promise_allSettled, 1));
   defmethod(js, ctor_obj, "race", 4, Ant_Function_CreateWithArity(builtin_Promise_race, 1));
   defmethod(js, ctor_obj, "any", 3, Ant_Function_CreateWithArity(builtin_Promise_any, 1));
+}
+
+static void report_unhandled_rejection(ant_t *js, ant_value_t promise, ant_value_t reason) {
+  if (process_report_unhandled_rejection(js, promise, reason)) return;
+  print_unhandled_promise_rejection(js, reason);
+  if (!js->uncaught_nonfatal) process_exit_with(js, EXIT_FAILURE);
+}
+
+void js_check_unhandled_rejections(ant_t *js) {
+  size_t keep = 0;
+  
+  for (size_t i = 0; i < js->pending_rejections.len; i++) {
+    ant_value_t p = js->pending_rejections.items[i];
+    ant_promise_state_t *pd = js_promise_data(js, p, false);
+    if (!pd || pd->has_rejection_handler || pd->unhandled_reported) continue;
+    
+    if (vtype(pd->trigger_parent) == kTypePromise) {
+      ant_promise_state_t *parent = js_promise_data(js, pd->trigger_parent, false);
+      if (parent && parent->has_rejection_handler) continue;
+    }
+    
+    if (js->fatal_error) {
+      js_throw(js, pd->value);
+      print_uncaught_throw(js);
+      int status = process_run_exit_handlers(js, EXIT_FAILURE);
+      js->process_exiting = true;
+      Ant_Destroy(js); exit(status);
+    }
+
+    if (js_is_termination(pd->value)) continue;
+
+    GC_ROOT_SAVE(root_mark, js);
+    ant_value_t reason = pd->value;
+    GC_ROOT_PIN(js, p); GC_ROOT_PIN(js, reason);
+    
+    pd->unhandled_reported = true;
+    report_unhandled_rejection(js, p, reason);
+    GC_ROOT_RESTORE(js, root_mark);
+  }
+  
+  js->pending_rejections.len = keep;
 }

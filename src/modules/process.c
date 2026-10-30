@@ -28,10 +28,10 @@
 #include <pwd.h>
 #endif
 
-#include "ant.h"
 #include "utf8.h"
 #include "cfunc.h"
 #include "errors.h"
+#include "sync.h"
 #include "output.h"
 #include "utils.h"
 #include "tty_ctrl.h"
@@ -53,10 +53,9 @@
 #include "modules/buffer.h"
 #include "modules/napi.h"
 #include "modules/worker_threads.h"
-#include "sync.h"
-#include "modules/timer.h"
 #include "modules/fs.h"
 #include "modules/stream.h"
+#include "modules/globals.h"
 
 #ifndef _WIN32
 extern char **environ;
@@ -402,6 +401,38 @@ bool process_report_uncaught_exception(ant_t *js) {
 
   GC_ROOT_RESTORE(js, root_mark);
   return true;
+}
+
+bool process_report_unhandled_rejection(ant_t *js, ant_value_t promise, ant_value_t reason) {
+  if (process_has_event_listeners(js, "unhandledRejection")) {
+    ant_value_t event_args[2] = { reason, promise };
+    emit_process_event(js, "unhandledRejection", event_args, 2);
+    process_report_uncaught_exception_if_pending(js);
+    return true;
+  }
+
+  if (js_fire_unhandled_rejection(js, promise, reason)) return true;
+
+  if (process_has_event_listeners(js, "uncaughtException")) {
+    ant_value_t event_args[2] = { reason, js_mkstr(js, "unhandledRejection", 18) };
+    emit_process_event(js, "uncaughtException", event_args, 2);
+    
+    if (Ant_Exception_Pending(js)) {
+      ant_value_t thrown = js_take_thrown(js, js_mkundef());
+      if (js->worker) ant_worker_report_uncaught(js, thrown);
+      else if (ant_watch_supervises(js)) ant_watch_exit(js);
+      else if (!js->uncaught_nonfatal) exit(7);
+    }
+    
+    return true;
+  }
+
+  if (js->worker) {
+    ant_worker_report_uncaught(js, reason);
+    return true;
+  }
+
+  return false;
 }
 
 static const char *stdin_escape_name(const char *seq, int len) {

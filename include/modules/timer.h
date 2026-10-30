@@ -2,6 +2,7 @@
 #define TIMER_H
 
 #include "types.h"
+#include "modules/microtasks.h"
 
 struct timer_entry;
 struct microtask_entry;
@@ -32,29 +33,9 @@ ant_value_t timers_promises_library(ant_t *js);
 
 void init_timer_module(ant_t *js);
 void cleanup_timer_module(ant_t *js);
-void process_microtasks(ant_t *js);
 void process_immediates(ant_t *js);
-void queue_promise_trigger(ant_t *js, ant_value_t promise);
-void ant_realm_run_microtasks(ant_t *js, ant_realm_t *realm);
-
-void queue_microtask(ant_t *js, ant_value_t callback);
-void queue_microtask_with_args(ant_t *js, ant_value_t callback, ant_args_t);
-
-void queue_next_tick(ant_t *js, ant_value_t callback);
-void queue_next_tick_with_args(ant_t *js, ant_value_t callback, ant_args_t);
-
-bool js_maybe_drain_microtasks(ant_t *js);
-bool js_maybe_drain_microtasks_after_async_settle(ant_t *js);
-
-bool queue_promise_thenable_job(ant_t *js, ant_value_t promise, ant_value_t thenable, ant_value_t then_fn);
-bool queue_await_resume_job(coroutine_t *coro, ant_value_t value);
-bool queue_await_settle_job(coroutine_t *coro, ant_value_t value, bool is_error);
-bool queue_await_defer_job(coroutine_t *coro, ant_value_t value);
-bool queue_promise_resolve_job(ant_t *js, ant_value_t promise, ant_value_t value);
-bool queue_generator_yield_job(ant_t *js, ant_value_t gen, ant_value_t value);
 
 int has_pending_timers(ant_t *js);
-int has_pending_microtasks(ant_t *js);
 int has_pending_immediates(ant_t *js);
 int has_active_immediates(ant_t *js);
 

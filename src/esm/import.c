@@ -1,19 +1,12 @@
 #include <compat.h> // IWYU pragma: keep
+#include <stdlib.h>
+#include <string.h>
 
-#include "ant.h"
 #include "cfunc.h"
-#include "common.h"
-#include "gc/roots.h"
-#include "errors.h"
-#include "cfunc.h"
-#include "object.h"
-
 #include "modules/proxy.h"
 #include "modules/promise.h"
 #include "silver/engine.h"
-
 #include "esm/remote.h"
-#include "esm/loader.h"
 #include "esm/import.h"
 #include "esm/builtin_bundle.h"
 

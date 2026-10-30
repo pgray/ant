@@ -221,8 +221,8 @@ static_assert(
 );
 
 static_assert(
-  offsetof(ant_object_t, u.promise.state) == offsetof(ant_object_t, u.array.len) &&
-  offsetof(ant_object_t, u.promise.state) + sizeof(ant_promise_state_t *) ==
+  offsetof(ant_object_t, u.promise.state) >= offsetof(ant_object_t, u.array.len) &&
+  offsetof(ant_object_t, u.promise.state) + sizeof(ant_promise_state_t *) <=
   offsetof(ant_object_t, u.array.cap) + sizeof(uint32_t),
   "obj_alloc clears the promise state pointer through u.array.len and u.array.cap"
 );

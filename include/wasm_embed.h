@@ -30,7 +30,6 @@ ANT_WASM_IMPORT("ant", "random_fill")
 int32_t ant_wasm_random_fill(void *buffer, uint32_t length);
 
 bool ant_wasm_should_interrupt(ant_t *js);
-void ant_wasm_microtasks_reset(ant_t *js);
 
 #endif
 

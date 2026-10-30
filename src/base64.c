@@ -1,10 +1,10 @@
 #include <stdlib.h>
 #include <libbase64.h>
+#include <string.h>
 
 #include "utf8.h"
 #include "cfunc.h"
 #include "base64.h"
-#include "errors.h"
 
 char *ant_base64_encode(const uint8_t *data, size_t len, size_t *out_len) {
   size_t encoded_len = 4 * ((len + 2) / 3);

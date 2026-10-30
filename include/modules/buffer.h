@@ -31,7 +31,7 @@ typedef struct ArrayBufferData {
 #if UINTPTR_MAX == UINT64_MAX
 static_assert(sizeof(ArrayBufferData) == 48, "ArrayBufferData layout changed");
 #elif UINTPTR_MAX == UINT32_MAX
-static_assert(sizeof(ArrayBufferData) == 28, "ArrayBufferData layout changed");
+static_assert(sizeof(ArrayBufferData) == 32, "ArrayBufferData layout changed");
 #endif
 
 typedef enum {

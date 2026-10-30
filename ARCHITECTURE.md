@@ -78,6 +78,12 @@ focused [runtime invariants](docs/repo/runtime-invariants.md) reference.
 ### Host platform surface
 
 - `src/modules/` implements built-in modules and runtime-facing JS APIs.
+  Core code never calls a host-only module (anything using libuv or absent
+  from `packages/wasm`) by name: its lifecycle, GC roots, per-object marking
+  and finalization go through `src/modules/host.c`, which the wasm package
+  replaces with `packages/wasm/src/host_stub.c`. The microtask queue lives in
+  `src/modules/microtasks.c` and is shared by native and wasm builds; timers
+  and immediates stay in `src/modules/timer.c`.
 - `src/builtins/` holds the JavaScript bootstrap, bundled shims, and
   Node-compatible modules.
 - `src/http/`, `src/net/`, and `src/streams/` provide protocol, networking, and

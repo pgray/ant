@@ -3,11 +3,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "ant.h"
 #include "cfunc.h"
+#include "runtime.h"
 #include "errors.h"
 #include "gc/roots.h"
 #include "internal.h"
+#include "wasm_embed.h"
+#include "wasm_abi.h"
 #include "modules/bigint.h"
 #include "modules/collections.h"
 #include "modules/generator.h"
@@ -16,11 +18,8 @@
 #include "modules/regex.h"
 #include "modules/symbol.h"
 #include "modules/iterator.h"
-#include "modules/timer.h"
-#include "runtime.h"
+#include "modules/microtasks.h"
 #include "silver/engine.h"
-#include "wasm_embed.h"
-#include "wasm_abi.h"
 
 typedef struct {
   uint8_t *data;
@@ -683,7 +682,7 @@ ant_wasm_runtime_t *ant_wasm_create(void) {
   runtime->js = js;
   js->uncaught_nonfatal = true;
   active_runtime = runtime;
-  ant_wasm_microtasks_reset(js);
+  ant_microtasks_discard(js);
   ant_runtime_init(js, 0, NULL, NULL);
   init_symbol_module(js);
   init_intrinsic_symbols(js);
@@ -701,7 +700,7 @@ ant_wasm_runtime_t *ant_wasm_create(void) {
 ANT_WASM_EXPORT("ant_destroy")
 void ant_wasm_destroy(ant_wasm_runtime_t *runtime) {
   if (!runtime) return;
-  ant_wasm_microtasks_reset(runtime->js);
+  ant_microtasks_discard(runtime->js);
   if (active_runtime == runtime) active_runtime = NULL;
   Ant_Destroy(runtime->js);
   clear_last_result(runtime);
@@ -797,7 +796,7 @@ const uint8_t *ant_wasm_eval(
   const uint8_t *response = NULL;
   if (runtime->timed_out) {
     js_take_thrown(js, js_mkundef());
-    ant_wasm_microtasks_reset(js);
+    ant_microtasks_discard(js);
     response = serialize_timeout(runtime);
   } else if (is_err(result)) {
     ant_value_t payload = error_payload(runtime, result);
@@ -806,7 +805,7 @@ const uint8_t *ant_wasm_eval(
     );
     if (!response && runtime->timed_out) {
       js_take_thrown(js, js_mkundef());
-      ant_wasm_microtasks_reset(js);
+      ant_microtasks_discard(js);
       response = serialize_timeout(runtime);
     } else if (!response) {
       response = serialize_transfer_error(runtime);
@@ -815,7 +814,7 @@ const uint8_t *ant_wasm_eval(
     response = serialize_value(runtime, ANT_WASM_RESPONSE_OK, result);
     if (!response && runtime->timed_out) {
       js_take_thrown(js, js_mkundef());
-      ant_wasm_microtasks_reset(js);
+      ant_microtasks_discard(js);
       response = serialize_timeout(runtime);
     } else if (!response) {
       response = serialize_transfer_error(runtime);

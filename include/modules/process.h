@@ -30,6 +30,7 @@ void emit_process_event(ant_t *js, const char *event_type, ant_args_t);
 
 bool has_active_stdin(ant_t *js);
 bool process_report_uncaught_exception(ant_t *js);
+bool process_report_unhandled_rejection(ant_t *js, ant_value_t promise, ant_value_t reason);
 bool process_has_event_listeners(ant_t *js, const char *event_type);
 
 int process_exit_code(ant_t *js);
