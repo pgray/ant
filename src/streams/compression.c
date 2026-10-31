@@ -107,11 +107,11 @@ static ant_value_t cs_transform(ant_params_t) {
 
   if (!input || input_len == 0) return js_mkundef();
 
-  brotli_stream_state_t *brotli_st = (brotli_stream_state_t *)js_get_native(js->current_func, CS_BROTLI_NATIVE_TAG);
+  brotli_stream_state_t *brotli_st = (brotli_stream_state_t *)js_get_native(call_func, CS_BROTLI_NATIVE_TAG);
   if (brotli_st)
     return brotli_stream_transform(js, brotli_st, ctrl_obj, input, input_len);
   
-  zstate_t *st = (zstate_t *)js_get_native(js->current_func, CS_Z_NATIVE_TAG);
+  zstate_t *st = (zstate_t *)js_get_native(call_func, CS_Z_NATIVE_TAG);
   if (!st) 
     return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid CompressionStream");
 
@@ -138,11 +138,11 @@ static ant_value_t cs_transform(ant_params_t) {
 static ant_value_t cs_flush(ant_params_t) {
   ant_value_t ctrl_obj = (nargs > 0) ? args[0] : js_mkundef();
 
-  brotli_stream_state_t *brotli_st = (brotli_stream_state_t *)js_get_native(js->current_func, CS_BROTLI_NATIVE_TAG);
+  brotli_stream_state_t *brotli_st = (brotli_stream_state_t *)js_get_native(call_func, CS_BROTLI_NATIVE_TAG);
   if (brotli_st)
     return brotli_stream_flush(js, brotli_st, ctrl_obj);
   
-  zstate_t *st = (zstate_t *)js_get_native(js->current_func, CS_Z_NATIVE_TAG);
+  zstate_t *st = (zstate_t *)js_get_native(call_func, CS_Z_NATIVE_TAG);
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid CompressionStream");
 
   st->strm.next_in = NULL;
@@ -165,13 +165,13 @@ static ant_value_t cs_flush(ant_params_t) {
 }
 
 static ant_value_t js_cs_get_readable(ant_params_t) {
-  ant_value_t ts_obj = get_ts(js->this_val);
+  ant_value_t ts_obj = get_ts(call_this);
   if (!ts_is_stream(ts_obj)) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid CompressionStream");
   return ts_stream_readable(ts_obj);
 }
 
 static ant_value_t js_cs_get_writable(ant_params_t) {
-  ant_value_t ts_obj = get_ts(js->this_val);
+  ant_value_t ts_obj = get_ts(call_this);
   if (!ts_is_stream(ts_obj)) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid CompressionStream");
   return ts_stream_writable(ts_obj);
 }
@@ -249,11 +249,11 @@ static ant_value_t ds_transform(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "The provided value is not of type '(ArrayBuffer or ArrayBufferView)'");
 
   if (!input || input_len == 0) return js_mkundef();
-  brotli_stream_state_t *brotli_st = (brotli_stream_state_t *)js_get_native(js->current_func, DS_BROTLI_NATIVE_TAG);
+  brotli_stream_state_t *brotli_st = (brotli_stream_state_t *)js_get_native(call_func, DS_BROTLI_NATIVE_TAG);
   if (brotli_st)
     return brotli_stream_transform(js, brotli_st, ctrl_obj, input, input_len);
   
-  zstate_t *st = (zstate_t *)js_get_native(js->current_func, DS_Z_NATIVE_TAG);
+  zstate_t *st = (zstate_t *)js_get_native(call_func, DS_Z_NATIVE_TAG);
   if (!st)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid DecompressionStream");
 
@@ -280,20 +280,20 @@ static ant_value_t ds_transform(ant_params_t) {
 
 static ant_value_t ds_flush(ant_params_t) {
   ant_value_t ctrl_obj = (nargs > 0) ? args[0] : js_mkundef();
-  brotli_stream_state_t *st = (brotli_stream_state_t *)js_get_native(js->current_func, DS_BROTLI_NATIVE_TAG);
+  brotli_stream_state_t *st = (brotli_stream_state_t *)js_get_native(call_func, DS_BROTLI_NATIVE_TAG);
   if (st)
     return brotli_stream_flush(js, st, ctrl_obj);
   return js_mkundef();
 }
 
 static ant_value_t js_ds_get_readable(ant_params_t) {
-  ant_value_t ts_obj = get_ts(js->this_val);
+  ant_value_t ts_obj = get_ts(call_this);
   if (!ts_is_stream(ts_obj)) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid DecompressionStream");
   return ts_stream_readable(ts_obj);
 }
 
 static ant_value_t js_ds_get_writable(ant_params_t) {
-  ant_value_t ts_obj = get_ts(js->this_val);
+  ant_value_t ts_obj = get_ts(call_this);
   if (!ts_is_stream(ts_obj)) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid DecompressionStream");
   return ts_stream_writable(ts_obj);
 }

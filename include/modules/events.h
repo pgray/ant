@@ -94,13 +94,13 @@ bool Ant_EventTarget_AddDataListener(ant_t *js, ant_value_t target, ant_value_t 
 
 #define ANT_EVENT_HANDLER_ACCESSORS(prefix, type, invalid_this)              \
   static ant_value_t prefix##_get_on##type(ant_params_t) {                   \
-    ant_value_t self = js_getthis(js);                                       \
+    ant_value_t self = call_this;                                            \
     ant_value_t invalid = invalid_this(js, self);                            \
     if (invalid) return invalid;                                             \
     return Ant_EventTarget_GetHandler(js, self, #type, sizeof(#type) - 1);   \
   }                                                                          \
   static ant_value_t prefix##_set_on##type(ant_params_t) {                   \
-    ant_value_t self = js_getthis(js);                                       \
+    ant_value_t self = call_this;                                            \
     ant_value_t invalid = invalid_this(js, self);                            \
     if (invalid) return invalid;                                             \
     ant_value_t handler = nargs > 0 ? args[0] : js_mknull();                 \

@@ -284,7 +284,7 @@ static void ws_reject_close_and_closed(ant_t *js, ant_value_t stream_obj) {
 }
 
 static ant_value_t ws_finish_erroring_abort_resolve(ant_params_t) {
-  ant_value_t wrapper = js_get_slot(js->current_func, SLOT_DATA);
+  ant_value_t wrapper = js_get_slot(call_func, SLOT_DATA);
   ant_value_t p = js_get_slot(wrapper, SLOT_DATA);
   ant_value_t stream_obj = js_get_slot(wrapper, SLOT_ENTRIES);
   js_resolve_promise(js, p, js_mkundef());
@@ -293,7 +293,7 @@ static ant_value_t ws_finish_erroring_abort_resolve(ant_params_t) {
 }
 
 static ant_value_t ws_finish_erroring_abort_reject(ant_params_t) {
-  ant_value_t wrapper = js_get_slot(js->current_func, SLOT_DATA);
+  ant_value_t wrapper = js_get_slot(call_func, SLOT_DATA);
   ant_value_t p = js_get_slot(wrapper, SLOT_DATA);
   ant_value_t stream_obj = js_get_slot(wrapper, SLOT_ENTRIES);
   ant_value_t reason = (nargs > 0) ? args[0] : js_mkundef();
@@ -450,7 +450,7 @@ static void writable_stream_mark_close_in_flight(ant_t *js, ant_value_t stream_o
 }
 
 static ant_value_t ws_process_write_resolve(ant_params_t) {
-  ant_value_t ctrl_obj = js_get_slot(js->current_func, SLOT_DATA);
+  ant_value_t ctrl_obj = js_get_slot(call_func, SLOT_DATA);
   ws_controller_t *ctrl = ws_get_controller(ctrl_obj);
   if (!ctrl) return js_mkundef();
 
@@ -479,7 +479,7 @@ static ant_value_t ws_process_write_resolve(ant_params_t) {
 }
 
 static ant_value_t ws_process_write_reject(ant_params_t) {
-  ant_value_t ctrl_obj = js_get_slot(js->current_func, SLOT_DATA);
+  ant_value_t ctrl_obj = js_get_slot(call_func, SLOT_DATA);
   ant_value_t stream_obj = ws_ctrl_stream(ctrl_obj);
   ws_stream_t *stream = ws_get_stream(stream_obj);
 
@@ -518,13 +518,13 @@ static void ws_default_controller_process_write(ant_t *js, ant_value_t ctrl_obj,
 }
 
 static ant_value_t ws_process_close_resolve(ant_params_t) {
-  ant_value_t stream_obj = js_get_slot(js->current_func, SLOT_DATA);
+  ant_value_t stream_obj = js_get_slot(call_func, SLOT_DATA);
   writable_stream_finish_in_flight_close(js, stream_obj);
   return js_mkundef();
 }
 
 static ant_value_t ws_process_close_reject(ant_params_t) {
-  ant_value_t stream_obj = js_get_slot(js->current_func, SLOT_DATA);
+  ant_value_t stream_obj = js_get_slot(call_func, SLOT_DATA);
   ant_value_t reason = (nargs > 0) ? args[0] : js_mkundef();
   writable_stream_finish_in_flight_close_with_error(js, stream_obj, reason);
   return js_mkundef();
@@ -766,7 +766,7 @@ ant_value_t ws_writer_write(ant_t *js, ant_value_t writer_obj, ant_value_t chunk
 }
 
 static ant_value_t ws_start_resolve_handler(ant_params_t) {
-  ant_value_t ctrl_obj = js_get_slot(js->current_func, SLOT_DATA);
+  ant_value_t ctrl_obj = js_get_slot(call_func, SLOT_DATA);
   ws_controller_t *ctrl = ws_get_controller(ctrl_obj);
   if (!ctrl) return js_mkundef();
   ctrl->started = true;
@@ -775,7 +775,7 @@ static ant_value_t ws_start_resolve_handler(ant_params_t) {
 }
 
 static ant_value_t ws_start_reject_handler(ant_params_t) {
-  ant_value_t ctrl_obj = js_get_slot(js->current_func, SLOT_DATA);
+  ant_value_t ctrl_obj = js_get_slot(call_func, SLOT_DATA);
   ws_controller_t *ctrl = ws_get_controller(ctrl_obj);
   if (!ctrl) return js_mkundef();
   ctrl->started = true;
@@ -785,32 +785,32 @@ static ant_value_t ws_start_reject_handler(ant_params_t) {
 }
 
 static ant_value_t js_ws_controller_get_signal(ant_params_t) {
-  ant_value_t signal_ctrl = ws_ctrl_signal(js->this_val);
+  ant_value_t signal_ctrl = ws_ctrl_signal(call_this);
   if (!is_object_type(signal_ctrl)) return js_mkundef();
   return js_get(js, signal_ctrl, "signal");
 }
 
 static ant_value_t js_ws_controller_error(ant_params_t) {
-  ws_controller_t *ctrl = ws_get_controller(js->this_val);
+  ws_controller_t *ctrl = ws_get_controller(call_this);
   if (!ctrl) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid WritableStreamDefaultController");
-  ant_value_t stream_obj = ws_ctrl_stream(js->this_val);
+  ant_value_t stream_obj = ws_ctrl_stream(call_this);
   ws_stream_t *stream = ws_get_stream(stream_obj);
   if (!stream || stream->state != WS_STATE_WRITABLE) return js_mkundef();
   ant_value_t e = (nargs > 0) ? args[0] : js_mkundef();
-  ws_default_controller_error(js, js->this_val, e);
+  ws_default_controller_error(js, call_this, e);
   return js_mkundef();
 }
 
 static ant_value_t js_ws_writer_get_closed(ant_params_t) {
-  return ws_writer_closed(js->this_val);
+  return ws_writer_closed(call_this);
 }
 
 static ant_value_t js_ws_writer_get_ready(ant_params_t) {
-  return ws_writer_ready(js->this_val);
+  return ws_writer_ready(call_this);
 }
 
 static ant_value_t js_ws_writer_get_desired_size(ant_params_t) {
-  ant_value_t stream_obj = ws_writer_stream(js->this_val);
+  ant_value_t stream_obj = ws_writer_stream(call_this);
   if (!ws_is_stream(stream_obj))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Writer has no stream");
   ws_stream_t *stream = ws_get_stream(stream_obj);
@@ -824,7 +824,7 @@ static ant_value_t js_ws_writer_get_desired_size(ant_params_t) {
 }
 
 static ant_value_t js_ws_writer_abort(ant_params_t) {
-  ant_value_t stream_obj = ws_writer_stream(js->this_val);
+  ant_value_t stream_obj = ws_writer_stream(call_this);
   if (!ws_is_stream(stream_obj)) {
     ant_value_t p = js_mkpromise(js);
     js_reject_promise(js, p, Ant_Error_Create(js, JS_ERR_TYPE, "Writer has no stream"));
@@ -836,7 +836,7 @@ static ant_value_t js_ws_writer_abort(ant_params_t) {
 }
 
 static ant_value_t js_ws_writer_close(ant_params_t) {
-  ant_value_t stream_obj = ws_writer_stream(js->this_val);
+  ant_value_t stream_obj = ws_writer_stream(call_this);
   if (!ws_is_stream(stream_obj)) {
     ant_value_t p = js_mkpromise(js);
     js_reject_promise(js, p, Ant_Error_Create(js, JS_ERR_TYPE, "Writer has no stream"));
@@ -853,34 +853,34 @@ static ant_value_t js_ws_writer_close(ant_params_t) {
 }
 
 static ant_value_t js_ws_writer_release_lock(ant_params_t) {
-  ant_value_t stream_obj = ws_writer_stream(js->this_val);
+  ant_value_t stream_obj = ws_writer_stream(call_this);
   if (!ws_is_stream(stream_obj)) return js_mkundef();
   ant_value_t release_err = Ant_Error_Create(js, JS_ERR_TYPE, "Writer was released");
 
-  ws_writer_reject_ready_promise(js, js->this_val, release_err);
-  ws_writer_reject_closed_promise(js, js->this_val, release_err);
+  ws_writer_reject_ready_promise(js, call_this, release_err);
+  ws_writer_reject_closed_promise(js, call_this, release_err);
   
-  promise_mark_handled(ws_writer_ready(js->this_val));
-  promise_mark_handled(ws_writer_closed(js->this_val));
+  promise_mark_handled(ws_writer_ready(call_this));
+  promise_mark_handled(ws_writer_closed(call_this));
   
-  ws_writer_replace_ready_promise_rejected(js, js->this_val, release_err);
-  ws_writer_replace_closed_promise_rejected(js, js->this_val, release_err);
+  ws_writer_replace_ready_promise_rejected(js, call_this, release_err);
+  ws_writer_replace_closed_promise_rejected(js, call_this, release_err);
 
   js_set_slot(stream_obj, SLOT_CTOR, js_mkundef());
-  js_set_slot(js->this_val, SLOT_ENTRIES, js_mkundef());
+  js_set_slot(call_this, SLOT_ENTRIES, js_mkundef());
   
   return js_mkundef();
 }
 
 static ant_value_t js_ws_writer_write(ant_params_t) {
-  ant_value_t stream_obj = ws_writer_stream(js->this_val);
+  ant_value_t stream_obj = ws_writer_stream(call_this);
   if (!ws_is_stream(stream_obj)) {
     ant_value_t p = js_mkpromise(js);
     js_reject_promise(js, p, Ant_Error_Create(js, JS_ERR_TYPE, "Writer has no stream"));
     return p;
   }
   ant_value_t chunk = (nargs > 0) ? args[0] : js_mkundef();
-  return ws_writer_write(js, js->this_val, chunk);
+  return ws_writer_write(js, call_this, chunk);
 }
 
 ant_value_t ws_writer_create(ant_t *js, ant_value_t stream_obj, ant_value_t new_target) {
@@ -934,48 +934,48 @@ ant_value_t js_ws_writer_ctor(ant_params_t) {
 }
 
 static ant_value_t js_ws_get_locked(ant_params_t) {
-  ws_stream_t *stream = ws_get_stream(js->this_val);
+  ws_stream_t *stream = ws_get_stream(call_this);
   if (!stream) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid WritableStream");
-  return js_bool(ws_is_writer(ws_stream_writer(js->this_val)));
+  return js_bool(ws_is_writer(ws_stream_writer(call_this)));
 }
 
 static ant_value_t js_ws_abort(ant_params_t) {
-  ws_stream_t *stream = ws_get_stream(js->this_val);
+  ws_stream_t *stream = ws_get_stream(call_this);
   if (!stream) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid WritableStream");
   
-  if (ws_is_writer(ws_stream_writer(js->this_val))) {
+  if (ws_is_writer(ws_stream_writer(call_this))) {
     ant_value_t p = js_mkpromise(js);
     js_reject_promise(js, p, Ant_Error_Create(js, JS_ERR_TYPE, "Cannot abort a locked WritableStream"));
     return p;
   }
   
   ant_value_t reason = (nargs > 0) ? args[0] : js_mkundef();
-  return writable_stream_abort(js, js->this_val, reason);
+  return writable_stream_abort(js, call_this, reason);
 }
 
 static ant_value_t js_ws_close(ant_params_t) {
-  ws_stream_t *stream = ws_get_stream(js->this_val);
+  ws_stream_t *stream = ws_get_stream(call_this);
   if (!stream) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid WritableStream");
   
-  if (ws_is_writer(ws_stream_writer(js->this_val))) {
+  if (ws_is_writer(ws_stream_writer(call_this))) {
     ant_value_t p = js_mkpromise(js);
     js_reject_promise(js, p, Ant_Error_Create(js, JS_ERR_TYPE, "Cannot close a locked WritableStream"));
     return p;
   }
   
-  if (writable_stream_close_queued_or_in_flight(js->this_val)) {
+  if (writable_stream_close_queued_or_in_flight(call_this)) {
     ant_value_t p = js_mkpromise(js);
     js_reject_promise(js, p, Ant_Error_Create(js, JS_ERR_TYPE, "Cannot close an already-closing stream"));
     return p;
   }
   
-  return writable_stream_close(js, js->this_val);
+  return writable_stream_close(js, call_this);
 }
 
 static ant_value_t js_ws_get_writer(ant_params_t) {
-  ws_stream_t *stream = ws_get_stream(js->this_val);
+  ws_stream_t *stream = ws_get_stream(call_this);
   if (!stream) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid WritableStream");
-  return ws_writer_create(js, js->this_val, js_mkundef());
+  return ws_writer_create(js, call_this, js_mkundef());
 }
 
 static ant_value_t setup_ws_default_controller(

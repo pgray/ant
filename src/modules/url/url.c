@@ -21,7 +21,7 @@ static inline ant_value_t url_illegal_invocation(ant_t *js) {
 }
 
 static ant_value_t url_get_href(ant_params_t) {
-  url_state_t *s = url_get_state(js->this_val);
+  url_state_t *s = url_get_state(call_this);
   if (!s) return url_illegal_invocation(js);
   if (s->href) return js_mkstr(js, s->href, strlen(s->href));
   
@@ -35,25 +35,25 @@ static ant_value_t url_get_href(ant_params_t) {
 }
 
 static ant_value_t url_get_protocol(ant_params_t) {
-  url_state_t *s = url_get_state(js->this_val);
+  url_state_t *s = url_get_state(call_this);
   if (!s) return url_illegal_invocation(js);
   return js_mkstr(js, s->protocol, strlen(s->protocol));
 }
 
 static ant_value_t url_get_username(ant_params_t) {
-  url_state_t *s = url_get_state(js->this_val);
+  url_state_t *s = url_get_state(call_this);
   if (!s) return url_illegal_invocation(js);
   return js_mkstr(js, s->username, strlen(s->username));
 }
 
 static ant_value_t url_get_password(ant_params_t) {
-  url_state_t *s = url_get_state(js->this_val);
+  url_state_t *s = url_get_state(call_this);
   if (!s) return url_illegal_invocation(js);
   return js_mkstr(js, s->password, strlen(s->password));
 }
 
 static ant_value_t url_get_host(ant_params_t) {
-  url_state_t *s = url_get_state(js->this_val);
+  url_state_t *s = url_get_state(call_this);
   if (!s) return url_illegal_invocation(js);
   if (s->port && *s->port) {
     size_t len = strlen(s->hostname) + strlen(s->port) + 2;
@@ -67,39 +67,39 @@ static ant_value_t url_get_host(ant_params_t) {
 }
 
 static ant_value_t url_get_hostname(ant_params_t) {
-  url_state_t *s = url_get_state(js->this_val);
+  url_state_t *s = url_get_state(call_this);
   if (!s) return url_illegal_invocation(js);
   return js_mkstr(js, s->hostname, strlen(s->hostname));
 }
 
 static ant_value_t url_get_port(ant_params_t) {
-  url_state_t *s = url_get_state(js->this_val);
+  url_state_t *s = url_get_state(call_this);
   if (!s) return url_illegal_invocation(js);
   return js_mkstr(js, s->port, strlen(s->port));
 }
 
 static ant_value_t url_get_pathname(ant_params_t) {
-  url_state_t *s = url_get_state(js->this_val);
+  url_state_t *s = url_get_state(call_this);
   if (!s) return url_illegal_invocation(js);
   return js_mkstr(js, s->pathname, strlen(s->pathname));
 }
 
 static ant_value_t url_get_search(ant_params_t) {
-  url_state_t *s = url_get_state(js->this_val);
+  url_state_t *s = url_get_state(call_this);
   if (!s) return url_illegal_invocation(js);
   if (s->search[0] == '?' && s->search[1] == '\0') return js_mkstr(js, "", 0);
   return js_mkstr(js, s->search, strlen(s->search));
 }
 
 static ant_value_t url_get_hash(ant_params_t) {
-  url_state_t *s = url_get_state(js->this_val);
+  url_state_t *s = url_get_state(call_this);
   if (!s) return url_illegal_invocation(js);
   if (s->hash[0] == '#' && s->hash[1] == '\0') return js_mkstr(js, "", 0);
   return js_mkstr(js, s->hash, strlen(s->hash));
 }
 
 static ant_value_t url_get_origin(ant_params_t) {
-  url_state_t *s = url_get_state(js->this_val);
+  url_state_t *s = url_get_state(call_this);
   if (!s) return url_illegal_invocation(js);
 
   char *href = build_href(s);
@@ -121,23 +121,23 @@ static ant_value_t url_get_origin(ant_params_t) {
 }
 
 static ant_value_t url_get_searchParams(ant_params_t) {
-  url_state_t *s = url_get_state(js->this_val);
+  url_state_t *s = url_get_state(call_this);
   if (!s) return url_illegal_invocation(js);
   
-  ant_value_t usp = js_get_slot(js->this_val, SLOT_ENTRIES);
+  ant_value_t usp = js_get_slot(call_this, SLOT_ENTRIES);
   if (vtype(usp) == kTypeObject) return usp;
   
   const char *query = (s->search && s->search[0] == '?') ? s->search + 1 : "";
-  usp = make_usp_for_url(js, js->this_val, query);
+  usp = make_usp_for_url(js, call_this, query);
   
   if (is_err(usp)) return usp;
-  js_set_slot_wb(js, js->this_val, SLOT_ENTRIES, usp);
+  js_set_slot_wb(js, call_this, SLOT_ENTRIES, usp);
   
   return usp;
 }
 
 static ant_value_t url_set_href(ant_params_t) {
-  url_state_t *s = url_get_state(js->this_val);
+  url_state_t *s = url_get_state(call_this);
   if (!s) return url_illegal_invocation(js);
 
   ant_value_t value = url_string_value(js, nargs ? args[0] : js_mkundef());
@@ -154,71 +154,71 @@ static ant_value_t url_set_href(ant_params_t) {
   *s = tmp;
   
   const char *q = (s->search[0] == '?') ? s->search + 1 : "";
-  url_sync_usp(js, js->this_val, q);
+  url_sync_usp(js, call_this, q);
   
   return js_mkundef();
 }
 
 static ant_value_t url_set_protocol(ant_params_t) {
-  url_state_t *s = url_get_state(js->this_val);
+  url_state_t *s = url_get_state(call_this);
   if (!s) return url_illegal_invocation(js);
   return url_apply_setter(js, s, nargs ? args[0] : js_mkundef(), ada_set_protocol);
 }
 
 static ant_value_t url_set_username(ant_params_t) {
-  url_state_t *s = url_get_state(js->this_val);
+  url_state_t *s = url_get_state(call_this);
   if (!s) return url_illegal_invocation(js);
   return url_apply_setter(js, s, nargs ? args[0] : js_mkundef(), ada_set_username);
 }
 
 static ant_value_t url_set_password(ant_params_t) {
-  url_state_t *s = url_get_state(js->this_val);
+  url_state_t *s = url_get_state(call_this);
   if (!s) return url_illegal_invocation(js);
   return url_apply_setter(js, s, nargs ? args[0] : js_mkundef(), ada_set_password);
 }
 
 static ant_value_t url_set_host(ant_params_t) {
-  url_state_t *s = url_get_state(js->this_val);
+  url_state_t *s = url_get_state(call_this);
   if (!s) return url_illegal_invocation(js);
   return url_apply_setter(js, s, nargs ? args[0] : js_mkundef(), ada_set_host);
 }
 
 static ant_value_t url_set_hostname(ant_params_t) {
-  url_state_t *s = url_get_state(js->this_val);
+  url_state_t *s = url_get_state(call_this);
   if (!s) return url_illegal_invocation(js);
   return url_apply_setter(js, s, nargs ? args[0] : js_mkundef(), ada_set_hostname);
 }
 
 static ant_value_t url_set_port(ant_params_t) {
-  url_state_t *s = url_get_state(js->this_val);
+  url_state_t *s = url_get_state(call_this);
   if (!s) return url_illegal_invocation(js);
   return url_apply_setter(js, s, nargs ? args[0] : js_mkundef(), ada_set_port);
 }
 
 static ant_value_t url_set_pathname(ant_params_t) {
-  url_state_t *s = url_get_state(js->this_val);
+  url_state_t *s = url_get_state(call_this);
   if (!s) return url_illegal_invocation(js);
   return url_apply_setter(js, s, nargs ? args[0] : js_mkundef(), ada_set_pathname);
 }
 
 static ant_value_t url_set_search(ant_params_t) {
-  url_state_t *s = url_get_state(js->this_val);
+  url_state_t *s = url_get_state(call_this);
   if (!s) return url_illegal_invocation(js);
   ant_value_t result = url_apply_setter(js, s, nargs ? args[0] : js_mkundef(), ada_set_search_bool);
   if (is_err(result)) return result;
   const char *query = s->search && s->search[0] == '?' ? s->search + 1 : "";
-  url_sync_usp(js, js->this_val, query);
+  url_sync_usp(js, call_this, query);
   return result;
 }
 
 static ant_value_t url_set_hash(ant_params_t) {
-  url_state_t *s = url_get_state(js->this_val);
+  url_state_t *s = url_get_state(call_this);
   if (!s) return url_illegal_invocation(js);
   return url_apply_setter(js, s, nargs ? args[0] : js_mkundef(), ada_set_hash_bool);
 }
 
 static ant_value_t url_toString(ant_params_t) {
-  url_state_t *s = url_get_state(js->this_val);
+  url_state_t *s = url_get_state(call_this);
   if (!s) return url_illegal_invocation(js);
   if (s->href) return js_mkstr(js, s->href, strlen(s->href));
   

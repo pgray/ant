@@ -187,8 +187,7 @@ static ant_value_t builtin_function_empty(ant_params_t) {
 }
 
 ant_value_t builtin_function_call(ant_params_t) {
-  ant_value_t func = js->this_val;
-  if (vtype(func) != kTypeFunction && vtype(func) != kTypeBuiltin) {
+  if (vtype(call_this) != kTypeFunction && vtype(call_this) != kTypeBuiltin) {
     return js_mkerr(js, "call requires a function");
   }
   
@@ -198,12 +197,11 @@ ant_value_t builtin_function_call(ant_params_t) {
   int call_nargs = (nargs > 1) ? nargs - 1 : 0;
   if (call_nargs > 0) call_args = &args[1];
 
-  return sv_vm_call_explicit_this(js->vm, js, func, this_arg, call_args, call_nargs);
+  return sv_vm_call_explicit_this(js->vm, js, call_this, this_arg, call_args, call_nargs);
 }
 
 static ant_value_t builtin_function_toString(ant_params_t) {
-  ant_value_t func = js->this_val;
-  uint8_t t = vtype(func);
+  uint8_t t = vtype(call_this);
   
   if (t != kTypeFunction && t != kTypeBuiltin) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Function.prototype.toString requires that 'this' be a Function");
@@ -212,7 +210,7 @@ static ant_value_t builtin_function_toString(ant_params_t) {
   // TODO: make dry
   if (t == kTypeBuiltin) {
     ant_offset_t name_len = 0;
-    const char *name = get_func_name(js, func, &name_len);
+    const char *name = get_func_name(js, call_this, &name_len);
     if (name && name_len > 0) {
       size_t total = 9 + name_len + 21 + 1;
       char *buf = calloc(1, total);
@@ -227,18 +225,18 @@ static ant_value_t builtin_function_toString(ant_params_t) {
     return Ant_String_FromLiteral(js, "function() { [native code] }");
   }
   
-  sv_closure_t *bound = js_func_closure(func);
+  sv_closure_t *bound = js_func_closure(call_this);
   if (bound && (bound->call_flags & SV_CALL_HAS_BOUND_THIS))
     return Ant_String_FromLiteral(js, "function () { [native code] }");
 
-  ant_value_t func_obj = js_func_obj(func);
+  ant_value_t func_obj = js_func_obj(call_this);
   ant_value_t cfunc_slot = get_slot(func_obj, SLOT_CFUNC);
   
   // TODO: make dry
   // native, unless it carries source text (a body-less dynamic function)
   if (vtype(cfunc_slot) == kTypeBuiltin && !func_has_code(get_slot(func_obj, SLOT_CODE))) {
     ant_offset_t name_len = 0;
-    const char *name = get_func_name(js, func, &name_len);
+    const char *name = get_func_name(js, call_this, &name_len);
     if (name && name_len > 0) {
       size_t total = 9 + name_len + 21 + 1;
       char *buf = calloc(1, total);
@@ -262,7 +260,7 @@ static ant_value_t builtin_function_toString(ant_params_t) {
     
     if (code && code_len > 0) {
       ant_value_t async_slot = get_slot(func_obj, SLOT_ASYNC);
-      sv_closure_t *closure = js_func_closure(func);
+      sv_closure_t *closure = js_func_closure(call_this);
       
       bool is_async = (async_slot == js_true);
       bool is_arrow = closure && (closure->call_flags & SV_CALL_IS_ARROW) != 0;
@@ -294,7 +292,7 @@ static ant_value_t builtin_function_toString(ant_params_t) {
     }
   }
   
-  sv_closure_t *cl = js_func_closure(func);
+  sv_closure_t *cl = js_func_closure(call_this);
   if (cl->func != NULL) {
     sv_func_t *fn = cl->func;
     if (fn && fn->debug->source && fn->debug->source_end > fn->debug->source_start) {
@@ -306,7 +304,7 @@ static ant_value_t builtin_function_toString(ant_params_t) {
   }
 
   char stack_buf[256];
-  js_cstr_t text = js_to_cstr(js, func, stack_buf, sizeof(stack_buf));
+  js_cstr_t text = js_to_cstr(js, call_this, stack_buf, sizeof(stack_buf));
   
   ant_value_t result = js_mkstr(js, text.ptr, text.len);
   if (text.needs_free) free((void *)text.ptr);
@@ -315,15 +313,14 @@ static ant_value_t builtin_function_toString(ant_params_t) {
 }
 
 ant_value_t builtin_function_apply(ant_params_t) {
-  ant_value_t func = js->this_val;
-  if (vtype(func) != kTypeFunction && vtype(func) != kTypeBuiltin)
+  if (vtype(call_this) != kTypeFunction && vtype(call_this) != kTypeBuiltin)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Function.prototype.apply requires that 'this' be a Function");
   
   ant_value_t this_arg = (nargs > 0) ? args[0] : js_mkundef();
   ant_value_t arg_array = (nargs > 1) ? args[1] : js_mkundef();
   
   if (vtype(arg_array) == kTypeUndefined || vtype(arg_array) == kTypeNull)
-    return sv_vm_call_explicit_this(js->vm, js, func, this_arg, NULL, 0);
+    return sv_vm_call_explicit_this(js->vm, js, call_this, this_arg, NULL, 0);
   if (!is_object_type(arg_array) && vtype(arg_array) != kTypeBuiltin)
     return js_mkerr_typed(js, JS_ERR_TYPE, "CreateListFromArrayLike called on non-object");
 
@@ -331,7 +328,7 @@ ant_value_t builtin_function_apply(ant_params_t) {
   ant_value_t err = Ant_ArgList_FromArrayLike(js, arg_array, &list);
   if (is_err(err)) return err;
 
-  ant_value_t result = sv_vm_call_explicit_this(js->vm, js, func, this_arg, list.args, list.argc);
+  ant_value_t result = sv_vm_call_explicit_this(js->vm, js, call_this, this_arg, list.args, list.argc);
   Ant_ArgList_Release(&list);
   
   return result;
@@ -350,17 +347,16 @@ bool js_is_function_apply_builtin(ant_value_t func) {
 }
 
 static ant_value_t builtin_bound_proxy_call(ant_params_t) {
-  ant_value_t bound = js->current_func;
-  if (vtype(bound) != kTypeFunction) return js_mkerr_typed(js, JS_ERR_TYPE, "invalid bound proxy call");
+  if (vtype(call_func) != kTypeFunction) return js_mkerr_typed(js, JS_ERR_TYPE, "invalid bound proxy call");
 
-  ant_value_t target = js_get_slot(js_func_obj(bound), SLOT_TARGET_FUNC);
+  ant_value_t target = js_get_slot(js_func_obj(call_func), SLOT_TARGET_FUNC);
   if (vtype(target) == kTypeUndefined) return js_mkerr_typed(js, JS_ERR_TYPE, "invalid bound proxy target");
 
   if (vtype(call_new_target) != kTypeUndefined) {
     return js_proxy_construct(js, target, args, nargs, call_new_target);
   }
 
-  return sv_vm_call(js->vm, js, target, js->this_val, args, nargs, NULL, js_mkundef());
+  return sv_vm_call(js->vm, js, target, call_this, args, nargs, NULL, js_mkundef());
 }
 
 static __attribute__((noinline, cold))
@@ -449,14 +445,13 @@ ant_value_t js_define_function_length(ant_t *js, ant_value_t fn, int length) {
 }
 
 static ant_value_t builtin_function_bind(ant_params_t) {
-  ant_value_t func = js->this_val;
-  uint8_t func_type = vtype(func);
-  bool func_is_proxy = func_type == kTypeObject && is_proxy(func);
+  uint8_t func_type = vtype(call_this);
+  bool func_is_proxy = func_type == kTypeObject && is_proxy(call_this);
   
   if (func_type != kTypeFunction && func_type != kTypeBuiltin && !func_is_proxy) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "bind requires a function");
   }
-  if (func_is_proxy && !is_callable(func)) {
+  if (func_is_proxy && !is_callable(call_this)) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "bind requires a function");
   }
 
@@ -467,13 +462,13 @@ static ant_value_t builtin_function_bind(ant_params_t) {
   int orig_length = 0;
   
   if (func_is_proxy) {
-    ant_value_t has_length = proxy_has_own(js, func, js->length_str);
+    ant_value_t has_length = proxy_has_own(js, call_this, js->length_str);
     if (is_err(has_length)) return has_length;
-    ant_value_t len_val = proxy_get(js, func, "length", 6);
+    ant_value_t len_val = proxy_get(js, call_this, "length", 6);
     if (is_err(len_val)) return len_val;
     if (vtype(len_val) == kTypeNumber) orig_length = (int) Ant_Value_AsNumberUnchecked(len_val);
   } else {
-    ant_value_t target = func_type == kTypeBuiltin ? js_cfunc_lookup_promoted(js, func) : func;
+    ant_value_t target = func_type == kTypeBuiltin ? js_cfunc_lookup_promoted(js, call_this) : call_this;
     ant_value_t len_val = vtype(target) == kTypeBuiltin
       ? js_cfunc_length_value(target)
       : lkp_interned_val(js, js_func_obj(target), js->intern.length);
@@ -487,16 +482,16 @@ static ant_value_t builtin_function_bind(ant_params_t) {
   size_t target_name_len = 0;
   ant_value_t target_name_val = js_mkundef();
   if (func_is_proxy) {
-    target_name_val = proxy_get(js, func, "name", 4);
+    target_name_val = proxy_get(js, call_this, "name", 4);
     if (is_err(target_name_val)) return target_name_val;
   } else if (func_type == kTypeBuiltin) {
-    const ant_cfunc_meta_t *meta = js_as_cfunc_meta(func);
+    const ant_cfunc_meta_t *meta = js_as_cfunc_meta(call_this);
     if (meta && meta->name) {
       target_name = meta->name;
       target_name_len = strlen(meta->name);
     }
   } else {
-    target_name_val = js_getprop_fallback(js, func, "name");
+    target_name_val = js_getprop_fallback(js, call_this, "name");
   }
   if (vtype(target_name_val) == kTypeString) {
     ant_offset_t nlen = 0;
@@ -510,7 +505,7 @@ static ant_value_t builtin_function_bind(ant_params_t) {
     if (is_err(bound_func)) return bound_func;
 
     set_slot(bound_func, SLOT_CFUNC, Ant_Function_Create(builtin_bound_proxy_call));
-    set_slot(bound_func, SLOT_TARGET_FUNC, func);
+    set_slot(bound_func, SLOT_TARGET_FUNC, call_this);
 
     ant_value_t func_proto = get_slot(js_glob(js), SLOT_FUNC_PROTO);
     if (vtype(func_proto) == kTypeFunction) js_set_proto_init(bound_func, func_proto);
@@ -536,7 +531,7 @@ static ant_value_t builtin_function_bind(ant_params_t) {
     );
     
     if (is_err(name_result)) return name_result;
-    js_mark_constructor(bound_func, js_is_constructor(func));
+    js_mark_constructor(bound_func, js_is_constructor(call_this));
 
     return bound;
   }
@@ -545,14 +540,14 @@ static ant_value_t builtin_function_bind(ant_params_t) {
     ant_value_t bound_func = mkobj(js, 0);
     if (is_err(bound_func)) return bound_func;
     
-    set_slot(bound_func, SLOT_CFUNC, func);
-    set_slot(bound_func, SLOT_TARGET_FUNC, func);
+    set_slot(bound_func, SLOT_CFUNC, call_this);
+    set_slot(bound_func, SLOT_TARGET_FUNC, call_this);
     
     ant_value_t func_proto = get_slot(js_glob(js), SLOT_FUNC_PROTO);
     if (vtype(func_proto) == kTypeFunction) js_set_proto_init(bound_func, func_proto);
 
     uint8_t bind_flags = SV_CALL_HAS_BOUND_THIS;
-    if (js_as_cfunc(func) == builtin_function_call) bind_flags |= SV_CALL_IS_UNCURRY;
+    if (js_as_cfunc(call_this) == builtin_function_call) bind_flags |= SV_CALL_IS_UNCURRY;
     if (bound_argc > 0) bind_flags |= SV_CALL_HAS_BOUND_ARGS;
     
     ant_value_t bound = js_obj_to_func_ex(js, bound_func, bind_flags);
@@ -575,16 +570,16 @@ static ant_value_t builtin_function_bind(ant_params_t) {
     );
     
     if (is_err(name_result)) return name_result;
-    js_mark_constructor(bound_func, js_is_constructor(func));
+    js_mark_constructor(bound_func, js_is_constructor(call_this));
     
     return bound;
   }
 
-  ant_value_t func_obj = js_func_obj(func);
+  ant_value_t func_obj = js_func_obj(call_this);
   ant_value_t bound_func = mkobj(js, 0);
   if (is_err(bound_func)) return bound_func;
 
-  sv_closure_t *orig = js_func_closure(func);
+  sv_closure_t *orig = js_func_closure(call_this);
   sv_closure_t *bound_closure = js_closure_alloc(js);
   if (!bound_closure) return js_mkerr(js, "oom");
   
@@ -630,7 +625,7 @@ static ant_value_t builtin_function_bind(ant_params_t) {
     set_slot(bound_func, SLOT_ASYNC, js_true);
   }
 
-  ant_value_t target_proto = get_proto(js, func);
+  ant_value_t target_proto = get_proto(js, call_this);
   if (is_object_type(target_proto) || vtype(target_proto) == kTypeNull) {
     js_set_proto_init(bound_func, target_proto);
   } else if (vtype(async_slot) == kTypeBool && vdata(async_slot) == 1) {
@@ -651,7 +646,7 @@ static ant_value_t builtin_function_bind(ant_params_t) {
     js_set_slot_wb(js, bound_func, SLOT_EVAL_ENV, eval_env);
 
   ant_value_t cfunc_slot = get_slot(func_obj, SLOT_CFUNC);
-  ant_value_t call_target = js_resolve_bound_target(func);
+  ant_value_t call_target = js_resolve_bound_target(call_this);
   set_slot(bound_func, SLOT_TARGET_FUNC, call_target);
   
   if (bound_argc > 0 || orig_bound_argc > 0) {
@@ -682,13 +677,13 @@ static ant_value_t builtin_function_bind(ant_params_t) {
   
   if (is_err(name_result)) return name_result;
   ant_value_t bound = mkref(kTypeFunction, bound_closure);
-  js_mark_constructor(bound_func, js_is_constructor(func));
+  js_mark_constructor(bound_func, js_is_constructor(call_this));
   
   return bound;
 }
 
 static ant_value_t builtin_function_has_instance(ant_params_t) {
-  return ordinary_has_instance(js, nargs > 0 ? args[0] : js_mkundef(), js->this_val);
+  return ordinary_has_instance(js, nargs > 0 ? args[0] : js_mkundef(), call_this);
 }
 
 void js_init_function_has_instance(ant_t *js) {

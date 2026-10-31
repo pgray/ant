@@ -81,7 +81,6 @@ static void set_constants(ant_t *js, ant_value_t obj) {
 static ant_value_t domexception_ctor(ant_params_t) {
   if (vtype(call_new_target) == kTypeUndefined)
     return js_mkerr_typed(js, JS_ERR_TYPE, "DOMException constructor requires 'new'");
-  ant_value_t self = js_getthis(js);
 
   const char *msg;
   if (nargs < 1 || vtype(args[0]) == kTypeUndefined) {
@@ -102,12 +101,12 @@ static ant_value_t domexception_ctor(ant_params_t) {
   size_t msg_len  = strlen(msg);
   size_t name_len = strlen(name);
 
-  js_set(js, self, "message", js_mkstr(js, msg,  msg_len));
-  js_set(js, self, "name",    js_mkstr(js, name, name_len));
-  js_set(js, self, "code",    Ant_Value_FromNumber(code));
+  js_set(js, call_this, "message", js_mkstr(js, msg,  msg_len));
+  js_set(js, call_this, "name",    js_mkstr(js, name, name_len));
+  js_set(js, call_this, "code",    Ant_Value_FromNumber(code));
 
-  js_set_slot(self, SLOT_ERROR_BRAND, js_true);
-  js_capture_stack_above(js, self, call_new_target);
+  js_set_slot(call_this, SLOT_ERROR_BRAND, js_true);
+  js_capture_stack_above(js, call_func, call_this, call_new_target);
   
   return js_mkundef();
 }

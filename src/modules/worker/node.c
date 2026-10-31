@@ -61,7 +61,7 @@ static const worker_ops_t node_worker_ops = {
 };
 
 static ant_value_t js_worker_elu(ant_params_t) {
-  ant_worker_t *w = worker_data(js_func_data(js->current_func));
+  ant_worker_t *w = worker_data(js_func_data(call_func));
   if (!w || w->exited) return ant_performance_elu_zero(js);
 
   ant_value_t pair;
@@ -113,12 +113,11 @@ static ant_value_t js_worker_ctor(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Class constructor Worker cannot be invoked without 'new'");
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "The \"filename\" argument must be of type string or an instance of URL");
 
-  ant_value_t this_obj = js_getthis(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.worker_proto, call_new_target);
-  if (is_object_type(proto)) js_set_proto_init(this_obj, proto);
+  if (is_object_type(proto)) js_set_proto_init(call_this, proto);
 
   ant_value_t options = nargs > 1 && is_object_type(args[1]) ? args[1] : js_mkundef();
-  ant_worker_t *w = worker_new(js, this_obj, &node_worker_ops);
+  ant_worker_t *w = worker_new(js, call_this, &node_worker_ops);
   if (!w) return Ant_Error_CreateOutOfMemory(js);
 
   w->is_eval = node_worker_flag(js, options, "eval");
@@ -141,22 +140,22 @@ static ant_value_t js_worker_ctor(ant_params_t) {
   }
 
   node_worker_define_props(js, w);
-  return this_obj;
+  return call_this;
 }
 
-static ant_worker_t *worker_this(ant_t *js) {
-  return worker_data(js_getthis(js));
+static ant_worker_t *worker_this(ant_t *js, ant_value_t call_this) {
+  return worker_data(call_this);
 }
 
 static ant_value_t js_worker_post_message(ant_params_t) {
-  ant_worker_t *w = worker_this(js);
+  ant_worker_t *w = worker_this(js, call_this);
   if (!w) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
   if (w->exited || !w->binding) return js_mkundef();
   return ant_port_binding_post(js, w->binding, nargs > 0 ? args[0] : js_mkundef(), worker_transfer_arg(js, args, nargs));
 }
 
 static ant_value_t js_worker_terminate(ant_params_t) {
-  ant_worker_t *w = worker_this(js);
+  ant_worker_t *w = worker_this(js, call_this);
   if (!w) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
 
   ant_value_t promise = js_mkpromise(js);
@@ -173,19 +172,19 @@ static ant_value_t js_worker_terminate(ant_params_t) {
 }
 
 static ant_value_t js_worker_ref(ant_params_t) {
-  ant_worker_t *w = worker_this(js);
+  ant_worker_t *w = worker_this(js, call_this);
   if (w) worker_set_ref(w, true);
   return js_mkundef();
 }
 
 static ant_value_t js_worker_unref(ant_params_t) {
-  ant_worker_t *w = worker_this(js);
+  ant_worker_t *w = worker_this(js, call_this);
   if (w) worker_set_ref(w, false);
   return js_mkundef();
 }
 
 static ant_value_t js_worker_has_ref(ant_params_t) {
-  ant_worker_t *w = worker_this(js);
+  ant_worker_t *w = worker_this(js, call_this);
   return js_bool(w && !w->exited && w->refed);
 }
 

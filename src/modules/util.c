@@ -1200,8 +1200,7 @@ static ant_value_t util_style_text(ant_params_t) {
 }
 
 static ant_value_t util_promisify_callback(ant_params_t) {
-  ant_value_t fn = js->current_func;
-  ant_value_t ctx = js_get_slot(fn, SLOT_DATA);
+  ant_value_t ctx = js_get_slot(call_func, SLOT_DATA);
   if (!is_object_type(ctx)) return js_mkundef();
 
   ant_value_t settled = js_get_slot(ctx, SLOT_SETTLED);
@@ -1233,8 +1232,7 @@ static ant_value_t util_promisify_callback(ant_params_t) {
 }
 
 static ant_value_t util_promisified_call(ant_params_t) {
-  ant_value_t fn = js->current_func;
-  ant_value_t original = js_get_slot(fn, SLOT_DATA);
+  ant_value_t original = js_get_slot(call_func, SLOT_DATA);
   if (!is_callable(original)) return js_mkerr(js, "promisified target is not callable");
 
   ant_value_t promise = js_mkpromise(js);
@@ -1255,9 +1253,8 @@ static ant_value_t util_promisified_call(ant_params_t) {
   GC_ROOT_PIN(js, cb);
   GC_ROOT_PIN(js, ctx);
   
-  ant_value_t this_arg = js_getthis(js);
   ant_value_t call_result = sv_vm_call(
-    js->vm, js, original, this_arg, 
+    js->vm, js, original, call_this, 
     call_args, nargs + 1, NULL, js_mkundef()
   );
   
@@ -1279,7 +1276,7 @@ static ant_value_t util_promisified_call(ant_params_t) {
 }
 
 static ant_value_t util_callbackify_success(ant_params_t) {
-  ant_value_t state = js_func_data(js->current_func);
+  ant_value_t state = js_func_data(call_func);
   if (!is_object_type(state)) return js_mkundef();
 
   ant_value_t callback = js_get_slot(state, SLOT_DATA);
@@ -1294,7 +1291,7 @@ static ant_value_t util_callbackify_success(ant_params_t) {
 }
 
 static ant_value_t util_callbackify_error(ant_params_t) {
-  ant_value_t state = js_func_data(js->current_func);
+  ant_value_t state = js_func_data(call_func);
   if (!is_object_type(state)) return js_mkundef();
 
   ant_value_t callback = js_get_slot(state, SLOT_DATA);
@@ -1307,8 +1304,7 @@ static ant_value_t util_callbackify_error(ant_params_t) {
 }
 
 static ant_value_t util_callbackified_call(ant_params_t) {
-  ant_value_t fn = js->current_func;
-  ant_value_t original = js_get_slot(fn, SLOT_DATA);
+  ant_value_t original = js_get_slot(call_func, SLOT_DATA);
   
   if (!is_callable(original)) return js_mkerr(js, "callbackified target is not callable");
   if (nargs < 1 || !is_callable(args[nargs - 1]))
@@ -1324,7 +1320,7 @@ static ant_value_t util_callbackified_call(ant_params_t) {
     for (int i = 0; i < call_nargs; i++) call_args[i] = args[i];
   }
 
-  ant_value_t result = sv_vm_call(js->vm, js, original, js_getthis(js), call_args, call_nargs, NULL, js_mkundef());
+  ant_value_t result = sv_vm_call(js->vm, js, original, call_this, call_args, call_nargs, NULL, js_mkundef());
   free(call_args);
 
   if (is_err(result) || Ant_Exception_Pending(js)) {
@@ -1355,8 +1351,7 @@ static ant_value_t util_callbackified_call(ant_params_t) {
 }
 
 static ant_value_t util_deprecated_call(ant_params_t) {
-  ant_value_t fn = js->current_func;
-  ant_value_t ctx = js_get_slot(fn, SLOT_DATA);
+  ant_value_t ctx = js_get_slot(call_func, SLOT_DATA);
   if (!is_object_type(ctx)) return js_mkundef();
 
   ant_value_t warned = js_get_slot(ctx, SLOT_SETTLED);
@@ -1368,8 +1363,7 @@ static ant_value_t util_deprecated_call(ant_params_t) {
   }
 
   ant_value_t original = js_get_slot(ctx, SLOT_DATA);
-  ant_value_t this_arg = js_getthis(js);
-  return sv_vm_call(js->vm, js, original, this_arg, args, nargs, NULL, js_mkundef());
+  return sv_vm_call(js->vm, js, original, call_this, args, nargs, NULL, js_mkundef());
 }
 
 static ant_value_t util_deprecate(ant_params_t) {
@@ -1403,7 +1397,7 @@ static ant_value_t util_callbackify(ant_params_t) {
 }
 
 static ant_value_t util_aborted_listener(ant_params_t) {
-  ant_value_t promise = js_func_data(js->current_func);
+  ant_value_t promise = js_func_data(call_func);
   if (vtype(promise) == kTypePromise) js_resolve_promise(js, promise, js_mkundef());
   return js_mkundef();
 }

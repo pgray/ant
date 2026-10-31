@@ -137,12 +137,12 @@ static __attribute__((cold, noinline)) ant_value_t abort_this_error(ant_t *js, c
 }
 
 static ant_value_t abort_signal_get_aborted(ant_params_t) {
-  abort_signal_data_t *data = get_signal_data(js_getthis(js));
+  abort_signal_data_t *data = get_signal_data(call_this);
   return data ? data->aborted : abort_this_error(js, "AbortSignal");
 }
 
 static ant_value_t abort_signal_get_reason_fn(ant_params_t) {
-  abort_signal_data_t *data = get_signal_data(js_getthis(js));
+  abort_signal_data_t *data = get_signal_data(call_this);
   return data ? data->reason : abort_this_error(js, "AbortSignal");
 }
 
@@ -153,12 +153,12 @@ static ant_value_t abort_signal_invalid_this(ant_t *js, ant_value_t this_obj) {
 ANT_EVENT_HANDLER_ACCESSORS(abort_signal, abort, abort_signal_invalid_this)
 
 static ant_value_t abort_signal_inspect(ant_params_t) {
-  abort_signal_data_t *data = get_signal_data(js_getthis(js));
+  abort_signal_data_t *data = get_signal_data(call_this);
   return data && signal_aborted(data) ? Ant_String_FromLiteral(js, "AbortSignal { aborted: true }") : Ant_String_FromLiteral(js, "AbortSignal { aborted: false }");
 }
 
 static ant_value_t abort_signal_throw_if_aborted(ant_params_t) {
-  abort_signal_data_t *data = get_signal_data(js_getthis(js));
+  abort_signal_data_t *data = get_signal_data(call_this);
   if (!data) return abort_this_error(js, "AbortSignal");
   return signal_aborted(data) ? js_throw(js, data->reason) : js_mkundef();
 }
@@ -268,27 +268,24 @@ static ant_value_t abort_signal_ctor(ant_params_t) {
 static ant_value_t abort_controller_ctor(ant_params_t) {
   if (vtype(call_new_target) == kTypeUndefined)
     return js_mkerr_typed(js, JS_ERR_TYPE, "AbortController constructor requires 'new'");
-  ant_value_t this_obj = js_getthis(js);
 
   ant_value_t signal = make_new_signal(js);
   if (is_err(signal)) return signal;
 
-  js_set_native(this_obj, get_signal_data(signal), ABORT_CONTROLLER_NATIVE_TAG);
-  js_set_slot_wb(js, this_obj, SLOT_DATA, signal);
+  js_set_native(call_this, get_signal_data(signal), ABORT_CONTROLLER_NATIVE_TAG);
+  js_set_slot_wb(js, call_this, SLOT_DATA, signal);
   return js_mkundef();
 }
 
 static ant_value_t abort_controller_get_signal(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  if (!is_object_type(this_obj) || !js_check_native_tag(this_obj, ABORT_CONTROLLER_NATIVE_TAG))
+  if (!is_object_type(call_this) || !js_check_native_tag(call_this, ABORT_CONTROLLER_NATIVE_TAG))
     return abort_this_error(js, "AbortController");
-  return js_get_slot(this_obj, SLOT_DATA);
+  return js_get_slot(call_this, SLOT_DATA);
 }
 
 // controller.abort(reason?)
 static ant_value_t abort_controller_abort(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  abort_signal_data_t *data = js_get_native(this_obj, ABORT_CONTROLLER_NATIVE_TAG);
+  abort_signal_data_t *data = js_get_native(call_this, ABORT_CONTROLLER_NATIVE_TAG);
   
   if (!data) return abort_this_error(js, "AbortController");
   if (signal_aborted(data)) return js_mkundef();
@@ -297,13 +294,12 @@ static ant_value_t abort_controller_abort(ant_params_t) {
     ? args[0]
     : make_abort_error(js);
 
-  signal_do_abort(js, js_get_slot(this_obj, SLOT_DATA), reason);
+  signal_do_abort(js, js_get_slot(call_this, SLOT_DATA), reason);
   return js_mkundef();
 }
 
 static ant_value_t abort_controller_inspect(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  abort_signal_data_t *data = js_get_native(this_obj, ABORT_CONTROLLER_NATIVE_TAG);
+  abort_signal_data_t *data = js_get_native(call_this, ABORT_CONTROLLER_NATIVE_TAG);
   return data && signal_aborted(data)
     ? Ant_String_FromLiteral(js, "AbortController { signal: AbortSignal { aborted: true } }")
     : Ant_String_FromLiteral(js, "AbortController { signal: AbortSignal { aborted: false } }");

@@ -153,13 +153,12 @@ static ant_value_t js_web_worker_ctor(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Constructor Worker requires 'new'");
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "Not enough arguments");
 
-  ant_value_t this_obj = js_getthis(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.web_worker_proto, call_new_target);
-  if (is_object_type(proto)) js_set_proto_init(this_obj, proto);
-  js_set_slot(this_obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_EVENTTARGET));
+  if (is_object_type(proto)) js_set_proto_init(call_this, proto);
+  js_set_slot(call_this, SLOT_BRAND, Ant_Value_FromNumber(BRAND_EVENTTARGET));
 
   ant_value_t options = nargs > 1 && is_object_type(args[1]) ? args[1] : js_mkundef();
-  ant_worker_t *w = worker_new(js, this_obj, &web_worker_ops);
+  ant_worker_t *w = worker_new(js, call_this, &web_worker_ops);
   if (!w) return Ant_Error_CreateOutOfMemory(js);
 
   ant_value_t error = js_mkundef();
@@ -179,41 +178,41 @@ static ant_value_t js_web_worker_ctor(ant_params_t) {
   ant_value_t ref = is_object_type(options) ? js_get(js, options, "ref") : js_mkundef();
   if (ref == js_false) worker_set_ref(w, false);
 
-  return this_obj;
+  return call_this;
 }
 
-static ant_worker_t *web_worker_this(ant_t *js) {
-  return worker_data(js_getthis(js));
+static ant_worker_t *web_worker_this(ant_t *js, ant_value_t call_this) {
+  return worker_data(call_this);
 }
 
 static ant_value_t js_web_worker_post_message(ant_params_t) {
-  ant_worker_t *w = web_worker_this(js);
+  ant_worker_t *w = web_worker_this(js, call_this);
   if (!w) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
   if (w->exited || !w->binding) return js_mkundef();
   return ant_port_binding_post(js, w->binding, nargs > 0 ? args[0] : js_mkundef(), worker_transfer_arg(js, args, nargs));
 }
 
 static ant_value_t js_web_worker_terminate(ant_params_t) {
-  ant_worker_t *w = web_worker_this(js);
+  ant_worker_t *w = web_worker_this(js, call_this);
   if (!w) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
   if (!w->exited) worker_request_stop(w, 0);
   return js_mkundef();
 }
 
 static ant_value_t js_web_worker_ref(ant_params_t) {
-  ant_worker_t *w = web_worker_this(js);
+  ant_worker_t *w = web_worker_this(js, call_this);
   if (w) worker_set_ref(w, true);
   return js_mkundef();
 }
 
 static ant_value_t js_web_worker_unref(ant_params_t) {
-  ant_worker_t *w = web_worker_this(js);
+  ant_worker_t *w = web_worker_this(js, call_this);
   if (w) worker_set_ref(w, false);
   return js_mkundef();
 }
 
 static ant_value_t js_web_worker_thread_id(ant_params_t) {
-  ant_worker_t *w = web_worker_this(js);
+  ant_worker_t *w = web_worker_this(js, call_this);
   return Ant_Value_FromNumber(w && !w->exited ? (double)w->thread_id : -1);
 }
 

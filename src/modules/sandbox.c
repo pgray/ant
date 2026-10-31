@@ -273,8 +273,8 @@ static ant_value_t sandbox_guest_on(ant_params_t) {
   const char *event = js_getstr(js, args[0], NULL);
   if (!event || strcmp(event, "message") != 0)
     return js_mkerr_typed(js, JS_ERR_TYPE, "parentPort only supports the 'message' event");
-  js_set(js, js->this_val, "_messageHandler", args[1]);
-  return js->this_val;
+  js_set(js, call_this, "_messageHandler", args[1]);
+  return call_this;
 }
 
 static ant_value_t sandbox_guest_close(ant_params_t) {
@@ -735,8 +735,8 @@ static ant_value_t sandbox_rejected(ant_t *js, ant_value_t error) {
   return promise;
 }
 
-static sandbox_state_t *sandbox_require_open_state(ant_t *js, ant_value_t *error_out) {
-  sandbox_state_t *state = sandbox_get_state(js->this_val);
+static sandbox_state_t *sandbox_require_open_state(ant_t *js, ant_value_t call_this, ant_value_t *error_out) {
+  sandbox_state_t *state = sandbox_get_state(call_this);
   if (!state) {
     *error_out = js_mkerr_typed(js, JS_ERR_TYPE, "Invalid Sandbox");
     return NULL;
@@ -1126,7 +1126,7 @@ static void sandbox_async_cb(uv_async_t *handle) {
 
 static ant_value_t sandbox_run(ant_params_t) {
   ant_value_t state_error = js_mkundef();
-  sandbox_state_t *state = sandbox_require_open_state(js, &state_error);
+  sandbox_state_t *state = sandbox_require_open_state(js, call_this, &state_error);
   
   if (!state) return sandbox_rejected(js, state_error);
   if (state->running)
@@ -1232,7 +1232,7 @@ static ant_value_t sandbox_run(ant_params_t) {
 
 static ant_value_t sandbox_eval(ant_params_t) {
   ant_value_t state_error = js_mkundef();
-  sandbox_state_t *state = sandbox_require_open_state(js, &state_error);
+  sandbox_state_t *state = sandbox_require_open_state(js, call_this, &state_error);
   
   if (!state) return sandbox_rejected(js, state_error);
   if (state->running)
@@ -1250,7 +1250,7 @@ static ant_value_t sandbox_eval(ant_params_t) {
 }
 
 static ant_value_t sandbox_close(ant_params_t) {
-  sandbox_state_t *state = sandbox_get_state(js->this_val);
+  sandbox_state_t *state = sandbox_get_state(call_this);
   ant_value_t promise = js_mkpromise(js);
   
   if (!state || state->closed) {
@@ -1323,7 +1323,7 @@ static ant_value_t sandbox_close(ant_params_t) {
 }
 
 static ant_value_t sandbox_send(ant_params_t) {
-  sandbox_state_t *state = sandbox_get_state(js->this_val);
+  sandbox_state_t *state = sandbox_get_state(call_this);
   if (!state || state->closed) return js_mkerr_typed(js, JS_ERR_TYPE, "Sandbox is closed");
   if (!state->running || !state->session)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Sandbox.send(value) requires a running entry");
@@ -1387,11 +1387,11 @@ static ant_value_t sandbox_wait_for_message(
 
 static ant_value_t sandbox_receive(ant_params_t) {
   (void)args; (void)nargs;
-  return sandbox_wait_for_message(js, sandbox_get_state(js->this_val), NULL, false);
+  return sandbox_wait_for_message(js, sandbox_get_state(call_this), NULL, false);
 }
 
 static ant_value_t sandbox_once(ant_params_t) {
-  sandbox_state_t *state = sandbox_get_state(js->this_val);
+  sandbox_state_t *state = sandbox_get_state(call_this);
   if (nargs < 1 || vtype(args[0]) != kTypeString)
     return sandbox_rejected(js, js_mkerr_typed(js, JS_ERR_TYPE,
       "Sandbox.once(type) requires a message type string"));
@@ -1401,16 +1401,16 @@ static ant_value_t sandbox_once(ant_params_t) {
 }
 
 static ant_value_t sandbox_messages_next(ant_params_t) {
-  return sandbox_wait_for_message(js, sandbox_get_state(js->this_val), NULL, true);
+  return sandbox_wait_for_message(js, sandbox_get_state(call_this), NULL, true);
 }
 
 static ant_value_t sandbox_messages_getter(ant_params_t) {
-  return js->this_val;
+  return call_this;
 }
 
 static ant_value_t sandbox_stats(ant_params_t) {
   (void)args; (void)nargs;
-  sandbox_state_t *state = sandbox_get_state(js->this_val);
+  sandbox_state_t *state = sandbox_get_state(call_this);
   if (!state) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid Sandbox receiver");
 
   ant_sandbox_vm_stats_t stats = state->last_stats;
@@ -1436,12 +1436,12 @@ static ant_value_t sandbox_on(ant_params_t) {
   const char *event = js_getstr(js, args[0], NULL);
   if (!event || strcmp(event, "message") != 0)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Sandbox only supports the 'message' event");
-  js_set(js, js->this_val, "_messageHandler", args[1]);
-  return js->this_val;
+  js_set(js, call_this, "_messageHandler", args[1]);
+  return call_this;
 }
 
 static ant_value_t sandbox_terminate(ant_params_t) {
-  sandbox_state_t *state = sandbox_get_state(js->this_val);
+  sandbox_state_t *state = sandbox_get_state(call_this);
   ant_value_t promise = js_mkpromise(js);
   
   if (!state || state->closed) {
@@ -1501,7 +1501,7 @@ ant_value_t sandbox_library(ant_t *js) {
     js_set(js, js->builtins.sandbox_proto, "close", Ant_Function_Create(sandbox_close));
     js_set(js, js->builtins.sandbox_proto, "terminate", Ant_Function_Create(sandbox_terminate));
     js_set_getter_desc(js, js->builtins.sandbox_proto, "messages", 8, Ant_Function_Create(sandbox_messages_getter), JS_DESC_C);
-    js_set_sym(js, js->builtins.sandbox_proto, js->sym.asyncIterator_sym, Ant_Function_Create(sym_this_cb));
+    js_set_sym(js, js->builtins.sandbox_proto, js->sym.asyncIterator_sym, Ant_Function_Create(js_return_this));
     js_set_tostringtag(js, js->builtins.sandbox_proto, js_mkstr(js, "Sandbox", 7));
     js->builtins.sandbox_ctor = Ant_Function_CreateConstructor(js, sandbox_ctor, js->builtins.sandbox_proto, "Sandbox", 0);
   }

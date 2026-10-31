@@ -59,8 +59,8 @@ ant_value_t iter_foreach(ant_t *js, ant_value_t iterable, iter_callback_t cb, vo
 ant_value_t iter_foreach_method(ant_t *js, ant_value_t iterable, ant_value_t iter_method, iter_callback_t cb, void *ctx);
 ant_value_t make_array_iterator(ant_t *js, ant_value_t array, array_iter_kind_t kind);
 
-static inline ant_value_t js_iter_next_result(ant_t *js, js_iter_advance_fn advance) {
-  iterator_t it = { .iterator = js->this_val };
+static inline ant_value_t js_iter_next_result(ant_t *js, ant_value_t call_this, js_iter_advance_fn advance) {
+  iterator_t it = { .iterator = call_this };
   ant_value_t value = js_mkundef();
   bool has_value = advance(js, &it, &value);
   return js_iter_result(js, has_value, value);

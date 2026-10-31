@@ -851,10 +851,10 @@ static ant_value_t builtin_Date(ant_params_t) {
     val = (i == n) ? date_make_fields(&fields, 1) : ANT_NAN;
   }
 
-  js_set_slot(js_as_obj(js->this_val), SLOT_DATA, Ant_Value_FromNumber(val));
-  js_set_slot(js_as_obj(js->this_val), SLOT_BRAND, Ant_Value_FromNumber(BRAND_DATE));
+  js_set_slot(js_as_obj(call_this), SLOT_DATA, Ant_Value_FromNumber(val));
+  js_set_slot(js_as_obj(call_this), SLOT_BRAND, Ant_Value_FromNumber(BRAND_DATE));
   
-  return js->this_val;
+  return call_this;
 }
 
 static ant_value_t builtin_Date_UTC(ant_params_t) {
@@ -889,11 +889,11 @@ static ant_value_t builtin_Date_now(ant_params_t) {
   return Ant_Value_FromNumber((double)date_now());
 }
 
-static ant_value_t date_get_field(ant_t *js, date_get_field_spec_t spec) {
+static ant_value_t date_get_field(ant_t *js, ant_value_t call_this, date_get_field_spec_t spec) {
   date_fields_t fields;
   ant_value_t err;
 
-  int res = date_extract_fields(js, js->this_val, &fields, spec.local_time, 0, &err);
+  int res = date_extract_fields(js, call_this, &fields, spec.local_time, 0, &err);
   if (res < 0) return err;
   if (!res) return Ant_Value_FromNumber(ANT_NAN);
 
@@ -901,13 +901,13 @@ static ant_value_t date_get_field(ant_t *js, date_get_field_spec_t spec) {
   return Ant_Value_FromNumber(date_fields_get(&fields, spec.field));
 }
 
-static ant_value_t date_set_field(ant_native_params_t, date_set_field_spec_t spec) {
+static ant_value_t date_set_field(ant_native_params_t, ant_value_t call_this, date_set_field_spec_t spec) {
   date_fields_t fields;
   ant_value_t err;
   double d = ANT_NAN;
 
   int res = date_extract_fields(
-    js, js->this_val,
+    js, call_this,
     &fields, spec.local_time,
     spec.first_field == DATE_FIELD_YEAR, &err
   );
@@ -917,71 +917,71 @@ static ant_value_t date_set_field(ant_native_params_t, date_set_field_spec_t spe
   
   for (int i = 0; i < n; i++) {
     double a = js_to_number(js, args[i]);
-    if (!isfinite(a)) return date_set_this_time_value(js, js->this_val, ANT_NAN);
+    if (!isfinite(a)) return date_set_this_time_value(js, call_this, ANT_NAN);
     date_fields_set(&fields, (date_field_index_t)(spec.first_field + i), trunc(a));
   }
 
   if (!res) return Ant_Value_FromNumber(ANT_NAN);
   if (nargs > 0) d = date_make_fields(&fields, spec.local_time);
 
-  return date_set_this_time_value(js, js->this_val, d);
+  return date_set_this_time_value(js, call_this, d);
 }
 
 static ant_value_t builtin_Date_valueOf(ant_params_t) {
   double v;
   ant_value_t err;
-  if (!date_this_time_value(js, js->this_val, &v, &err)) return err;
+  if (!date_this_time_value(js, call_this, &v, &err)) return err;
   return Ant_Value_FromNumber(v);
 }
 
 static ant_value_t builtin_Date_getTime(ant_params_t) {
-  return builtin_Date_valueOf(js, args, nargs, js_mkundef());
+  return builtin_Date_valueOf(js, args, nargs, js_mkundef(), call_this, call_func);
 }
 
 static ant_value_t builtin_Date_toUTCString(ant_params_t) {
   static const date_string_spec_t kSpec = {DATE_STRING_FMT_UTC, DATE_STRING_PART_ALL};
-  return get_date_string(js, js->this_val, kSpec);
+  return get_date_string(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_toString(ant_params_t) {
   static const date_string_spec_t kSpec = {DATE_STRING_FMT_LOCAL, DATE_STRING_PART_ALL};
-  return get_date_string(js, js->this_val, kSpec);
+  return get_date_string(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_toISOString(ant_params_t) {
   static const date_string_spec_t kSpec = {DATE_STRING_FMT_ISO, DATE_STRING_PART_ALL};
-  return get_date_string(js, js->this_val, kSpec);
+  return get_date_string(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_toDateString(ant_params_t) {
   static const date_string_spec_t kSpec = {DATE_STRING_FMT_LOCAL, DATE_STRING_PART_DATE};
-  return get_date_string(js, js->this_val, kSpec);
+  return get_date_string(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_toTimeString(ant_params_t) {
   static const date_string_spec_t kSpec = {DATE_STRING_FMT_LOCAL, DATE_STRING_PART_TIME};
-  return get_date_string(js, js->this_val, kSpec);
+  return get_date_string(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_toLocaleString(ant_params_t) {
   static const date_string_spec_t kSpec = {DATE_STRING_FMT_LOCALE, DATE_STRING_PART_ALL};
-  return get_date_string(js, js->this_val, kSpec);
+  return get_date_string(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_toLocaleDateString(ant_params_t) {
   static const date_string_spec_t kSpec = {DATE_STRING_FMT_LOCALE, DATE_STRING_PART_DATE};
-  return get_date_string(js, js->this_val, kSpec);
+  return get_date_string(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_toLocaleTimeString(ant_params_t) {
   static const date_string_spec_t kSpec = {DATE_STRING_FMT_LOCALE, DATE_STRING_PART_TIME};
-  return get_date_string(js, js->this_val, kSpec);
+  return get_date_string(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_getTimezoneOffset(ant_params_t) {
   double v;
   ant_value_t err;
-  if (!date_this_time_value(js, js->this_val, &v, &err)) return err;
+  if (!date_this_time_value(js, call_this, &v, &err)) return err;
   if (isnan(v)) return Ant_Value_FromNumber(ANT_NAN);
   return Ant_Value_FromNumber((double)get_timezone_offset((int64_t)trunc(v)));
 }
@@ -989,174 +989,174 @@ static ant_value_t builtin_Date_getTimezoneOffset(ant_params_t) {
 static ant_value_t builtin_Date_setTime(ant_params_t) {
   double cur;
   ant_value_t err;
-  if (!date_this_time_value(js, js->this_val, &cur, &err)) return err;
+  if (!date_this_time_value(js, call_this, &cur, &err)) return err;
 
   double v = (nargs > 0) ? js_to_number(js, args[0]) : ANT_NAN;
-  return date_set_this_time_value(js, js->this_val, date_timeclip(v));
+  return date_set_this_time_value(js, call_this, date_timeclip(v));
 }
 
 static ant_value_t builtin_Date_getYear(ant_params_t) {
   static const date_get_field_spec_t kSpec = {DATE_FIELD_YEAR, true, true};
-  return date_get_field(js, kSpec);
+  return date_get_field(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_getFullYear(ant_params_t) {
   static const date_get_field_spec_t kSpec = {DATE_FIELD_YEAR, true, false};
-  return date_get_field(js, kSpec);
+  return date_get_field(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_getUTCFullYear(ant_params_t) {
   static const date_get_field_spec_t kSpec = {DATE_FIELD_YEAR, false, false};
-  return date_get_field(js, kSpec);
+  return date_get_field(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_getMonth(ant_params_t) {
   static const date_get_field_spec_t kSpec = {DATE_FIELD_MONTH, true, false};
-  return date_get_field(js, kSpec);
+  return date_get_field(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_getUTCMonth(ant_params_t) {
   static const date_get_field_spec_t kSpec = {DATE_FIELD_MONTH, false, false};
-  return date_get_field(js, kSpec);
+  return date_get_field(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_getDate(ant_params_t) {
   static const date_get_field_spec_t kSpec = {DATE_FIELD_DAY_OF_MONTH, true, false};
-  return date_get_field(js, kSpec);
+  return date_get_field(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_getUTCDate(ant_params_t) {
   static const date_get_field_spec_t kSpec = {DATE_FIELD_DAY_OF_MONTH, false, false};
-  return date_get_field(js, kSpec);
+  return date_get_field(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_getHours(ant_params_t) {
   static const date_get_field_spec_t kSpec = {DATE_FIELD_HOUR, true, false};
-  return date_get_field(js, kSpec);
+  return date_get_field(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_getUTCHours(ant_params_t) {
   static const date_get_field_spec_t kSpec = {DATE_FIELD_HOUR, false, false};
-  return date_get_field(js, kSpec);
+  return date_get_field(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_getMinutes(ant_params_t) {
   static const date_get_field_spec_t kSpec = {DATE_FIELD_MINUTE, true, false};
-  return date_get_field(js, kSpec);
+  return date_get_field(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_getUTCMinutes(ant_params_t) {
   static const date_get_field_spec_t kSpec = {DATE_FIELD_MINUTE, false, false};
-  return date_get_field(js, kSpec);
+  return date_get_field(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_getSeconds(ant_params_t) {
   static const date_get_field_spec_t kSpec = {DATE_FIELD_SECOND, true, false};
-  return date_get_field(js, kSpec);
+  return date_get_field(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_getUTCSeconds(ant_params_t) {
   static const date_get_field_spec_t kSpec = {DATE_FIELD_SECOND, false, false};
-  return date_get_field(js, kSpec);
+  return date_get_field(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_getMilliseconds(ant_params_t) {
   static const date_get_field_spec_t kSpec = {DATE_FIELD_MILLISECOND, true, false};
-  return date_get_field(js, kSpec);
+  return date_get_field(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_getUTCMilliseconds(ant_params_t) {
   static const date_get_field_spec_t kSpec = {DATE_FIELD_MILLISECOND, false, false};
-  return date_get_field(js, kSpec);
+  return date_get_field(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_getDay(ant_params_t) {
   static const date_get_field_spec_t kSpec = {DATE_FIELD_DAY_OF_WEEK, true, false};
-  return date_get_field(js, kSpec);
+  return date_get_field(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_getUTCDay(ant_params_t) {
   static const date_get_field_spec_t kSpec = {DATE_FIELD_DAY_OF_WEEK, false, false};
-  return date_get_field(js, kSpec);
+  return date_get_field(js, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_setMilliseconds(ant_params_t) {
   static const date_set_field_spec_t kSpec = {DATE_FIELD_MILLISECOND, DATE_FIELD_DAY_OF_WEEK, true};
-  return date_set_field(js, args, nargs, kSpec);
+  return date_set_field(js, args, nargs, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_setUTCMilliseconds(ant_params_t) {
   static const date_set_field_spec_t kSpec = {DATE_FIELD_MILLISECOND, DATE_FIELD_DAY_OF_WEEK, false};
-  return date_set_field(js, args, nargs, kSpec);
+  return date_set_field(js, args, nargs, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_setSeconds(ant_params_t) {
   static const date_set_field_spec_t kSpec = {DATE_FIELD_SECOND, DATE_FIELD_DAY_OF_WEEK, true};
-  return date_set_field(js, args, nargs, kSpec);
+  return date_set_field(js, args, nargs, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_setUTCSeconds(ant_params_t) {
   static const date_set_field_spec_t kSpec = {DATE_FIELD_SECOND, DATE_FIELD_DAY_OF_WEEK, false};
-  return date_set_field(js, args, nargs, kSpec);
+  return date_set_field(js, args, nargs, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_setMinutes(ant_params_t) {
   static const date_set_field_spec_t kSpec = {DATE_FIELD_MINUTE, DATE_FIELD_DAY_OF_WEEK, true};
-  return date_set_field(js, args, nargs, kSpec);
+  return date_set_field(js, args, nargs, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_setUTCMinutes(ant_params_t) {
   static const date_set_field_spec_t kSpec = {DATE_FIELD_MINUTE, DATE_FIELD_DAY_OF_WEEK, false};
-  return date_set_field(js, args, nargs, kSpec);
+  return date_set_field(js, args, nargs, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_setHours(ant_params_t) {
   static const date_set_field_spec_t kSpec = {DATE_FIELD_HOUR, DATE_FIELD_DAY_OF_WEEK, true};
-  return date_set_field(js, args, nargs, kSpec);
+  return date_set_field(js, args, nargs, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_setUTCHours(ant_params_t) {
   static const date_set_field_spec_t kSpec = {DATE_FIELD_HOUR, DATE_FIELD_DAY_OF_WEEK, false};
-  return date_set_field(js, args, nargs, kSpec);
+  return date_set_field(js, args, nargs, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_setDate(ant_params_t) {
   static const date_set_field_spec_t kSpec = {DATE_FIELD_DAY_OF_MONTH, DATE_FIELD_HOUR, true};
-  return date_set_field(js, args, nargs, kSpec);
+  return date_set_field(js, args, nargs, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_setUTCDate(ant_params_t) {
   static const date_set_field_spec_t kSpec = {DATE_FIELD_DAY_OF_MONTH, DATE_FIELD_HOUR, false};
-  return date_set_field(js, args, nargs, kSpec);
+  return date_set_field(js, args, nargs, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_setMonth(ant_params_t) {
   static const date_set_field_spec_t kSpec = {DATE_FIELD_MONTH, DATE_FIELD_DAY_OF_MONTH, true};
-  return date_set_field(js, args, nargs, kSpec);
+  return date_set_field(js, args, nargs, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_setUTCMonth(ant_params_t) {
   static const date_set_field_spec_t kSpec = {DATE_FIELD_MONTH, DATE_FIELD_DAY_OF_MONTH, false};
-  return date_set_field(js, args, nargs, kSpec);
+  return date_set_field(js, args, nargs, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_setFullYear(ant_params_t) {
   static const date_set_field_spec_t kSpec = {DATE_FIELD_YEAR, DATE_FIELD_HOUR, true};
-  return date_set_field(js, args, nargs, kSpec);
+  return date_set_field(js, args, nargs, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_setUTCFullYear(ant_params_t) {
   static const date_set_field_spec_t kSpec = {DATE_FIELD_YEAR, DATE_FIELD_HOUR, false};
-  return date_set_field(js, args, nargs, kSpec);
+  return date_set_field(js, args, nargs, call_this, kSpec);
 }
 
 static ant_value_t builtin_Date_setYear(ant_params_t) {
   double y;
   ant_value_t err;
-  if (!date_this_time_value(js, js->this_val, &y, &err)) return err;
+  if (!date_this_time_value(js, call_this, &y, &err)) return err;
 
   y = (nargs > 0) ? js_to_number(js, args[0]) : ANT_NAN;
-  if (isnan(y)) return date_set_this_time_value(js, js->this_val, y);
+  if (isnan(y)) return date_set_this_time_value(js, call_this, y);
 
   if (isfinite(y)) {
     y = trunc(y);
@@ -1167,7 +1167,7 @@ static ant_value_t builtin_Date_setYear(ant_params_t) {
   static const date_set_field_spec_t kSetYearSpec = {
     DATE_FIELD_YEAR, DATE_FIELD_MONTH, true
   };
-  return date_set_field(js, &darg, 1, kSetYearSpec);
+  return date_set_field(js, &darg, 1, call_this, kSetYearSpec);
 }
 
 static ant_value_t date_to_primitive_number(ant_t *js, ant_value_t obj) {
@@ -1202,30 +1202,28 @@ static ant_value_t date_to_primitive_number(ant_t *js, ant_value_t obj) {
 }
 
 static ant_value_t builtin_Date_toJSON(ant_params_t) {
-  ant_value_t obj = js->this_val;
-  if (!is_object_type(obj)) {
+  if (!is_object_type(call_this)) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Date.prototype.toJSON called on non-object");
   }
 
-  ant_value_t tv = date_to_primitive_number(js, obj);
+  ant_value_t tv = date_to_primitive_number(js, call_this);
   if (is_err(tv)) return tv;
 
   if (vtype(tv) == kTypeNumber && !isfinite(Ant_Value_AsNumberUnchecked(tv))) {
     return js_mknull();
   }
 
-  ant_value_t method = js_getprop_fallback(js, obj, "toISOString");
+  ant_value_t method = js_getprop_fallback(js, call_this, "toISOString");
   uint8_t mt = vtype(method);
   if (mt != kTypeFunction && mt != kTypeBuiltin) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "object needs toISOString method");
   }
 
-  return sv_vm_call(js->vm, js, method, obj, NULL, 0, NULL, js_mkundef());
+  return sv_vm_call(js->vm, js, method, call_this, NULL, 0, NULL, js_mkundef());
 }
 
 static ant_value_t date_toPrimitive(ant_params_t) {
-  ant_value_t this_val = js_getthis(js);
-  if (!is_object_type(this_val)) {
+  if (!is_object_type(call_this)) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Not an object");
   }
 
@@ -1252,10 +1250,10 @@ static ant_value_t date_toPrimitive(ant_params_t) {
   const char **methods = hint_num ? methods1 : methods0;
 
   for (int i = 0; i < 2; i++) {
-    ant_value_t method = js_getprop_fallback(js, this_val, methods[i]);
+    ant_value_t method = js_getprop_fallback(js, call_this, methods[i]);
     uint8_t mt = vtype(method);
     if (mt == kTypeFunction || mt == kTypeBuiltin) {
-      ant_value_t result = sv_vm_call(js->vm, js, method, this_val, NULL, 0, NULL, js_mkundef());
+      ant_value_t result = sv_vm_call(js->vm, js, method, call_this, NULL, 0, NULL, js_mkundef());
       if (is_err(result)) return result;
       if (date_is_primitive(result)) return result;
     }

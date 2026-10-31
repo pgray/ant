@@ -115,9 +115,7 @@ static inline uint64_t vdata(ant_value_t value) {
 }
 
 static inline ant_value_t mkval(ant_value_type_t type, uint64_t payload) {
-  return NANBOX_PREFIX
-    | ((ant_value_t)(type & NANBOX_TYPE_MASK) << NANBOX_TYPE_SHIFT)
-    | (payload & NANBOX_DATA_MASK);
+  return NANBOX_PREFIX | ((ant_value_t)(type & NANBOX_TYPE_MASK) << NANBOX_TYPE_SHIFT) | (payload & NANBOX_DATA_MASK);
 }
 
 static inline ant_value_t mkref(ant_value_type_t type, const void *ptr) {

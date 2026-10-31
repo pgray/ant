@@ -166,18 +166,18 @@ static ant_value_t js_textencoder_ctor(ant_params_t) {
 }
 
 static ant_value_t js_textdecoder_get_encoding(ant_params_t) {
-  td_state_t *st = td_get_state(js->this_val);
+  td_state_t *st = td_get_state(call_this);
   const char *name = encoding_name(st ? st->encoding : TD_ENC_UTF8);
   return js_mkstr(js, name, strlen(name));
 }
 
 static ant_value_t js_textdecoder_get_fatal(ant_params_t) {
-  td_state_t *st = td_get_state(js->this_val);
+  td_state_t *st = td_get_state(call_this);
   return (st && st->fatal) ? js_true : js_false;
 }
 
 static ant_value_t js_textdecoder_get_ignore_bom(ant_params_t) {
-  td_state_t *st = td_get_state(js->this_val);
+  td_state_t *st = td_get_state(call_this);
   return (st && st->ignore_bom) ? js_true : js_false;
 }
 
@@ -446,7 +446,7 @@ ant_value_t td_decode(ant_t *js, td_state_t *st, const uint8_t *input, size_t in
 }
 
 static ant_value_t js_textdecoder_decode(ant_params_t) {
-  td_state_t *st = td_get_state(js->this_val);
+  td_state_t *st = td_get_state(call_this);
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid TextDecoder");
 
   bool stream_mode = false;

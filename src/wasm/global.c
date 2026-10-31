@@ -1,7 +1,7 @@
 #include "wasm_internal.h"
 
 ant_value_t js_wasm_global_value_getter(ant_params_t) {
-  wasm_extern_handle_t *handle = wasm_extern_handle(js->this_val, WASM_EXTERN_WRAP_GLOBAL);
+  wasm_extern_handle_t *handle = wasm_extern_handle(call_this, WASM_EXTERN_WRAP_GLOBAL);
   wasm_val_t value = WASM_INIT_VAL;
 
   if (!handle || !handle->as.global) return js_mkerr_typed(js, JS_ERR_TYPE, "Expected a WebAssembly.Global");
@@ -12,7 +12,7 @@ ant_value_t js_wasm_global_value_getter(ant_params_t) {
 }
 
 ant_value_t js_wasm_global_value_setter(ant_params_t) {
-  wasm_extern_handle_t *handle = wasm_extern_handle(js->this_val, WASM_EXTERN_WRAP_GLOBAL);
+  wasm_extern_handle_t *handle = wasm_extern_handle(call_this, WASM_EXTERN_WRAP_GLOBAL);
   wasm_globaltype_t *type = NULL;
   
   const wasm_valtype_t *content = NULL;
@@ -43,7 +43,7 @@ ant_value_t js_wasm_global_value_setter(ant_params_t) {
 }
 
 ant_value_t js_wasm_global_value_of(ant_params_t) {
-  return js_wasm_global_value_getter(js, NULL, 0, js_mkundef());
+  return js_wasm_global_value_getter(js, NULL, 0, js_mkundef(), call_this, call_func);
 }
 
 ant_value_t js_wasm_global_ctor(ant_params_t) {

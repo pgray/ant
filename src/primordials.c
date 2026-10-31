@@ -82,7 +82,7 @@ ant_value_t primordial_library(ant_t *js) {
     }
   }
 
-  captured = builtin_object_freeze(js, &result, 1, js_mkundef());
+  captured = builtin_object_freeze(js, &result, 1, js_mkundef(), js_mkundef(), js_mkundef());
   if (is_err(captured)) { result = captured; goto done; }
   js->primordials = result;
 done:

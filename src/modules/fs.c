@@ -425,24 +425,23 @@ static void fs_stream_on_open(uv_fs_t *uv_req) {
 }
 
 static ant_value_t fs_stream_construct(ant_params_t) {
-  ant_value_t stream_obj = js_getthis(js);
   ant_value_t callback = nargs > 0 ? args[0] : js_mkundef();
-  ant_value_t path_val = js_get(js, stream_obj, "path");
-  ant_value_t mode_val = js_get(js, stream_obj, "mode");
-  ant_value_t flags_val = js_get_slot(stream_obj, SLOT_FS_FLAGS);
+  ant_value_t path_val = js_get(js, call_this, "path");
+  ant_value_t mode_val = js_get(js, call_this, "mode");
+  ant_value_t flags_val = js_get_slot(call_this, SLOT_FS_FLAGS);
 
-  if (vtype(js_get(js, stream_obj, "fd")) == kTypeNumber) return fs_stream_callback(js, callback, js_mknull());
-  if (vtype(path_val) != kTypeString) return fs_stream_callback(js, callback, fs_stream_error(js, stream_obj, "open", UV_EINVAL));
+  if (vtype(js_get(js, call_this, "fd")) == kTypeNumber) return fs_stream_callback(js, callback, js_mknull());
+  if (vtype(path_val) != kTypeString) return fs_stream_callback(js, callback, fs_stream_error(js, call_this, "open", UV_EINVAL));
 
   size_t path_len = 0;
   const char *path = js_getstr(js, path_val, &path_len);
   
-  fs_request_t *req = fs_stream_request(js, stream_obj, FS_OP_OPEN, callback);
+  fs_request_t *req = fs_stream_request(js, call_this, FS_OP_OPEN, callback);
   if (req) req->path = strndup(path, path_len);
   
   if (!req || !req->path) {
     free_fs_request(req);
-    return fs_stream_callback(js, callback, fs_stream_error(js, stream_obj, "open", UV_ENOMEM));
+    return fs_stream_callback(js, callback, fs_stream_error(js, call_this, "open", UV_ENOMEM));
   }
 
   int flags = vtype(flags_val) == kTypeNumber ? (int)Ant_Value_AsNumberUnchecked(flags_val) : O_RDONLY;
@@ -451,7 +450,7 @@ static ant_value_t fs_stream_construct(ant_params_t) {
   
   if (rc < 0) {
     free_fs_request(req);
-    return fs_stream_callback(js, callback, fs_stream_error(js, stream_obj, "open", rc));
+    return fs_stream_callback(js, callback, fs_stream_error(js, call_this, "open", rc));
   }
 
   return js_mkundef();
@@ -540,25 +539,22 @@ static ant_value_t fs_stream_close_after_reads(ant_t *js, ant_value_t stream_obj
 }
 
 static ant_value_t fs_stream_destroy(ant_params_t) {
-  ant_value_t stream_obj = js_getthis(js);
   ant_value_t err = nargs > 0 ? args[0] : js_mknull();
   ant_value_t callback = nargs > 1 ? args[1] : js_mkundef();
-  return fs_stream_close_after_reads(js, stream_obj, js_get(js, stream_obj, "fd"), err, callback);
+  return fs_stream_close_after_reads(js, call_this, js_get(js, call_this, "fd"), err, callback);
 }
 
 static ant_value_t fs_stream_close(ant_params_t) {
-  ant_value_t stream_obj = js_getthis(js);
-
   if (nargs > 0 && is_callable(args[0])) {
-    eventemitter_add_listener(js, stream_obj, "close", args[0], true);
-    if (stream_is_closed(stream_obj))
+    eventemitter_add_listener(js, call_this, "close", args[0], true);
+    if (stream_is_closed(call_this))
       sv_call_value(js, args[0], js_mkundef(), NULL, 0);
   }
 
-  if (!stream_is_destroyed(js, stream_obj))
-    stream_destroy(js, stream_obj, js_mkundef());
+  if (!stream_is_destroyed(js, call_this))
+    stream_destroy(js, call_this, js_mkundef());
 
-  return stream_obj;
+  return call_this;
 }
 
 static constexpr size_t FS_READSTREAM_BLOCK = 1024 * 1024;
@@ -817,18 +813,17 @@ static ant_value_t fs_readstream_take_tick(ant_params_t) {
 }
 
 static ant_value_t fs_readstream__read(ant_params_t) {
-  ant_value_t stream_obj = js_getthis(js);
-  fs_readstream_state_t *st = fs_readstream_state(stream_obj);
+  fs_readstream_state_t *st = fs_readstream_state(call_this);
   if (!st) return js_mkundef();
 
-  ant_value_t pos_val = js_get(js, stream_obj, "pos");
-  ant_value_t end_val = js_get(js, stream_obj, "end");
+  ant_value_t pos_val = js_get(js, call_this, "pos");
+  ant_value_t end_val = js_get(js, call_this, "end");
 
-  int fd = fs_stream_fd(js, stream_obj);
+  int fd = fs_stream_fd(js, call_this);
   double want = 65536;
 
   if (fd < 0) {
-    stream_destroy(js, stream_obj, fs_stream_error(js, stream_obj, "read", fd));
+    stream_destroy(js, call_this, fs_stream_error(js, call_this, "read", fd));
     return js_mkundef();
   }
 
@@ -836,35 +831,34 @@ static ant_value_t fs_readstream__read(ant_params_t) {
 
   if (vtype(pos_val) == kTypeNumber && vtype(end_val) == kTypeNumber) {
     double left = Ant_Value_AsNumberUnchecked(end_val) - Ant_Value_AsNumberUnchecked(pos_val) + 1;
-    if (left <= 0) return fs_stream_push_chunk(js, stream_obj, js_mknull());
+    if (left <= 0) return fs_stream_push_chunk(js, call_this, js_mknull());
     if (want > left) want = left;
   }
 
-  ant_value_t queue = fs_readstream_queue(js, stream_obj);
+  ant_value_t queue = fs_readstream_queue(js, call_this);
   if (js_arr_len(js, queue) > 0 && !is_undefined(js_arr_get(js, queue, 0))) {
-    ant_value_t tick_args[2] = { stream_obj, Ant_Value_FromNumber(want) };
+    ant_value_t tick_args[2] = { call_this, Ant_Value_FromNumber(want) };
     queue_next_tick_with_args(js, Ant_Function_Create(fs_readstream_take_tick), tick_args, 2);
     return js_mkundef();
   }
 
-  fs_readstream_take(js, stream_obj, st, (size_t)want);
+  fs_readstream_take(js, call_this, st, (size_t)want);
   return js_mkundef();
 }
 
 static ant_value_t fs_writestream__write(ant_params_t) {
-  ant_value_t stream_obj = js_getthis(js);
   ant_value_t callback = nargs > 2 ? args[2] : js_mkundef();
-  ant_value_t pos_val = js_get(js, stream_obj, "pos");
-  ant_value_t bytes_written_val = js_get(js, stream_obj, "bytesWritten");
+  ant_value_t pos_val = js_get(js, call_this, "pos");
+  ant_value_t bytes_written_val = js_get(js, call_this, "bytesWritten");
   
   const uint8_t *bytes = NULL;
   size_t len = 0;
   
-  int fd = fs_stream_fd(js, stream_obj);
+  int fd = fs_stream_fd(js, call_this);
   int64_t pos = (vtype(pos_val) == kTypeNumber) ? (int64_t)Ant_Value_AsNumberUnchecked(pos_val) : -1;
   size_t offset = 0;
 
-  if (fd < 0) return fs_stream_callback(js, callback, fs_stream_error(js, stream_obj, "write", fd));
+  if (fd < 0) return fs_stream_callback(js, callback, fs_stream_error(js, call_this, "write", fd));
 
   if (vtype(args[0]) == kTypeString) {
     bytes = (const uint8_t *)js_getstr(js, args[0], &len);
@@ -878,15 +872,15 @@ static ant_value_t fs_writestream__write(ant_params_t) {
     int result = uv_fs_write(js->loop, &req, fd, &buf, 1, pos, NULL);
     uv_fs_req_cleanup(&req);
 
-    if (result < 0) return fs_stream_callback(js, callback, fs_stream_error(js, stream_obj, "write", result));
+    if (result < 0) return fs_stream_callback(js, callback, fs_stream_error(js, call_this, "write", result));
     if (result == 0) return fs_stream_callback(js, callback, js_mkerr(js, "write failed: short write"));
 
     offset += (size_t)result;
     if (pos >= 0) pos += result;
   }
 
-  if (pos >= 0) js_set(js, stream_obj, "pos", Ant_Value_FromNumber((double)pos));
-  js_set(js, stream_obj, "bytesWritten", Ant_Value_FromNumber(
+  if (pos >= 0) js_set(js, call_this, "pos", Ant_Value_FromNumber((double)pos));
+  js_set(js, call_this, "bytesWritten", Ant_Value_FromNumber(
     (vtype(bytes_written_val) == kTypeNumber
     ? Ant_Value_AsNumberUnchecked(bytes_written_val) : 0.0) + (double)offset
   ));
@@ -895,15 +889,15 @@ static ant_value_t fs_writestream__write(ant_params_t) {
 }
 
 static ant_value_t fs_stream_get_pending(ant_params_t) {
-  return js_bool(is_null(js_get(js, js_getthis(js), "fd")));
+  return js_bool(is_null(js_get(js, call_this, "fd")));
 }
 
 static ant_value_t fs_stream_get_auto_close(ant_params_t) {
-  return js_bool(stream_get_auto_destroy(js_getthis(js)));
+  return js_bool(stream_get_auto_destroy(call_this));
 }
 
 static ant_value_t fs_stream_set_auto_close(ant_params_t) {
-  stream_set_auto_destroy(js_getthis(js), nargs > 0 && js_truthy(js, args[0]));
+  stream_set_auto_destroy(call_this, nargs > 0 && js_truthy(js, args[0]));
   return js_mkundef();
 }
 
@@ -1521,33 +1515,33 @@ static void fs_watcher_on_poll(
 }
 
 static ant_value_t js_fswatcher_close(ant_params_t) {
-  fs_watcher_t *watcher = fs_watcher_data(js->this_val);
+  fs_watcher_t *watcher = fs_watcher_data(call_this);
 
-  if (!watcher) return js->this_val;
+  if (!watcher) return call_this;
   fs_watcher_close_native(watcher);
-  return js->this_val;
+  return call_this;
 }
 
 static ant_value_t js_fswatcher_ref(ant_params_t) {
-  fs_watcher_t *watcher = fs_watcher_data(js->this_val);
+  fs_watcher_t *watcher = fs_watcher_data(call_this);
   uv_handle_t *handle = NULL;
 
-  if (!watcher || watcher->handle_closed) return js->this_val;
+  if (!watcher || watcher->handle_closed) return call_this;
   handle = fs_watcher_uv_handle(watcher);
   if (handle) uv_ref(handle);
   watcher->persistent = true;
-  return js->this_val;
+  return call_this;
 }
 
 static ant_value_t js_fswatcher_unref(ant_params_t) {
-  fs_watcher_t *watcher = fs_watcher_data(js->this_val);
+  fs_watcher_t *watcher = fs_watcher_data(call_this);
   uv_handle_t *handle = NULL;
 
-  if (!watcher || watcher->handle_closed) return js->this_val;
+  if (!watcher || watcher->handle_closed) return call_this;
   handle = fs_watcher_uv_handle(watcher);
   if (handle) uv_unref(handle);
   watcher->persistent = false;
-  return js->this_val;
+  return call_this;
 }
 
 static ant_value_t js_fswatcher_ctor(ant_params_t) {
@@ -2044,11 +2038,10 @@ static ant_value_t fs_resolved_promise(ant_t *js, ant_value_t value) {
   return promise;
 }
 
-static ant_value_t fs_filehandle_require_this(ant_t *js) {
-  ant_value_t this_obj = js_getthis(js);
-  if (!is_object_type(this_obj) || !js_check_native_tag(this_obj, FS_FILEHANDLE_NATIVE_TAG))
+static ant_value_t fs_filehandle_require_this(ant_t *js, ant_value_t call_this) {
+  if (!is_object_type(call_this) || !js_check_native_tag(call_this, FS_FILEHANDLE_NATIVE_TAG))
     return js_mkerr_typed(js, JS_ERR_TYPE, "FileHandle method called on incompatible receiver");
-  return this_obj;
+  return call_this;
 }
 
 static ant_value_t fs_filehandle_get_fd(ant_t *js, ant_value_t handle_obj) {
@@ -2059,7 +2052,7 @@ static ant_value_t fs_filehandle_get_fd(ant_t *js, ant_value_t handle_obj) {
 }
 
 static ant_value_t builtin_fs_filehandle_close(ant_params_t) {
-  ant_value_t handle_obj = fs_filehandle_require_this(js);
+  ant_value_t handle_obj = fs_filehandle_require_this(js, call_this);
   if (is_err(handle_obj)) return fs_rejected_promise(js, handle_obj);
 
   ant_value_t fd_val = js_get_slot(handle_obj, SLOT_DATA);
@@ -2076,7 +2069,7 @@ static ant_value_t builtin_fs_filehandle_close(ant_params_t) {
 }
 
 static ant_value_t builtin_fs_filehandle_stat(ant_params_t) {
-  ant_value_t handle_obj = fs_filehandle_require_this(js);
+  ant_value_t handle_obj = fs_filehandle_require_this(js, call_this);
   if (is_err(handle_obj)) return fs_rejected_promise(js, handle_obj);
 
   ant_value_t fd_val = fs_filehandle_get_fd(js, handle_obj);
@@ -2096,7 +2089,7 @@ static ant_value_t builtin_fs_filehandle_stat(ant_params_t) {
 }
 
 static ant_value_t builtin_fs_filehandle_sync(ant_params_t) {
-  ant_value_t handle_obj = fs_filehandle_require_this(js);
+  ant_value_t handle_obj = fs_filehandle_require_this(js, call_this);
   if (is_err(handle_obj)) return fs_rejected_promise(js, handle_obj);
 
   ant_value_t fd_val = fs_filehandle_get_fd(js, handle_obj);
@@ -2111,7 +2104,7 @@ static ant_value_t builtin_fs_filehandle_sync(ant_params_t) {
 }
 
 static ant_value_t builtin_fs_filehandle_read(ant_params_t) {
-  ant_value_t handle_obj = fs_filehandle_require_this(js);
+  ant_value_t handle_obj = fs_filehandle_require_this(js, call_this);
   if (is_err(handle_obj)) return fs_rejected_promise(js, handle_obj);
 
   ant_value_t fd_val = fs_filehandle_get_fd(js, handle_obj);
@@ -2147,7 +2140,7 @@ static ant_value_t builtin_fs_filehandle_read(ant_params_t) {
 }
 
 static ant_value_t builtin_fs_filehandle_write(ant_params_t) {
-  ant_value_t handle_obj = fs_filehandle_require_this(js);
+  ant_value_t handle_obj = fs_filehandle_require_this(js, call_this);
   if (is_err(handle_obj)) return fs_rejected_promise(js, handle_obj);
 
   ant_value_t fd_val = fs_filehandle_get_fd(js, handle_obj);
@@ -2196,7 +2189,7 @@ static ant_value_t builtin_fs_filehandle_write(ant_params_t) {
 }
 
 static ant_value_t builtin_fs_filehandle_writeFile(ant_params_t) {
-  ant_value_t handle_obj = fs_filehandle_require_this(js);
+  ant_value_t handle_obj = fs_filehandle_require_this(js, call_this);
   if (is_err(handle_obj)) return fs_rejected_promise(js, handle_obj);
 
   ant_value_t fd_val = fs_filehandle_get_fd(js, handle_obj);
@@ -2232,7 +2225,7 @@ static ant_value_t builtin_fs_filehandle_writeFile(ant_params_t) {
 
 #define FS_STREAM(Name, name, ...)                                                                                  \
   static ant_value_t builtin_fs_filehandle_create##Name##Stream(ant_params_t) {                                     \
-    ant_value_t handle_obj = fs_filehandle_require_this(js);                                                        \
+    ant_value_t handle_obj = fs_filehandle_require_this(js, call_this);                                                        \
     if (is_err(handle_obj)) return handle_obj;                                                                      \
     fs_init_stream_constructors(js);                                                                                \
     ant_value_t options = fs_filehandle_stream_options(js, handle_obj, nargs > 0 ? args[0] : js_mkundef());         \
@@ -3592,7 +3585,7 @@ static ant_value_t builtin_fs_utimesSync(ant_params_t) {
 }
 
 static ant_value_t builtin_fs_utimes(ant_params_t) {
-  return builtin_fs_utimesSync(js, args, nargs, js_mkundef());
+  return builtin_fs_utimesSync(js, args, nargs, js_mkundef(), call_this, call_func);
 }
 
 static ant_value_t builtin_fs_futimesSync(ant_params_t) {
@@ -3610,7 +3603,7 @@ static ant_value_t builtin_fs_futimesSync(ant_params_t) {
 }
 
 static ant_value_t builtin_fs_futimes(ant_params_t) {
-  return builtin_fs_futimesSync(js, args, nargs, js_mkundef());
+  return builtin_fs_futimesSync(js, args, nargs, js_mkundef(), call_this, call_func);
 }
 
 static ant_value_t builtin_fs_truncateSync(ant_params_t) {
@@ -4076,20 +4069,20 @@ static ant_value_t builtin_fs_rm(ant_params_t) {
   return fs_rm_impl(js, args, nargs, true);
 }
 
-static ant_value_t stat_mode_is(ant_t *js, mode_t type) {
-  ant_value_t mode_val = js_get_slot(js_getthis(js), SLOT_DATA);
+static ant_value_t stat_mode_is(ant_t *js, ant_value_t call_this, mode_t type) {
+  ant_value_t mode_val = js_get_slot(call_this, SLOT_DATA);
   if (vtype(mode_val) != kTypeNumber) return js_false;
   return js_bool(((mode_t)Ant_Value_AsNumberUnchecked(mode_val) & S_IFMT) == type);
 }
 
-static ant_value_t dirent_type_is(ant_t *js, uv_dirent_type_t type) {
-  ant_value_t type_val = js_get_slot(js_getthis(js), SLOT_DATA);
+static ant_value_t dirent_type_is(ant_t *js, ant_value_t call_this, uv_dirent_type_t type) {
+  ant_value_t type_val = js_get_slot(call_this, SLOT_DATA);
   return js_bool(vtype(type_val) == kTypeNumber && (int)Ant_Value_AsNumberUnchecked(type_val) == (int)type);
 }
 
 #define FS_FILE_TYPE(name, mode, dirent) \
-  static ant_value_t stat_##name(ant_params_t) { return stat_mode_is(js, mode); } \
-  static ant_value_t dirent_##name(ant_params_t) { return dirent_type_is(js, dirent); }
+  static ant_value_t stat_##name(ant_params_t) { return stat_mode_is(js, call_this, mode); } \
+  static ant_value_t dirent_##name(ant_params_t) { return dirent_type_is(js, call_this, dirent); }
 #include "fs/file_types.h"
 
 static const ant_cfunc_meta_t stat_methods[] = {
@@ -6248,7 +6241,7 @@ void init_fs_module(ant_t *js) {
 }
 
 static ant_value_t fs_callback_success_handler(ant_params_t) {
-  ant_value_t ctx = js_func_data(js->current_func);
+  ant_value_t ctx = js_func_data(call_func);
   ant_value_t callback = js_get_slot(ctx, SLOT_DATA);
 
   if (!is_callable(callback)) return js_mkundef();
@@ -6265,7 +6258,7 @@ static ant_value_t fs_callback_success_handler(ant_params_t) {
 }
 
 static ant_value_t fs_callback_error_handler(ant_params_t) {
-  ant_value_t ctx = js_func_data(js->current_func);
+  ant_value_t ctx = js_func_data(call_func);
   ant_value_t callback = js_get_slot(ctx, SLOT_DATA);
   ant_value_t cb_args[1];
 
@@ -6347,20 +6340,18 @@ static ant_value_t fs_callback_attach_promise(
 
 static ant_value_t fs_callback_wrapper_call(ant_params_t) {
   GC_ROOT_SAVE(root_mark, js);
-  ant_value_t wrapper = js->current_func;
-  ant_value_t config = js_get_slot(wrapper, SLOT_DATA);
+  ant_value_t config = js_get_slot(call_func, SLOT_DATA);
   ant_value_t original = js_get_slot(config, SLOT_DATA);
   
   ant_value_t callback = js_mkundef();
   ant_value_t result = js_mkundef();
-  ant_value_t this_arg = js_getthis(js);
   ant_value_t ex = js_mkundef();
   
   bool exists_style = false;
   int call_nargs = nargs;
 
   GC_ROOT_PIN(js, original);
-  GC_ROOT_PIN(js, this_arg);
+  GC_ROOT_PIN(js, call_this);
 
   exists_style = js_truthy(js, js_get(js, config, "existsStyle"));
   if (nargs > 0 && is_callable(args[nargs - 1])) {
@@ -6369,7 +6360,7 @@ static ant_value_t fs_callback_wrapper_call(ant_params_t) {
     call_nargs--;
   }
 
-  result = sv_call_value(js, original, this_arg, args, call_nargs);
+  result = sv_call_value(js, original, call_this, args, call_nargs);
   GC_ROOT_PIN(js, result);
 
   if (!is_callable(callback)) {
@@ -6411,16 +6402,14 @@ static ant_value_t fs_make_callback_wrapper(ant_t *js, ant_value_t original, boo
 static ant_value_t fs_promise_wrapper_call(ant_params_t) {
   GC_ROOT_SAVE(root_mark, js);
   
-  ant_value_t wrapper = js->current_func;
-  ant_value_t original = js_get_slot(wrapper, SLOT_DATA);
-  ant_value_t this_arg = js_getthis(js);
+  ant_value_t original = js_get_slot(call_func, SLOT_DATA);
   ant_value_t result = js_mkundef();
   ant_value_t error = js_mkundef();
 
   GC_ROOT_PIN(js, original);
-  GC_ROOT_PIN(js, this_arg);
+  GC_ROOT_PIN(js, call_this);
 
-  result = sv_call_value(js, original, this_arg, args, nargs);
+  result = sv_call_value(js, original, call_this, args, nargs);
   GC_ROOT_PIN(js, result);
 
   if (is_err(result) || Ant_Exception_Pending(js)) {
@@ -6860,22 +6849,22 @@ static ant_value_t fs_dir_enqueue(
 
 static ant_value_t builtin_fs_dir_readSync(ant_params_t) {
   ant_value_t err = js_mkundef();
-  fs_dir_t *d = fs_dir_sync_data(js, js->this_val, &err);
+  fs_dir_t *d = fs_dir_sync_data(js, call_this, &err);
   if (!d) return err;
-  return fs_dir_read_sync(js, js->this_val, d);
+  return fs_dir_read_sync(js, call_this, d);
 }
 
 static ant_value_t builtin_fs_dir_read(ant_params_t) {
   ant_value_t err = js_mkundef();
-  fs_dir_t *d = fs_dir_data(js, js->this_val, &err);
+  fs_dir_t *d = fs_dir_data(js, call_this, &err);
   if (!d) return fs_rejected_promise(js, err);
   if (d->closed && !d->ops_head) return fs_rejected_promise(js, fs_dir_closed_error(js));
-  return fs_dir_enqueue(js, js->this_val, d, FS_OP_DIR_READ, js_mkundef());
+  return fs_dir_enqueue(js, call_this, d, FS_OP_DIR_READ, js_mkundef());
 }
 
 static ant_value_t builtin_fs_dir_closeSync(ant_params_t) {
   ant_value_t err = js_mkundef();
-  fs_dir_t *d = fs_dir_sync_data(js, js->this_val, &err);
+  fs_dir_t *d = fs_dir_sync_data(js, call_this, &err);
   if (!d) return err;
 
   int rc = fs_dir_release(d);
@@ -6885,26 +6874,26 @@ static ant_value_t builtin_fs_dir_closeSync(ant_params_t) {
 
 static ant_value_t builtin_fs_dir_close(ant_params_t) {
   ant_value_t err = js_mkundef();
-  fs_dir_t *d = fs_dir_data(js, js->this_val, &err);
+  fs_dir_t *d = fs_dir_data(js, call_this, &err);
   if (!d) return fs_rejected_promise(js, err);
   if (d->closed && !d->ops_head) return fs_rejected_promise(js, fs_dir_closed_error(js));
-  return fs_dir_enqueue(js, js->this_val, d, FS_OP_DIR_CLOSE, js_mkundef());
+  return fs_dir_enqueue(js, call_this, d, FS_OP_DIR_CLOSE, js_mkundef());
 }
 
 static ant_value_t builtin_fs_dir_dispose(ant_params_t) {
-  fs_dir_t *d = (fs_dir_t *)js_get_native(js->this_val, FS_DIR_NATIVE_TAG);
+  fs_dir_t *d = (fs_dir_t *)js_get_native(call_this, FS_DIR_NATIVE_TAG);
   if (!d || d->closed) return js_mkundef();
-  return builtin_fs_dir_closeSync(js, args, nargs, call_new_target);
+  return builtin_fs_dir_closeSync(js, args, nargs, call_new_target, call_this, call_func);
 }
 
 static ant_value_t builtin_fs_dir_asyncDispose(ant_params_t) {
-  fs_dir_t *d = (fs_dir_t *)js_get_native(js->this_val, FS_DIR_NATIVE_TAG);
+  fs_dir_t *d = (fs_dir_t *)js_get_native(call_this, FS_DIR_NATIVE_TAG);
   if (!d || d->closed) return fs_resolved_promise(js, js_mkundef());
-  return fs_dir_enqueue(js, js->this_val, d, FS_OP_DIR_CLOSE, js_mkundef());
+  return fs_dir_enqueue(js, call_this, d, FS_OP_DIR_CLOSE, js_mkundef());
 }
 
 static ant_value_t fs_dir_iter_next(ant_params_t) {
-  ant_value_t dir_obj = js_func_data(js->current_func);
+  ant_value_t dir_obj = js_func_data(call_func);
   ant_value_t err = js_mkundef();
 
   fs_dir_t *d = fs_dir_data(js, dir_obj, &err);
@@ -6915,7 +6904,7 @@ static ant_value_t fs_dir_iter_next(ant_params_t) {
 }
 
 static ant_value_t fs_dir_iter_return(ant_params_t) {
-  ant_value_t dir_obj = js_func_data(js->current_func);
+  ant_value_t dir_obj = js_func_data(call_func);
   ant_value_t value = nargs > 0 ? args[0] : js_mkundef();
 
   fs_dir_t *d = (fs_dir_t *)js_get_native(dir_obj, FS_DIR_NATIVE_TAG);
@@ -6933,8 +6922,7 @@ static ant_value_t fs_dir_iter_return(ant_params_t) {
 }
 
 static ant_value_t builtin_fs_dir_asyncIterator(ant_params_t) {
-  ant_value_t dir_obj = js->this_val;
-  if (!js_get_native(dir_obj, FS_DIR_NATIVE_TAG))
+  if (!js_get_native(call_this, FS_DIR_NATIVE_TAG))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Value of \"this\" must be of type Dir");
 
   GC_ROOT_SAVE(root_mark, js);
@@ -6942,8 +6930,8 @@ static ant_value_t builtin_fs_dir_asyncIterator(ant_params_t) {
   GC_ROOT_PIN(js, iter);
 
   js_set_proto_init(iter, js->sym.async_iterator_proto);
-  js_set(js, iter, "next", js_heavy_mkfun(js, fs_dir_iter_next, dir_obj));
-  js_set(js, iter, "return", js_heavy_mkfun(js, fs_dir_iter_return, dir_obj));
+  js_set(js, iter, "next", js_heavy_mkfun(js, fs_dir_iter_next, call_this));
+  js_set(js, iter, "return", js_heavy_mkfun(js, fs_dir_iter_return, call_this));
 
   GC_ROOT_RESTORE(js, root_mark);
   return iter;
@@ -7270,12 +7258,11 @@ ant_value_t fs_make_constants(ant_t *js) {
 }
 
 static ant_value_t builtin_fs_promises_getter(ant_params_t) {
-  ant_value_t getter_fn = js->current_func;
-  ant_value_t cached = js_get_slot(getter_fn, SLOT_DATA);
+  ant_value_t cached = js_get_slot(call_func, SLOT_DATA);
   if (is_object_type(cached)) return cached;
 
   ant_value_t promises = fs_promises_library(js);
-  js_set_slot(getter_fn, SLOT_DATA, promises);
+  js_set_slot(call_func, SLOT_DATA, promises);
   return promises;
 }
 

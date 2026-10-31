@@ -71,7 +71,7 @@ static ant_value_t wasm_make_external_arraybuffer(ant_t *js, uint8_t *data, size
 }
 
 ant_value_t js_wasm_memory_buffer_getter(ant_params_t) {
-  wasm_extern_handle_t *handle = wasm_extern_handle(js->this_val, WASM_EXTERN_WRAP_MEMORY);
+  wasm_extern_handle_t *handle = wasm_extern_handle(call_this, WASM_EXTERN_WRAP_MEMORY);
   byte_t *data; size_t len;
 
   if (!handle || !handle->as.memory)
@@ -84,7 +84,7 @@ ant_value_t js_wasm_memory_buffer_getter(ant_params_t) {
     return handle->memory_buffer;
   if (cached) wasm_detach_external_arraybuffer(js, handle->memory_buffer);
 
-  ant_value_t buffer = wasm_make_external_arraybuffer(js, (uint8_t *)data, len, js->this_val);
+  ant_value_t buffer = wasm_make_external_arraybuffer(js, (uint8_t *)data, len, call_this);
   if (is_err(buffer)) return buffer;
 
   handle->memory_buffer = buffer;
@@ -94,12 +94,12 @@ ant_value_t js_wasm_memory_buffer_getter(ant_params_t) {
     handle->view_pages = handle->view_memory->cur_page_count;
     Ant_List_Insert(&js->wasm_memory_views, handle);
   }
-  js_set_slot_wb(js, js->this_val, SLOT_AUX, buffer);
+  js_set_slot_wb(js, call_this, SLOT_AUX, buffer);
   return buffer;
 }
 
 ant_value_t js_wasm_memory_grow(ant_params_t) {
-  wasm_extern_handle_t *handle = wasm_extern_handle(js->this_val, WASM_EXTERN_WRAP_MEMORY);
+  wasm_extern_handle_t *handle = wasm_extern_handle(call_this, WASM_EXTERN_WRAP_MEMORY);
   wasm_memory_pages_t old_size;
   uint32_t delta;
 
@@ -119,7 +119,7 @@ ant_value_t js_wasm_memory_grow(ant_params_t) {
   wasm_detach_external_arraybuffer(js, handle->memory_buffer);
   handle->memory_buffer = js_mkundef();
   Ant_List_Remove(handle);
-  js_set_slot_wb(js, js->this_val, SLOT_AUX, js_mkundef());
+  js_set_slot_wb(js, call_this, SLOT_AUX, js_mkundef());
 
   return Ant_Value_FromNumber((double)old_size);
 }
@@ -172,5 +172,5 @@ ant_value_t js_wasm_memory_ctor(ant_params_t) {
 }
 
 ant_value_t js_wasm_memory_to_fixed_length_buffer(ant_params_t) {
-  return js_wasm_memory_buffer_getter(js, args, nargs, call_new_target);
+  return js_wasm_memory_buffer_getter(js, args, nargs, call_new_target, call_this, call_func);
 }

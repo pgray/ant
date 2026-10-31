@@ -510,14 +510,14 @@ static void rpc_complete_task(rpc_deferred_task_t *task, ant_value_t result, boo
 }
 
 static ant_value_t rpc_task_promise_resolve(ant_params_t) {
-  rpc_deferred_task_t *task = (rpc_deferred_task_t *)js_get_native(js->current_func, RPC_TASK_NATIVE_TAG);
+  rpc_deferred_task_t *task = (rpc_deferred_task_t *)js_get_native(call_func, RPC_TASK_NATIVE_TAG);
   rpc_complete_task(task, nargs > 0 ? args[0] : js_mkundef(), false);
   rpc_task_release(task);
   return js_mkundef();
 }
 
 static ant_value_t rpc_task_promise_reject(ant_params_t) {
-  rpc_deferred_task_t *task = (rpc_deferred_task_t *)js_get_native(js->current_func, RPC_TASK_NATIVE_TAG);
+  rpc_deferred_task_t *task = (rpc_deferred_task_t *)js_get_native(call_func, RPC_TASK_NATIVE_TAG);
   rpc_complete_task(task, nargs > 0 ? args[0] : js_mkundef(), true);
   rpc_task_release(task);
   return js_mkundef();
@@ -677,7 +677,7 @@ static rpc_server_t *rpc_require_server(ant_t *js, ant_value_t this_val) {
   return server;
 }
 
-static ant_value_t rpc_server_register_impl(ant_t *js, rpc_server_t *server, ant_value_t name_val, ant_value_t handler) {
+static ant_value_t rpc_server_register_impl(ant_t *js, ant_value_t call_this, rpc_server_t *server, ant_value_t name_val, ant_value_t handler) {
   char *name = rpc_value_to_cstring(js, name_val, "route name");
   if (!name) return Ant_Exception_Current(js);
   if (!is_callable(handler)) {
@@ -704,18 +704,18 @@ static ant_value_t rpc_server_register_impl(ant_t *js, rpc_server_t *server, ant
   }
 
   free(name);
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t rpc_server_register(ant_params_t) {
-  rpc_server_t *server = rpc_require_server(js, js_getthis(js));
+  rpc_server_t *server = rpc_require_server(js, call_this);
   if (!server) return Ant_Exception_Current(js);
   if (nargs < 2) return js_mkerr_typed(js, JS_ERR_TYPE, "RpcServer.register requires name and handler");
-  return rpc_server_register_impl(js, server, args[0], args[1]);
+  return rpc_server_register_impl(js, call_this, server, args[0], args[1]);
 }
 
 static ant_value_t rpc_server_unregister(ant_params_t) {
-  rpc_server_t *server = rpc_require_server(js, js_getthis(js));
+  rpc_server_t *server = rpc_require_server(js, call_this);
   if (!server) return Ant_Exception_Current(js);
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "RpcServer.unregister requires a name");
 
@@ -727,24 +727,24 @@ static ant_value_t rpc_server_unregister(ant_params_t) {
     if (server->server) (void)wirecall_server_remove_route_name(server->server, name);
   }
   free(name);
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t rpc_server_port_getter(ant_params_t) {
   (void)args; (void)nargs;
-  rpc_server_t *server = rpc_require_server(js, js_getthis(js));
+  rpc_server_t *server = rpc_require_server(js, call_this);
   if (!server) return Ant_Exception_Current(js);
   if (server->server) server->port = wirecall_server_port(server->server);
   return Ant_Value_FromNumber((double)server->port);
 }
 
 static ant_value_t rpc_server_listen(ant_params_t) {
-  rpc_server_t *server = rpc_require_server(js, js_getthis(js));
+  rpc_server_t *server = rpc_require_server(js, call_this);
   if (!server) return Ant_Exception_Current(js);
 
   ant_value_t promise = js_mkpromise(js);
   if (server->listening) {
-    js_resolve_promise(js, promise, js_getthis(js));
+    js_resolve_promise(js, promise, call_this);
     return promise;
   }
   if (nargs < 1 || !is_object_type(args[0])) {
@@ -821,7 +821,7 @@ static ant_value_t rpc_server_listen(ant_params_t) {
   server->listening = true;
   server->port = wirecall_server_port(server->server);
   server->listen_promise = promise;
-  js_resolve_promise(js, promise, js_getthis(js));
+  js_resolve_promise(js, promise, call_this);
   return promise;
 }
 
@@ -849,7 +849,7 @@ static void rpc_server_close_impl(rpc_server_t *server) {
 
 static ant_value_t rpc_server_close(ant_params_t) {
   (void)args; (void)nargs;
-  rpc_server_t *server = rpc_require_server(js, js_getthis(js));
+  rpc_server_t *server = rpc_require_server(js, call_this);
   if (!server) return Ant_Exception_Current(js);
   ant_value_t promise = js_mkpromise(js);
   rpc_server_close_impl(server);
@@ -864,7 +864,7 @@ static ant_value_t rpc_server_ctor(ant_params_t) {
   rpc_server_t *server = calloc(1, sizeof(*server));
   if (!server) return Ant_Error_CreateOutOfMemory(js);
   server->js = js;
-  server->obj = js_getthis(js);
+  server->obj = call_this;
   server->listen_promise = js_mkundef();
   pthread_mutex_init(&server->task_mutex, NULL);
 
@@ -885,7 +885,7 @@ static ant_value_t rpc_server_ctor(ant_params_t) {
     ant_value_t handler = js_mkundef();
     while (js_prop_iter_next(&iter, &key, &key_len, &handler)) {
       ant_value_t name = js_mkstr(js, key, key_len);
-      ant_value_t r = rpc_server_register_impl(js, server, name, handler);
+      ant_value_t r = rpc_server_register_impl(js, call_this, server, name, handler);
       if (is_err(r)) {
         js_prop_iter_end(&iter);
         return r;
@@ -1054,7 +1054,7 @@ static rpc_client_t *rpc_require_client(ant_t *js, ant_value_t this_val) {
 }
 
 static ant_value_t rpc_client_connect(ant_params_t) {
-  rpc_client_t *client = rpc_require_client(js, js_getthis(js));
+  rpc_client_t *client = rpc_require_client(js, call_this);
   if (!client) return Ant_Exception_Current(js);
 
   if (client->closed || client->closing) {
@@ -1071,7 +1071,7 @@ static ant_value_t rpc_client_connect(ant_params_t) {
 }
 
 static ant_value_t rpc_client_call(ant_params_t) {
-  rpc_client_t *client = rpc_require_client(js, js_getthis(js));
+  rpc_client_t *client = rpc_require_client(js, call_this);
   if (!client) return Ant_Exception_Current(js);
 
   if (nargs < 2 || vtype(args[1]) != kTypeArray)
@@ -1102,7 +1102,7 @@ static ant_value_t rpc_client_call(ant_params_t) {
 }
 
 static ant_value_t rpc_client_ping(ant_params_t) {
-  rpc_client_t *client = rpc_require_client(js, js_getthis(js));
+  rpc_client_t *client = rpc_require_client(js, call_this);
   if (!client) return Ant_Exception_Current(js);
   if (client->closed || client->closing) {
     ant_value_t promise = js_mkpromise(js);
@@ -1117,7 +1117,7 @@ static ant_value_t rpc_client_ping(ant_params_t) {
 
 static ant_value_t rpc_client_close(ant_params_t) {
   (void)args; (void)nargs;
-  rpc_client_t *client = rpc_require_client(js, js_getthis(js));
+  rpc_client_t *client = rpc_require_client(js, call_this);
   if (!client) return Ant_Exception_Current(js);
   ant_value_t promise = js_mkpromise(js);
   if (client->closed || client->closing) {
@@ -1211,7 +1211,7 @@ static ant_value_t rpc_client_ctor(ant_params_t) {
     return Ant_Error_CreateOutOfMemory(js);
   }
   client->js = js;
-  client->obj = js_getthis(js);
+  client->obj = call_this;
   client->host = host;
   client->port = strdup(port_buf);
   client->integrity = WIRECALL_INTEGRITY_DEFAULT;

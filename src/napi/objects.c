@@ -53,8 +53,7 @@ static int napi_desc_flags(napi_property_attributes attributes) {
 }
 
 static ant_value_t napi_callback_trampoline(ant_params_t) {
-  ant_value_t current = js->current_func;
-  napi_callback_binding_t *binding = (napi_callback_binding_t *)js_get_native(current, NAPI_CALLBACK_NATIVE_TAG);
+  napi_callback_binding_t *binding = (napi_callback_binding_t *)js_get_native(call_func, NAPI_CALLBACK_NATIVE_TAG);
   if (!binding || !binding->cb) return js_mkundef();
 
   ant_napi_env_t *nenv = binding->env ? binding->env : ant_napi_get_or_create_env(js);
@@ -64,7 +63,7 @@ static ant_value_t napi_callback_trampoline(ant_params_t) {
     .env = nenv,
     .argv = (const napi_value *)args,
     .argc = (size_t)(nargs < 0 ? 0 : nargs),
-    .this_arg = (napi_value)js_getthis(js),
+    .this_arg = (napi_value)call_this,
     .new_target = (napi_value)call_new_target,
     .data = binding->data,
   };

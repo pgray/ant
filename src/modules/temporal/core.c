@@ -128,9 +128,9 @@ ant_value_t temporal_wrap(ant_t *js, temporal_kind_t kind, void *ptr) {
   return temporal_wrap_on(js, Ant_Object_CreateBare(js), kind, ptr, temporal_proto(js, kind));
 }
 
-ant_value_t temporal_wrap_constructed(ant_t *js, temporal_kind_t kind, void *ptr, ant_value_t new_target) {
+ant_value_t temporal_wrap_constructed(ant_t *js, ant_value_t call_this, temporal_kind_t kind, void *ptr, ant_value_t new_target) {
   ant_value_t proto = js_instance_proto_from_new_target(js, temporal_proto(js, kind), new_target);
-  return temporal_wrap_on(js, js->this_val, kind, ptr, proto);
+  return temporal_wrap_on(js, call_this, kind, ptr, proto);
 }
 
 void *temporal_unwrap(

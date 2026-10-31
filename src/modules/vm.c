@@ -619,21 +619,20 @@ static ant_value_t vm_script_ctor(ant_params_t) {
   return vm_script_init(js, script, nargs > 0 ? args[0] : js_mkundef(), nargs > 1 ? args[1] : js_mkundef());
 }
 
-static ant_value_t vm_this_script(ant_t *js) {
-  ant_value_t script = js->this_val;
-  if (!is_object_type(script) || !vm_script_state(script))
+static ant_value_t vm_this_script(ant_t *js, ant_value_t call_this) {
+  if (!is_object_type(call_this) || !vm_script_state(call_this))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation: receiver is not a vm.Script");
-  return script;
+  return call_this;
 }
 
 static ant_value_t vm_script_run_in_this_context(ant_params_t) {
-  ant_value_t script = vm_this_script(js);
+  ant_value_t script = vm_this_script(js, call_this);
   if (is_err(script)) return script;
   return vm_script_run(js, script, js->realm, nargs > 0 ? args[0] : js_mkundef());
 }
 
 static ant_value_t vm_script_run_in_context(ant_params_t) {
-  ant_value_t script = vm_this_script(js);
+  ant_value_t script = vm_this_script(js, call_this);
   if (is_err(script)) return script;
 
   ant_value_t context = nargs > 0 ? args[0] : js_mkundef();
@@ -644,7 +643,7 @@ static ant_value_t vm_script_run_in_context(ant_params_t) {
 }
 
 static ant_value_t vm_script_run_in_new_context(ant_params_t) {
-  ant_value_t script = vm_this_script(js);
+  ant_value_t script = vm_this_script(js, call_this);
   if (is_err(script)) return script;
 
   ant_value_t context = vm_context_for(js, nargs > 0 ? args[0] : js_mkundef(), nargs > 1 ? args[1] : js_mkundef(), true);
@@ -654,7 +653,7 @@ static ant_value_t vm_script_run_in_new_context(ant_params_t) {
 }
 
 static ant_value_t vm_script_create_cached_data(ant_params_t) {
-  ant_value_t script = vm_this_script(js);
+  ant_value_t script = vm_this_script(js, call_this);
   if (is_err(script)) return script;
   return create_typed_array(js, TYPED_ARRAY_UINT8, create_array_buffer_data(js, 0), 0, 0, js->builtins.buffer_proto);
 }

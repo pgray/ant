@@ -67,7 +67,7 @@ static ant_value_t get_iterator_prototype(ant_t *js) {
   js->sym.iterator_proto = Ant_Object_CreateBare(js);
   js_set_proto_init(js->sym.iterator_proto, js->sym.object_proto);
   
-  defmethod_sym(js, js->sym.iterator_proto, js->sym.iterator_sym, Ant_Function_Create(sym_this_cb));
+  defmethod_sym(js, js->sym.iterator_proto, js->sym.iterator_sym, Ant_Function_Create(js_return_this));
   ant_iterator_protector_holder_mark(js->sym.iterator_proto);
 
   return js->sym.iterator_proto;
@@ -159,7 +159,7 @@ static bool advance_string(ant_t *js, iterator_t *it, ant_value_t *out) {
 }
 
 static ant_value_t arr_iter_next(ant_params_t) {
-  return js_iter_next_result(js, advance_array);
+  return js_iter_next_result(js, call_this, advance_array);
 }
 
 // TODO: cleanup
@@ -210,9 +210,9 @@ ant_value_t js_array_iterator_at(ant_t *js, ant_value_t array, uint32_t index) {
 }
 
 static ant_value_t str_iter_next(ant_params_t) {
-  if (!js_check_native_tag(js->this_val, STRING_ITERATOR_NATIVE_TAG))
+  if (!js_check_native_tag(call_this, STRING_ITERATOR_NATIVE_TAG))
     return js_mkerr_typed(js, JS_ERR_TYPE, "String Iterator next called on incompatible receiver");
-  return js_iter_next_result(js, string_iter_step);
+  return js_iter_next_result(js, call_this, string_iter_step);
 }
 
 static ant_value_t get_string_iterator_prototype(ant_t *js) {
@@ -234,12 +234,11 @@ static ant_value_t get_string_iterator_prototype(ant_t *js) {
 }
 
 static ant_value_t string_iterator(ant_params_t) {
-  ant_value_t recv = js->this_val;
-  if (is_null(recv) || is_undefined(recv)) return js_mkerr_typed(
+  if (is_null(call_this) || is_undefined(call_this)) return js_mkerr_typed(
     js, JS_ERR_TYPE, "String.prototype[Symbol.iterator] called on null or undefined"
   );
 
-  ant_value_t str = js_template_to_string(js, recv);
+  ant_value_t str = js_template_to_string(js, call_this);
   if (is_err(str)) return str;
 
   GC_ROOT_SAVE(mark, js);
@@ -506,21 +505,20 @@ static inline ant_value_t call_indexed_callback(ant_t *js, ant_value_t fn, ant_v
 }
 
 static ant_value_t wrap_iter_next(ant_params_t) {
-  ant_value_t self = js->this_val;
-  ant_value_t source = js_get_slot(self, SLOT_DATA);
-  ant_value_t state_v = js_get_slot(self, SLOT_ITER_STATE);
+  ant_value_t source = js_get_slot(call_this, SLOT_DATA);
+  ant_value_t state_v = js_get_slot(call_this, SLOT_ITER_STATE);
   
   uint32_t state = (vtype(state_v) == kTypeNumber) ? (uint32_t)Ant_Value_AsNumberUnchecked(state_v) : 0;
   uint32_t kind  = iter_state_kind(state);
   uint32_t count = iter_state_index(state);
   
-  ant_value_t cb = js_get_slot(self, SLOT_CTOR);
+  ant_value_t cb = js_get_slot(call_this, SLOT_CTOR);
   ant_value_t next_fn = js_getprop_fallback(js, source, "next");
   if (is_err(next_fn)) return next_fn;
 
   for (;;) {
     if (kind == WRAP_FLATMAP) {
-    ant_value_t inner = js_get_slot(self, SLOT_ENTRIES);
+    ant_value_t inner = js_get_slot(call_this, SLOT_ENTRIES);
     
     if (vtype(inner) != kTypeUndefined) {
       ant_value_t inner_next = js_getprop_fallback(js, inner, "next");
@@ -538,7 +536,7 @@ static ant_value_t wrap_iter_next(ant_params_t) {
         return Ant_Iterator_CreateResult(js, inner_value, false);
       }
       
-      js_set_slot(self, SLOT_ENTRIES, js_mkundef());
+      js_set_slot(call_this, SLOT_ENTRIES, js_mkundef());
     }}
 
     ant_value_t step = sv_call_value(js, next_fn, source, NULL, 0);
@@ -549,9 +547,9 @@ static ant_value_t wrap_iter_next(ant_params_t) {
     
     if (js_truthy(js, done)) {
       if (kind == WRAP_FLATMAP) {
-      ant_value_t inner = js_get_slot(self, SLOT_ENTRIES);
+      ant_value_t inner = js_get_slot(call_this, SLOT_ENTRIES);
       if (vtype(inner) != kTypeUndefined) {
-        js_set_slot(self, SLOT_ENTRIES, js_mkundef());
+        js_set_slot(call_this, SLOT_ENTRIES, js_mkundef());
       }}
       
       return Ant_Iterator_CreateResult(js, js_mkundef(), true);
@@ -569,7 +567,7 @@ static ant_value_t wrap_iter_next(ant_params_t) {
       } else out_val = value;
 
       count++;
-      js_set_slot(self, SLOT_ITER_STATE, Ant_Value_FromNumber((double)iter_state_pack(kind, count)));
+      js_set_slot(call_this, SLOT_ITER_STATE, Ant_Value_FromNumber((double)iter_state_pack(kind, count)));
       return Ant_Iterator_CreateResult(js, out_val, false);
     }
 
@@ -577,7 +575,7 @@ static ant_value_t wrap_iter_next(ant_params_t) {
       ant_value_t test = call_indexed_callback(js, cb, value, (double)count);
       if (is_err(test)) return test;
       count++;
-      js_set_slot(self, SLOT_ITER_STATE, Ant_Value_FromNumber((double)iter_state_pack(kind, count)));
+      js_set_slot(call_this, SLOT_ITER_STATE, Ant_Value_FromNumber((double)iter_state_pack(kind, count)));
       if (js_truthy(js, test)) {
         return Ant_Iterator_CreateResult(js, value, false);
       }
@@ -589,14 +587,14 @@ static ant_value_t wrap_iter_next(ant_params_t) {
       if (count >= limit) {
         return Ant_Iterator_CreateResult(js, js_mkundef(), true);
       }
-      js_set_slot(self, SLOT_ITER_STATE, Ant_Value_FromNumber((double)iter_state_pack(kind, count + 1)));
+      js_set_slot(call_this, SLOT_ITER_STATE, Ant_Value_FromNumber((double)iter_state_pack(kind, count + 1)));
       return Ant_Iterator_CreateResult(js, value, false);
     }
 
     case WRAP_DROP: {
       uint32_t limit = (vtype(cb) == kTypeNumber) ? (uint32_t)Ant_Value_AsNumberUnchecked(cb) : 0;
       count++;
-      js_set_slot(self, SLOT_ITER_STATE, Ant_Value_FromNumber((double)iter_state_pack(kind, count)));
+      js_set_slot(call_this, SLOT_ITER_STATE, Ant_Value_FromNumber((double)iter_state_pack(kind, count)));
       if (count <= limit) continue;
       return Ant_Iterator_CreateResult(js, value, false);
     }
@@ -605,7 +603,7 @@ static ant_value_t wrap_iter_next(ant_params_t) {
       ant_value_t mapped = call_indexed_callback(js, cb, value, (double)count);
       if (is_err(mapped)) return mapped;
       count++;
-      js_set_slot(self, SLOT_ITER_STATE, Ant_Value_FromNumber((double)iter_state_pack(kind, count)));
+      js_set_slot(call_this, SLOT_ITER_STATE, Ant_Value_FromNumber((double)iter_state_pack(kind, count)));
 
       ant_value_t iter_fn = js_get_sym(js, mapped, js->sym.iterator_sym);
       if (!is_callable(iter_fn)) {
@@ -627,7 +625,7 @@ static ant_value_t wrap_iter_next(ant_params_t) {
       if (!js_truthy(js, inner_done)) {
         ant_value_t inner_value = js_getprop_fallback(js, inner_step, "value");
         if (is_err(inner_value)) return inner_value;
-        js_set_slot_wb(js, self, SLOT_ENTRIES, inner);
+        js_set_slot_wb(js, call_this, SLOT_ENTRIES, inner);
         return Ant_Iterator_CreateResult(js, inner_value, false);
       }
       continue;
@@ -649,62 +647,61 @@ static ant_value_t make_wrap_iter(ant_t *js, ant_value_t source, int kind, ant_v
   return iter;
 }
 
-static ant_value_t get_source_iter(ant_t *js) {
-  ant_value_t self = js->this_val;
-  ant_value_t next = js_getprop_fallback(js, self, "next");
+static ant_value_t get_source_iter(ant_t *js, ant_value_t call_this) {
+  ant_value_t next = js_getprop_fallback(js, call_this, "next");
   if (is_err(next)) return next;
-  if (is_callable(next)) return self;
+  if (is_callable(next)) return call_this;
   
-  ant_value_t iter_fn = js_get_sym(js, self, js->sym.iterator_sym);
+  ant_value_t iter_fn = js_get_sym(js, call_this, js->sym.iterator_sym);
   if (is_err(iter_fn)) return iter_fn;
   if (!is_callable(iter_fn)) return js_mkerr_typed(js, JS_ERR_TYPE, "object is not iterable");
   
-  return sv_vm_call(js->vm, js, iter_fn, self, NULL, 0, NULL, js_mkundef());
+  return sv_vm_call(js->vm, js, iter_fn, call_this, NULL, 0, NULL, js_mkundef());
 }
 
-static ant_value_t iter_make_helper(ant_t *js, int kind, ant_value_t cb) {
-  ant_value_t source = get_source_iter(js);
+static ant_value_t iter_make_helper(ant_t *js, ant_value_t call_this, int kind, ant_value_t cb) {
+  ant_value_t source = get_source_iter(js, call_this);
   if (is_err(source)) return source;
   return make_wrap_iter(js, source, kind, cb);
 }
 
 static ant_value_t iter_make_callable_helper(
-  ant_native_params_t,
+  ant_native_params_t, ant_value_t call_this,
   int kind,
   const char *method
 ) {
   if (nargs < 1 || !is_callable(args[0]))
     return js_mkerr_typed(js, JS_ERR_TYPE, "%s requires a callable", method);
-  return iter_make_helper(js, kind, args[0]);
+  return iter_make_helper(js, call_this, kind, args[0]);
 }
 
 static ant_value_t iter_make_count_helper(
-  ant_native_params_t, int kind,
+  ant_native_params_t, ant_value_t call_this, int kind,
   const char *method
 ) {
   double limit = (nargs >= 1 && vtype(args[0]) == kTypeNumber) ? Ant_Value_AsNumberUnchecked(args[0]) : 0;
   if (limit < 0) return js_mkerr(js, "%s requires a non-negative number", method);
-  return iter_make_helper(js, kind, Ant_Value_FromNumber(limit));
+  return iter_make_helper(js, call_this, kind, Ant_Value_FromNumber(limit));
 }
 
 static ant_value_t iter_map(ant_params_t) {
-  return iter_make_callable_helper(js, args, nargs, WRAP_MAP, "Iterator.prototype.map");
+  return iter_make_callable_helper(js, args, nargs, call_this, WRAP_MAP, "Iterator.prototype.map");
 }
 
 static ant_value_t iter_filter(ant_params_t) {
-  return iter_make_callable_helper(js, args, nargs, WRAP_FILTER, "Iterator.prototype.filter");
+  return iter_make_callable_helper(js, args, nargs, call_this, WRAP_FILTER, "Iterator.prototype.filter");
 }
 
 static ant_value_t iter_take(ant_params_t) {
-  return iter_make_count_helper(js, args, nargs, WRAP_TAKE, "Iterator.prototype.take");
+  return iter_make_count_helper(js, args, nargs, call_this, WRAP_TAKE, "Iterator.prototype.take");
 }
 
 static ant_value_t iter_drop(ant_params_t) {
-  return iter_make_count_helper(js, args, nargs, WRAP_DROP, "Iterator.prototype.drop");
+  return iter_make_count_helper(js, args, nargs, call_this, WRAP_DROP, "Iterator.prototype.drop");
 }
 
 static ant_value_t iter_flatMap(ant_params_t) {
-  return iter_make_callable_helper(js, args, nargs, WRAP_FLATMAP, "Iterator.prototype.flatMap");
+  return iter_make_callable_helper(js, args, nargs, call_this, WRAP_FLATMAP, "Iterator.prototype.flatMap");
 }
 
 static ant_value_t iter_every(ant_params_t) {
@@ -713,7 +710,7 @@ static ant_value_t iter_every(ant_params_t) {
   ant_value_t fn = args[0];
 
   iterator_t it;
-  if (!js_iter_open(js, js->this_val, &it))
+  if (!js_iter_open(js, call_this, &it))
     return Ant_Exception_Pending(js) ? Ant_Exception_Current(js)
       : js_mkerr_typed(js, JS_ERR_TYPE, "object is not iterable");
 
@@ -736,7 +733,7 @@ static ant_value_t iter_some(ant_params_t) {
   ant_value_t fn = args[0];
 
   iterator_t it;
-  if (!js_iter_open(js, js->this_val, &it))
+  if (!js_iter_open(js, call_this, &it))
     return Ant_Exception_Pending(js) ? Ant_Exception_Current(js)
       : js_mkerr_typed(js, JS_ERR_TYPE, "object is not iterable");
 
@@ -759,7 +756,7 @@ static ant_value_t iter_find(ant_params_t) {
   ant_value_t fn = args[0];
 
   iterator_t it;
-  if (!js_iter_open(js, js->this_val, &it))
+  if (!js_iter_open(js, call_this, &it))
     return Ant_Exception_Pending(js) ? Ant_Exception_Current(js)
       : js_mkerr_typed(js, JS_ERR_TYPE, "object is not iterable");
 
@@ -782,7 +779,7 @@ static ant_value_t iter_forEach(ant_params_t) {
   ant_value_t fn = args[0];
 
   iterator_t it;
-  if (!js_iter_open(js, js->this_val, &it))
+  if (!js_iter_open(js, call_this, &it))
     return Ant_Exception_Pending(js) ? Ant_Exception_Current(js)
       : js_mkerr_typed(js, JS_ERR_TYPE, "object is not iterable");
 
@@ -802,7 +799,7 @@ static ant_value_t iter_reduce(ant_params_t) {
   bool has_init = (nargs >= 2);
 
   iterator_t it;
-  if (!js_iter_open(js, js->this_val, &it))
+  if (!js_iter_open(js, call_this, &it))
     return Ant_Exception_Pending(js) ? Ant_Exception_Current(js)
       : js_mkerr_typed(js, JS_ERR_TYPE, "object is not iterable");
 
@@ -826,7 +823,7 @@ static ant_value_t iter_reduce(ant_params_t) {
 
 static ant_value_t iter_toArray(ant_params_t) {
   iterator_t it;
-  if (!js_iter_open(js, js->this_val, &it))
+  if (!js_iter_open(js, call_this, &it))
     return Ant_Exception_Pending(js) ? Ant_Exception_Current(js)
       : js_mkerr_typed(js, JS_ERR_TYPE, "object is not iterable");
 
@@ -952,7 +949,7 @@ static ant_value_t async_wrap_handle_callback_result(
 );
 
 static ant_value_t async_wrap_on_step(ant_params_t) {
-  ant_value_t state = js_func_data(js->current_func);
+  ant_value_t state = js_func_data(call_func);
   ant_value_t iter = js_get(js, state, "iter");
   ant_value_t promise = js_get(js, state, "promise");
   ant_value_t step = nargs > 0 ? args[0] : js_mkundef();
@@ -960,14 +957,14 @@ static ant_value_t async_wrap_on_step(ant_params_t) {
 }
 
 static ant_value_t async_wrap_on_reject(ant_params_t) {
-  ant_value_t state = js_func_data(js->current_func);
+  ant_value_t state = js_func_data(call_func);
   ant_value_t promise = js_get(js, state, "promise");
   async_iter_reject(js, promise, nargs > 0 ? args[0] : js_mkundef());
   return js_mkundef();
 }
 
 static ant_value_t async_wrap_on_callback(ant_params_t) {
-  ant_value_t state = js_func_data(js->current_func);
+  ant_value_t state = js_func_data(call_func);
   ant_value_t iter = js_get(js, state, "iter");
   ant_value_t promise = js_get(js, state, "promise");
   uint32_t kind = (uint32_t)Ant_Value_AsNumberUnchecked(js_get(js, state, "kind"));
@@ -977,7 +974,7 @@ static ant_value_t async_wrap_on_callback(ant_params_t) {
 }
 
 static ant_value_t async_wrap_on_sync_value(ant_params_t) {
-  ant_value_t state = js_func_data(js->current_func);
+  ant_value_t state = js_func_data(call_func);
   ant_value_t promise = js_get(js, state, "promise");
   bool done = js_truthy(js, js_get(js, state, "done"));
   ant_value_t value = nargs > 0 ? args[0] : js_mkundef();
@@ -1037,7 +1034,7 @@ static ant_value_t async_wrap_handle_inner_step(
 }
 
 static ant_value_t async_wrap_on_inner_step(ant_params_t) {
-  ant_value_t state = js_func_data(js->current_func);
+  ant_value_t state = js_func_data(call_func);
   ant_value_t iter = js_get(js, state, "iter");
   ant_value_t promise = js_get(js, state, "promise");
   ant_value_t step = nargs > 0 ? args[0] : js_mkundef();
@@ -1264,35 +1261,35 @@ static ant_value_t async_wrap_advance(ant_t *js, ant_value_t iter, ant_value_t p
 static ant_value_t async_wrap_next(ant_params_t) {
   (void)args; (void)nargs;
   ant_value_t promise = js_mkpromise(js);
-  async_wrap_advance(js, js->this_val, promise);
+  async_wrap_advance(js, call_this, promise);
   return promise;
 }
 
 static ant_value_t async_wrap_return(ant_params_t) {
-  ant_value_t source = js_get_slot(js->this_val, SLOT_DATA);
+  ant_value_t source = js_get_slot(call_this, SLOT_DATA);
   bool missing = false;
   ant_value_t result = async_iter_call_method(js, source, "return", args, nargs, &missing);
   if (missing) return fulfilled_promise(js, Ant_Iterator_CreateResult(js, nargs > 0 ? args[0] : js_mkundef(), true));
-  ant_value_t state_v = js_get_slot(js->this_val, SLOT_ITER_STATE);
+  ant_value_t state_v = js_get_slot(call_this, SLOT_ITER_STATE);
   uint32_t state = (vtype(state_v) == kTypeNumber) ? (uint32_t)Ant_Value_AsNumberUnchecked(state_v) : 0;
   if (iter_state_kind(state) == WRAP_FROM_SYNC) {
     ant_value_t promise = js_mkpromise(js);
-    async_wrap_chain_step(js, js->this_val, promise, result);
+    async_wrap_chain_step(js, call_this, promise, result);
     return promise;
   }
   return promise_from_call_result(js, result);
 }
 
 static ant_value_t async_wrap_throw(ant_params_t) {
-  ant_value_t source = js_get_slot(js->this_val, SLOT_DATA);
+  ant_value_t source = js_get_slot(call_this, SLOT_DATA);
   bool missing = false;
   ant_value_t result = async_iter_call_method(js, source, "throw", args, nargs, &missing);
   if (missing) return rejected_promise(js, nargs > 0 ? args[0] : js_mkundef());
-  ant_value_t state_v = js_get_slot(js->this_val, SLOT_ITER_STATE);
+  ant_value_t state_v = js_get_slot(call_this, SLOT_ITER_STATE);
   uint32_t state = (vtype(state_v) == kTypeNumber) ? (uint32_t)Ant_Value_AsNumberUnchecked(state_v) : 0;
   if (iter_state_kind(state) == WRAP_FROM_SYNC) {
     ant_value_t promise = js_mkpromise(js);
-    async_wrap_chain_step(js, js->this_val, promise, result);
+    async_wrap_chain_step(js, call_this, promise, result);
     return promise;
   }
   return promise_from_call_result(js, result);
@@ -1326,63 +1323,62 @@ static ant_value_t async_iter_from(ant_params_t) {
   return js_mkerr_typed(js, JS_ERR_TYPE, "object is not async iterable");
 }
 
-static ant_value_t get_async_source_iter(ant_t *js) {
-  ant_value_t self = js->this_val;
-  ant_value_t next = js_getprop_fallback(js, self, "next");
+static ant_value_t get_async_source_iter(ant_t *js, ant_value_t call_this) {
+  ant_value_t next = js_getprop_fallback(js, call_this, "next");
   if (is_err(next)) return next;
-  if (is_callable(next)) return self;
+  if (is_callable(next)) return call_this;
 
-  ant_value_t iter_fn = js_get_sym(js, self, js->sym.asyncIterator_sym);
+  ant_value_t iter_fn = js_get_sym(js, call_this, js->sym.asyncIterator_sym);
   if (is_err(iter_fn)) return iter_fn;
   if (!is_callable(iter_fn)) return js_mkerr_typed(js, JS_ERR_TYPE, "object is not async iterable");
 
-  return sv_vm_call(js->vm, js, iter_fn, self, NULL, 0, NULL, js_mkundef());
+  return sv_vm_call(js->vm, js, iter_fn, call_this, NULL, 0, NULL, js_mkundef());
 }
 
-static ant_value_t async_iter_make_helper(ant_t *js, int kind, ant_value_t cb) {
-  ant_value_t source = get_async_source_iter(js);
+static ant_value_t async_iter_make_helper(ant_t *js, ant_value_t call_this, int kind, ant_value_t cb) {
+  ant_value_t source = get_async_source_iter(js, call_this);
   if (is_err(source)) return source;
   return make_async_wrap_iter(js, source, kind, cb);
 }
 
 static ant_value_t async_iter_make_callable_helper(
-  ant_native_params_t,
+  ant_native_params_t, ant_value_t call_this,
   int kind,
   const char *method
 ) {
   if (nargs < 1 || !is_callable(args[0]))
     return js_mkerr_typed(js, JS_ERR_TYPE, "%s requires a callable", method);
-  return async_iter_make_helper(js, kind, args[0]);
+  return async_iter_make_helper(js, call_this, kind, args[0]);
 }
 
 static ant_value_t async_iter_make_count_helper(
-  ant_native_params_t,
+  ant_native_params_t, ant_value_t call_this,
   int kind,
   const char *method
 ) {
   double limit = (nargs >= 1 && vtype(args[0]) == kTypeNumber) ? Ant_Value_AsNumberUnchecked(args[0]) : 0;
   if (limit < 0) return js_mkerr_typed(js, JS_ERR_TYPE, "%s requires a non-negative number", method);
-  return async_iter_make_helper(js, kind, Ant_Value_FromNumber(limit));
+  return async_iter_make_helper(js, call_this, kind, Ant_Value_FromNumber(limit));
 }
 
 static ant_value_t async_iter_map(ant_params_t) {
-  return async_iter_make_callable_helper(js, args, nargs, WRAP_MAP, "AsyncIterator.prototype.map");
+  return async_iter_make_callable_helper(js, args, nargs, call_this, WRAP_MAP, "AsyncIterator.prototype.map");
 }
 
 static ant_value_t async_iter_filter(ant_params_t) {
-  return async_iter_make_callable_helper(js, args, nargs, WRAP_FILTER, "AsyncIterator.prototype.filter");
+  return async_iter_make_callable_helper(js, args, nargs, call_this, WRAP_FILTER, "AsyncIterator.prototype.filter");
 }
 
 static ant_value_t async_iter_take(ant_params_t) {
-  return async_iter_make_count_helper(js, args, nargs, WRAP_TAKE, "AsyncIterator.prototype.take");
+  return async_iter_make_count_helper(js, args, nargs, call_this, WRAP_TAKE, "AsyncIterator.prototype.take");
 }
 
 static ant_value_t async_iter_drop(ant_params_t) {
-  return async_iter_make_count_helper(js, args, nargs, WRAP_DROP, "AsyncIterator.prototype.drop");
+  return async_iter_make_count_helper(js, args, nargs, call_this, WRAP_DROP, "AsyncIterator.prototype.drop");
 }
 
 static ant_value_t async_iter_flatMap(ant_params_t) {
-  return async_iter_make_callable_helper(js, args, nargs, WRAP_FLATMAP, "AsyncIterator.prototype.flatMap");
+  return async_iter_make_callable_helper(js, args, nargs, call_this, WRAP_FLATMAP, "AsyncIterator.prototype.flatMap");
 }
 
 static ant_value_t async_terminal_advance(ant_t *js, ant_value_t state);
@@ -1415,33 +1411,33 @@ static inline bool async_terminal_has_acc(ant_value_t state) {
 }
 
 static ant_value_t async_terminal_on_reject(ant_params_t) {
-  ant_value_t state = js_func_data(js->current_func);
+  ant_value_t state = js_func_data(call_func);
   ant_value_t promise = js_get_slot(state, SLOT_CTOR);
   async_iter_reject(js, promise, nargs > 0 ? args[0] : js_mkundef());
   return js_mkundef();
 }
 
 static ant_value_t async_terminal_on_callback_reject(ant_params_t) {
-  ant_value_t state = js_func_data(js->current_func);
+  ant_value_t state = js_func_data(call_func);
   async_terminal_close_and_reject(js, state, nargs > 0 ? args[0] : js_mkundef());
   return js_mkundef();
 }
 
 static ant_value_t async_terminal_on_callback(ant_params_t) {
-  ant_value_t state = js_func_data(js->current_func);
+  ant_value_t state = js_func_data(call_func);
   ant_value_t result = nargs > 0 ? args[0] : js_mkundef();
   return async_terminal_finish_callback(js, state, result);
 }
 
 static ant_value_t async_terminal_on_close(ant_params_t) {
-  ant_value_t state = js_func_data(js->current_func);
+  ant_value_t state = js_func_data(call_func);
   ant_value_t promise = js_get_slot(state, SLOT_CTOR);
   js_resolve_promise(js, promise, js_get_slot(state, SLOT_AUX));
   return js_mkundef();
 }
 
 static ant_value_t async_terminal_on_close_reject(ant_params_t) {
-  ant_value_t state = js_func_data(js->current_func);
+  ant_value_t state = js_func_data(call_func);
   ant_value_t promise = js_get_slot(state, SLOT_CTOR);
   async_iter_reject(js, promise, js_get_slot(state, SLOT_AUX));
   return js_mkundef();
@@ -1643,7 +1639,7 @@ static bool async_terminal_handle_step(ant_t *js, ant_value_t state, ant_value_t
 }
 
 static ant_value_t async_terminal_on_step(ant_params_t) {
-  ant_value_t state = js_func_data(js->current_func);
+  ant_value_t state = js_func_data(call_func);
   ant_value_t step = nargs > 0 ? args[0] : js_mkundef();
   if (async_terminal_handle_step(js, state, step)) return async_terminal_advance(js, state);
   return js_mkundef();
@@ -1696,11 +1692,11 @@ for (;;) {
   if (!async_terminal_handle_step(js, state, next_result)) return js_mkundef();
 }}
 
-static ant_value_t async_iter_terminal(ant_native_params_t, int mode) {
+static ant_value_t async_iter_terminal(ant_native_params_t, ant_value_t call_this, int mode) {
   if (mode != ASYNC_TERM_TOARRAY && (nargs < 1 || !is_callable(args[0])))
     return js_mkerr_typed(js, JS_ERR_TYPE, "AsyncIterator helper requires a callable");
 
-  ant_value_t iter = get_async_source_iter(js);
+  ant_value_t iter = get_async_source_iter(js, call_this);
   if (is_err(iter)) return rejected_promise(js, iter);
 
   ant_value_t promise = js_mkpromise(js);
@@ -1731,27 +1727,27 @@ static ant_value_t async_iter_terminal(ant_native_params_t, int mode) {
 }
 
 static ant_value_t async_iter_every(ant_params_t) {
-  return async_iter_terminal(js, args, nargs, ASYNC_TERM_EVERY);
+  return async_iter_terminal(js, args, nargs, call_this, ASYNC_TERM_EVERY);
 }
 
 static ant_value_t async_iter_some(ant_params_t) {
-  return async_iter_terminal(js, args, nargs, ASYNC_TERM_SOME);
+  return async_iter_terminal(js, args, nargs, call_this, ASYNC_TERM_SOME);
 }
 
 static ant_value_t async_iter_find(ant_params_t) {
-  return async_iter_terminal(js, args, nargs, ASYNC_TERM_FIND);
+  return async_iter_terminal(js, args, nargs, call_this, ASYNC_TERM_FIND);
 }
 
 static ant_value_t async_iter_forEach(ant_params_t) {
-  return async_iter_terminal(js, args, nargs, ASYNC_TERM_FOREACH);
+  return async_iter_terminal(js, args, nargs, call_this, ASYNC_TERM_FOREACH);
 }
 
 static ant_value_t async_iter_reduce(ant_params_t) {
-  return async_iter_terminal(js, args, nargs, ASYNC_TERM_REDUCE);
+  return async_iter_terminal(js, args, nargs, call_this, ASYNC_TERM_REDUCE);
 }
 
 static ant_value_t async_iter_toArray(ant_params_t) {
-  return async_iter_terminal(js, args, nargs, ASYNC_TERM_TOARRAY);
+  return async_iter_terminal(js, args, nargs, call_this, ASYNC_TERM_TOARRAY);
 }
 
 static ant_value_t iterator_tag_get(ant_params_t) {
@@ -1759,14 +1755,13 @@ static ant_value_t iterator_tag_get(ant_params_t) {
 }
 
 static ant_value_t iter_dispose(ant_params_t) {
-  ant_value_t self = js->this_val;
-  ant_value_t return_fn = iterator_get_method(js, self, "return", 6);
+  ant_value_t return_fn = iterator_get_method(js, call_this, "return", 6);
   
   if (is_err(return_fn)) return return_fn;
   if (is_undefined(return_fn) || is_null(return_fn)) return js_mkundef();
   if (!is_callable(return_fn)) return js_mkerr_typed(js, JS_ERR_TYPE, "iterator return is not callable");
   
-  ant_value_t result = sv_vm_call(js->vm, js, return_fn, self, NULL, 0, NULL, js_mkundef());
+  ant_value_t result = sv_vm_call(js->vm, js, return_fn, call_this, NULL, 0, NULL, js_mkundef());
   return is_err(result) ? result : js_mkundef();
 }
 
@@ -1776,11 +1771,10 @@ static ant_value_t async_iter_dispose_done(ant_params_t) {
 
 static ant_value_t async_iter_async_dispose(ant_params_t) {
   GC_ROOT_SAVE(root_mark, js);
-  ant_value_t self = js->this_val;
-  GC_ROOT_PIN(js, self);
+  GC_ROOT_PIN(js, call_this);
   
   ant_value_t out;
-  ant_value_t return_fn = iterator_get_method(js, self, "return", 6);
+  ant_value_t return_fn = iterator_get_method(js, call_this, "return", 6);
   GC_ROOT_PIN(js, return_fn);
   
   if (is_err(return_fn)) out = rejected_promise(js, return_fn);
@@ -1788,7 +1782,7 @@ static ant_value_t async_iter_async_dispose(ant_params_t) {
   else if (!is_callable(return_fn)) out = rejected_promise(js, js_mkerr_typed(js, JS_ERR_TYPE, "iterator return is not callable"));
   else {
     ant_value_t arg = js_mkundef();
-    ant_value_t result = sv_vm_call(js->vm, js, return_fn, self, &arg, 1, NULL, js_mkundef());
+    ant_value_t result = sv_vm_call(js->vm, js, return_fn, call_this, &arg, 1, NULL, js_mkundef());
     if (!is_err(result)) result = js_promise_assimilate_awaitable(js, result);
     out = is_err(result) ? rejected_promise(js, result) : js_promise_then(js, result, Ant_Function_Create(async_iter_dispose_done), js_mkundef());
   }
@@ -1802,15 +1796,14 @@ static ant_value_t async_iterator_tag_get(ant_params_t) {
 }
 
 static ant_value_t iterator_tag_set(ant_params_t) {
-  ant_value_t receiver = js->this_val;
   
   if (
-    (!is_object_type(receiver) && vtype(receiver) != kTypeBuiltin) ||
-    receiver == js->sym.iterator_proto || receiver == js->sym.async_iterator_proto
+    (!is_object_type(call_this) && vtype(call_this) != kTypeBuiltin) ||
+    call_this == js->sym.iterator_proto || call_this == js->sym.async_iterator_proto
   ) return js_mkerr_typed(js, JS_ERR_TYPE, "cannot set iterator prototype tag");
 
   GC_ROOT_SAVE(mark, js);
-  GC_ROOT_PIN(js, receiver);
+  GC_ROOT_PIN(js, call_this);
   ant_value_t value = nargs ? args[0] : js_mkundef();
   
   GC_ROOT_PIN(js, value);
@@ -1822,7 +1815,7 @@ static ant_value_t iterator_tag_set(ant_params_t) {
   js_set(js, descriptor, "enumerable", js_true);
   js_set(js, descriptor, "configurable", js_true);
   
-  ant_value_t result = js_define_property(js, receiver, js->sym.toStringTag_sym, descriptor, false);
+  ant_value_t result = js_define_property(js, call_this, js->sym.toStringTag_sym, descriptor, false);
   GC_ROOT_RESTORE(js, mark);
   
   return is_err(result) ? result : js_mkundef();
@@ -1876,7 +1869,7 @@ void init_iterator_module(ant_t *js) {
   
   mkprop(
     js, async_iter_proto, js->sym.asyncIterator_sym, 
-    Ant_Function_Create(sym_this_cb), ANT_PROP_ATTR_WRITABLE | ANT_PROP_ATTR_CONFIGURABLE);
+    Ant_Function_Create(js_return_this), ANT_PROP_ATTR_WRITABLE | ANT_PROP_ATTR_CONFIGURABLE);
   
   js_set_sym_getter_desc(js, async_iter_proto, js->sym.toStringTag_sym, Ant_Function_Create(async_iterator_tag_get), JS_DESC_C);
   static const ant_cfunc_meta_t async_dispose_meta = { async_iter_async_dispose, "[Symbol.asyncDispose]", 0, 0 };

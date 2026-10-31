@@ -195,7 +195,7 @@ static ant_value_t temporal_zdt_ctor(ant_params_t) {
   temporal_rs_ZonedDateTime_try_new_with_provider_result result =
     temporal_rs_ZonedDateTime_try_new_with_provider(ns, calendar, zone, temporal_provider(js));
   if (!result.is_ok) return temporal_error(js, result.err);
-  return temporal_wrap_constructed(js, TEMPORAL_ZONED_DATETIME, result.ok, call_new_target);
+  return temporal_wrap_constructed(js, call_this, TEMPORAL_ZONED_DATETIME, result.ok, call_new_target);
 }
 
 static ant_value_t temporal_zdt_from(ant_params_t) {
@@ -255,8 +255,8 @@ static ant_value_t temporal_zdt_compare(ant_params_t) {
   return Ant_Value_FromNumber(comparison);
 }
 
-static ZonedDateTime *temporal_zdt_this(ant_t *js, const char *method, ant_value_t *err) {
-  return temporal_unwrap(js, js_getthis(js), TEMPORAL_ZONED_DATETIME, method, err);
+static ZonedDateTime *temporal_zdt_this(ant_t *js, ant_value_t call_this, const char *method, ant_value_t *err) {
+  return temporal_unwrap(js, call_this, TEMPORAL_ZONED_DATETIME, method, err);
 }
 
 #  define ZDT_NUMBER_GETTER(name, capi)                                                                                \
@@ -264,7 +264,7 @@ static ZonedDateTime *temporal_zdt_this(ant_t *js, const char *method, ant_value
       (void)args;                                                                                                      \
       (void)nargs;                                                                                                     \
       ant_value_t err = js_mkundef();                                                                                  \
-      ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype." #name, &err);                    \
+      ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype." #name, &err);                    \
       return self ? Ant_Value_FromNumber((double)capi(self)) : err;                                                                \
     }
 
@@ -290,28 +290,28 @@ static ant_value_t temporal_zdt_get_epoch_nanoseconds(ant_params_t) {
   (void)args;
   (void)nargs;
   ant_value_t err = js_mkundef();
-  ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.epochNanoseconds", &err);
+  ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.epochNanoseconds", &err);
   return self ? temporal_i128_to_bigint(js, temporal_rs_ZonedDateTime_epoch_nanoseconds(self)) : err;
 }
 static ant_value_t temporal_zdt_get_calendar_id(ant_params_t) {
   (void)args;
   (void)nargs;
   ant_value_t err = js_mkundef();
-  ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.calendarId", &err);
+  ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.calendarId", &err);
   return self ? temporal_calendar_identifier(js, temporal_rs_ZonedDateTime_calendar(self)) : err;
 }
 static ant_value_t temporal_zdt_get_time_zone_id(ant_params_t) {
   (void)args;
   (void)nargs;
   ant_value_t err = js_mkundef();
-  ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.timeZoneId", &err);
+  ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.timeZoneId", &err);
   return self ? temporal_time_zone_identifier(js, temporal_rs_ZonedDateTime_timezone(self)) : err;
 }
 static ant_value_t temporal_zdt_get_month_code(ant_params_t) {
   (void)args;
   (void)nargs;
   ant_value_t err = js_mkundef();
-  ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.monthCode", &err);
+  ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.monthCode", &err);
   if (!self) return err;
   DiplomatWrite *write = diplomat_buffer_write_create(4);
   temporal_rs_ZonedDateTime_month_code(self, write);
@@ -321,7 +321,7 @@ static ant_value_t temporal_zdt_get_week_of_year(ant_params_t) {
   (void)args;
   (void)nargs;
   ant_value_t err = js_mkundef();
-  ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.weekOfYear", &err);
+  ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.weekOfYear", &err);
   if (!self) return err;
   temporal_rs_ZonedDateTime_week_of_year_result r = temporal_rs_ZonedDateTime_week_of_year(self);
   return r.is_ok ? Ant_Value_FromNumber(r.ok) : js_mkundef();
@@ -330,7 +330,7 @@ static ant_value_t temporal_zdt_get_year_of_week(ant_params_t) {
   (void)args;
   (void)nargs;
   ant_value_t err = js_mkundef();
-  ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.yearOfWeek", &err);
+  ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.yearOfWeek", &err);
   if (!self) return err;
   temporal_rs_ZonedDateTime_year_of_week_result r = temporal_rs_ZonedDateTime_year_of_week(self);
   return r.is_ok ? Ant_Value_FromNumber(r.ok) : js_mkundef();
@@ -339,14 +339,14 @@ static ant_value_t temporal_zdt_get_in_leap_year(ant_params_t) {
   (void)args;
   (void)nargs;
   ant_value_t err = js_mkundef();
-  ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.inLeapYear", &err);
+  ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.inLeapYear", &err);
   return self ? js_bool(temporal_rs_ZonedDateTime_in_leap_year(self)) : err;
 }
 static ant_value_t temporal_zdt_get_era(ant_params_t) {
   (void)args;
   (void)nargs;
   ant_value_t err = js_mkundef();
-  ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.era", &err);
+  ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.era", &err);
   if (!self) return err;
   DiplomatWrite *write = diplomat_buffer_write_create(8);
   temporal_rs_ZonedDateTime_era(self, write);
@@ -360,7 +360,7 @@ static ant_value_t temporal_zdt_get_era_year(ant_params_t) {
   (void)args;
   (void)nargs;
   ant_value_t err = js_mkundef();
-  ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.eraYear", &err);
+  ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.eraYear", &err);
   if (!self) return err;
   temporal_rs_ZonedDateTime_era_year_result r = temporal_rs_ZonedDateTime_era_year(self);
   return r.is_ok ? Ant_Value_FromNumber(r.ok) : js_mkundef();
@@ -369,7 +369,7 @@ static ant_value_t temporal_zdt_get_offset(ant_params_t) {
   (void)args;
   (void)nargs;
   ant_value_t err = js_mkundef();
-  ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.offset", &err);
+  ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.offset", &err);
   if (!self) return err;
   DiplomatWrite *write = diplomat_buffer_write_create(16);
   temporal_rs_ZonedDateTime_offset_result r = temporal_rs_ZonedDateTime_offset(self, write);
@@ -383,17 +383,17 @@ static ant_value_t temporal_zdt_get_hours_in_day(ant_params_t) {
   (void)args;
   (void)nargs;
   ant_value_t err = js_mkundef();
-  ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.hoursInDay", &err);
+  ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.hoursInDay", &err);
   if (!self) return err;
   temporal_rs_ZonedDateTime_hours_in_day_with_provider_result r =
     temporal_rs_ZonedDateTime_hours_in_day_with_provider(self, temporal_provider(js));
   return r.is_ok ? Ant_Value_FromNumber(r.ok) : temporal_error(js, r.err);
 }
 
-static ant_value_t temporal_zdt_binary_duration(ant_native_params_t, bool subtract) {
+static ant_value_t temporal_zdt_binary_duration(ant_native_params_t, ant_value_t call_this, bool subtract) {
   ant_value_t err = js_mkundef();
   ZonedDateTime *self = temporal_zdt_this(
-    js, subtract ? "Temporal.ZonedDateTime.prototype.subtract" : "Temporal.ZonedDateTime.prototype.add", &err
+    js, call_this, subtract ? "Temporal.ZonedDateTime.prototype.subtract" : "Temporal.ZonedDateTime.prototype.add", &err
   );
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "Duration argument is required");
@@ -425,14 +425,14 @@ static ant_value_t temporal_zdt_binary_duration(ant_native_params_t, bool subtra
   return temporal_wrap(js, TEMPORAL_ZONED_DATETIME, value);
 }
 static ant_value_t temporal_zdt_add(ant_params_t) {
-  return temporal_zdt_binary_duration(js, args, nargs, false);
+  return temporal_zdt_binary_duration(js, args, nargs, call_this, false);
 }
 static ant_value_t temporal_zdt_subtract(ant_params_t) {
-  return temporal_zdt_binary_duration(js, args, nargs, true);
+  return temporal_zdt_binary_duration(js, args, nargs, call_this, true);
 }
 static ant_value_t temporal_zdt_equals(ant_params_t) {
   ant_value_t err = js_mkundef();
-  ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.equals", &err);
+  ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.equals", &err);
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "ZonedDateTime argument is required");
   ZonedDateTime *other;
@@ -442,10 +442,10 @@ static ant_value_t temporal_zdt_equals(ant_params_t) {
   temporal_rs_ZonedDateTime_destroy(other);
   return r.is_ok ? js_bool(r.ok) : temporal_error(js, r.err);
 }
-static ant_value_t temporal_zdt_difference(ant_native_params_t, bool since) {
+static ant_value_t temporal_zdt_difference(ant_native_params_t, ant_value_t call_this, bool since) {
   ant_value_t err = js_mkundef();
   ZonedDateTime *self = temporal_zdt_this(
-    js, since ? "Temporal.ZonedDateTime.prototype.since" : "Temporal.ZonedDateTime.prototype.until", &err
+    js, call_this, since ? "Temporal.ZonedDateTime.prototype.since" : "Temporal.ZonedDateTime.prototype.until", &err
   );
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "ZonedDateTime argument is required");
@@ -477,16 +477,16 @@ static ant_value_t temporal_zdt_difference(ant_native_params_t, bool since) {
   return temporal_wrap(js, TEMPORAL_DURATION, value);
 }
 static ant_value_t temporal_zdt_since(ant_params_t) {
-  return temporal_zdt_difference(js, args, nargs, true);
+  return temporal_zdt_difference(js, args, nargs, call_this, true);
 }
 static ant_value_t temporal_zdt_until(ant_params_t) {
-  return temporal_zdt_difference(js, args, nargs, false);
+  return temporal_zdt_difference(js, args, nargs, call_this, false);
 }
 static ant_value_t temporal_zdt_start_of_day(ant_params_t) {
   (void)args;
   (void)nargs;
   ant_value_t err = js_mkundef();
-  ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.startOfDay", &err);
+  ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.startOfDay", &err);
   if (!self) return err;
   temporal_rs_ZonedDateTime_start_of_day_with_provider_result r =
     temporal_rs_ZonedDateTime_start_of_day_with_provider(self, temporal_provider(js));
@@ -496,33 +496,33 @@ static ant_value_t temporal_zdt_to_instant(ant_params_t) {
   (void)args;
   (void)nargs;
   ant_value_t err = js_mkundef();
-  ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.toInstant", &err);
+  ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.toInstant", &err);
   return self ? temporal_wrap(js, TEMPORAL_INSTANT, temporal_rs_ZonedDateTime_to_instant(self)) : err;
 }
 static ant_value_t temporal_zdt_to_plain_date(ant_params_t) {
   (void)args;
   (void)nargs;
   ant_value_t err = js_mkundef();
-  ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.toPlainDate", &err);
+  ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.toPlainDate", &err);
   return self ? temporal_wrap(js, TEMPORAL_PLAIN_DATE, temporal_rs_ZonedDateTime_to_plain_date(self)) : err;
 }
 static ant_value_t temporal_zdt_to_plain_datetime(ant_params_t) {
   (void)args;
   (void)nargs;
   ant_value_t err = js_mkundef();
-  ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.toPlainDateTime", &err);
+  ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.toPlainDateTime", &err);
   return self ? temporal_wrap(js, TEMPORAL_PLAIN_DATETIME, temporal_rs_ZonedDateTime_to_plain_datetime(self)) : err;
 }
 static ant_value_t temporal_zdt_to_plain_time(ant_params_t) {
   (void)args;
   (void)nargs;
   ant_value_t err = js_mkundef();
-  ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.toPlainTime", &err);
+  ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.toPlainTime", &err);
   return self ? temporal_wrap(js, TEMPORAL_PLAIN_TIME, temporal_rs_ZonedDateTime_to_plain_time(self)) : err;
 }
 static ant_value_t temporal_zdt_with_calendar(ant_params_t) {
   ant_value_t err = js_mkundef();
-  ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.withCalendar", &err);
+  ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.withCalendar", &err);
   if (!self) return err;
   if (nargs < 1 || vtype(args[0]) == kTypeUndefined) return js_mkerr_typed(js, JS_ERR_TYPE, "calendar is required");
   AnyCalendarKind calendar;
@@ -531,7 +531,7 @@ static ant_value_t temporal_zdt_with_calendar(ant_params_t) {
 }
 static ant_value_t temporal_zdt_with_timezone(ant_params_t) {
   ant_value_t err = js_mkundef();
-  ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.withTimeZone", &err);
+  ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.withTimeZone", &err);
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "time zone is required");
   TimeZone zone;
@@ -542,7 +542,7 @@ static ant_value_t temporal_zdt_with_timezone(ant_params_t) {
 }
 static ant_value_t temporal_zdt_with_plain_time(ant_params_t) {
   ant_value_t err = js_mkundef();
-  ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.withPlainTime", &err);
+  ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.withPlainTime", &err);
   if (!self) return err;
   PlainTime *time = NULL;
   if (nargs > 0 && vtype(args[0]) != kTypeUndefined && !temporal_plain_time_from_value(js, args[0], &time, &err)) return err;
@@ -553,7 +553,7 @@ static ant_value_t temporal_zdt_with_plain_time(ant_params_t) {
 }
 static ant_value_t temporal_zdt_with(ant_params_t) {
   ant_value_t err = js_mkundef();
-  ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.with", &err);
+  ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.with", &err);
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "ZonedDateTime-like argument is required");
   if (!is_object_type(args[0])) return js_mkerr_typed(js, JS_ERR_TYPE, "ZonedDateTime-like argument must be an object");
@@ -584,7 +584,7 @@ static ant_value_t temporal_zdt_with(ant_params_t) {
 }
 static ant_value_t temporal_zdt_get_transition(ant_params_t) {
   ant_value_t err = js_mkundef();
-  ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.getTimeZoneTransition", &err);
+  ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.getTimeZoneTransition", &err);
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "direction is required");
   ant_value_t direction_value = args[0];
@@ -609,7 +609,7 @@ static ant_value_t temporal_zdt_get_transition(ant_params_t) {
 }
 static ant_value_t temporal_zdt_to_string(ant_params_t) {
   ant_value_t err = js_mkundef();
-  ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.toString", &err);
+  ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.toString", &err);
   if (!self) return err;
   DiplomatWrite *write = diplomat_buffer_write_create(64);
   temporal_to_string_options_t options;
@@ -635,11 +635,11 @@ static ant_value_t temporal_zdt_to_string(ant_params_t) {
 static ant_value_t temporal_zdt_to_string_default(ant_params_t) {
   (void)args;
   (void)nargs;
-  return temporal_zdt_to_string(js, NULL, 0, js_mkundef());
+  return temporal_zdt_to_string(js, NULL, 0, js_mkundef(), call_this, call_func);
 }
 static ant_value_t temporal_zdt_round(ant_params_t) {
   ant_value_t err = js_mkundef();
-  ZonedDateTime *self = temporal_zdt_this(js, "Temporal.ZonedDateTime.prototype.round", &err);
+  ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.round", &err);
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "round options are required");
   RoundingOptions options;

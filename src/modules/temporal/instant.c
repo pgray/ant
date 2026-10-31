@@ -39,7 +39,7 @@ static ant_value_t temporal_instant_ctor(ant_params_t) {
   if (!temporal_i128_from_value(js, args[0], &ns, &err)) return err;
   temporal_rs_Instant_try_new_result result = temporal_rs_Instant_try_new(ns);
   if (!result.is_ok) return temporal_error(js, result.err);
-  return temporal_wrap_constructed(js, TEMPORAL_INSTANT, result.ok, call_new_target);
+  return temporal_wrap_constructed(js, call_this, TEMPORAL_INSTANT, result.ok, call_new_target);
 }
 
 static ant_value_t temporal_instant_from(ant_params_t) {
@@ -87,29 +87,29 @@ static ant_value_t temporal_instant_compare(ant_params_t) {
   return Ant_Value_FromNumber(comparison);
 }
 
-static Instant *temporal_instant_this(ant_t *js, const char *method, ant_value_t *err) {
-  return temporal_unwrap(js, js_getthis(js), TEMPORAL_INSTANT, method, err);
+static Instant *temporal_instant_this(ant_t *js, ant_value_t call_this, const char *method, ant_value_t *err) {
+  return temporal_unwrap(js, call_this, TEMPORAL_INSTANT, method, err);
 }
 
 static ant_value_t temporal_instant_get_epoch_milliseconds(ant_params_t) {
   (void)args; (void)nargs;
   ant_value_t err = js_mkundef();
-  Instant *self = temporal_instant_this(js, "Temporal.Instant.prototype.epochMilliseconds", &err);
+  Instant *self = temporal_instant_this(js, call_this, "Temporal.Instant.prototype.epochMilliseconds", &err);
   return self ? Ant_Value_FromNumber((double)temporal_rs_Instant_epoch_milliseconds(self)) : err;
 }
 
 static ant_value_t temporal_instant_get_epoch_nanoseconds(ant_params_t) {
   (void)args; (void)nargs;
   ant_value_t err = js_mkundef();
-  Instant *self = temporal_instant_this(js, "Temporal.Instant.prototype.epochNanoseconds", &err);
+  Instant *self = temporal_instant_this(js, call_this, "Temporal.Instant.prototype.epochNanoseconds", &err);
   return self ? temporal_i128_to_bigint(js, temporal_rs_Instant_epoch_nanoseconds(self)) : err;
 }
 
 static ant_value_t temporal_instant_binary_duration(
-  ant_native_params_t, bool subtract
+  ant_native_params_t, ant_value_t call_this, bool subtract
 ) {
   ant_value_t err = js_mkundef();
-  Instant *self = temporal_instant_this(js,
+  Instant *self = temporal_instant_this(js, call_this,
     subtract ? "Temporal.Instant.prototype.subtract" : "Temporal.Instant.prototype.add", &err);
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "Duration argument is required");
@@ -133,16 +133,16 @@ static ant_value_t temporal_instant_binary_duration(
 }
 
 static ant_value_t temporal_instant_add(ant_params_t) {
-  return temporal_instant_binary_duration(js, args, nargs, false);
+  return temporal_instant_binary_duration(js, args, nargs, call_this, false);
 }
 
 static ant_value_t temporal_instant_subtract(ant_params_t) {
-  return temporal_instant_binary_duration(js, args, nargs, true);
+  return temporal_instant_binary_duration(js, args, nargs, call_this, true);
 }
 
 static ant_value_t temporal_instant_equals(ant_params_t) {
   ant_value_t err = js_mkundef();
-  Instant *self = temporal_instant_this(js, "Temporal.Instant.prototype.equals", &err);
+  Instant *self = temporal_instant_this(js, call_this, "Temporal.Instant.prototype.equals", &err);
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "Instant argument is required");
   Instant *other;
@@ -153,10 +153,10 @@ static ant_value_t temporal_instant_equals(ant_params_t) {
 }
 
 static ant_value_t temporal_instant_difference(
-  ant_native_params_t, bool since
+  ant_native_params_t, ant_value_t call_this, bool since
 ) {
   ant_value_t err = js_mkundef();
-  Instant *self = temporal_instant_this(js,
+  Instant *self = temporal_instant_this(js, call_this,
     since ? "Temporal.Instant.prototype.since" : "Temporal.Instant.prototype.until", &err);
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "Instant argument is required");
@@ -184,16 +184,16 @@ static ant_value_t temporal_instant_difference(
 }
 
 static ant_value_t temporal_instant_since(ant_params_t) {
-  return temporal_instant_difference(js, args, nargs, true);
+  return temporal_instant_difference(js, args, nargs, call_this, true);
 }
 
 static ant_value_t temporal_instant_until(ant_params_t) {
-  return temporal_instant_difference(js, args, nargs, false);
+  return temporal_instant_difference(js, args, nargs, call_this, false);
 }
 
 static ant_value_t temporal_instant_to_string(ant_params_t) {
   ant_value_t err = js_mkundef();
-  Instant *self = temporal_instant_this(js, "Temporal.Instant.prototype.toString", &err);
+  Instant *self = temporal_instant_this(js, call_this, "Temporal.Instant.prototype.toString", &err);
   if (!self) return err;
   DiplomatWrite *write = diplomat_buffer_write_create(40);
   if (!write) return js_mkerr_typed(js, JS_ERR_INTERNAL, "Temporal string allocation failed");
@@ -215,12 +215,12 @@ static ant_value_t temporal_instant_to_string(ant_params_t) {
 }
 
 static ant_value_t temporal_instant_to_string_default(ant_params_t) {
-  (void)args; (void)nargs; return temporal_instant_to_string(js, NULL, 0, js_mkundef());
+  (void)args; (void)nargs; return temporal_instant_to_string(js, NULL, 0, js_mkundef(), call_this, call_func);
 }
 
 static ant_value_t temporal_instant_round(ant_params_t) {
   ant_value_t err = js_mkundef();
-  Instant *self = temporal_instant_this(js, "Temporal.Instant.prototype.round", &err);
+  Instant *self = temporal_instant_this(js, call_this, "Temporal.Instant.prototype.round", &err);
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "round options are required");
   RoundingOptions options;
@@ -231,7 +231,7 @@ static ant_value_t temporal_instant_round(ant_params_t) {
 
 static ant_value_t temporal_instant_to_zdt_iso(ant_params_t) {
   ant_value_t err = js_mkundef();
-  Instant *self = temporal_instant_this(js, "Temporal.Instant.prototype.toZonedDateTimeISO", &err);
+  Instant *self = temporal_instant_this(js, call_this, "Temporal.Instant.prototype.toZonedDateTimeISO", &err);
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "time zone is required");
   TimeZone zone;

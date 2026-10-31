@@ -267,22 +267,21 @@ ANT_EVENT_HANDLER_ACCESSORS(js_websocket, message, websocket_invalid_this)
 ANT_EVENT_HANDLER_ACCESSORS(js_websocket, close, websocket_invalid_this)
 ANT_EVENT_HANDLER_ACCESSORS(js_websocket, error, websocket_invalid_this)
 
-static ant_value_t websocket_on_impl(ant_native_params_t, bool once, bool remove) {
-  ant_value_t self = js_getthis(js);
-  if (!websocket_data(self)) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid WebSocket");
+static ant_value_t websocket_on_impl(ant_native_params_t, ant_value_t call_this, bool once, bool remove) {
+  if (!websocket_data(call_this)) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid WebSocket");
   if (nargs < 2 || !is_callable(args[1])) return js_mkerr_typed(js, JS_ERR_TYPE, "listener must be a function");
   
   ant_value_t key = js_tostring_val(js, args[0]);
   if (is_err(key)) return key;
-  if (remove) eventemitter_remove_listener_val(js, self, key, args[1]);
-  else eventemitter_add_listener_val(js, self, key, args[1], once, false);
+  if (remove) eventemitter_remove_listener_val(js, call_this, key, args[1]);
+  else eventemitter_add_listener_val(js, call_this, key, args[1], once, false);
   
-  return self;
+  return call_this;
 }
 
-static ant_value_t js_websocket_on(ant_params_t) { return websocket_on_impl(js, args, nargs, false, false); }
-static ant_value_t js_websocket_once(ant_params_t) { return websocket_on_impl(js, args, nargs, true, false); }
-static ant_value_t js_websocket_off(ant_params_t) { return websocket_on_impl(js, args, nargs, false, true); }
+static ant_value_t js_websocket_on(ant_params_t) { return websocket_on_impl(js, args, nargs, call_this, false, false); }
+static ant_value_t js_websocket_once(ant_params_t) { return websocket_on_impl(js, args, nargs, call_this, true, false); }
+static ant_value_t js_websocket_off(ant_params_t) { return websocket_on_impl(js, args, nargs, call_this, false, true); }
 
 static void websocket_emit_message(ant_t *js, websocket_state_t *ws, const uint8_t *data, size_t len, bool binary) {
   ant_value_t event = Ant_EventTarget_CreateEvent(js, ws->obj, js->builtins.message_event_proto, ANT_EVENT_MESSAGE, "message");
@@ -555,13 +554,13 @@ static ant_value_t js_websocket_ctor(ant_params_t) {
 }
 
 static ant_value_t js_websocket_get_binary_type(ant_params_t) {
-  websocket_state_t *ws = websocket_data(js_getthis(js));
+  websocket_state_t *ws = websocket_data(call_this);
   if (!ws) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid WebSocket");
   return ws->binary_type_blob ? js_mkstr(js, "blob", 4) : js_mkstr(js, "arraybuffer", 11);
 }
 
 static ant_value_t js_websocket_set_binary_type(ant_params_t) {
-  websocket_state_t *ws = websocket_data(js_getthis(js));
+  websocket_state_t *ws = websocket_data(call_this);
   if (!ws) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid WebSocket");
   if (nargs < 1) return js_mkundef();
   
@@ -589,7 +588,7 @@ static bool websocket_bytes_from_value(ant_t *js, ant_value_t value, const uint8
 }
 
 static ant_value_t js_websocket_send(ant_params_t) {
-  websocket_state_t *ws = websocket_data(js_getthis(js));
+  websocket_state_t *ws = websocket_data(call_this);
   const uint8_t *bytes = NULL;
   size_t len = 0;
   ant_value_t keepalive = js_mkundef();
@@ -638,7 +637,7 @@ static ant_value_t js_websocket_send(ant_params_t) {
 }
 
 static ant_value_t js_websocket_close(ant_params_t) {
-  websocket_state_t *ws = websocket_data(js_getthis(js));
+  websocket_state_t *ws = websocket_data(call_this);
   uint16_t code = nargs > 0 && vtype(args[0]) == kTypeNumber ? (uint16_t)Ant_Value_AsNumberUnchecked(args[0]) : 1000;
   const char *reason = NULL;
 

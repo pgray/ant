@@ -1,7 +1,7 @@
 #include "wasm_internal.h"
 
 static ant_value_t js_wasm_exported_func_call(ant_params_t) {
-  ant_value_t state = js_get_slot(js->current_func, SLOT_DATA);
+  ant_value_t state = js_get_slot(call_func, SLOT_DATA);
   wasm_func_handle_t *handle;
   wasm_func_t *func;
 

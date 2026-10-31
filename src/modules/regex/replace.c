@@ -566,11 +566,10 @@ ant_value_t regexp_symbol_replace_impl(
 }
 
 ant_value_t builtin_regexp_symbol_replace(ant_params_t) {
-  ant_value_t rx = js->this_val;
-  if (!is_object_type(rx))
+  if (!is_object_type(call_this))
     return js_mkerr_typed(js, JS_ERR_TYPE, "RegExp.prototype[@@replace] called on non-object");
 
   ant_value_t str = nargs > 0 ? js_tostring_val(js, args[0]) : js_mkstr(js, "undefined", 9);
   if (is_err(str)) return str;
-  return regexp_symbol_replace_impl(js, rx, str, nargs > 1 ? args[1] : js_mkundef(), NULL);
+  return regexp_symbol_replace_impl(js, call_this, str, nargs > 1 ? args[1] : js_mkundef(), NULL);
 }

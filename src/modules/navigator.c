@@ -334,8 +334,8 @@ static void lock_finish(ant_t *js, lock_request_t *req) {
   lock_request_free(js, req);
 }
 
-static void lock_settle_handler(ant_t *js, ant_value_t value, bool fulfilled) {
-  ant_value_t data = js_func_data(js->current_func);
+static void lock_settle_handler(ant_t *js, ant_value_t call_func, ant_value_t value, bool fulfilled) {
+  ant_value_t data = js_func_data(call_func);
   ant_value_t outer_promise = js_get(js, data, "outerPromise");
   navigator_locks_t *client = js->navigator_locks;
 
@@ -348,12 +348,12 @@ static void lock_settle_handler(ant_t *js, ant_value_t value, bool fulfilled) {
 }
 
 static ant_value_t lock_then_handler(ant_params_t) {
-  lock_settle_handler(js, nargs > 0 ? args[0] : js_mkundef(), true);
+  lock_settle_handler(js, call_func, nargs > 0 ? args[0] : js_mkundef(), true);
   return js_mkundef();
 }
 
 static ant_value_t lock_catch_handler(ant_params_t) {
-  lock_settle_handler(js, nargs > 0 ? args[0] : js_mkundef(), false);
+  lock_settle_handler(js, call_func, nargs > 0 ? args[0] : js_mkundef(), false);
   return js_mkundef();
 }
 
@@ -460,7 +460,7 @@ static void locks_drain(ant_t *js, navigator_locks_t *client) {
 
 static ant_value_t lock_abort_handler(ant_params_t) {
   navigator_locks_t *client = js->navigator_locks;
-  lock_request_t *req = lock_find(client, js_func_data(js->current_func));
+  lock_request_t *req = lock_find(client, js_func_data(call_func));
   if (!req) return js_mkundef();
 
   ant_mutex_lock(&lock_registry);

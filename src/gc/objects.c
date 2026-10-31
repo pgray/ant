@@ -1449,8 +1449,6 @@ static void gc_mark_roots(ant_t *js) {
   gc_mark_value(js, js->sym.async_generator_proto);
   gc_mark_value(js, js->sym.async_iterator_proto);
   
-  gc_mark_value(js, js->this_val);
-  gc_mark_value(js, js->current_func);
   gc_mark_value(js, js->exception);
   gc_mark_value(js, js->exception_oom);
   gc_mark_value(js, js->length_str);

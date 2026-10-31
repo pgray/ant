@@ -29,15 +29,14 @@ static ant_value_t async_local_storage_run(ant_params_t) {
     return js_mkerr(js, "AsyncLocalStorage.run(store, callback, ...args) requires a callback");
   }
 
-  ant_value_t this_obj = js_getthis(js);
-  if (!is_object_type(this_obj)) {
+  if (!is_object_type(call_this)) {
     return js_mkerr(js, "AsyncLocalStorage.run() requires an AsyncLocalStorage instance");
   }
 
-  ant_value_t prev = js_get_slot(this_obj, SLOT_DATA);
-  js_set_slot_wb(js, this_obj, SLOT_DATA, args[0]);
+  ant_value_t prev = js_get_slot(call_this, SLOT_DATA);
+  js_set_slot_wb(js, call_this, SLOT_DATA, args[0]);
   ant_value_t result = async_hooks_call_with_tail_args(js, args[1], js_mkundef(), args, nargs, 2);
-  js_set_slot_wb(js, this_obj, SLOT_DATA, prev);
+  js_set_slot_wb(js, call_this, SLOT_DATA, prev);
   return result;
 }
 
@@ -46,36 +45,32 @@ static ant_value_t async_local_storage_exit(ant_params_t) {
     return js_mkerr(js, "AsyncLocalStorage.exit(callback, ...args) requires a callback");
   }
 
-  ant_value_t this_obj = js_getthis(js);
-  if (!is_object_type(this_obj)) {
+  if (!is_object_type(call_this)) {
     return js_mkerr(js, "AsyncLocalStorage.exit() requires an AsyncLocalStorage instance");
   }
 
-  ant_value_t prev = js_get_slot(this_obj, SLOT_DATA);
-  js_set_slot_wb(js, this_obj, SLOT_DATA, js_mkundef());
+  ant_value_t prev = js_get_slot(call_this, SLOT_DATA);
+  js_set_slot_wb(js, call_this, SLOT_DATA, js_mkundef());
   ant_value_t result = async_hooks_call_with_tail_args(js, args[0], js_mkundef(), args, nargs, 1);
-  js_set_slot_wb(js, this_obj, SLOT_DATA, prev);
+  js_set_slot_wb(js, call_this, SLOT_DATA, prev);
   return result;
 }
 
 static ant_value_t async_local_storage_enterWith(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  if (!is_object_type(this_obj)) {
+  if (!is_object_type(call_this)) {
     return js_mkerr(js, "AsyncLocalStorage.enterWith() requires an AsyncLocalStorage instance");
   }
-  js_set_slot_wb(js, this_obj, SLOT_DATA, nargs > 0 ? args[0] : js_mkundef());
+  js_set_slot_wb(js, call_this, SLOT_DATA, nargs > 0 ? args[0] : js_mkundef());
   return js_mkundef();
 }
 
 static ant_value_t async_local_storage_getStore(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  if (!is_object_type(this_obj)) return js_mkundef();
-  return js_get_slot(this_obj, SLOT_DATA);
+  if (!is_object_type(call_this)) return js_mkundef();
+  return js_get_slot(call_this, SLOT_DATA);
 }
 
 static ant_value_t async_local_storage_disable(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  if (is_object_type(this_obj)) js_set_slot_wb(js, this_obj, SLOT_DATA, js_mkundef());
+  if (is_object_type(call_this)) js_set_slot_wb(js, call_this, SLOT_DATA, js_mkundef());
   return js_mkundef();
 }
 
@@ -88,7 +83,7 @@ static ant_value_t async_resource_runInAsyncScope(ant_params_t) {
 }
 
 static ant_value_t async_resource_emitDestroy(ant_params_t) {
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t async_resource_asyncId(ant_params_t) {
@@ -100,11 +95,11 @@ static ant_value_t async_resource_triggerAsyncId(ant_params_t) {
 }
 
 static ant_value_t async_hook_enable(ant_params_t) {
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t async_hook_disable(ant_params_t) {
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t async_hooks_createHook(ant_params_t) {

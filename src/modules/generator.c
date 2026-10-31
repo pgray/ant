@@ -519,50 +519,47 @@ static ant_value_t generator_resume(ant_t *js, ant_value_t gen, ant_value_t resu
 }
 
 static ant_value_t generator_next(ant_params_t) {
-  ant_value_t gen = js->this_val;
-  if (vtype(gen) != kTypeGenerator)
+  if (vtype(call_this) != kTypeGenerator)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Generator.prototype.next called on incompatible receiver");
 
-  if (generator_state(gen) == GEN_EXECUTING && !generator_is_async(gen))
+  if (generator_state(call_this) == GEN_EXECUTING && !generator_is_async(call_this))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Generator is already running");
     
   ant_value_t resume_value = nargs > 0 ? args[0] : js_mkundef();
-  ant_value_t result = generator_resume(js, gen, resume_value);
+  ant_value_t result = generator_resume(js, call_this, resume_value);
   
-  if (generator_is_async(gen) && vtype(result) == kTypePromise) return result;
-  return generator_is_async(gen) ? generator_async_wrap_result(js, result) : result;
+  if (generator_is_async(call_this) && vtype(result) == kTypePromise) return result;
+  return generator_is_async(call_this) ? generator_async_wrap_result(js, result) : result;
 }
 
 static ant_value_t generator_return(ant_params_t) {
-  ant_value_t gen = js->this_val;
-  if (vtype(gen) != kTypeGenerator)
+  if (vtype(call_this) != kTypeGenerator)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Generator.prototype.return called on incompatible receiver");
 
-  generator_state_t state = generator_state(gen);
-  if (state == GEN_EXECUTING && !generator_is_async(gen))
+  generator_state_t state = generator_state(call_this);
+  if (state == GEN_EXECUTING && !generator_is_async(call_this))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Generator is already running");
     
   ant_value_t value = nargs > 0 ? args[0] : js_mkundef();
-  ant_value_t result = generator_resume_kind(js, gen, value, SV_RESUME_RETURN);
+  ant_value_t result = generator_resume_kind(js, call_this, value, SV_RESUME_RETURN);
   
-  if (generator_is_async(gen) && vtype(result) == kTypePromise) return result;
-  return generator_is_async(gen) ? generator_async_wrap_result(js, result) : result;
+  if (generator_is_async(call_this) && vtype(result) == kTypePromise) return result;
+  return generator_is_async(call_this) ? generator_async_wrap_result(js, result) : result;
 }
 
 static ant_value_t generator_throw(ant_params_t) {
-  ant_value_t gen = js->this_val;
-  if (vtype(gen) != kTypeGenerator)
+  if (vtype(call_this) != kTypeGenerator)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Generator.prototype.throw called on incompatible receiver");
     
-  generator_state_t state = generator_state(gen);
-  if (state == GEN_EXECUTING && !generator_is_async(gen))
+  generator_state_t state = generator_state(call_this);
+  if (state == GEN_EXECUTING && !generator_is_async(call_this))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Generator is already running");
     
   ant_value_t value = nargs > 0 ? args[0] : js_mkundef();
-  ant_value_t result = generator_resume_kind(js, gen, value, SV_RESUME_THROW);
+  ant_value_t result = generator_resume_kind(js, call_this, value, SV_RESUME_THROW);
   
-  if (generator_is_async(gen) && vtype(result) == kTypePromise) return result;
-  return generator_is_async(gen) ? generator_async_wrap_result(js, result) : result;
+  if (generator_is_async(call_this) && vtype(result) == kTypePromise) return result;
+  return generator_is_async(call_this) ? generator_async_wrap_result(js, result) : result;
 }
 
 bool js_generator_can_resume_sync(ant_value_t gen, ant_value_t method, sv_resume_kind_t kind) {

@@ -1760,8 +1760,8 @@ static ant_value_t builtin_BigInt_asUintN(ant_params_t) {
   return res;
 }
 
-static ant_value_t bigint_this_value(ant_t *js, const char *method) {
-  ant_value_t val = js->this_val;
+static ant_value_t bigint_this_value(ant_t *js, ant_value_t call_this, const char *method) {
+  ant_value_t val = call_this;
   if (vtype(val) != kTypeBigInt) val = unwrap_primitive(js, val);
   if (vtype(val) == kTypeBigInt) return val;
   return js_mkerr_typed(js, JS_ERR_TYPE, "BigInt.prototype.%s requires that 'this' be a BigInt", method);
@@ -1824,7 +1824,7 @@ static ant_value_t bigint_to_radix_string(ant_t *js, ant_value_t val, uint32_t r
 }
 
 static ant_value_t builtin_bigint_toString(ant_params_t) {
-  ant_value_t val = bigint_this_value(js, "toString");
+  ant_value_t val = bigint_this_value(js, call_this, "toString");
   if (is_err(val)) return val;
 
   uint32_t radix = 10;
@@ -1835,13 +1835,13 @@ static ant_value_t builtin_bigint_toString(ant_params_t) {
 }
 
 static ant_value_t builtin_bigint_toLocaleString(ant_params_t) {
-  ant_value_t val = bigint_this_value(js, "toLocaleString");
+  ant_value_t val = bigint_this_value(js, call_this, "toLocaleString");
   if (is_err(val)) return val;
   return bigint_to_radix_string(js, val, 10, true);
 }
 
 static ant_value_t builtin_bigint_valueOf(ant_params_t) {
-  return bigint_this_value(js, "valueOf");
+  return bigint_this_value(js, call_this, "valueOf");
 }
 
 void init_bigint_module(ant_t *js) {

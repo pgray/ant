@@ -94,13 +94,12 @@ void regexp_note_replace_property_write(ant_t *js) {
 }
 
 static ant_value_t builtin_regexp_groups_getter(ant_params_t) {
-  ant_value_t result_arr = js->this_val;
-  if (!is_object_type(result_arr)) return js_mkundef();
+  if (!is_object_type(call_this)) return js_mkundef();
 
-  ant_value_t cached = js_get_slot(result_arr, SLOT_REGEXP_GROUPS_CACHE);
+  ant_value_t cached = js_get_slot(call_this, SLOT_REGEXP_GROUPS_CACHE);
   if (is_object_type(cached)) return cached;
 
-  ant_value_t meta = js_get_slot(result_arr, SLOT_REGEXP_RESULT_GROUPS);
+  ant_value_t meta = js_get_slot(call_this, SLOT_REGEXP_RESULT_GROUPS);
   if (!is_object_type(meta)) return js_mkundef();
 
   ant_value_t groups = Ant_Object_CreateBare(js);
@@ -114,13 +113,13 @@ static ant_value_t builtin_regexp_groups_getter(ant_params_t) {
     ant_offset_t index = (vtype(index_val) == kTypeNumber) ? (ant_offset_t)Ant_Value_AsNumberUnchecked(index_val) : 0;
     char idxstr[16];
     (void)uint_to_str(idxstr, sizeof(idxstr), (uint64_t)index);
-    ant_value_t value = js_getprop_fallback(js, result_arr, idxstr);
+    ant_value_t value = js_getprop_fallback(js, call_this, idxstr);
     ant_offset_t name_len, name_off = vstr(js, name, &name_len);
     ant_value_t status = setprop_cstr(js, groups, (const char *)(uintptr_t)name_off, (size_t)name_len, value);
     if (is_err(status)) return status;
   }
 
-  js_set_slot(result_arr, SLOT_REGEXP_GROUPS_CACHE, groups);
+  js_set_slot(call_this, SLOT_REGEXP_GROUPS_CACHE, groups);
   return groups;
 }
 
@@ -366,14 +365,13 @@ ant_value_t regexp_exec_internal(ant_t *js, ant_value_t regexp, ant_value_t str_
 }
 
 ant_value_t builtin_regexp_exec(ant_params_t) {
-  ant_value_t regexp = js->this_val;
-  if (!regexp_has_internal_slots(js, regexp))
+  if (!regexp_has_internal_slots(js, call_this))
     return js_mkerr_typed(js, JS_ERR_TYPE, "RegExp.prototype.exec called on incompatible receiver");
 
   ant_value_t str_arg = nargs > 0 ? coerce_to_str(js, args[0]) : js_mkstr(js, "undefined", 9);
   if (is_err(str_arg)) return str_arg;
 
-  return regexp_exec_internal(js, regexp, str_arg, false);
+  return regexp_exec_internal(js, call_this, str_arg, false);
 }
 
 bool regexp_named_capture(void *ctx, const char *name, size_t len, repl_capture_t *out) {
@@ -477,23 +475,22 @@ bool regexp_exec_truthy_try_fast(
 }
 
 ant_value_t builtin_regexp_test(ant_params_t) {
-  ant_value_t regexp = js->this_val;
-  if (!is_object_type(regexp))
+  if (!is_object_type(call_this))
     return js_mkerr_typed(js, JS_ERR_TYPE, "test called on non-object");
   ant_value_t str_arg = nargs > 0 ? js_tostring_val(js, args[0]) : js_mkstr(js, "undefined", 9);
   if (is_err(str_arg)) return str_arg;
   regexp_fast_t fast;
-  if (regexp_fast_get(js, regexp, REGEXP_FAST_PRISTINE, &fast)) {
-    ant_value_t result = regexp_exec_internal(js, regexp, str_arg, true);
+  if (regexp_fast_get(js, call_this, REGEXP_FAST_PRISTINE, &fast)) {
+    ant_value_t result = regexp_exec_internal(js, call_this, str_arg, true);
     return is_err(result) ? result : mkval(kTypeBool, vtype(result) != kTypeNull ? 1 : 0);
   }
-  ant_value_t exec_fn = js_getprop_fallback(js, regexp, "exec");
+  ant_value_t exec_fn = js_getprop_fallback(js, call_this, "exec");
   if (is_err(exec_fn)) return exec_fn;
 
   ant_value_t result;
   if (vtype(exec_fn) == kTypeBuiltin && js_cfunc_same_entrypoint(exec_fn, builtin_regexp_exec)) {
-    result = regexp_exec_internal(js, regexp, str_arg, true);
-  } else result = regexp_exec_with_exec_fn(js, regexp, str_arg, exec_fn);
+    result = regexp_exec_internal(js, call_this, str_arg, true);
+  } else result = regexp_exec_with_exec_fn(js, call_this, str_arg, exec_fn);
   
   if (is_err(result)) return result;
   return mkval(kTypeBool, vtype(result) != kTypeNull ? 1 : 0);

@@ -83,11 +83,10 @@ static bool is_tty_fd(int fd) {
   return uv_guess_handle(fd) == UV_TTY;
 }
 
-static int stream_fd_from_this(ant_t *js, int fallback_fd) {
-  ant_value_t this_obj = js_getthis(js);
-  if (!is_special_object(this_obj)) return fallback_fd;
+static int stream_fd_from_this(ant_t *js, ant_value_t call_this, int fallback_fd) {
+  if (!is_special_object(call_this)) return fallback_fd;
 
-  ant_value_t fd_val = js_get(js, this_obj, "fd");
+  ant_value_t fd_val = js_get(js, call_this, "fd");
   int fd = 0;
   if (!parse_fd(fd_val, &fd)) return fallback_fd;
   return fd;
@@ -189,12 +188,11 @@ cleanup:
 }
 
 static ant_value_t tty_readstream__read(ant_params_t) {
-  ant_value_t stream_obj = js_getthis(js);
-  tty_read_stream_state_t *state = tty_read_stream_state_from_obj(stream_obj);
+  tty_read_stream_state_t *state = tty_read_stream_state_from_obj(call_this);
   int rc = 0;
 
   if (!state) return js_mkundef();
-  if (state->closing || js_truthy(js, js_get(js, stream_obj, "destroyed"))) return js_mkundef();
+  if (state->closing || js_truthy(js, js_get(js, call_this, "destroyed"))) return js_mkundef();
 
   if (!state->initialized) {
     rc = uv_tty_init(js->loop, &state->tty, state->fd, 0);
@@ -219,14 +217,12 @@ static ant_value_t tty_readstream__read(ant_params_t) {
 }
 
 static ant_value_t tty_readstream__destroy(ant_params_t) {
-  ant_value_t stream_obj = js_getthis(js);
-
-  tty_read_stream_state_t *state = tty_read_stream_state_from_obj(stream_obj);
+  tty_read_stream_state_t *state = tty_read_stream_state_from_obj(call_this);
   ant_value_t cb = nargs > 1 ? args[1] : js_mkundef();
   if (!state) return invoke_callback_if_needed(js, cb, js_mknull());
 
   tty_read_stream_stop(state);
-  stream_clear_attached_state(stream_obj);
+  stream_clear_attached_state(call_this);
 
   if (state->initialized && !state->closing) {
     state->closing = true;
@@ -540,7 +536,7 @@ static ant_value_t tty_stream_write(ant_params_t) {
   if (nargs > 1 && is_callable(args[1])) cb = args[1];
   if (nargs > 2 && is_callable(args[2])) cb = args[2];
 
-  int fd = stream_fd_from_this(js, ANT_STDOUT_FD);
+  int fd = stream_fd_from_this(js, call_this, ANT_STDOUT_FD);
   bool ok = false;
 
   if (ant_output_has_writer() && (fd == ANT_STDOUT_FD || fd == ANT_STDERR_FD)) {
@@ -563,7 +559,7 @@ static ant_value_t tty_stream_write(ant_params_t) {
 }
 
 static ant_value_t tty_write_stream_rows_getter(ant_params_t) {
-  int fd = stream_fd_from_this(js, ANT_STDOUT_FD);
+  int fd = stream_fd_from_this(js, call_this, ANT_STDOUT_FD);
   if (!is_tty_fd(fd)) return js_mkundef();
 
   int rows = 0;
@@ -573,7 +569,7 @@ static ant_value_t tty_write_stream_rows_getter(ant_params_t) {
 }
 
 static ant_value_t tty_write_stream_columns_getter(ant_params_t) {
-  int fd = stream_fd_from_this(js, ANT_STDOUT_FD);
+  int fd = stream_fd_from_this(js, call_this, ANT_STDOUT_FD);
   if (!is_tty_fd(fd)) return js_mkundef();
 
   int rows = 0;
@@ -583,7 +579,7 @@ static ant_value_t tty_write_stream_columns_getter(ant_params_t) {
 }
 
 static ant_value_t tty_write_stream_get_window_size(ant_params_t) {
-  int fd = stream_fd_from_this(js, ANT_STDOUT_FD);
+  int fd = stream_fd_from_this(js, call_this, ANT_STDOUT_FD);
   int rows = 0;
   int cols = 0;
   get_tty_size(fd, &rows, &cols);
@@ -595,8 +591,6 @@ static ant_value_t tty_write_stream_get_window_size(ant_params_t) {
 }
 
 static ant_value_t tty_write_stream_clear_line(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-
   int dir = 0;
   if (!tty_ctrl_parse_clear_line_dir(args, nargs, 0, &dir)) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "clearLine(dir) requires a numeric dir");
@@ -605,32 +599,29 @@ static ant_value_t tty_write_stream_clear_line(ant_params_t) {
   ant_value_t cb = js_mkundef();
   if (nargs > 1 && is_callable(args[1])) cb = args[1];
 
-  int fd = stream_fd_from_this(js, ANT_STDOUT_FD);
+  int fd = stream_fd_from_this(js, call_this, ANT_STDOUT_FD);
   size_t seq_len = 0;
   
   const char *seq = tty_ctrl_clear_line_seq(dir, &seq_len);
   bool ok = tty_ctrl_write_fd(fd, seq, seq_len);
   
-  return maybe_callback_or_throw(js, this_obj, cb, ok, "clearLine", fd);
+  return maybe_callback_or_throw(js, call_this, cb, ok, "clearLine", fd);
 }
 
 static ant_value_t tty_write_stream_clear_screen_down(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-
   ant_value_t cb = js_mkundef();
   if (nargs > 0 && is_callable(args[0])) cb = args[0];
 
-  int fd = stream_fd_from_this(js, ANT_STDOUT_FD);
+  int fd = stream_fd_from_this(js, call_this, ANT_STDOUT_FD);
   size_t seq_len = 0;
   
   const char *seq = tty_ctrl_clear_screen_down_seq(&seq_len);
   bool ok = tty_ctrl_write_fd(fd, seq, seq_len);
   
-  return maybe_callback_or_throw(js, this_obj, cb, ok, "clearScreenDown", fd);
+  return maybe_callback_or_throw(js, call_this, cb, ok, "clearScreenDown", fd);
 }
 
 static ant_value_t tty_write_stream_cursor_to(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
   int x = 0;
   
   if (nargs < 1 || !tty_ctrl_parse_int_value(args[0], &x)) {
@@ -663,13 +654,12 @@ static ant_value_t tty_write_stream_cursor_to(ant_params_t) {
     return js_mkerr(js, "Failed to build cursor sequence");
   }
 
-  int fd = stream_fd_from_this(js, ANT_STDOUT_FD);
+  int fd = stream_fd_from_this(js, call_this, ANT_STDOUT_FD);
   bool ok = tty_ctrl_write_fd(fd, seq, seq_len);
-  return maybe_callback_or_throw(js, this_obj, cb, ok, "cursorTo", fd);
+  return maybe_callback_or_throw(js, call_this, cb, ok, "cursorTo", fd);
 }
 
 static ant_value_t tty_write_stream_move_cursor(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
   if (nargs < 2) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "moveCursor(dx, dy[, callback]) requires dx and dy");
   }
@@ -683,7 +673,7 @@ static ant_value_t tty_write_stream_move_cursor(ant_params_t) {
   ant_value_t cb = js_mkundef();
   if (nargs > 2 && is_callable(args[2])) cb = args[2];
 
-  int fd = stream_fd_from_this(js, ANT_STDOUT_FD);
+  int fd = stream_fd_from_this(js, call_this, ANT_STDOUT_FD);
   bool ok = true;
 
   if (dx != 0) {
@@ -704,14 +694,14 @@ static ant_value_t tty_write_stream_move_cursor(ant_params_t) {
     if (!tty_ctrl_write_fd(fd, seq_y, len_y)) ok = false;
   }
 
-  return maybe_callback_or_throw(js, this_obj, cb, ok, "moveCursor", fd);
+  return maybe_callback_or_throw(js, call_this, cb, ok, "moveCursor", fd);
 }
 
 static ant_value_t tty_write_stream_get_color_depth(ant_params_t) {
   ant_value_t env_obj = js_mkundef();
   if (nargs > 0 && is_special_object(args[0])) env_obj = args[0];
 
-  int fd = stream_fd_from_this(js, ANT_STDOUT_FD);
+  int fd = stream_fd_from_this(js, call_this, ANT_STDOUT_FD);
   int depth = detect_color_depth(js, fd, env_obj);
   return Ant_Value_FromNumber((double)depth);
 }
@@ -737,25 +727,24 @@ static ant_value_t tty_write_stream_has_colors(ant_params_t) {
   if (nargs > 1 && is_special_object(args[1])) env_obj = args[1];
   if (count < 1) count = 1;
 
-  int fd = stream_fd_from_this(js, ANT_STDOUT_FD);
+  int fd = stream_fd_from_this(js, call_this, ANT_STDOUT_FD);
   int depth = detect_color_depth(js, fd, env_obj);
   int max_colors = palette_size_for_depth(depth);
   return js_bool(max_colors >= count);
 }
 
 static ant_value_t tty_read_stream_set_raw_mode(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  if (!is_special_object(this_obj)) {
+  if (!is_special_object(call_this)) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "setRawMode() requires a ReadStream receiver");
   }
 
   bool enable = nargs > 0 ? js_truthy(js, args[0]) : true;
-  int fd = stream_fd_from_this(js, ANT_STDIN_FD);
+  int fd = stream_fd_from_this(js, call_this, ANT_STDIN_FD);
   if (!tty_set_raw_mode(fd, enable)) {
     return js_mkerr_typed(js, JS_ERR_GENERIC, "Failed to set raw mode for fd %d", fd);
   }
-  js_set(js, this_obj, "isRaw", js_bool(enable));
-  return this_obj;
+  js_set(js, call_this, "isRaw", js_bool(enable));
+  return call_this;
 }
 
 static ant_value_t tty_read_stream_constructor(ant_params_t) {

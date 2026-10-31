@@ -152,14 +152,14 @@ switch (st->encoding) {
 }}
 
 static ant_value_t js_sd_get_encoding(ant_params_t) {
-  sd_state_t *st = sd_get_state(js->this_val);
+  sd_state_t *st = sd_get_state(call_this);
   if (!st) return js_mkstr(js, "utf-8", 5);
   const char *name = sd_encoding_name(st->encoding);
   return js_mkstr(js, name, strlen(name));
 }
 
 static ant_value_t js_sd_write(ant_params_t) {
-  sd_state_t *st = sd_get_state(js->this_val);
+  sd_state_t *st = sd_get_state(call_this);
   
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid StringDecoder");
   if (nargs < 1) return js_mkstr(js, "", 0);
@@ -179,7 +179,7 @@ static ant_value_t js_sd_write(ant_params_t) {
 }
 
 static ant_value_t js_sd_end(ant_params_t) {
-  sd_state_t *st = sd_get_state(js->this_val);
+  sd_state_t *st = sd_get_state(call_this);
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid StringDecoder");
 
   const uint8_t *src = NULL;
@@ -278,9 +278,9 @@ static __attribute__((noinline)) ant_value_t sd_init_this(ant_t *js, ant_value_t
 static ant_value_t js_sd_ctor(ant_params_t) {
   ant_value_t encoding = nargs > 0 ? args[0] : js_mkundef();
 
-  if (!is_undefined(call_new_target) || !is_object_type(js->this_val))
+  if (!is_undefined(call_new_target) || !is_object_type(call_this))
     return string_decoder_create(js, encoding, call_new_target);
-  return sd_init_this(js, js->this_val, encoding);
+  return sd_init_this(js, call_this, encoding);
 }
 
 ant_value_t string_decoder_library(ant_t *js) {

@@ -89,8 +89,8 @@ static ant_value_t wasm_wrap_export_value(ant_t *js, ant_value_t instance_obj, c
 }
 
 ant_value_t js_wasm_instance_exports_getter(ant_params_t) {
-  if (!js_check_brand(js->this_val, BRAND_WASM_INSTANCE)) return js_mkerr_typed(js, JS_ERR_TYPE, "Expected a WebAssembly.Instance");
-  return js_get_slot(js->this_val, SLOT_ENTRIES);
+  if (!js_check_brand(call_this, BRAND_WASM_INSTANCE)) return js_mkerr_typed(js, JS_ERR_TYPE, "Expected a WebAssembly.Instance");
+  return js_get_slot(call_this, SLOT_ENTRIES);
 }
 
 static ant_value_t wasm_property_get_nested(ant_t *js, ant_value_t base, const wasm_name_t *name) {

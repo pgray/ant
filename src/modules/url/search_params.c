@@ -13,7 +13,6 @@
 
 #include "silver/call.h"
 #include "modules/url.h"
-#include "modules/symbol.h"
 #include "modules/iterator.h"
 #include "url_internal.h"
 
@@ -215,7 +214,7 @@ static ant_value_t usp_get(ant_params_t) {
   if (is_err(key_sv)) return key_sv;
 
   const char *key = js_getstr(js, key_sv, NULL);
-  ant_value_t entries = usp_entries(js->this_val);
+  ant_value_t entries = usp_entries(call_this);
   if (!key || !entries) return js_mknull();
 
   ant_offset_t len = js_arr_len(js, entries);
@@ -235,7 +234,7 @@ static ant_value_t usp_getAll(ant_params_t) {
   if (is_err(key_sv)) return key_sv;
 
   const char *key = js_getstr(js, key_sv, NULL);
-  ant_value_t entries = usp_entries(js->this_val);
+  ant_value_t entries = usp_entries(call_this);
   if (!key || !entries) return result;
 
   ant_offset_t len = js_arr_len(js, entries);
@@ -260,7 +259,7 @@ static ant_value_t usp_has(ant_params_t) {
   ant_value_t converted = usp_optional_value(js, args, nargs, &value);
   if (is_err(converted)) return converted;
 
-  ant_value_t entries = usp_entries(js->this_val);
+  ant_value_t entries = usp_entries(call_this);
   ant_offset_t len = usp_entry_count(js, entries);
   for (ant_offset_t i = 0; i < len; i++)
     if (usp_entry_matches(js, js_arr_get(js, entries, i), key, value)) return js_true;
@@ -280,7 +279,7 @@ static ant_value_t usp_set(ant_params_t) {
   const char *key = js_getstr(js, key_sv, NULL);
   if (!key) return js_mkundef();
 
-  ant_value_t entries = usp_entries(js->this_val);
+  ant_value_t entries = usp_entries(call_this);
   ant_offset_t len = usp_entry_count(js, entries);
   ant_value_t next = js_mkarr(js);
   bool found = false;
@@ -297,7 +296,7 @@ static ant_value_t usp_set(ant_params_t) {
   }
 
   if (!found) js_arr_push(js, next, usp_make_entry(js, key_sv, value_sv));
-  usp_replace_entries(js, js->this_val, next);
+  usp_replace_entries(js, call_this, next);
 
   return js_mkundef();
 }
@@ -311,11 +310,11 @@ static ant_value_t usp_append(ant_params_t) {
   ant_value_t value_sv = url_string_value(js, args[1]);
   if (is_err(value_sv)) return value_sv;
 
-  ant_value_t entries = usp_entries(js->this_val);
+  ant_value_t entries = usp_entries(call_this);
   if (!entries) return js_mkundef();
 
   js_arr_push(js, entries, usp_make_entry(js, key_sv, value_sv));
-  usp_push_to_url(js, js->this_val);
+  usp_push_to_url(js, call_this);
 
   return js_mkundef();
 }
@@ -333,7 +332,7 @@ static ant_value_t usp_delete(ant_params_t) {
   ant_value_t converted = usp_optional_value(js, args, nargs, &value);
   if (is_err(converted)) return converted;
 
-  ant_value_t entries = usp_entries(js->this_val);
+  ant_value_t entries = usp_entries(call_this);
   ant_offset_t len = usp_entry_count(js, entries);
   ant_value_t next = js_mkarr(js);
 
@@ -342,12 +341,12 @@ static ant_value_t usp_delete(ant_params_t) {
     if (!usp_entry_matches(js, entry, key, value)) js_arr_push(js, next, entry);
   }
 
-  usp_replace_entries(js, js->this_val, next);
+  usp_replace_entries(js, call_this, next);
   return js_mkundef();
 }
 
 static ant_value_t usp_toString(ant_params_t) {
-  char *s = usp_serialize(js, js->this_val);
+  char *s = usp_serialize(js, call_this);
   ant_value_t ret = js_mkstr(js, s, strlen(s));
   free(s);
   return ret;
@@ -365,13 +364,12 @@ static ant_value_t usp_forEach(ant_params_t) {
 
   ant_value_t callback = args[0];
   ant_value_t this_arg = nargs >= 2 ? args[1] : js_mkundef();
-  ant_value_t self = js->this_val;
-  ant_value_t entries = usp_entries(self);
+  ant_value_t entries = usp_entries(call_this);
   ant_offset_t len = usp_entry_count(js, entries);
 
   for (ant_offset_t i = 0; i < len; i++) {
     ant_value_t entry = js_arr_get(js, entries, i);
-    ant_value_t call_args[3] = { js_arr_get(js, entry, 1), js_arr_get(js, entry, 0), self };
+    ant_value_t call_args[3] = { js_arr_get(js, entry, 1), js_arr_get(js, entry, 0), call_this };
     ant_value_t result = sv_vm_call(js->vm, js, callback, this_arg, call_args, 3, NULL, js_mkundef());
     if (is_err(result)) return result;
   }
@@ -380,7 +378,7 @@ static ant_value_t usp_forEach(ant_params_t) {
 }
 
 static ant_value_t usp_size_get(ant_params_t) {
-  return Ant_Value_FromNumber((double)usp_entry_count(js, usp_entries(js->this_val)));
+  return Ant_Value_FromNumber((double)usp_entry_count(js, usp_entries(call_this)));
 }
 
 static void usp_sort_entries(ant_t *js, ant_value_t *items, ant_offset_t len) {
@@ -401,7 +399,7 @@ static void usp_sort_entries(ant_t *js, ant_value_t *items, ant_offset_t len) {
 }
 
 static ant_value_t usp_sort(ant_params_t) {
-  ant_value_t entries = usp_entries(js->this_val);
+  ant_value_t entries = usp_entries(call_this);
   ant_offset_t len = usp_entry_count(js, entries);
   if (len <= 1) return js_mkundef();
 
@@ -415,7 +413,7 @@ static ant_value_t usp_sort(ant_params_t) {
   for (ant_offset_t i = 0; i < len; i++) js_arr_push(js, next, items[i]);
   free(items);
 
-  usp_replace_entries(js, js->this_val, next);
+  usp_replace_entries(js, call_this, next);
   return js_mkundef();
 }
 
@@ -428,17 +426,17 @@ static ant_value_t usp_iter_value(ant_t *js, uint32_t kind, ant_value_t entry) {
 }
 
 static ant_value_t usp_iter_next(ant_params_t) {
-  ant_value_t state_v = js_get_slot(js->this_val, SLOT_ITER_STATE);
+  ant_value_t state_v = js_get_slot(call_this, SLOT_ITER_STATE);
   if (vtype(state_v) != kTypeNumber) return js_iter_result(js, false, js_mkundef());
 
   uint32_t state = (uint32_t)Ant_Value_AsNumberUnchecked(state_v);
   uint32_t kind = iter_state_kind(state);
   uint32_t idx = iter_state_index(state);
 
-  ant_value_t entries = usp_entries(js_get_slot(js->this_val, SLOT_DATA));
+  ant_value_t entries = usp_entries(js_get_slot(call_this, SLOT_DATA));
   if ((ant_offset_t)idx >= usp_entry_count(js, entries)) return js_iter_result(js, false, js_mkundef());
 
-  js_set_slot(js->this_val, SLOT_ITER_STATE, Ant_Value_FromNumber((double)iter_state_pack(kind, idx + 1)));
+  js_set_slot(call_this, SLOT_ITER_STATE, Ant_Value_FromNumber((double)iter_state_pack(kind, idx + 1)));
   return js_iter_result(js, true, usp_iter_value(js, kind, js_arr_get(js, entries, (ant_offset_t)idx)));
 }
 
@@ -451,15 +449,15 @@ static ant_value_t make_usp_iter(ant_t *js, ant_value_t usp, int kind) {
 }
 
 static ant_value_t usp_entries_fn(ant_params_t) {
-  return make_usp_iter(js, js->this_val, USP_ITER_ENTRIES);
+  return make_usp_iter(js, call_this, USP_ITER_ENTRIES);
 }
 
 static ant_value_t usp_keys_fn(ant_params_t) {
-  return make_usp_iter(js, js->this_val, USP_ITER_KEYS);
+  return make_usp_iter(js, call_this, USP_ITER_KEYS);
 }
 
 static ant_value_t usp_values_fn(ant_params_t) {
-  return make_usp_iter(js, js->this_val, USP_ITER_VALUES);
+  return make_usp_iter(js, call_this, USP_ITER_VALUES);
 }
 
 static ant_value_t usp_invalid_tuple(ant_t *js) {
@@ -646,7 +644,6 @@ void url_init_search_params(ant_t *js) {
   js_set_proto_init(js->builtins.usp_iter_proto, js->sym.iterator_proto);
   js_set(js, js->builtins.usp_iter_proto, "next", Ant_Function_Create(usp_iter_next));
   js_set_descriptor(js, js->builtins.usp_iter_proto, "next", 4, JS_DESC_W | JS_DESC_E | JS_DESC_C);
-  js_set_sym(js, js->builtins.usp_iter_proto, js->sym.iterator_sym, Ant_Function_Create(sym_this_cb));
 
   js->builtins.usp_proto = Ant_Object_CreateBare(js);
   js_set(js, js->builtins.usp_proto, "get",      Ant_Function_CreateWithArity(usp_get, 1));

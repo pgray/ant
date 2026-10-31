@@ -69,13 +69,12 @@ static ant_value_t regexp_symbol_match_impl(ant_t *js, ant_value_t rx, ant_value
 }
 
 ant_value_t builtin_regexp_symbol_match(ant_params_t) {
-  ant_value_t rx = js->this_val;
-  if (!is_object_type(rx))
+  if (!is_object_type(call_this))
     return js_mkerr_typed(js, JS_ERR_TYPE, "RegExp.prototype[@@match] called on non-object");
 
   ant_value_t str = nargs > 0 ? js_tostring_val(js, args[0]) : js_mkstr(js, "undefined", 9);
   if (is_err(str)) return str;
-  return regexp_symbol_match_impl(js, rx, str);
+  return regexp_symbol_match_impl(js, call_this, str);
 }
 
 enum {
@@ -85,10 +84,9 @@ enum {
 };
 
 ant_value_t regexp_matchall_next(ant_params_t) {
-  ant_value_t iter = js->this_val;
-  ant_value_t rx = js_get_slot(iter, SLOT_MATCHALL_RX);
-  ant_value_t str = js_get_slot(iter, SLOT_MATCHALL_STR);
-  ant_value_t state_val = js_get_slot(iter, SLOT_MATCHALL_STATE);
+  ant_value_t rx = js_get_slot(call_this, SLOT_MATCHALL_RX);
+  ant_value_t str = js_get_slot(call_this, SLOT_MATCHALL_STR);
+  ant_value_t state_val = js_get_slot(call_this, SLOT_MATCHALL_STATE);
   uint32_t state = vtype(state_val) == kTypeNumber ? (uint32_t)Ant_Value_AsNumberUnchecked(state_val) : MATCHALL_DONE;
   
   if (state & MATCHALL_DONE)
@@ -99,7 +97,7 @@ ant_value_t regexp_matchall_next(ant_params_t) {
     ant_value_t result = regexp_exec_internal(js, rx, str, false);
     if (is_err(result)) return result;
     if (vtype(result) == kTypeNull || !(state & MATCHALL_GLOBAL))
-      js_set_slot(iter, SLOT_MATCHALL_STATE, Ant_Value_FromNumber(state | MATCHALL_DONE));
+      js_set_slot(call_this, SLOT_MATCHALL_STATE, Ant_Value_FromNumber(state | MATCHALL_DONE));
     if (vtype(result) == kTypeNull) return js_iter_result(js, false, js_mkundef());
     if (state & MATCHALL_GLOBAL) {
       ant_offset_t match_len;
@@ -121,7 +119,7 @@ ant_value_t regexp_matchall_next(ant_params_t) {
   if (is_err(result)) return result;
 
   if (vtype(result) == kTypeNull) {
-    js_set_slot(iter, SLOT_MATCHALL_STATE, Ant_Value_FromNumber(state | MATCHALL_DONE));
+    js_set_slot(call_this, SLOT_MATCHALL_STATE, Ant_Value_FromNumber(state | MATCHALL_DONE));
     return js_iter_result(js, false, js_mkundef());
   }
 
@@ -134,7 +132,7 @@ ant_value_t regexp_matchall_next(ant_params_t) {
       ant_value_t advanced = regexp_advance_last_index(js, rx, str, (state & MATCHALL_UNICODE) != 0);
       if (is_err(advanced)) return advanced;
     }
-  } else js_set_slot(iter, SLOT_MATCHALL_STATE, Ant_Value_FromNumber(state | MATCHALL_DONE));
+  } else js_set_slot(call_this, SLOT_MATCHALL_STATE, Ant_Value_FromNumber(state | MATCHALL_DONE));
 
   return js_iter_result(js, true, result);
 }
@@ -167,32 +165,31 @@ static ant_value_t regexp_matchall_fast(ant_t *js, ant_value_t rx, const regexp_
 }
 
 ant_value_t builtin_regexp_symbol_matchAll(ant_params_t) {
-  ant_value_t rx = js->this_val;
-  if (!is_object_type(rx))
+  if (!is_object_type(call_this))
     return js_mkerr_typed(js, JS_ERR_TYPE, "RegExp.prototype[@@matchAll] called on non-object");
 
   ant_value_t str = nargs > 0 ? js_tostring_val(js, args[0]) : js_mkstr(js, "undefined", 9);
   if (is_err(str)) return str;
 
   regexp_fast_t fast;
-  if (regexp_fast_get(js, rx, REGEXP_FAST_PRISTINE, &fast)) {
-    ant_value_t iter = regexp_matchall_fast(js, rx, &fast, str);
+  if (regexp_fast_get(js, call_this, REGEXP_FAST_PRISTINE, &fast)) {
+    ant_value_t iter = regexp_matchall_fast(js, call_this, &fast, str);
     if (vtype(iter) != kTypeUndefined) return iter;
   }
 
-  ant_value_t C = regexp_species_ctor(js, rx, "RegExp.prototype[@@matchAll]");
+  ant_value_t C = regexp_species_ctor(js, call_this, "RegExp.prototype[@@matchAll]");
   if (is_err(C)) return C;
 
-  ant_value_t flags_val = js_getprop_fallback(js, rx, "flags");
+  ant_value_t flags_val = js_getprop_fallback(js, call_this, "flags");
   if (is_err(flags_val)) return flags_val;
   ant_value_t flags_str = js_tostring_val(js, flags_val);
   if (is_err(flags_str)) return flags_str;
 
-  ant_value_t ctor_args[2] = { rx, flags_str };
-  ant_value_t new_rx = regexp_species_construct(js, rx, C, ctor_args, 2);
+  ant_value_t ctor_args[2] = { call_this, flags_str };
+  ant_value_t new_rx = regexp_species_construct(js, call_this, C, ctor_args, 2);
   if (is_err(new_rx)) return new_rx;
 
-  ant_value_t li_val = js_getprop_fallback(js, rx, "lastIndex");
+  ant_value_t li_val = js_getprop_fallback(js, call_this, "lastIndex");
   if (is_err(li_val)) return li_val;
   size_t last_index = 0;
   ant_value_t status = js_to_length_fast(js, li_val, &last_index);
@@ -210,7 +207,7 @@ ant_value_t builtin_regexp_symbol_matchAll(ant_params_t) {
 }
 
 ant_value_t builtin_string_matchAll(ant_params_t) {
-  ant_value_t str = Ant_String_CoerceThis(js, "matchAll");
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, "matchAll");
   
   if (is_err(str)) return str;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "matchAll requires at least 1 argument");
@@ -264,13 +261,12 @@ ant_value_t builtin_string_matchAll(ant_params_t) {
 static ant_value_t regexp_symbol_search_impl(ant_t *js, ant_value_t rx, ant_value_t str);
 
 ant_value_t builtin_regexp_symbol_search(ant_params_t) {
-  ant_value_t rx = js->this_val;
-  if (!is_object_type(rx))
+  if (!is_object_type(call_this))
     return js_mkerr_typed(js, JS_ERR_TYPE, "RegExp.prototype[@@search] called on non-object");
 
   ant_value_t str = nargs > 0 ? js_tostring_val(js, args[0]) : js_mkstr(js, "undefined", 9);
   if (is_err(str)) return str;
-  return regexp_symbol_search_impl(js, rx, str);
+  return regexp_symbol_search_impl(js, call_this, str);
 }
 
 ant_value_t regexp_search_fast(ant_t *js, const regexp_fast_t *fast, ant_value_t str) {
@@ -323,7 +319,7 @@ static ant_value_t regexp_symbol_search_impl(ant_t *js, ant_value_t rx, ant_valu
 }
 
 ant_value_t builtin_string_search(ant_params_t) {
-  ant_value_t str = Ant_String_CoerceThis(js, "search");
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, "search");
   
   if (is_err(str)) return str;
   ant_value_t pattern = nargs > 0 ? args[0] : js_mkundef();
@@ -346,7 +342,7 @@ ant_value_t builtin_string_search(ant_params_t) {
 }
 
 ant_value_t builtin_string_match(ant_params_t) {
-  ant_value_t str = Ant_String_CoerceThis(js, "match");
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, "match");
   
   if (is_err(str)) return str;
   ant_value_t pattern = nargs > 0 ? args[0] : js_mkundef();

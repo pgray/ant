@@ -114,7 +114,7 @@ ant_value_t Ant_URL_FileURLToPath(ant_t *js, ant_value_t input) {
       return js_mkerr_code(js, JS_ERR_TYPE, "ERR_INVALID_FILE_URL_PATH", "File URL path must not include encoded / characters");
   }
 
-  return js_decodeURIComponent(js, &text, 1, js_mkundef());
+  return js_decodeURIComponent(js, &text, 1, js_mkundef(), js_mkundef(), js_mkundef());
 }
 
 static ant_value_t builtin_fileURLToPath(ant_params_t) {

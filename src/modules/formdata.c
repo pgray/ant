@@ -14,7 +14,6 @@
 #include "silver/call.h"
 #include "modules/formdata.h"
 #include "modules/blob.h"
-#include "modules/symbol.h"
 #include "modules/iterator.h"
 
 typedef struct {
@@ -242,7 +241,7 @@ ant_value_t formdata_append_file(ant_t *js, ant_value_t fd, ant_value_t name_v, 
 
 static ant_value_t js_formdata_append(ant_params_t) {
   if (nargs < 2) return js_mkerr_typed(js, JS_ERR_TYPE, "FormData.append requires 2 arguments");
-  fd_data_t *d = get_fd_data(js->this_val);
+  fd_data_t *d = get_fd_data(call_this);
   if (!d) return js_mkerr(js, "Invalid FormData object");
 
   ant_value_t name_v = args[0];
@@ -252,7 +251,7 @@ static ant_value_t js_formdata_append(ant_params_t) {
   ant_value_t val = args[1];
   if (is_object_type(val) && blob_get_data(val)) {
     ant_value_t fname = (nargs >= 3) ? args[2] : js_mkundef();
-    ant_value_t values_arr = get_fd_values(js->this_val);
+    ant_value_t values_arr = get_fd_values(call_this);
     return extract_file_entry(js, d, values_arr, name, val, fname, false);
   }
 
@@ -262,7 +261,7 @@ static ant_value_t js_formdata_append(ant_params_t) {
 
 static ant_value_t js_formdata_set(ant_params_t) {
   if (nargs < 2) return js_mkerr_typed(js, JS_ERR_TYPE, "FormData.set requires 2 arguments");
-  fd_data_t *d = get_fd_data(js->this_val);
+  fd_data_t *d = get_fd_data(call_this);
   if (!d) return js_mkerr(js, "Invalid FormData object");
 
   ant_value_t name_v = args[0];
@@ -272,7 +271,7 @@ static ant_value_t js_formdata_set(ant_params_t) {
   ant_value_t val = args[1];
   if (is_object_type(val) && blob_get_data(val)) {
     ant_value_t fname = (nargs >= 3) ? args[2] : js_mkundef();
-    ant_value_t values_arr = get_fd_values(js->this_val);
+    ant_value_t values_arr = get_fd_values(call_this);
     return extract_file_entry(js, d, values_arr, name, val, fname, true);
   }
 
@@ -283,14 +282,14 @@ static ant_value_t js_formdata_set(ant_params_t) {
 
 static ant_value_t js_formdata_get(ant_params_t) {
   if (nargs < 1) return js_mknull();
-  fd_data_t *d = get_fd_data(js->this_val);
+  fd_data_t *d = get_fd_data(call_this);
   if (!d) return js_mknull();
 
   ant_value_t name_v = args[0];
   const char *name = resolve_name(js, &name_v);
   if (!name) return name_v;
 
-  ant_value_t values_arr = get_fd_values(js->this_val);
+  ant_value_t values_arr = get_fd_values(call_this);
   for (fd_entry_t *e = d->head; e; e = e->next) {
     if (strcmp(e->name, name) == 0)
       return entry_to_js_value(js, values_arr, e);
@@ -301,14 +300,14 @@ static ant_value_t js_formdata_get(ant_params_t) {
 static ant_value_t js_formdata_get_all(ant_params_t) {
   ant_value_t result = js_mkarr(js);
   if (nargs < 1) return result;
-  fd_data_t *d = get_fd_data(js->this_val);
+  fd_data_t *d = get_fd_data(call_this);
   if (!d) return result;
 
   ant_value_t name_v = args[0];
   const char *name = resolve_name(js, &name_v);
   if (!name) return name_v;
 
-  ant_value_t values_arr = get_fd_values(js->this_val);
+  ant_value_t values_arr = get_fd_values(call_this);
   for (fd_entry_t *e = d->head; e; e = e->next) {
   if (strcmp(e->name, name) == 0) {
     ant_value_t v = entry_to_js_value(js, values_arr, e);
@@ -320,7 +319,7 @@ static ant_value_t js_formdata_get_all(ant_params_t) {
 
 static ant_value_t js_formdata_has(ant_params_t) {
   if (nargs < 1) return js_false;
-  fd_data_t *d = get_fd_data(js->this_val);
+  fd_data_t *d = get_fd_data(call_this);
   if (!d) return js_false;
 
   ant_value_t name_v = args[0];
@@ -335,7 +334,7 @@ static ant_value_t js_formdata_has(ant_params_t) {
 
 static ant_value_t js_formdata_delete(ant_params_t) {
   if (nargs < 1) return js_mkundef();
-  fd_data_t *d = get_fd_data(js->this_val);
+  fd_data_t *d = get_fd_data(call_this);
   if (!d) return js_mkundef();
 
   ant_value_t name_v = args[0];
@@ -349,19 +348,18 @@ static ant_value_t js_formdata_delete(ant_params_t) {
 static ant_value_t js_formdata_foreach(ant_params_t) {
   if (nargs < 1 || !is_callable(args[0]))
     return js_mkerr_typed(js, JS_ERR_TYPE, "FormData.forEach requires a function");
-  fd_data_t *d = get_fd_data(js->this_val);
+  fd_data_t *d = get_fd_data(call_this);
   if (!d) return js_mkundef();
 
   ant_value_t fn = args[0];
   ant_value_t this_arg = (nargs >= 2) ? args[1] : js_mkundef();
-  ant_value_t self = js->this_val;
-  ant_value_t values_arr = get_fd_values(self);
+  ant_value_t values_arr = get_fd_values(call_this);
 
   for (fd_entry_t *e = d->head; e; e = e->next) {
     ant_value_t val = entry_to_js_value(js, values_arr, e);
     if (is_err(val)) return val;
     ant_value_t name = js_mkstr(js, e->name, strlen(e->name));
-    ant_value_t cb_args[3] = { val, name, self };
+    ant_value_t cb_args[3] = { val, name, call_this };
     ant_value_t r = sv_vm_call(js->vm, js, fn, this_arg, cb_args, 3, NULL, js_mkundef());
     if (is_err(r)) return r;
   }
@@ -369,9 +367,9 @@ static ant_value_t js_formdata_foreach(ant_params_t) {
 }
 
 static ant_value_t formdata_iter_next(ant_params_t) {
-  fd_iter_t *st = (fd_iter_t *)js_get_native(js->this_val, FORMDATA_ITER_NATIVE_TAG);
+  fd_iter_t *st = (fd_iter_t *)js_get_native(call_this, FORMDATA_ITER_NATIVE_TAG);
   if (!st) return js_iter_result(js, false, js_mkundef());
-  ant_value_t fd_obj = js_get_slot(js->this_val, SLOT_DATA);
+  ant_value_t fd_obj = js_get_slot(call_this, SLOT_DATA);
   fd_data_t *d = get_fd_data(fd_obj);
   if (!d) return js_iter_result(js, false, js_mkundef());
 
@@ -424,15 +422,15 @@ static ant_value_t make_formdata_iter(ant_t *js, ant_value_t fd_obj, int kind) {
 }
 
 static ant_value_t js_formdata_entries(ant_params_t) {
-  return make_formdata_iter(js, js->this_val, FD_ITER_ENTRIES);
+  return make_formdata_iter(js, call_this, FD_ITER_ENTRIES);
 }
 
 static ant_value_t js_formdata_keys(ant_params_t) {
-  return make_formdata_iter(js, js->this_val, FD_ITER_KEYS);
+  return make_formdata_iter(js, call_this, FD_ITER_KEYS);
 }
 
 static ant_value_t js_formdata_values(ant_params_t) {
-  return make_formdata_iter(js, js->this_val, FD_ITER_VALUES);
+  return make_formdata_iter(js, call_this, FD_ITER_VALUES);
 }
 
 static ant_value_t js_formdata_ctor(ant_params_t) {
@@ -480,5 +478,4 @@ void init_formdata_module(ant_t *js) {
   js_set_proto_init(js->builtins.formdata_iter_proto, js->sym.iterator_proto);
   js_set(js, js->builtins.formdata_iter_proto, "next", Ant_Function_Create(formdata_iter_next));
   js_set_descriptor(js, js->builtins.formdata_iter_proto, "next", 4, JS_DESC_W | JS_DESC_E | JS_DESC_C);
-  js_set_sym(js, js->builtins.formdata_iter_proto, js->sym.iterator_sym, Ant_Function_Create(sym_this_cb));
 }

@@ -208,7 +208,7 @@ static void dns_query_cb(void *arg, ares_status_t status, size_t timeouts, const
 }
 
 static ant_value_t dns_query_issue(
-  ant_t *js, dns_channel_t *channel, dns_req_kind_t kind, dns_rr_t rr,
+  ant_t *js, ant_value_t call_this, dns_channel_t *channel, dns_req_kind_t kind, dns_rr_t rr,
   ant_value_t hostname, const char *qname, ant_value_t callback, bool ttl
 ) {
   if (!channel || !channel->ares) return js_mkerr(js, "DNS channel is not available");
@@ -219,7 +219,7 @@ static ant_value_t dns_query_issue(
   req->rr = rr;
   req->ttl = ttl;
   req->channel = channel;
-  req->owner = js_getthis(js);
+  req->owner = call_this;
 
   ant_value_t result = vtype(req->promise) == kTypePromise ? req->promise : js_mkundef();
   GC_ROOT_SAVE(mark, js);
@@ -249,7 +249,7 @@ static int dns_rr_from_name(ant_t *js, ant_value_t value) {
   return -1;
 }
 
-ant_value_t dns_resolve_impl(ant_native_params_t, int rr, bool promises) {
+ant_value_t dns_resolve_impl(ant_native_params_t, ant_value_t call_this, int rr, bool promises) {
   ant_value_t hostname = nargs > 0 ? args[0] : js_mkundef();
   ant_value_t second = nargs > 1 ? args[1] : js_mkundef();
   ant_value_t callback = promises ? js_mkundef() : nargs > 2 ? args[2] : js_mkundef();
@@ -270,11 +270,11 @@ ant_value_t dns_resolve_impl(ant_native_params_t, int rr, bool promises) {
   if (is_err(nul)) return nul;
   if (!promises && !is_callable(callback)) return Ant_Error_CreateInvalidArgType(js, "callback", "of type function", callback);
 
-  dns_channel_t *channel = dns_this_channel(js);
-  return dns_query_issue(js, channel, DNS_REQ_QUERY, (dns_rr_t)rr, hostname, js_getstr(js, hostname, NULL), callback, ttl);
+  dns_channel_t *channel = dns_this_channel(js, call_this);
+  return dns_query_issue(js, call_this, channel, DNS_REQ_QUERY, (dns_rr_t)rr, hostname, js_getstr(js, hostname, NULL), callback, ttl);
 }
 
-ant_value_t dns_reverse_impl(ant_native_params_t, bool promises) {
+ant_value_t dns_reverse_impl(ant_native_params_t, ant_value_t call_this, bool promises) {
   ant_value_t ip = nargs > 0 ? args[0] : js_mkundef();
   ant_value_t callback = promises ? js_mkundef() : nargs > 1 ? args[1] : js_mkundef();
   if (vtype(ip) != kTypeString) return Ant_Error_CreateInvalidArgType(js, "ip", "of type string", ip);
@@ -306,7 +306,7 @@ ant_value_t dns_reverse_impl(ant_native_params_t, bool promises) {
   char *qname = ares_dns_addr_to_ptr(&addr);
   if (!qname) return Ant_Error_CreateOutOfMemory(js);
 
-  ant_value_t result = dns_query_issue(js, dns_this_channel(js), DNS_REQ_REVERSE, DNS_RR_PTR, ip, qname, callback, false);
+  ant_value_t result = dns_query_issue(js, call_this, dns_this_channel(js, call_this), DNS_REQ_REVERSE, DNS_RR_PTR, ip, qname, callback, false);
   ares_free_string(qname);
 
   return result;

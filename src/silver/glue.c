@@ -30,7 +30,10 @@
 #include "ops/objects.h"
 
 __attribute__((noinline)) 
-ant_value_t Ant_Silver_InvokeNativeScoped(ant_t *js, ant_cfunc_t fn, ant_call_params_t) {
+ant_value_t Ant_Silver_InvokeNativeScoped(
+  ant_t *js, ant_cfunc_t fn, ant_value_t this_val,
+  ant_value_t func, ant_call_params_t
+) {
   ant_value_t previous = Ant_Exception_Peek(js);
   size_t exception_mark = 0;
 
@@ -49,7 +52,7 @@ ant_value_t Ant_Silver_InvokeNativeScoped(ant_t *js, ant_cfunc_t fn, ant_call_pa
   bool rooted_target = vm && gc_value_is_heap_ref(new_target);
   if (rooted_target) vm->native_frame = &frame;
 
-  ant_value_t result = fn(js, args, nargs, new_target);
+  ant_value_t result = fn(js, args, nargs, new_target, this_val, func);
   if (rooted_target) vm->native_frame = frame.caller;
 
   result = Ant_Silver_FinishNativeCall(js, result);

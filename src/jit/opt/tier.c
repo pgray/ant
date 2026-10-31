@@ -823,11 +823,8 @@ ant_value_t opt_rt_call(sv_vm_t *vm, ant_value_t callee, ant_value_t this_val, a
   
   if (vtype(callee) == kTypeBuiltin && sv_native_direct_allowed(js)) {
     ant_cfunc_t fn = ((const ant_cfunc_meta_t *)vptr(callee))->fn;
-    ant_value_t saved = js->this_val;
-    
-    js->this_val = vtype(this_val) == kTypeNull ? js_mkundef() : this_val;
-    ant_value_t result = fn(js, args, (int)argc, js_mkundef());
-    js->this_val = saved;
+    ant_value_t native_this = vtype(this_val) == kTypeNull ? js_mkundef() : this_val;
+    ant_value_t result = fn(js, args, (int)argc, js_mkundef(), native_this, callee);
     
     if (is_err(result) || vtype(js->exception) != kTypeUndefined) result = jit_helper_native_finish(js, result);
     return result;
@@ -835,7 +832,7 @@ ant_value_t opt_rt_call(sv_vm_t *vm, ant_value_t callee, ant_value_t this_val, a
   
   ant_value_t cfunc = sv_native_closure_cfunc(callee);
   if (cfunc && sv_native_direct_allowed(js))
-    return sv_call_native_closure(js, callee, cfunc, this_val, args, (int)argc, js_mkundef());
+    return sv_invoke_builtin(js, cfunc, this_val, callee, args, (int)argc, js_mkundef());
   
   return sv_vm_call(vm, js, callee, this_val, args, (int)argc, NULL, js_mkundef());
 }

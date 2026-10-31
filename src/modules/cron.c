@@ -848,11 +848,10 @@ static uint64_t cron_timer_delay(int64_t next, int64_t now) {
   return next > now ? (uint64_t)(next - now) : 0;
 }
 
-static cron_job_t *cron_job_from_this(ant_t *js, const char *member, ant_value_t *error) {
-  ant_value_t object = js_getthis(js);
-  if (is_object_type(object)) {
-    cron_job_t *job = js_get_native(object, CRON_JOB_NATIVE_TAG);
-    if (job && job->js == js && job->object == object && !job->finalized) return job;
+static cron_job_t *cron_job_from_this(ant_t *js, ant_value_t call_this, const char *member, ant_value_t *error) {
+  if (is_object_type(call_this)) {
+    cron_job_t *job = js_get_native(call_this, CRON_JOB_NATIVE_TAG);
+    if (job && job->js == js && job->object == call_this && !job->finalized) return job;
   }
   *error = js_mkerr_typed(
     js, JS_ERR_TYPE, "CronJob.%s can only be used on instances of CronJob", member
@@ -861,7 +860,7 @@ static cron_job_t *cron_job_from_this(ant_t *js, const char *member, ant_value_t
 }
 
 static ant_value_t cron_handler_fulfilled(ant_params_t) {
-  ant_value_t state = js_func_data(js->current_func);
+  ant_value_t state = js_func_data(call_func);
   ant_value_t object = js_get_slot(state, SLOT_DATA);
   
   cron_job_t *job = js_get_native(object, CRON_JOB_NATIVE_TAG);
@@ -876,7 +875,7 @@ static ant_value_t cron_handler_fulfilled(ant_params_t) {
 
 static ant_value_t cron_handler_rejected(ant_params_t) {
   ant_value_t reason = nargs > 0 ? args[0] : js_mkundef();
-  ant_value_t state = js_func_data(js->current_func);
+  ant_value_t state = js_func_data(call_func);
   ant_value_t promise = js_get_slot(state, SLOT_AUX);
   
   if (process_has_event_listeners(js, "unhandledRejection")) {
@@ -888,7 +887,7 @@ static ant_value_t cron_handler_rejected(ant_params_t) {
     js->fatal_error = true;
   }
   
-  return cron_handler_fulfilled(js, NULL, 0, js_mkundef());
+  return cron_handler_fulfilled(js, NULL, 0, js_mkundef(), call_this, call_func);
 }
 
 static void cron_timer_callback(uv_timer_t *timer) {
@@ -980,39 +979,36 @@ static bool cron_schedule_job(cron_job_t *job, ant_value_t *error) {
 
 static ant_value_t cron_job_get_cron(ant_params_t) {
   ant_value_t error = js_mkundef();
-  cron_job_t *job = cron_job_from_this(js, "cron getter", &error);
+  cron_job_t *job = cron_job_from_this(js, call_this, "cron getter", &error);
   return job ? js_mkstr(js, job->source, strlen(job->source)) : error;
 }
 
 static ant_value_t cron_job_stop(ant_params_t) {
-  ant_value_t object = js_getthis(js);
   ant_value_t error = js_mkundef();
-  cron_job_t *job = cron_job_from_this(js, "stop()", &error);
+  cron_job_t *job = cron_job_from_this(js, call_this, "stop()", &error);
   if (!job) return error;
   if (!job->stopped) cron_close_job(job);
-  return object;
+  return call_this;
 }
 
 static ant_value_t cron_job_ref(ant_params_t) {
-  ant_value_t object = js_getthis(js);
   ant_value_t error = js_mkundef();
-  cron_job_t *job = cron_job_from_this(js, "ref()", &error);
+  cron_job_t *job = cron_job_from_this(js, call_this, "ref()", &error);
   if (!job) return error;
   if (job && !job->closing) uv_ref((uv_handle_t *)&job->timer);
-  return object;
+  return call_this;
 }
 
 static ant_value_t cron_job_unref(ant_params_t) {
-  ant_value_t object = js_getthis(js);
   ant_value_t error = js_mkundef();
-  cron_job_t *job = cron_job_from_this(js, "unref()", &error);
+  cron_job_t *job = cron_job_from_this(js, call_this, "unref()", &error);
   if (!job) return error;
   if (job && !job->closing) uv_unref((uv_handle_t *)&job->timer);
-  return object;
+  return call_this;
 }
 
 static ant_value_t cron_job_dispose(ant_params_t) {
-  ant_value_t result = cron_job_stop(js, args, nargs, js_mkundef());
+  ant_value_t result = cron_job_stop(js, args, nargs, js_mkundef(), call_this, call_func);
   return is_err(result) ? result : js_mkundef();
 }
 

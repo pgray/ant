@@ -63,7 +63,6 @@ bool ant_crash_is_internal_report(int argc, char **argv) {
 #include <sys/wait.h>
 
 #ifdef __APPLE__
-#include <mach-o/dyld.h>
 #include <sys/sysctl.h>
 #elif defined(__linux__)
 #include <sys/utsname.h>
@@ -886,7 +885,7 @@ int ant_crash_run_internal_report(ant_t *js) {
     return EXIT_SUCCESS;
   }
 
-  ant_value_t report_json = js_json_stringify(js, &report, 1, js_mkundef());
+  ant_value_t report_json = js_json_stringify(js, &report, 1, js_mkundef(), js_mkundef(), js_mkundef());
   if (vtype(report_json) != kTypeString) {
     crash_report_print_upload_failed();
     free(payload);
@@ -914,7 +913,7 @@ int ant_crash_run_internal_report(ant_t *js) {
   js_set(js, init, "body", js_mkstr(js, report_payload, report_payload_len));
 
   ant_value_t fetch_args[2] = { js_mkstr(js, url, strlen(url)), init };
-  ant_value_t fetch_promise = ant_fetch(js, fetch_args, 2, js_mkundef());
+  ant_value_t fetch_promise = ant_fetch(js, fetch_args, 2, js_mkundef(), js_mkundef(), js_mkundef());
 
   if (is_err(fetch_promise)) {
     crash_report_status_printed = true;

@@ -897,14 +897,14 @@ static ant_value_t crypto_subtle_digest_impl(
 }
 
 static ant_value_t crypto_subtle_call(
-  ant_native_params_t,
+  ant_native_params_t, ant_value_t call_this, ant_value_t call_func,
   ant_cfunc_t impl
 ) {
   GC_ROOT_SAVE(root_mark, js);
   ant_value_t promise = js_mkpromise(js);
   if (is_err(promise)) return promise;
   GC_ROOT_PIN(js, promise);
-  ant_value_t result = impl(js, args, nargs, js_mkundef());
+  ant_value_t result = impl(js, args, nargs, js_mkundef(), call_this, call_func);
   if (is_err(result) || Ant_Exception_Pending(js)) {
     ant_value_t reason = js_take_thrown(js, result);
     js_reject_promise(js, promise, reason);
@@ -920,7 +920,7 @@ static ant_value_t crypto_subtle_digest_args(ant_params_t) {
 }
 
 static ant_value_t js_crypto_subtle_digest(ant_params_t) {
-  return crypto_subtle_call(js, args, nargs, crypto_subtle_digest_args);
+  return crypto_subtle_call(js, args, nargs, call_this, call_func, crypto_subtle_digest_args);
 }
 
 static const char *const crypto_key_usage_names[] = {
@@ -1277,7 +1277,7 @@ cleanup:
 }
 
 static ant_value_t js_crypto_subtle_import_key(ant_params_t) {
-  return crypto_subtle_call(js, args, nargs, crypto_subtle_import_key_impl);
+  return crypto_subtle_call(js, args, nargs, call_this, call_func, crypto_subtle_import_key_impl);
 }
 
 static ant_value_t crypto_subtle_generate_key_impl(ant_params_t) {
@@ -1333,7 +1333,7 @@ static ant_value_t crypto_subtle_generate_key_impl(ant_params_t) {
 }
 
 static ant_value_t js_crypto_subtle_generate_key(ant_params_t) {
-  return crypto_subtle_call(js, args, nargs, crypto_subtle_generate_key_impl);
+  return crypto_subtle_call(js, args, nargs, call_this, call_func, crypto_subtle_generate_key_impl);
 }
 
 static ant_value_t crypto_subtle_export_key_impl(ant_params_t) {
@@ -1361,7 +1361,7 @@ static ant_value_t crypto_subtle_export_key_impl(ant_params_t) {
 }
 
 static ant_value_t js_crypto_subtle_export_key(ant_params_t) {
-  return crypto_subtle_call(js, args, nargs, crypto_subtle_export_key_impl);
+  return crypto_subtle_call(js, args, nargs, call_this, call_func, crypto_subtle_export_key_impl);
 }
 
 static ant_value_t crypto_subtle_derive_bits_impl(ant_params_t) {
@@ -1422,7 +1422,7 @@ static ant_value_t crypto_subtle_derive_bits_impl(ant_params_t) {
 }
 
 static ant_value_t js_crypto_subtle_derive_bits(ant_params_t) {
-  return crypto_subtle_call(js, args, nargs, crypto_subtle_derive_bits_impl);
+  return crypto_subtle_call(js, args, nargs, call_this, call_func, crypto_subtle_derive_bits_impl);
 }
 
 static ant_value_t crypto_hmac_once(
@@ -1456,7 +1456,7 @@ static ant_value_t crypto_subtle_sign_impl(ant_params_t) {
 }
 
 static ant_value_t js_crypto_subtle_sign(ant_params_t) {
-  return crypto_subtle_call(js, args, nargs, crypto_subtle_sign_impl);
+  return crypto_subtle_call(js, args, nargs, call_this, call_func, crypto_subtle_sign_impl);
 }
 
 static ant_value_t crypto_subtle_verify_impl(ant_params_t) {
@@ -1486,7 +1486,7 @@ static ant_value_t crypto_subtle_verify_impl(ant_params_t) {
 }
 
 static ant_value_t js_crypto_subtle_verify(ant_params_t) {
-  return crypto_subtle_call(js, args, nargs, crypto_subtle_verify_impl);
+  return crypto_subtle_call(js, args, nargs, call_this, call_func, crypto_subtle_verify_impl);
 }
 
 static ant_value_t crypto_aes_gcm_crypt(
@@ -1614,15 +1614,14 @@ static ant_value_t crypto_subtle_decrypt_impl(ant_params_t) {
 }
 
 static ant_value_t js_crypto_subtle_encrypt(ant_params_t) {
-  return crypto_subtle_call(js, args, nargs, crypto_subtle_encrypt_impl);
+  return crypto_subtle_call(js, args, nargs, call_this, call_func, crypto_subtle_encrypt_impl);
 }
 
 static ant_value_t js_crypto_subtle_decrypt(ant_params_t) {
-  return crypto_subtle_call(js, args, nargs, crypto_subtle_decrypt_impl);
+  return crypto_subtle_call(js, args, nargs, call_this, call_func, crypto_subtle_decrypt_impl);
 }
 
 static ant_value_t js_hash_update(ant_params_t) {
-  ant_value_t this_val = js_getthis(js);
   ant_hash_state_t *state = NULL;
   
   const uint8_t *bytes = NULL;
@@ -1631,7 +1630,7 @@ static ant_value_t js_hash_update(ant_params_t) {
   uint8_t *owned = NULL;
   ant_value_t err;
 
-  err = crypto_require_hash_state(js, this_val, &state);
+  err = crypto_require_hash_state(js, call_this, &state);
   if (is_err(err)) return err;
   if (state->finalized) return js_mkerr(js, "Hash digest already called");
   if (nargs < 1) return js_mkerr(js, "Hash.update requires data");
@@ -1645,7 +1644,7 @@ static ant_value_t js_hash_update(ant_params_t) {
     goto cleanup;
   }
 
-  err = this_val;
+  err = call_this;
 
 cleanup:
   if (owned) free(owned);
@@ -1654,7 +1653,7 @@ cleanup:
 
 static ant_value_t js_hash_digest(ant_params_t) {
   ant_hash_state_t *state = NULL;
-  ant_value_t err = crypto_require_hash_state(js, js_getthis(js), &state);
+  ant_value_t err = crypto_require_hash_state(js, call_this, &state);
   
   if (is_err(err)) return err;
   if (state->finalized) return js_mkerr(js, "Hash digest already called");
@@ -1729,7 +1728,7 @@ static ant_value_t js_hmac_update(ant_params_t) {
   size_t len = 0;
   uint8_t *owned = NULL;
 
-  ant_value_t err = crypto_require_hmac_state(js, js_getthis(js), &state);
+  ant_value_t err = crypto_require_hmac_state(js, call_this, &state);
   if (is_err(err)) return err;
   if (state->finalized) return js_mkerr(js, "Hmac digest already called");
   if (nargs < 1) return js_mkerr(js, "Hmac.update requires data");
@@ -1743,7 +1742,7 @@ static ant_value_t js_hmac_update(ant_params_t) {
     goto cleanup;
   }
 
-  err = js_getthis(js);
+  err = call_this;
 
 cleanup:
   if (owned) free(owned);
@@ -1752,7 +1751,7 @@ cleanup:
 
 static ant_value_t js_hmac_digest(ant_params_t) {
   ant_hmac_state_t *state = NULL;
-  ant_value_t err = crypto_require_hmac_state(js, js_getthis(js), &state);
+  ant_value_t err = crypto_require_hmac_state(js, call_this, &state);
   if (is_err(err)) return err;
   if (state->finalized) return js_mkerr(js, "Hmac digest already called");
 
@@ -1879,7 +1878,7 @@ static ant_value_t crypto_cipher_bytes_result(
 
 static ant_value_t js_cipher_update(ant_params_t) {
   ant_cipher_state_t *state = NULL;
-  ant_value_t err = crypto_require_cipher_state(js, js_getthis(js), &state);
+  ant_value_t err = crypto_require_cipher_state(js, call_this, &state);
   if (is_err(err)) return err;
   if (state->finalized) return js_mkerr(js, "Cipher already finalized");
   if (nargs < 1) return js_mkerr(js, "Cipher.update requires data");
@@ -1917,7 +1916,7 @@ static ant_value_t js_cipher_update(ant_params_t) {
 
 static ant_value_t js_cipher_final(ant_params_t) {
   ant_cipher_state_t *state = NULL;
-  ant_value_t err = crypto_require_cipher_state(js, js_getthis(js), &state);
+  ant_value_t err = crypto_require_cipher_state(js, call_this, &state);
   if (is_err(err)) return err;
   if (state->finalized) return js_mkerr(js, "Cipher already finalized");
 
@@ -1944,7 +1943,7 @@ static ant_value_t js_cipher_final(ant_params_t) {
 
 static ant_value_t js_cipher_set_aad(ant_params_t) {
   ant_cipher_state_t *state = NULL;
-  ant_value_t err = crypto_require_cipher_state(js, js_getthis(js), &state);
+  ant_value_t err = crypto_require_cipher_state(js, call_this, &state);
   if (is_err(err)) return err;
   if (nargs < 1) return js_mkerr(js, "setAAD requires data");
 
@@ -1959,12 +1958,12 @@ static ant_value_t js_cipher_set_aad(ant_params_t) {
     ? EVP_EncryptUpdate(state->ctx, NULL, &out_len, aad, (int)aad_len)
     : EVP_DecryptUpdate(state->ctx, NULL, &out_len, aad, (int)aad_len);
   if (!ok) return js_mkerr(js, "setAAD failed");
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t js_cipher_get_auth_tag(ant_params_t) {
   ant_cipher_state_t *state = NULL;
-  ant_value_t err = crypto_require_cipher_state(js, js_getthis(js), &state);
+  ant_value_t err = crypto_require_cipher_state(js, call_this, &state);
   if (is_err(err)) return err;
   if (!state->is_gcm || !state->encrypt || state->auth_tag_len == 0) {
     return js_mkerr(js, "Auth tag is not available");
@@ -1974,7 +1973,7 @@ static ant_value_t js_cipher_get_auth_tag(ant_params_t) {
 
 static ant_value_t js_cipher_set_auth_tag(ant_params_t) {
   ant_cipher_state_t *state = NULL;
-  ant_value_t err = crypto_require_cipher_state(js, js_getthis(js), &state);
+  ant_value_t err = crypto_require_cipher_state(js, call_this, &state);
   if (is_err(err)) return err;
   if (nargs < 1) return js_mkerr(js, "setAuthTag requires a tag");
 
@@ -1989,16 +1988,16 @@ static ant_value_t js_cipher_set_auth_tag(ant_params_t) {
   if (!state->encrypt && state->is_gcm) {
     EVP_CIPHER_CTX_ctrl(state->ctx, EVP_CTRL_GCM_SET_TAG, (int)tag_len, state->auth_tag);
   }
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t js_cipher_set_auto_padding(ant_params_t) {
   ant_cipher_state_t *state = NULL;
-  ant_value_t err = crypto_require_cipher_state(js, js_getthis(js), &state);
+  ant_value_t err = crypto_require_cipher_state(js, call_this, &state);
   if (is_err(err)) return err;
   int padding = nargs < 1 || js_truthy(js, args[0]);
   EVP_CIPHER_CTX_set_padding(state->ctx, padding);
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t crypto_create_cipheriv(ant_native_params_t, bool encrypt) {

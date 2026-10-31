@@ -154,11 +154,13 @@ void jit_setup_prototypes(jit_compile_t *c, MIR_type_t ret_type) {
 
   c->cfunc_proto = MIR_new_proto(c->ctx, "cfunc_proto",
                                  1, &call_ret,
-                                 4,
+                                 6,
                                  MIR_T_P, "js",
                                  MIR_T_P, "args",
                                  MIR_T_I32, "nargs",
-                                 MIR_JSVAL, "new_target");
+                                 MIR_JSVAL, "new_target",
+                                 MIR_JSVAL, "this_val",
+                                 MIR_JSVAL, "func");
 
   c->native_finish_proto = MIR_new_proto(c->ctx, "native_finish_proto",
                                          1, &call_ret,

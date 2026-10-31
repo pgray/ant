@@ -602,15 +602,15 @@ static inspector_await_t *inspector_take_pending_await(uint32_t await_id) {
   return NULL;
 }
 
-static uint32_t inspector_current_await_id(ant_t *js) {
-  ant_value_t state = js_func_data(js->current_func);
+static uint32_t inspector_current_await_id(ant_t *js, ant_value_t call_func) {
+  ant_value_t state = js_func_data(call_func);
   if (vtype(state) != kTypeNumber) return 0;
   double id = Ant_Value_AsNumberUnchecked(state);
   return id > 0 && id <= UINT32_MAX ? (uint32_t)id : 0;
 }
 
 static ant_value_t inspector_await_fulfilled(ant_params_t) {
-  inspector_await_t *pending = inspector_take_pending_await(inspector_current_await_id(js));
+  inspector_await_t *pending = inspector_take_pending_await(inspector_current_await_id(js, call_func));
   if (!pending) return js_mkundef();
 
   ant_value_t value = nargs > 0 ? args[0] : js_mkundef();
@@ -625,7 +625,7 @@ static ant_value_t inspector_await_fulfilled(ant_params_t) {
 }
 
 static ant_value_t inspector_await_rejected(ant_params_t) {
-  inspector_await_t *pending = inspector_take_pending_await(inspector_current_await_id(js));
+  inspector_await_t *pending = inspector_take_pending_await(inspector_current_await_id(js, call_func));
   if (!pending) return js_mkundef();
 
   ant_value_t reason = nargs > 0 ? args[0] : js_mkundef();

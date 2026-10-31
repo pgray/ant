@@ -1,17 +1,17 @@
 #ifndef ANT_INTERNAL_H
 #define ANT_INTERNAL_H
 
-#include "ant.h"
-#include "value.h"
-#include "object.h"
-#include "errors.h"
-#include "isolate.h"
+#include "ant.h"     // IWYU pragma: export
+#include "value.h"   // IWYU pragma: export
+#include "object.h"  // IWYU pragma: export
+#include "errors.h"  // IWYU pragma: export
+#include "isolate.h" // IWYU pragma: export
 
-#include "gc/strings.h"
-#include "gc/roots.h"
-#include "silver/ast.h"
-#include "descriptors.h"
-#include "esm/loader.h"
+#include "gc/strings.h"  // IWYU pragma: export
+#include "gc/roots.h"    // IWYU pragma: export
+#include "silver/ast.h"  // IWYU pragma: export
+#include "descriptors.h" // IWYU pragma: export
+#include "esm/loader.h"  // IWYU pragma: export
 
 #include <assert.h>
 #include <string.h>
@@ -210,7 +210,7 @@ const ant_value_t *Ant_Array_DenseView(ant_value_t arr, int *len_out);
 ant_object_t *obj_alloc_shaped(ant_t *js, uint8_t type_tag, ant_shape_t *shape);
 ant_object_t *obj_alloc(ant_t *js, uint8_t type_tag, uint8_t inobj_limit);
 
-ant_value_t Ant_String_CoerceThis(ant_t *js, const char *name);
+ant_value_t Ant_String_CoerceThis(ant_t *js, ant_value_t call_this, const char *name);
 ant_value_t Ant_ArgList_FromArrayLike(ant_t *js, ant_value_t array_like, ant_arg_list_t *list);
 
 size_t uint_to_str(char *buf, size_t bufsize, uint64_t val);
@@ -504,17 +504,11 @@ static inline ant_value_t js_module_ctx_namespace(ant_value_t module_ctx) {
   return is_object_type(ns) ? ns : js_mkundef();
 }
 
-static inline ant_value_t js_current_func_module_ns(ant_t *js) {
-  if (!js || !is_object_type(js->current_func)) return js_mkundef();
-  return js_module_ctx_namespace(js_get_slot(js->current_func, SLOT_MODULE_CTX));
-}
-
 static inline ant_value_t js_module_eval_active_ns(ant_t *js) {
   ant_module_t *ctx = js->modules.module_stack;
   if (ctx) return ctx->module_ns;
   ctx = js->active_async_coro ? js_active_tla_module_ctx(js) : NULL;
-  if (ctx) return ctx->module_ns;
-  return js_current_func_module_ns(js);
+  return ctx ? ctx->module_ns : js_mkundef();
 }
 
 static inline ant_value_t js_module_eval_active_ctx(ant_t *js) {

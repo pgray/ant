@@ -42,7 +42,7 @@ static ant_value_t builtin_Symbol_keyFor(ant_params_t) {
 }
 
 static ant_value_t builtin_Symbol_toString(ant_params_t) {
-  ant_value_t this_val = js_getthis(js);
+  ant_value_t this_val = call_this;
   
   if (vtype(this_val) != kTypeSymbol && is_object_type(this_val)) {
     ant_value_t prim = js_get_slot(this_val, SLOT_PRIMITIVE);
@@ -56,20 +56,17 @@ static ant_value_t builtin_Symbol_toString(ant_params_t) {
 }
 
 static ant_value_t builtin_Symbol_valueOf(ant_params_t) {
-  ant_value_t this_val = js_getthis(js);
-
-  if (vtype(this_val) != kTypeSymbol && is_object_type(this_val)) {
-    ant_value_t prim = js_get_slot(this_val, SLOT_PRIMITIVE);
+  if (vtype(call_this) != kTypeSymbol && is_object_type(call_this)) {
+    ant_value_t prim = js_get_slot(call_this, SLOT_PRIMITIVE);
     if (vtype(prim) == kTypeSymbol) return prim;
   }
 
-  if (vtype(this_val) == kTypeSymbol) return this_val;
+  if (vtype(call_this) == kTypeSymbol) return call_this;
   return js_mkerr_typed(js, JS_ERR_TYPE, "Symbol.prototype.valueOf requires a symbol");
 }
 
 static ant_value_t builtin_Symbol_description(ant_params_t) {
-  ant_value_t this_val = js_getthis(js);
-  ant_value_t sym = this_val;
+  ant_value_t sym = call_this;
 
   if (vtype(sym) != kTypeSymbol && is_object_type(sym)) {
     ant_value_t prim = js_get_slot(sym, SLOT_PRIMITIVE);
@@ -108,10 +105,14 @@ ant_value_t maybe_call_symbol_method(
   return sv_vm_call(js->vm, js, method, this_arg, args, nargs, NULL, js_mkundef());
 }
 
+ant_value_t js_return_this(ant_params_t) {
+  return call_this;
+}
+
 void js_define_species_getter(ant_t *js, ant_value_t ctor) {
   if (!is_object_type(ctor) || vtype(js->sym.species_sym) != kTypeSymbol) return;
   ctor = js_as_obj(ctor);
-  js_set_sym_getter_desc(js, ctor, js->sym.species_sym, Ant_Function_Create(sym_this_cb), JS_DESC_C);
+  js_set_sym_getter_desc(js, ctor, js->sym.species_sym, Ant_Function_Create(js_return_this), JS_DESC_C);
 }
 
 void init_well_known_symbols(ant_t *js) {

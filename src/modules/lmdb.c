@@ -469,7 +469,7 @@ static ant_value_t lmdb_open(ant_params_t) {
 }
 
 static ant_value_t lmdb_env_open_db(ant_params_t) {
-  lmdb_env_handle_t *env = get_env_handle(js, js_getthis(js), true);
+  lmdb_env_handle_t *env = get_env_handle(js, call_this, true);
   if (!env) return js_mkerr(js, "Invalid or closed LMDB env");
 
   const char *name = NULL;
@@ -535,11 +535,11 @@ static ant_value_t lmdb_env_open_db(ant_params_t) {
   db->next_global = js->lmdb->db_handles;
   js->lmdb->db_handles = db;
 
-  return make_db_obj(js, db, js_getthis(js));
+  return make_db_obj(js, db, call_this);
 }
 
 static ant_value_t lmdb_env_begin_txn(ant_params_t) {
-  lmdb_env_handle_t *env = get_env_handle(js, js_getthis(js), true);
+  lmdb_env_handle_t *env = get_env_handle(js, call_this, true);
   if (!env) return js_mkerr(js, "Invalid or closed LMDB env");
 
   ant_value_t options = nargs > 0 ? args[0] : js_mkundef();
@@ -569,23 +569,22 @@ static ant_value_t lmdb_env_begin_txn(ant_params_t) {
   handle->next_global = js->lmdb->txn_handles;
   js->lmdb->txn_handles = handle;
 
-  return make_txn_obj(js, handle, js_getthis(js));
+  return make_txn_obj(js, handle, call_this);
 }
 
 static ant_value_t lmdb_env_close_method(ant_params_t) {
   (void)args;
   (void)nargs;
-  ant_value_t self = js_getthis(js);
-  lmdb_env_handle_t *env = get_env_handle(js, self, false);
+  lmdb_env_handle_t *env = get_env_handle(js, call_this, false);
   if (!env) return js_mkerr(js, "Invalid LMDB env");
 
   env_handle_close(js, env);
-  unregister_env_ref_by_obj(js, self);
+  unregister_env_ref_by_obj(js, call_this);
   return js_mkundef();
 }
 
 static ant_value_t lmdb_env_sync_method(ant_params_t) {
-  lmdb_env_handle_t *env = get_env_handle(js, js_getthis(js), true);
+  lmdb_env_handle_t *env = get_env_handle(js, call_this, true);
   if (!env) return js_mkerr(js, "Invalid or closed LMDB env");
 
   bool force = true;
@@ -597,7 +596,7 @@ static ant_value_t lmdb_env_sync_method(ant_params_t) {
 }
 
 static ant_value_t lmdb_env_stat_method(ant_params_t) {
-  lmdb_env_handle_t *env = get_env_handle(js, js_getthis(js), true);
+  lmdb_env_handle_t *env = get_env_handle(js, call_this, true);
   if (!env) return js_mkerr(js, "Invalid or closed LMDB env");
 
   MDB_txn *txn = NULL;
@@ -621,7 +620,7 @@ static ant_value_t lmdb_env_stat_method(ant_params_t) {
 }
 
 static ant_value_t lmdb_env_info_method(ant_params_t) {
-  lmdb_env_handle_t *env = get_env_handle(js, js_getthis(js), true);
+  lmdb_env_handle_t *env = get_env_handle(js, call_this, true);
   if (!env) return js_mkerr(js, "Invalid or closed LMDB env");
 
   MDB_envinfo info;
@@ -638,10 +637,10 @@ static ant_value_t lmdb_env_info_method(ant_params_t) {
   return out;
 }
 
-static ant_value_t lmdb_txn_get_impl(ant_native_params_t, bool as_string) {
+static ant_value_t lmdb_txn_get_impl(ant_native_params_t, ant_value_t call_this, bool as_string) {
   if (nargs < 2) return js_mkerr(js, "txn.getBytes/getString(db, key) requires db and key");
 
-  lmdb_txn_handle_t *txn = get_txn_handle(js, js_getthis(js), true);
+  lmdb_txn_handle_t *txn = get_txn_handle(js, call_this, true);
   if (!txn) return js_mkerr(js, "Invalid or closed LMDB transaction");
 
   lmdb_db_handle_t *db = get_db_handle(js, args[0], true);
@@ -667,21 +666,21 @@ static ant_value_t lmdb_txn_get(ant_params_t) {
   if (nargs > 2 && !parse_get_encoding(js, args[2], &as_string)) {
     return js_mkerr(js, "txn.get encoding must be 'utf8' or 'bytes'");
   }
-  return lmdb_txn_get_impl(js, args, nargs, as_string);
+  return lmdb_txn_get_impl(js, args, nargs, call_this, as_string);
 }
 
 static ant_value_t lmdb_txn_get_bytes(ant_params_t) {
-  return lmdb_txn_get_impl(js, args, nargs, false);
+  return lmdb_txn_get_impl(js, args, nargs, call_this, false);
 }
 
 static ant_value_t lmdb_txn_get_string(ant_params_t) {
-  return lmdb_txn_get_impl(js, args, nargs, true);
+  return lmdb_txn_get_impl(js, args, nargs, call_this, true);
 }
 
 static ant_value_t lmdb_txn_put(ant_params_t) {
   if (nargs < 3) return js_mkerr(js, "txn.put(db, key, value, options?) requires db, key, and value");
 
-  lmdb_txn_handle_t *txn = get_txn_handle(js, js_getthis(js), true);
+  lmdb_txn_handle_t *txn = get_txn_handle(js, call_this, true);
   if (!txn) return js_mkerr(js, "Invalid or closed LMDB transaction");
   if (txn->read_only) return js_mkerr(js, "Cannot write in read-only transaction");
 
@@ -710,7 +709,7 @@ static ant_value_t lmdb_txn_put(ant_params_t) {
 static ant_value_t lmdb_txn_del(ant_params_t) {
   if (nargs < 2) return js_mkerr(js, "txn.del(db, key, value?) requires db and key");
 
-  lmdb_txn_handle_t *txn = get_txn_handle(js, js_getthis(js), true);
+  lmdb_txn_handle_t *txn = get_txn_handle(js, call_this, true);
   if (!txn) return js_mkerr(js, "Invalid or closed LMDB transaction");
   if (txn->read_only) return js_mkerr(js, "Cannot delete in read-only transaction");
 
@@ -735,8 +734,7 @@ static ant_value_t lmdb_txn_del(ant_params_t) {
 }
 
 static ant_value_t lmdb_txn_commit(ant_params_t) {
-  ant_value_t self = js_getthis(js);
-  lmdb_txn_handle_t *txn = get_txn_handle(js, self, true);
+  lmdb_txn_handle_t *txn = get_txn_handle(js, call_this, true);
   if (!txn) return js_mkerr(js, "Invalid or closed LMDB transaction");
 
   int rc = txn->read_only ? MDB_SUCCESS : mdb_txn_commit(txn->txn);
@@ -745,18 +743,17 @@ static ant_value_t lmdb_txn_commit(ant_params_t) {
   txn->txn = NULL;
   txn->closed = true;
   if (txn->env) list_remove_txn(txn->env, txn);
-  unregister_txn_ref_by_obj(js, self);
+  unregister_txn_ref_by_obj(js, call_this);
 
   if (rc != 0) return js_mkerr(js, "lmdb_txn_commit failed: %s", mdb_strerror(rc));
   return js_mkundef();
 }
 
 static ant_value_t lmdb_txn_abort(ant_params_t) {
-  ant_value_t self = js_getthis(js);
-  lmdb_txn_handle_t *txn = get_txn_handle(js, self, false);
+  lmdb_txn_handle_t *txn = get_txn_handle(js, call_this, false);
   if (!txn) return js_mkerr(js, "Invalid LMDB transaction");
   if (txn->closed || !txn->txn) {
-    unregister_txn_ref_by_obj(js, self);
+    unregister_txn_ref_by_obj(js, call_this);
     return js_mkundef();
   }
 
@@ -764,13 +761,13 @@ static ant_value_t lmdb_txn_abort(ant_params_t) {
   txn->txn = NULL;
   txn->closed = true;
   if (txn->env) list_remove_txn(txn->env, txn);
-  unregister_txn_ref_by_obj(js, self);
+  unregister_txn_ref_by_obj(js, call_this);
   return js_mkundef();
 }
 
-static ant_value_t lmdb_db_get_impl(ant_native_params_t, bool as_string) {
+static ant_value_t lmdb_db_get_impl(ant_native_params_t, ant_value_t call_this, bool as_string) {
   if (nargs < 1) return js_mkerr(js, "db.getBytes/getString(key) requires key");
-  lmdb_db_handle_t *db = get_db_handle(js, js_getthis(js), true);
+  lmdb_db_handle_t *db = get_db_handle(js, call_this, true);
   if (!db) return js_mkerr(js, "Invalid or closed LMDB database handle");
 
   MDB_txn *txn = NULL;
@@ -805,20 +802,20 @@ static ant_value_t lmdb_db_get(ant_params_t) {
   if (nargs > 1 && !parse_get_encoding(js, args[1], &as_string)) {
     return js_mkerr(js, "db.get encoding must be 'utf8' or 'bytes'");
   }
-  return lmdb_db_get_impl(js, args, nargs, as_string);
+  return lmdb_db_get_impl(js, args, nargs, call_this, as_string);
 }
 
 static ant_value_t lmdb_db_get_bytes(ant_params_t) {
-  return lmdb_db_get_impl(js, args, nargs, false);
+  return lmdb_db_get_impl(js, args, nargs, call_this, false);
 }
 
 static ant_value_t lmdb_db_get_string(ant_params_t) {
-  return lmdb_db_get_impl(js, args, nargs, true);
+  return lmdb_db_get_impl(js, args, nargs, call_this, true);
 }
 
 static ant_value_t lmdb_db_put(ant_params_t) {
   if (nargs < 2) return js_mkerr(js, "db.put(key, value, options?) requires key and value");
-  lmdb_db_handle_t *db = get_db_handle(js, js_getthis(js), true);
+  lmdb_db_handle_t *db = get_db_handle(js, call_this, true);
   if (!db) return js_mkerr(js, "Invalid or closed LMDB database handle");
   if (db->env->read_only) return js_mkerr(js, "Cannot write on read-only LMDB env");
 
@@ -857,7 +854,7 @@ static ant_value_t lmdb_db_put(ant_params_t) {
 
 static ant_value_t lmdb_db_del(ant_params_t) {
   if (nargs < 1) return js_mkerr(js, "db.del(key, value?) requires key");
-  lmdb_db_handle_t *db = get_db_handle(js, js_getthis(js), true);
+  lmdb_db_handle_t *db = get_db_handle(js, call_this, true);
   if (!db) return js_mkerr(js, "Invalid or closed LMDB database handle");
   if (db->env->read_only) return js_mkerr(js, "Cannot delete on read-only LMDB env");
 
@@ -897,7 +894,7 @@ static ant_value_t lmdb_db_del(ant_params_t) {
 }
 
 static ant_value_t lmdb_db_clear(ant_params_t) {
-  lmdb_db_handle_t *db = get_db_handle(js, js_getthis(js), true);
+  lmdb_db_handle_t *db = get_db_handle(js, call_this, true);
   if (!db) return js_mkerr(js, "Invalid or closed LMDB database handle");
   if (db->env->read_only) return js_mkerr(js, "Cannot clear on read-only LMDB env");
 
@@ -917,8 +914,7 @@ static ant_value_t lmdb_db_clear(ant_params_t) {
 }
 
 static ant_value_t lmdb_db_drop(ant_params_t) {
-  ant_value_t self = js_getthis(js);
-  lmdb_db_handle_t *db = get_db_handle(js, self, true);
+  lmdb_db_handle_t *db = get_db_handle(js, call_this, true);
   if (!db) return js_mkerr(js, "Invalid or closed LMDB database handle");
   if (db->env->read_only) return js_mkerr(js, "Cannot drop on read-only LMDB env");
 
@@ -945,7 +941,7 @@ static ant_value_t lmdb_db_drop(ant_params_t) {
   if (del_db) {
     db->closed = true;
     if (db->env) list_remove_db(db->env, db);
-    unregister_db_ref_by_obj(js, self);
+    unregister_db_ref_by_obj(js, call_this);
   }
   return js_mkundef();
 }
@@ -953,11 +949,10 @@ static ant_value_t lmdb_db_drop(ant_params_t) {
 static ant_value_t lmdb_db_close(ant_params_t) {
   (void)args;
   (void)nargs;
-  ant_value_t self = js_getthis(js);
-  lmdb_db_handle_t *db = get_db_handle(js, self, false);
+  lmdb_db_handle_t *db = get_db_handle(js, call_this, false);
   if (!db) return js_mkerr(js, "Invalid LMDB database handle");
   if (db->closed) {
-    unregister_db_ref_by_obj(js, self);
+    unregister_db_ref_by_obj(js, call_this);
     return js_mkundef();
   }
 
@@ -967,7 +962,7 @@ static ant_value_t lmdb_db_close(ant_params_t) {
   }
 
   db->closed = true;
-  unregister_db_ref_by_obj(js, self);
+  unregister_db_ref_by_obj(js, call_this);
   return js_mkundef();
 }
 

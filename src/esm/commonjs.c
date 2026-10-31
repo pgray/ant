@@ -227,9 +227,9 @@ void esm_cjs_update_children(ant_t *js, ant_value_t parent, ant_value_t child, b
   if (!remove) js_arr_push(js, children, child);
 }
 
-static ant_value_t esm_cjs_require_parent(ant_t *js) {
-  ant_value_t parent = js_func_data(js->current_func);
-  return is_object_type(parent) ? parent : js->this_val;
+static ant_value_t esm_cjs_require_parent(ant_t *js, ant_value_t call_this, ant_value_t call_func) {
+  ant_value_t parent = js_func_data(call_func);
+  return is_object_type(parent) ? parent : call_this;
 }
 
 static bool esm_cjs_builtin_unshadowed(ant_t *js, const char *name) {
@@ -242,7 +242,7 @@ typedef enum {
   CJS_BUILTIN_HIT,
 } esm_cjs_builtin_t;
 
-static esm_cjs_builtin_t esm_cjs_require_builtin(ant_t *js, ant_value_t specifier, ant_value_t *out) {
+static esm_cjs_builtin_t esm_cjs_require_builtin(ant_t *js, ant_value_t call_this, ant_value_t call_func, ant_value_t specifier, ant_value_t *out) {
   if (!esm_require_builtin_cacheable(js)) return CJS_BUILTIN_UNKNOWN;
 
   uint32_t slot = (uint32_t)((specifier >> 3) ^ (specifier >> 11)) & (CJS_BUILTIN_CACHE_SIZE - 1);
@@ -268,7 +268,7 @@ static esm_cjs_builtin_t esm_cjs_require_builtin(ant_t *js, ant_value_t specifie
   ant_value_t previous = js->modules.cjs.parent;
   
   GC_ROOT_PIN(js, previous);
-  js->modules.cjs.parent = esm_cjs_require_parent(js);
+  js->modules.cjs.parent = esm_cjs_require_parent(js, call_this, call_func);
   
   ant_value_t ns = esm_require_load_builtin(js, name, builtin);
   js->modules.cjs.parent = previous;
@@ -289,10 +289,10 @@ ant_value_t esm_cjs_require_module(ant_params_t) {
     return js_mkerr(js, "require() expects a string specifier");
   
   ant_value_t builtin;
-  esm_cjs_builtin_t found = esm_cjs_require_builtin(js, args[0], &builtin);
+  esm_cjs_builtin_t found = esm_cjs_require_builtin(js, call_this, call_func, args[0], &builtin);
   if (found == CJS_BUILTIN_HIT) return builtin;
   
-  ant_value_t parent = esm_cjs_require_parent(js);
+  ant_value_t parent = esm_cjs_require_parent(js, call_this, call_func);
   ant_value_t filename = js_get(js, parent, "filename");
   
   const char *base = vtype(filename) == kTypeString ? js_getstr(js, filename, NULL) : NULL;
@@ -321,7 +321,7 @@ static ant_value_t esm_cjs_require_paths(ant_params_t) {
   const char *spec = js_getstr(js, args[0], &len);
   if (esm_find_builtin(spec, len).kind != ANT_BUILTIN_NAME_NONE) return js_mknull();
   
-  ant_value_t module = js_func_data(js->current_func);
+  ant_value_t module = js_func_data(call_func);
   ant_value_t directory = js_get(js, module, "path");
   
   const char *path = js_getstr(js, directory, NULL);
@@ -343,7 +343,7 @@ static ant_value_t esm_cjs_require_resolve(ant_params_t) {
   if (nargs < 1 || vtype(args[0]) != kTypeString)
     return js_mkerr(js, "require.resolve() expects a string specifier");
   
-  ant_value_t module = js_func_data(js->current_func);
+  ant_value_t module = js_func_data(call_func);
   ant_value_t filename = js_get(js, module, "filename");
   
   const char *base = js_getstr(js, filename, NULL);

@@ -313,10 +313,10 @@ typedef struct {
 
 static constexpr int ERROR_ABOVE_SLACK = 2;
 
-static error_above_t error_above_of(ant_t *js, ant_value_t fn) {
+static error_above_t error_above_of(ant_value_t call_func, ant_value_t fn) {
   bool direct = true;
   
-  while (fn != js->current_func) {
+  while (fn != call_func) {
     if (vtype(fn) == kTypeBuiltin) return (error_above_t){ NULL, direct };
     if (vtype(fn) != kTypeFunction) break;
 
@@ -450,12 +450,12 @@ static void error_record_finalize(ant_t *js, ant_object_t *obj) {
   if (obj->native_tag == ERROR_RECORD_NATIVE_TAG) free(obj->native_ptr);
 }
 
-ant_value_t js_error_record_capture(ant_t *js, const js_error_site_t *at, ant_value_t above_fn) {
+ant_value_t js_error_record_capture(ant_t *js, ant_value_t call_func, const js_error_site_t *at, ant_value_t above_fn) {
   int limit = error_stack_trace_limit(js);
   if (limit < 0) return js_mkundef();
 
   error_frame_t local[ERROR_FRAMES_INLINE], *frames;
-  error_above_t above = error_above_of(js, above_fn);
+  error_above_t above = error_above_of(call_func, above_fn);
   int n = error_collect_frames(js, limit, above, false, local, &frames);
   bool need_file = false;
   
@@ -682,28 +682,28 @@ enum {
   CS_CONSTRUCT
 };
 
-static ant_value_t callsite_field(ant_t *js, int field) {
-  ant_value_t data = js_get_slot(js->this_val, SLOT_DATA);
+static ant_value_t callsite_field(ant_t *js, ant_value_t call_this, int field) {
+  ant_value_t data = js_get_slot(call_this, SLOT_DATA);
   if (vtype(data) != kTypeArray) return js_mkundef();
   return js_arr_get(js, data, field);
 }
 
-static ant_value_t callsite_getFileName(ant_params_t) { return callsite_field(js, CS_FILE); }
-static ant_value_t callsite_getLineNumber(ant_params_t) { return callsite_field(js, CS_LINE); }
-static ant_value_t callsite_getColumnNumber(ant_params_t) { return callsite_field(js, CS_COL); }
-static ant_value_t callsite_getFunctionName(ant_params_t) { return callsite_field(js, CS_NAME); }
-static ant_value_t callsite_isConstructor(ant_params_t) { return js_bool(js_truthy(js, callsite_field(js, CS_CONSTRUCT))); }
+static ant_value_t callsite_getFileName(ant_params_t)     { return callsite_field(js, call_this, CS_FILE); }
+static ant_value_t callsite_getLineNumber(ant_params_t)   { return callsite_field(js, call_this, CS_LINE); }
+static ant_value_t callsite_getColumnNumber(ant_params_t) { return callsite_field(js, call_this, CS_COL); }
+static ant_value_t callsite_getFunctionName(ant_params_t) { return callsite_field(js, call_this, CS_NAME); }
+static ant_value_t callsite_isConstructor(ant_params_t)   { return js_bool(js_truthy(js, callsite_field(js, call_this, CS_CONSTRUCT))); }
 
-static ant_value_t callsite_null(ant_params_t) { return js_mknull(); }
-static ant_value_t callsite_false(ant_params_t) { return js_false; }
+static ant_value_t callsite_null(ant_params_t)      { return js_mknull(); }
+static ant_value_t callsite_false(ant_params_t)     { return js_false; }
 static ant_value_t callsite_undefined(ant_params_t) { return js_mkundef(); }
 
 static ant_value_t callsite_toString(ant_params_t) {
-  ant_value_t name = callsite_field(js, CS_NAME);
-  ant_value_t file = callsite_field(js, CS_FILE);
-  ant_value_t line = callsite_field(js, CS_LINE);
-  ant_value_t col  = callsite_field(js, CS_COL);
-  bool construct = js_truthy(js, callsite_field(js, CS_CONSTRUCT));
+  ant_value_t name = callsite_field(js, call_this, CS_NAME);
+  ant_value_t file = callsite_field(js, call_this, CS_FILE);
+  ant_value_t line = callsite_field(js, call_this, CS_LINE);
+  ant_value_t col  = callsite_field(js, call_this, CS_COL);
+  bool construct = js_truthy(js, callsite_field(js, call_this, CS_CONSTRUCT));
 
   const char *n = "", *f = "";
   size_t n_len = 0, f_len = 0;
@@ -748,14 +748,14 @@ static ant_value_t callsite_proto(ant_t *js) {
   return proto;
 }
 
-ant_value_t js_build_callsite_array(ant_t *js, ant_value_t above) {
+ant_value_t js_build_callsite_array(ant_t *js, ant_value_t call_func, ant_value_t above) {
   GC_ROOT_SAVE(root_mark, js);
   ant_value_t proto = callsite_proto(js);
   ant_value_t arr = js_mkarr(js);
   GC_ROOT_PIN(js, arr);
 
   error_frame_t local[ERROR_FRAMES_INLINE], *frames;
-  int count = error_collect_frames(js, error_stack_trace_limit(js), error_above_of(js, above), true, local, &frames);
+  int count = error_collect_frames(js, error_stack_trace_limit(js), error_above_of(call_func, above), true, local, &frames);
   const char *file = js->filename ? js->filename : "<eval>";
 
   ant_value_t data = js_mkundef(), site = js_mkundef();

@@ -78,7 +78,7 @@ static void wasm_table_entry_set(ant_t *js, ant_value_t entries, uint32_t index,
 }
 
 ant_value_t js_wasm_table_length_getter(ant_params_t) {
-  wasm_extern_handle_t *handle = wasm_extern_handle(js->this_val, WASM_EXTERN_WRAP_TABLE);
+  wasm_extern_handle_t *handle = wasm_extern_handle(call_this, WASM_EXTERN_WRAP_TABLE);
   if (!handle || !handle->as.table)  return js_mkerr_typed(js, JS_ERR_TYPE, "Expected a WebAssembly.Table");
   if (handle->standalone_table && handle->standalone_table_element != WASM_FUNCREF)
     return Ant_Value_FromNumber((double)handle->standalone_table_size);
@@ -86,7 +86,8 @@ ant_value_t js_wasm_table_length_getter(ant_params_t) {
 }
 
 ant_value_t js_wasm_table_get(ant_params_t) {
-  wasm_extern_handle_t *handle = wasm_extern_handle(js->this_val, WASM_EXTERN_WRAP_TABLE);
+  wasm_extern_handle_t *handle = wasm_extern_handle(call_this, WASM_EXTERN_WRAP_TABLE);
+  
   wasm_ref_t *ref;
   wasm_func_t *func;
   uint32_t index;
@@ -101,16 +102,14 @@ ant_value_t js_wasm_table_get(ant_params_t) {
     ant_value_t entries;
     if (index >= handle->standalone_table_size)
       return js_mkerr_typed(js, JS_ERR_RANGE, "WebAssembly.Table index is out of bounds");
-    entries = js_get(js, js->this_val, "__wasmTableEntries");
+    entries = js_get(js, call_this, "__wasmTableEntries");
     return wasm_table_entry_get(js, entries, index);
   }
 
-  {
-    ant_value_t entries = js_get(js, js->this_val, "__wasmTableEntries");
-    if (is_object_type(entries)) {
-      ant_value_t retained = wasm_table_entry_get(js, entries, index);
-      if (vtype(retained) != kTypeUndefined && vtype(retained) != kTypeNull) return retained;
-    }
+  ant_value_t entries = js_get(js, call_this, "__wasmTableEntries");
+  if (is_object_type(entries)) {
+    ant_value_t retained = wasm_table_entry_get(js, entries, index);
+    if (vtype(retained) != kTypeUndefined && vtype(retained) != kTypeNull) return retained;
   }
 
   ref = wasm_table_get(handle->as.table, index);
@@ -120,7 +119,7 @@ ant_value_t js_wasm_table_get(ant_params_t) {
   
   if (func) {
     ant_value_t owner = wasm_find_instance_owner(js, func->inst_comm_rt);
-    if (!is_object_type(owner)) owner = js_get_slot(js->this_val, SLOT_ENTRIES);
+    if (!is_object_type(owner)) owner = js_get_slot(call_this, SLOT_ENTRIES);
     ant_value_t wrapped = wasm_wrap_func(js, func, owner, true);
     wasm_ref_delete(ref);
     return wrapped;
@@ -131,7 +130,8 @@ ant_value_t js_wasm_table_get(ant_params_t) {
 }
 
 ant_value_t js_wasm_table_set(ant_params_t) {
-  wasm_extern_handle_t *handle = wasm_extern_handle(js->this_val, WASM_EXTERN_WRAP_TABLE);
+  wasm_extern_handle_t *handle = wasm_extern_handle(call_this, WASM_EXTERN_WRAP_TABLE);
+  
   wasm_ref_t *ref = NULL;
   uint32_t index;
   ant_value_t err;
@@ -148,7 +148,7 @@ ant_value_t js_wasm_table_set(ant_params_t) {
       return js_mkerr_typed(js, JS_ERR_RANGE, "WebAssembly.Table index is out of bounds");
     if (!wasm_table_value_ok(js, handle->standalone_table_element, args[1], &err))
       return err;
-    entries = js_get(js, js->this_val, "__wasmTableEntries");
+    entries = js_get(js, call_this, "__wasmTableEntries");
     wasm_table_entry_set(js, entries, index, args[1]);
     return js_mkundef();
   }
@@ -176,17 +176,16 @@ ant_value_t js_wasm_table_set(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Failed to update WebAssembly.Table");
   }
 
-  {
-    ant_value_t entries = js_get(js, js->this_val, "__wasmTableEntries");
-    if (is_object_type(entries))
-      wasm_table_entry_set(js, entries, index, vtype(args[1]) == kTypeUndefined ? js_mknull() : args[1]);
-  }
+  ant_value_t entries = js_get(js, call_this, "__wasmTableEntries");
+  if (is_object_type(entries))
+    wasm_table_entry_set(js, entries, index, vtype(args[1]) == kTypeUndefined ? js_mknull() : args[1]);
   
   return js_mkundef();
 }
 
 ant_value_t js_wasm_table_grow(ant_params_t) {
-  wasm_extern_handle_t *handle = wasm_extern_handle(js->this_val, WASM_EXTERN_WRAP_TABLE);
+  wasm_extern_handle_t *handle = wasm_extern_handle(call_this, WASM_EXTERN_WRAP_TABLE);
+  
   uint32_t delta, old_size, needed;
   ant_value_t init, err, entries;
   wasm_ref_t *ref = NULL;
@@ -224,7 +223,7 @@ ant_value_t js_wasm_table_grow(ant_params_t) {
       if (ref) wasm_ref_delete(ref);
       return js_mkerr_typed(js, JS_ERR_RANGE, "Failed to grow WebAssembly.Table");
     }
-    entries = js_get(js, js->this_val, "__wasmTableEntries");
+    entries = js_get(js, call_this, "__wasmTableEntries");
     if (is_object_type(entries)) {
       for (uint32_t i = old_size; i < old_size + delta; i++)
         wasm_table_entry_set(js, entries, i,
@@ -236,21 +235,25 @@ ant_value_t js_wasm_table_grow(ant_params_t) {
 
   old_size = handle->standalone_table_size;
   if (delta == 0) return Ant_Value_FromNumber((double)old_size);
+  
   if (delta > UINT32_MAX - old_size)
     return js_mkerr_typed(js, JS_ERR_RANGE, "Failed to grow WebAssembly.Table");
+  
   needed = old_size + delta;
   if (needed > handle->standalone_table_max_size)
     return js_mkerr_typed(js, JS_ERR_RANGE, "Failed to grow WebAssembly.Table");
 
-  entries = js_get(js, js->this_val, "__wasmTableEntries");
+  entries = js_get(js, call_this, "__wasmTableEntries");
   for (uint32_t i = old_size; i < needed; i++) wasm_table_entry_set(js, entries, i, init);
   handle->standalone_table_size = needed;
+  
   return Ant_Value_FromNumber((double)old_size);
 }
 
 ant_value_t js_wasm_table_ctor(ant_params_t) {
   wasm_limits_t limits;
   wasm_valkind_t element;
+  
   wasm_store_t *store = NULL;
   wasm_valtype_t *valtype = NULL;
   wasm_tabletype_t *tabletype = NULL;

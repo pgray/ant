@@ -2792,34 +2792,21 @@ static void opt_cg_call_builtin(opt_cg_t *cg, ir_node_id_t node_id) {
   masm_load64(m, scratch, asm_addr(a[0], (int32_t)offsetof(ant_t, exception)));
   masm_sar64_imm(m, scratch, scratch, NANBOX_TYPE_SHIFT);
   masm_branch64_imm(m, ASM_COND_NOT_EQUAL, scratch, OPT_UNDEFINED_TAG_SIGNED, slow);
-  masm_load64(m, a[1], asm_addr(a[0], (int32_t)offsetof(ant_t, this_val)));
-  masm_store64(m, opt_cg_call_slot(cg, 0), a[1]);
-  masm_load64(m, a[1], opt_cg_call_slot(cg, 1));
+  masm_load64(m, a[4], opt_cg_call_slot(cg, 1));
   if (!op->call.extra) {
-    masm_sar64_imm(m, scratch, a[1], NANBOX_TYPE_SHIFT);
+    masm_sar64_imm(m, scratch, a[4], NANBOX_TYPE_SHIFT);
     masm_branch64_imm(m, ASM_COND_NOT_EQUAL, scratch, OPT_NULL_TAG_SIGNED, keep);
-    masm_move_imm64(m, a[1], IR_VALUE_UNDEFINED);
+    masm_move_imm64(m, a[4], IR_VALUE_UNDEFINED);
   }
   masm_bind(m, keep);
-  masm_store64(m, asm_addr(a[0], (int32_t)offsetof(ant_t, this_val)), a[1]);
-  if (op->call.extra) {
-    masm_load64(m, a[1], asm_addr(a[0], (int32_t)offsetof(ant_t, current_func)));
-    masm_store64(m, opt_cg_call_slot(cg, 1), a[1]);
-    masm_move_imm64(m, a[1], op->call.extra);
-    masm_store64(m, asm_addr(a[0], (int32_t)offsetof(ant_t, current_func)), a[1]);
-  }
+  if (op->call.extra) masm_move_imm64(m, a[5], op->call.extra);
+  else masm_load64(m, a[5], opt_cg_call_slot(cg, 0));
   masm_load_effective_address(m, a[1], opt_cg_call_slot(cg, 2));
   masm_move_imm32(m, a[2], op->call.argc);
   masm_move_imm64(m, a[3], IR_VALUE_UNDEFINED);
   masm_call_absolute(m, op->call.helper);
   opt_cg_record_call(cg, node->frame_state, -1);
   masm_load64(m, scratch, asm_addr(cg->pinned.vm, (int32_t)offsetof(sv_vm_t, js)));
-  masm_load64(m, a[1], opt_cg_call_slot(cg, 0));
-  masm_store64(m, asm_addr(scratch, (int32_t)offsetof(ant_t, this_val)), a[1]);
-  if (op->call.extra) {
-    masm_load64(m, a[1], opt_cg_call_slot(cg, 1));
-    masm_store64(m, asm_addr(scratch, (int32_t)offsetof(ant_t, current_func)), a[1]);
-  }
   masm_sar64_imm(m, a[1], result, NANBOX_TYPE_SHIFT);
   masm_branch64_imm(m, ASM_COND_EQUAL, a[1], OPT_ERROR_TAG_SIGNED, finish);
   masm_load64(m, a[1], asm_addr(scratch, (int32_t)offsetof(ant_t, exception)));

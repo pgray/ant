@@ -107,8 +107,8 @@ out:
   return result;
 }
 
-static ant_value_t string_replace_impl(ant_native_params_t, bool replace_all) {
-  ant_value_t str = Ant_String_CoerceThis(js, replace_all ? "replaceAll" : "replace");
+static ant_value_t string_replace_impl(ant_native_params_t, ant_value_t call_this, bool replace_all) {
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, replace_all ? "replaceAll" : "replace");
   
   if (is_err(str)) return str;
   if (nargs < 1) return str;
@@ -319,9 +319,9 @@ static ant_value_t string_replace_impl(ant_native_params_t, bool replace_all) {
 }
 
 ant_value_t builtin_string_replace(ant_params_t) {
-  return string_replace_impl(js, args, nargs, false);
+  return string_replace_impl(js, args, nargs, call_this, false);
 }
 
 ant_value_t builtin_string_replaceAll(ant_params_t) {
-  return string_replace_impl(js, args, nargs, true);
+  return string_replace_impl(js, args, nargs, call_this, true);
 }

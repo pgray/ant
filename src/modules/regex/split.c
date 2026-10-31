@@ -101,20 +101,19 @@ bool regexp_split_try_fast(ant_t *js, ant_value_t rx, ant_value_t str, ant_value
 }
 
 ant_value_t builtin_regexp_symbol_split(ant_params_t) {
-  ant_value_t rx = js_getthis(js);
-  if (!is_object_type(rx))
+  if (!is_object_type(call_this))
     return js_mkerr_typed(js, JS_ERR_TYPE, "RegExp.prototype[@@split] called on non-object");
 
   ant_value_t str = nargs > 0 ? js_tostring_val(js, args[0]) : js_mkstr(js, "", 0);
   if (is_err(str)) return str;
 
   ant_value_t fast_split;
-  if (regexp_split_try_fast(js, rx, str, nargs >= 2 ? args[1] : js_mkundef(), &fast_split)) return fast_split;
+  if (regexp_split_try_fast(js, call_this, str, nargs >= 2 ? args[1] : js_mkundef(), &fast_split)) return fast_split;
 
-  ant_value_t C = regexp_species_ctor(js, rx, "RegExp.prototype[@@split]");
+  ant_value_t C = regexp_species_ctor(js, call_this, "RegExp.prototype[@@split]");
   if (is_err(C)) return C;
 
-  ant_value_t flags_val = js_get(js, rx, "flags");
+  ant_value_t flags_val = js_get(js, call_this, "flags");
   if (is_err(flags_val)) return flags_val;
   ant_value_t flags_str = js_tostring_val(js, flags_val);
   if (is_err(flags_str)) return flags_str;
@@ -139,8 +138,8 @@ ant_value_t builtin_regexp_symbol_split(ant_params_t) {
     new_flags = js_mkstr(js, fbuf, flen + 1);
   }
 
-  ant_value_t ctor_args[2] = { rx, new_flags };
-  ant_value_t splitter = regexp_species_construct(js, rx, C, ctor_args, 2);
+  ant_value_t ctor_args[2] = { call_this, new_flags };
+  ant_value_t splitter = regexp_species_construct(js, call_this, C, ctor_args, 2);
   if (is_err(splitter)) return splitter;
 
   ant_value_t A = js_mkarr(js);

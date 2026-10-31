@@ -223,7 +223,7 @@ ant_value_t builtin_RegExp(ant_params_t) {
     }
   }
 
-  ant_value_t regexp_obj = js->this_val;
+  ant_value_t regexp_obj = call_this;
   bool use_this = (vtype(call_new_target) != kTypeUndefined && vtype(regexp_obj) == kTypeObject);
 
   if (!use_this) {
@@ -290,14 +290,13 @@ ant_value_t builtin_RegExp(ant_params_t) {
 }
 
 ant_value_t builtin_regexp_toString(ant_params_t) {
-  ant_value_t regexp = js->this_val;
-  if (!is_object_type(regexp))
+  if (!is_object_type(call_this))
     return js_mkerr_typed(js, JS_ERR_TYPE, "toString called on non-object");
 
   GC_ROOT_SAVE(root_mark, js);
-  GC_ROOT_PIN(js, regexp);
+  GC_ROOT_PIN(js, call_this);
 
-  ant_value_t source_val = js_getprop_fallback(js, regexp, "source");
+  ant_value_t source_val = js_getprop_fallback(js, call_this, "source");
   if (is_err(source_val)) {
     GC_ROOT_RESTORE(js, root_mark);
     return source_val;
@@ -310,7 +309,7 @@ ant_value_t builtin_regexp_toString(ant_params_t) {
     return source_str;
   }
 
-  ant_value_t flags_val = js_getprop_fallback(js, regexp, "flags");
+  ant_value_t flags_val = js_getprop_fallback(js, call_this, "flags");
   if (is_err(flags_val)) {
     GC_ROOT_RESTORE(js, root_mark);
     return flags_val;
@@ -362,8 +361,7 @@ ant_value_t builtin_regexp_toString(ant_params_t) {
 }
 
 ant_value_t builtin_regexp_compile(ant_params_t) {
-  ant_value_t rx = js->this_val;
-  if (!is_object_type(rx))
+  if (!is_object_type(call_this))
     return js_mkerr_typed(js, JS_ERR_TYPE, "compile called on non-object");
 
   ant_value_t pattern = js_mkstr(js, "", 0);
@@ -391,12 +389,12 @@ ant_value_t builtin_regexp_compile(ant_params_t) {
   ant_value_t pattern_error = regexp_check_pattern(js, pattern, flags);
   if (is_err(pattern_error)) return pattern_error;
   
-  js_set_slot(rx, SLOT_DATA, pattern);
+  js_set_slot(call_this, SLOT_DATA, pattern);
   
-  regexp_init_flags(js, rx, flags, false);
-  regexp_object_compiled_detach(js, rx);
+  regexp_init_flags(js, call_this, flags, false);
+  regexp_object_compiled_detach(js, call_this);
 
-  return rx;
+  return call_this;
 }
 
 static inline bool is_syntax_char(char c) {
@@ -494,7 +492,7 @@ static ant_value_t regexp_flag_getter(ant_t *js, ant_value_t rx, uint8_t bit, co
 }
 #define REGEXP_FLAG(id, name, ch)                                       \
   ant_value_t builtin_regexp_get_##name(ant_params_t) {                 \
-    return regexp_flag_getter(js, js->this_val, REGEXP_FLAG_##id, #name); \
+    return regexp_flag_getter(js, call_this, REGEXP_FLAG_##id, #name); \
   }
 #include "modules/regex_flags.h"
 
@@ -562,21 +560,19 @@ ant_value_t regexp_source_value(ant_t *js, ant_value_t rx) {
 }
 
 ant_value_t builtin_regexp_source_getter(ant_params_t) {
-  ant_value_t rx = js->this_val;
-  if (regexp_has_internal_slots(js, rx)) return regexp_source_value(js, rx);
-  if (regexp_is_proto(js, rx)) return Ant_String_FromLiteral(js, "(?:)");
+  if (regexp_has_internal_slots(js, call_this)) return regexp_source_value(js, call_this);
+  if (regexp_is_proto(js, call_this)) return Ant_String_FromLiteral(js, "(?:)");
   return js_mkerr_typed(js, JS_ERR_TYPE, "RegExp.prototype.source getter called on incompatible receiver");
 }
 
 ant_value_t builtin_regexp_flags_getter(ant_params_t) {
-  ant_value_t rx = js->this_val;
-  if (!is_object_type(rx))
+  if (!is_object_type(call_this))
     return js_mkerr_typed(js, JS_ERR_TYPE, "RegExp.prototype.flags called on non-object");
-  if (regexp_flags_pristine(js, rx)) return regexp_flags_value(js, rx);
+  if (regexp_flags_pristine(js, call_this)) return regexp_flags_value(js, call_this);
 
   char buf[REGEXP_FLAG_COUNT]; int n = 0;
   for (int i = 0; i < REGEXP_FLAG_COUNT; i++) {
-    ant_value_t v = regexp_read_flag(js, rx, i);
+    ant_value_t v = regexp_read_flag(js, call_this, i);
     if (is_err(v)) return v;
     if (js_truthy(js, v)) buf[n++] = regexp_flag_info[i].ch;
   }

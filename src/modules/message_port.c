@@ -555,11 +555,11 @@ static ant_value_t js_message_port_post_message(ant_params_t) {
       transfer = list;
     } else transfer = opt;
   }
-  return ant_message_port_post(js, js_getthis(js), nargs > 0 ? args[0] : js_mkundef(), transfer);
+  return ant_message_port_post(js, call_this, nargs > 0 ? args[0] : js_mkundef(), transfer);
 }
 
 static ant_value_t js_message_port_start(ant_params_t) {
-  ant_port_binding_t *binding = port_binding(js_getthis(js));
+  ant_port_binding_t *binding = port_binding(call_this);
   if (!binding) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
   if (!binding->started) {
     binding->started = true;
@@ -569,74 +569,70 @@ static ant_value_t js_message_port_start(ant_params_t) {
 }
 
 static ant_value_t js_message_port_close(ant_params_t) {
-  ant_port_binding_t *binding = port_binding(js_getthis(js));
+  ant_port_binding_t *binding = port_binding(call_this);
   if (!binding) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
   ant_port_binding_close(binding);
   return js_mkundef();
 }
 
 static ant_value_t js_message_port_ref(ant_params_t) {
-  ant_port_binding_t *binding = port_binding(js_getthis(js));
+  ant_port_binding_t *binding = port_binding(call_this);
   if (binding) {
     binding->refed = true;
     binding_update_ref(binding);
   }
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t js_message_port_unref(ant_params_t) {
-  ant_port_binding_t *binding = port_binding(js_getthis(js));
+  ant_port_binding_t *binding = port_binding(call_this);
   if (binding) {
     binding->refed = false;
     binding_update_ref(binding);
   }
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t js_message_port_has_ref(ant_params_t) {
-  ant_port_binding_t *binding = port_binding(js_getthis(js));
+  ant_port_binding_t *binding = port_binding(call_this);
   return js_bool(binding && binding->refed && !binding->closed);
 }
 
-static ant_value_t node_target_add(ant_native_params_t, bool once, bool prepend) {
-  ant_value_t this_obj = js_getthis(js);
+static ant_value_t node_target_add(ant_native_params_t, ant_value_t call_this, bool once, bool prepend) {
   if (nargs < 2 || !is_callable(args[1]))
     return js_mkerr_typed(js, JS_ERR_TYPE, "The \"listener\" argument must be of type function");
   ant_value_t type = vtype(args[0]) == kTypeSymbol ? args[0] : js_tostring_val(js, args[0]);
   if (is_err(type)) return type;
-  Ant_EventTarget_AddDataListener(js, this_obj, type, args[1], once, prepend);
-  return this_obj;
+  Ant_EventTarget_AddDataListener(js, call_this, type, args[1], once, prepend);
+  return call_this;
 }
 
-static ant_value_t js_node_target_on(ant_params_t) { return node_target_add(js, args, nargs, false, false); }
-static ant_value_t js_node_target_once(ant_params_t) { return node_target_add(js, args, nargs, true, false); }
-static ant_value_t js_node_target_prepend(ant_params_t) { return node_target_add(js, args, nargs, false, true); }
-static ant_value_t js_node_target_prepend_once(ant_params_t) { return node_target_add(js, args, nargs, true, true); }
+static ant_value_t js_node_target_on(ant_params_t) { return node_target_add(js, args, nargs, call_this, false, false); }
+static ant_value_t js_node_target_once(ant_params_t) { return node_target_add(js, args, nargs, call_this, true, false); }
+static ant_value_t js_node_target_prepend(ant_params_t) { return node_target_add(js, args, nargs, call_this, false, true); }
+static ant_value_t js_node_target_prepend_once(ant_params_t) { return node_target_add(js, args, nargs, call_this, true, true); }
 
 static ant_value_t js_node_target_off(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  if (nargs < 2) return this_obj;
+  if (nargs < 2) return call_this;
   
   ant_value_t type = vtype(args[0]) == kTypeSymbol ? args[0] : js_tostring_val(js, args[0]);
   if (is_err(type)) return type;
   
-  Ant_EventTarget_RemoveListener(js, this_obj, type, args[1]);
+  Ant_EventTarget_RemoveListener(js, call_this, type, args[1]);
   
-  return this_obj;
+  return call_this;
 }
 
 static ant_value_t js_node_target_remove_all(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
   ant_value_t remove = js_get(js, js->builtins.eventemitter_proto, "removeAllListeners");
   if (is_callable(remove)) {
-    ant_value_t r = sv_vm_call(js->vm, js, remove, this_obj, args, nargs, NULL, js_mkundef());
+    ant_value_t r = sv_vm_call(js->vm, js, remove, call_this, args, nargs, NULL, js_mkundef());
     if (is_err(r)) return r;
   }
-  return this_obj;
+  return call_this;
 }
 
 static ant_value_t js_node_target_emit(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
   if (nargs < 1) return js_false;
   
   ant_value_t type = js_tostring_val(js, args[0]);
@@ -649,7 +645,7 @@ static ant_value_t js_node_target_emit(ant_params_t) {
   if (len >= sizeof(buf)) len = sizeof(buf) - 1;
   memcpy(buf, name, len);
   buf[len] = '\0';
-  port_dispatch(js, this_obj, buf, nargs > 1 ? args[1] : js_mkundef(), js_mkundef());
+  port_dispatch(js, call_this, buf, nargs > 1 ? args[1] : js_mkundef(), js_mkundef());
   
   return js_true;
 }
@@ -667,7 +663,7 @@ static ant_value_t js_node_target_listener_count(ant_params_t) {
   memcpy(buf, name, len);
   buf[len] = '\0';
   
-  return Ant_Value_FromNumber((double)eventemitter_listener_count(js, js_getthis(js), buf));
+  return Ant_Value_FromNumber((double)eventemitter_listener_count(js, call_this, buf));
 }
 
 static ant_value_t js_node_target_max_listeners(ant_params_t) {
@@ -675,24 +671,24 @@ static ant_value_t js_node_target_max_listeners(ant_params_t) {
 }
 
 static ant_value_t js_node_target_set_max_listeners(ant_params_t) {
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t js_message_port_onmessage_get(ant_params_t) {
-  return Ant_EventTarget_GetHandler(js, js_getthis(js), "message", 7);
+  return Ant_EventTarget_GetHandler(js, call_this, "message", 7);
 }
 
 static ant_value_t js_message_port_onmessage_set(ant_params_t) {
-  Ant_EventTarget_SetHandler(js, js_getthis(js), "message", 7, nargs > 0 ? args[0] : js_mkundef());
+  Ant_EventTarget_SetHandler(js, call_this, "message", 7, nargs > 0 ? args[0] : js_mkundef());
   return js_mkundef();
 }
 
 static ant_value_t js_message_port_onmessageerror_get(ant_params_t) {
-  return Ant_EventTarget_GetHandler(js, js_getthis(js), "messageerror", 12);
+  return Ant_EventTarget_GetHandler(js, call_this, "messageerror", 12);
 }
 
 static ant_value_t js_message_port_onmessageerror_set(ant_params_t) {
-  Ant_EventTarget_SetHandler(js, js_getthis(js), "messageerror", 12, nargs > 0 ? args[0] : js_mkundef());
+  Ant_EventTarget_SetHandler(js, call_this, "messageerror", 12, nargs > 0 ? args[0] : js_mkundef());
   return js_mkundef();
 }
 
@@ -704,9 +700,8 @@ static ant_value_t js_message_channel_ctor(ant_params_t) {
   if (vtype(call_new_target) == kTypeUndefined)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Class constructor MessageChannel cannot be invoked without 'new'");
 
-  ant_value_t this_obj = js_getthis(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.message_channel_proto, call_new_target);
-  if (is_object_type(proto)) js_set_proto_init(this_obj, proto);
+  if (is_object_type(proto)) js_set_proto_init(call_this, proto);
 
   ant_port_end_t *a = NULL, *b = NULL;
   if (!ant_port_end_pair(&a, &b)) return Ant_Error_CreateOutOfMemory(js);
@@ -726,10 +721,10 @@ static ant_value_t js_message_channel_ctor(ant_params_t) {
   }
   GC_ROOT_PIN(js, port2);
 
-  js_set(js, this_obj, "port1", port1);
-  js_set(js, this_obj, "port2", port2);
+  js_set(js, call_this, "port1", port1);
+  js_set(js, call_this, "port2", port2);
   GC_ROOT_RESTORE(js, mark);
-  return this_obj;
+  return call_this;
 }
 
 static inline broadcast_member_t *broadcast_member(ant_value_t value) {
@@ -827,9 +822,8 @@ static ant_value_t js_broadcast_channel_ctor(ant_params_t) {
   ant_value_t name_val = js_tostring_val(js, args[0]);
   if (is_err(name_val)) return name_val;
 
-  ant_value_t this_obj = js_getthis(js);
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.broadcast_channel_proto, call_new_target);
-  if (is_object_type(proto)) js_set_proto_init(this_obj, proto);
+  if (is_object_type(proto)) js_set_proto_init(call_this, proto);
 
   broadcast_member_t *m = calloc(1, sizeof(*m));
   if (!m) return Ant_Error_CreateOutOfMemory(js);
@@ -838,7 +832,7 @@ static ant_value_t js_broadcast_channel_ctor(ant_params_t) {
     return js_mkerr(js, "failed to create BroadcastChannel");
   }
   m->js = js;
-  m->obj = this_obj;
+  m->obj = call_this;
   m->async.data = m;
   m->async_open = true;
   m->obj_alive = true;
@@ -860,15 +854,15 @@ static ant_value_t js_broadcast_channel_ctor(ant_params_t) {
   ant_mutex_unlock(&broadcast_lock);
 
   Ant_List_Insert(&js->broadcast_members, m);
-  js_set_native(this_obj, m, BROADCAST_NATIVE_TAG);
-  js_set_finalizer(this_obj, broadcast_finalize);
-  js_set(js, this_obj, "name", name_val);
+  js_set_native(call_this, m, BROADCAST_NATIVE_TAG);
+  js_set_finalizer(call_this, broadcast_finalize);
+  js_set(js, call_this, "name", name_val);
   
-  return this_obj;
+  return call_this;
 }
 
 static ant_value_t js_broadcast_channel_post_message(ant_params_t) {
-  broadcast_member_t *m = broadcast_member(js_getthis(js));
+  broadcast_member_t *m = broadcast_member(call_this);
   if (!m) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
   if (m->closed) return js_throw(js, make_dom_exception(js, "BroadcastChannel is closed.", "InvalidStateError"));
 
@@ -893,28 +887,28 @@ static ant_value_t js_broadcast_channel_post_message(ant_params_t) {
 }
 
 static ant_value_t js_broadcast_channel_close(ant_params_t) {
-  broadcast_member_t *m = broadcast_member(js_getthis(js));
+  broadcast_member_t *m = broadcast_member(call_this);
   if (!m) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
   if (!m->closed) broadcast_close(m);
   return js_mkundef();
 }
 
 static ant_value_t js_broadcast_channel_ref(ant_params_t) {
-  broadcast_member_t *m = broadcast_member(js_getthis(js));
+  broadcast_member_t *m = broadcast_member(call_this);
   if (m) {
     m->refed = true;
     broadcast_update_ref(m);
   }
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t js_broadcast_channel_unref(ant_params_t) {
-  broadcast_member_t *m = broadcast_member(js_getthis(js));
+  broadcast_member_t *m = broadcast_member(call_this);
   if (m) {
     m->refed = false;
     broadcast_update_ref(m);
   }
-  return js_getthis(js);
+  return call_this;
 }
 
 #define define_handler_accessor(js, proto, name, getter, setter) \

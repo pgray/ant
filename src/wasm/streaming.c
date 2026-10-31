@@ -13,13 +13,13 @@ static ant_value_t wasm_streaming_type_error(ant_t *js, ant_value_t state, const
 }
 
 static ant_value_t wasm_streaming_on_reject(ant_params_t) {
-  ant_value_t state = js_func_data(js->current_func);
+  ant_value_t state = js_func_data(call_func);
   js_reject_promise(js, js_get_slot(state, SLOT_DATA), nargs > 0 ? args[0] : js_mkundef());
   return js_mkundef();
 }
 
 static ant_value_t wasm_streaming_on_bytes(ant_params_t) {
-  ant_value_t state = js_func_data(js->current_func);
+  ant_value_t state = js_func_data(call_func);
   ant_value_t promise = js_get_slot(state, SLOT_DATA);
   ant_value_t imports = js_get_slot(state, SLOT_AUX);
   ant_value_t api = js_get_slot(state, SLOT_ENTRIES);
@@ -57,7 +57,7 @@ static bool wasm_mime_is_wasm(ant_t *js, ant_value_t content_type) {
 }
 
 static ant_value_t wasm_streaming_on_response(ant_params_t) {
-  ant_value_t state = js_func_data(js->current_func);
+  ant_value_t state = js_func_data(call_func);
   ant_value_t response = nargs > 0 ? args[0] : js_mkundef();
 
   GC_ROOT_SAVE(mark, js);

@@ -156,12 +156,12 @@ typedef struct {
 #define FFI_ERR_RANGE(...) js_mkerr_typed(js, JS_ERR_RANGE, __VA_ARGS__)
 
 #define FFI_RECEIVER(kind, var)                                   \
-  ffi_##kind##_handle_t *var = ffi_##kind##_data(js_getthis(js)); \
+  ffi_##kind##_handle_t *var = ffi_##kind##_data(call_this); \
   if (!var) return ffi_receiver_error(js, ffi_##kind##_label)
 
 #define FFI_POINTER_RECEIVER(var) \
   FFI_RECEIVER(pointer, var);     \
-  ffi_pointer_sync(js, js_getthis(js), var)
+  ffi_pointer_sync(js, call_this, var)
 
 #define FFI_WRAP(kind, handle) \
   ffi_wrap(js, js->builtins.ffi_##kind##_proto, (handle), ffi_##kind##_tag, ffi_##kind##_finalize)
@@ -693,7 +693,7 @@ static ant_value_t ffi_function_invoke(ant_t *js, ffi_function_handle_t *functio
 }
 
 ant_value_t ffi_function_call(ant_params_t) {
-  ffi_function_handle_t *function = ffi_function_data(js->current_func);
+  ffi_function_handle_t *function = ffi_function_data(call_func);
   if (!function) return ffi_receiver_error(js, ffi_function_label);
 
   const ffi_signature_t *signature = &function->signature;
@@ -837,7 +837,7 @@ static ant_value_t ffi_dlopen(ant_params_t) {
 ant_value_t ffi_library_close(ant_params_t) {
   FFI_RECEIVER(library, library);
   ffi_library_close_handle(library);
-  return js_getthis(js);
+  return call_this;
 }
 
 ant_value_t ffi_library_define(ant_params_t) {
@@ -858,7 +858,7 @@ ant_value_t ffi_library_define(ant_params_t) {
   ant_value_t fn = ffi_make_function(js, library, symbol_name, &signature, sym);
   if (is_err(fn)) return fn;
 
-  js_set(js, js_getthis(js), ffi_function_data(fn)->symbol_name, fn);
+  js_set(js, call_this, ffi_function_data(fn)->symbol_name, fn);
   return fn;
 }
 
@@ -867,7 +867,7 @@ ant_value_t ffi_library_call(ant_params_t) {
   if (library->closed) return FFI_ERR_TYPE("FFILibrary is closed");
   if (nargs < 1 || vtype(args[0]) != kTypeString) return FFI_ERR_TYPE("call(name, ...args) requires a symbol name");
 
-  ant_value_t fn = js_get(js, js_getthis(js), js_getstr(js, args[0], NULL));
+  ant_value_t fn = js_get(js, call_this, js_getstr(js, args[0], NULL));
   if (!is_callable(fn)) return FFI_ERR_TYPE("Symbol '%s' has not been defined", js_getstr(js, args[0], NULL));
 
   return sv_vm_call(js->vm, js, fn, js_mkundef(), args + 1, nargs - 1, NULL, js_mkundef());
@@ -944,12 +944,11 @@ ant_value_t ffi_pointer_write(ant_params_t) {
   ffi_value_type_id_t type = ffi_type_from_value(js, args[0]);
   if (!ffi_type_is_data(type)) return FFI_ERR_TYPE("Unsupported FFIPointer.write() type");
 
-  ant_value_t self = js_getthis(js);
   ant_value_t error = type == FFI_VALUE_STRING
-    ? ffi_pointer_store_string(js, self, handle, args[1])
-    : ffi_pointer_store(js, self, handle, type, args[1]);
+    ? ffi_pointer_store_string(js, call_this, handle, args[1])
+    : ffi_pointer_store(js, call_this, handle, type, args[1]);
 
-  return is_err(error) ? error : self;
+  return is_err(error) ? error : call_this;
 }
 
 ant_value_t ffi_pointer_offset(ant_params_t) {
@@ -965,7 +964,7 @@ ant_value_t ffi_pointer_offset(ant_params_t) {
   if (region->size_known && offset > region->size) return FFI_ERR_RANGE("FFIPointer.offset() is out of bounds");
 
   ant_value_t out = ffi_make_pointer(js, region, offset);
-  if (!is_err(out)) js_set_slot_wb(js, out, SLOT_DATA, js_get_slot(js_getthis(js), SLOT_DATA));
+  if (!is_err(out)) js_set_slot_wb(js, out, SLOT_DATA, js_get_slot(call_this, SLOT_DATA));
 
   return out;
 }
@@ -974,7 +973,7 @@ ant_value_t ffi_pointer_free(ant_params_t) {
   FFI_RECEIVER(pointer, handle);
   if (!handle->region->owned) return FFI_ERR_TYPE("Only owned FFIPointers can be freed");
   if (!ffi_pointer_region_free(handle->region)) return FFI_ERR_TYPE("FFIPointer has already been freed");
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t ffi_callback_discard(ffi_callback_handle_t *callback, ant_value_t error) {
@@ -1026,7 +1025,7 @@ ant_value_t ffi_callback_address(ant_params_t) {
 ant_value_t ffi_callback_close(ant_params_t) {
   FFI_RECEIVER(callback, callback);
   ffi_callback_close_handle(callback);
-  return js_getthis(js);
+  return call_this;
 }
 
 static const ant_cfunc_meta_t ffi_exports[] = {

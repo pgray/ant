@@ -276,20 +276,23 @@ static bool realm_free_call(const ant_cfunc_meta_t *meta, ant_args_t) {
   return true;
 }
 
-ant_value_t sv_invoke_builtin_in_realm(ant_t *js, const ant_cfunc_meta_t *meta, ant_call_params_t) {
+ant_value_t sv_invoke_builtin_in_realm(
+  ant_t *js, const ant_cfunc_meta_t *meta,
+  ant_value_t this_val, ant_value_t func, ant_call_params_t
+) {
   ant_realm_t *realm = ant_cfunc_meta_realm(meta);
   if (!realm) realm = ant_realm_main(js);
   
   if (realm_free_call(meta, args, nargs)) {
     ant_realm_t *prev_error = js->error_realm;
     js->error_realm = realm;
-    ant_value_t result = sv_invoke_native(js, meta->fn, args, nargs, new_target);
+    ant_value_t result = sv_invoke_native(js, meta->fn, this_val, func, args, nargs, new_target);
     js->error_realm = prev_error;
     return result;
   }
   
   ant_realm_t *prev = ant_realm_enter(js, realm);
-  ant_value_t result = sv_invoke_native(js, meta->fn, args, nargs, new_target);
+  ant_value_t result = sv_invoke_native(js, meta->fn, this_val, func, args, nargs, new_target);
   ant_realm_enter(js, prev);
   
   return result;

@@ -667,7 +667,7 @@ static bool fetch_handle_blob_url(fetch_request_t *req) {
 }
 
 static ant_value_t fetch_upload_on_reject(ant_params_t) {
-  fetch_request_t *req = (fetch_request_t *)js_get_native(js->current_func, FETCH_REQUEST_NATIVE_TAG);
+  fetch_request_t *req = (fetch_request_t *)js_get_native(call_func, FETCH_REQUEST_NATIVE_TAG);
   ant_value_t reason = (nargs > 0) ? args[0] : js_mkundef();
 
   if (!req) return js_mkundef();
@@ -685,7 +685,7 @@ static ant_value_t fetch_upload_on_reject(ant_params_t) {
 
 static void fetch_upload_schedule_next_read(fetch_request_t *req);
 static ant_value_t fetch_upload_on_read(ant_params_t) {
-  fetch_request_t *req = (fetch_request_t *)js_get_native(js->current_func, FETCH_REQUEST_NATIVE_TAG);
+  fetch_request_t *req = (fetch_request_t *)js_get_native(call_func, FETCH_REQUEST_NATIVE_TAG);
   
   ant_value_t result = (nargs > 0) ? args[0] : js_mkundef();
   ant_value_t done = 0;
@@ -928,7 +928,7 @@ void fetch_start_http(fetch_request_t *req) {
 }
 
 static ant_value_t fetch_abort_listener(ant_params_t) {
-  fetch_request_t *req = (fetch_request_t *)js_get_native(js->current_func, FETCH_REQUEST_NATIVE_TAG);
+  fetch_request_t *req = (fetch_request_t *)js_get_native(call_func, FETCH_REQUEST_NATIVE_TAG);
   ant_value_t signal = 0;
   ant_value_t reason = 0;
 

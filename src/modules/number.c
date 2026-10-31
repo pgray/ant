@@ -97,13 +97,13 @@ static ant_value_t builtin_Number_isSafeInteger(ant_params_t) {
 
 static ant_value_t builtin_Number(ant_params_t) {
   ant_value_t nval = Ant_Value_FromNumber(nargs > 0 ? js_to_number(js, args[0]) : 0.0);
-  if (is_wrapper_ctor_target(js, js->this_val, call_new_target))
-    set_slot(js->this_val, SLOT_PRIMITIVE, nval);
+  if (is_wrapper_ctor_target(js, call_this, call_new_target))
+    set_slot(call_this, SLOT_PRIMITIVE, nval);
   return nval;
 }
 
 static ant_value_t builtin_number_toString(ant_params_t) {
-  ant_value_t num = unwrap_primitive(js, js->this_val);
+  ant_value_t num = unwrap_primitive(js, call_this);
   if (vtype(num) != kTypeNumber) return js_mkerr(js, "toString called on non-number");
   
   int radix = 10;
@@ -168,7 +168,7 @@ static ant_value_t builtin_number_toString(ant_params_t) {
 }
 
 static ant_value_t builtin_number_toFixed(ant_params_t) {
-  ant_value_t num = unwrap_primitive(js, js->this_val);
+  ant_value_t num = unwrap_primitive(js, call_this);
   if (vtype(num) != kTypeNumber) return js_mkerr(js, "toFixed called on non-number");
   
   double d = Ant_Value_AsNumberUnchecked(num);
@@ -197,7 +197,7 @@ static ant_value_t builtin_number_toFixed(ant_params_t) {
 }
 
 static ant_value_t builtin_number_toPrecision(ant_params_t) {
-  ant_value_t num = unwrap_primitive(js, js->this_val);
+  ant_value_t num = unwrap_primitive(js, call_this);
   if (vtype(num) != kTypeNumber) return js_mkerr(js, "toPrecision called on non-number");
   
   double d = Ant_Value_AsNumberUnchecked(num);
@@ -223,7 +223,7 @@ static ant_value_t builtin_number_toPrecision(ant_params_t) {
 }
 
 static ant_value_t builtin_number_toExponential(ant_params_t) {
-  ant_value_t num = unwrap_primitive(js, js->this_val);
+  ant_value_t num = unwrap_primitive(js, call_this);
   if (vtype(num) != kTypeNumber) return js_mkerr(js, "toExponential called on non-number");
   
   double d = Ant_Value_AsNumberUnchecked(num);
@@ -247,14 +247,14 @@ static ant_value_t builtin_number_toExponential(ant_params_t) {
 
 static ant_value_t builtin_number_valueOf(ant_params_t) {
   (void) args; (void) nargs;
-  ant_value_t num = unwrap_primitive(js, js->this_val);
+  ant_value_t num = unwrap_primitive(js, call_this);
   if (vtype(num) != kTypeNumber) return js_mkerr(js, "valueOf called on non-number");
   return num;
 }
 
 ant_value_t builtin_number_toLocaleString(ant_params_t) {
   (void) args; (void) nargs;
-  ant_value_t num = unwrap_primitive(js, js->this_val);
+  ant_value_t num = unwrap_primitive(js, call_this);
   if (vtype(num) != kTypeNumber) return js_mkerr(js, "toLocaleString called on non-number");
   char buf[128];
   size_t len = format_number_to_locale_string(num, buf, sizeof(buf));
@@ -358,12 +358,12 @@ static ant_value_t builtin_parseFloat(ant_params_t) {
 }
 
 double js_parse_int_value(ant_t *js, ant_value_t arg) {
-  ant_value_t result = builtin_parseInt(js, &arg, 1, js_mkundef());
+  ant_value_t result = builtin_parseInt(js, &arg, 1, js_mkundef(), js_mkundef(), js_mkundef());
   return vtype(result) == kTypeNumber ? Ant_Value_AsNumberUnchecked(result) : ANT_NAN;
 }
 
 double js_parse_float_value(ant_t *js, ant_value_t arg) {
-  ant_value_t result = builtin_parseFloat(js, &arg, 1, js_mkundef());
+  ant_value_t result = builtin_parseFloat(js, &arg, 1, js_mkundef(), js_mkundef(), js_mkundef());
   return vtype(result) == kTypeNumber ? Ant_Value_AsNumberUnchecked(result) : ANT_NAN;
 }
 

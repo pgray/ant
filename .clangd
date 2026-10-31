@@ -1,0 +1,13 @@
+CompileFlags:
+  CompilationDatabase: build
+Diagnostics:
+  Includes:
+    IgnoreHeader:
+      - mach/mach\.h
+---
+If:
+  PathMatch: include/.*\.h
+CompileFlags:
+  Add:
+    - -I../include
+    - -I../vendor/uthash-2.3.0/src

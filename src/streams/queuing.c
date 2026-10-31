@@ -24,13 +24,13 @@ static ant_value_t js_bytelength_size(ant_params_t) {
 }
 
 static ant_value_t js_qs_get_highwatermark(ant_params_t) {
-  ant_value_t s = js_get_slot(js->this_val, SLOT_DATA);
+  ant_value_t s = js_get_slot(call_this, SLOT_DATA);
   if (vtype(s) == kTypeNumber) return s;
   return js_mkundef();
 }
 
 static ant_value_t js_qs_get_size(ant_params_t) {
-  ant_value_t proto = js_get_proto(js, js->this_val);
+  ant_value_t proto = js_get_proto(js, call_this);
   return js_get_slot(proto, SLOT_DATA);
 }
 

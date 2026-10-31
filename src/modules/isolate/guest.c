@@ -240,7 +240,7 @@ static ant_value_t guest_child_callback_fn(ant_params_t) {
     return Ant_Error_CreateOutOfMemory(js);
   }
 
-  call->callback = (uint32_t)Ant_Value_AsNumberUnchecked(js_func_data(js->current_func));
+  call->callback = (uint32_t)Ant_Value_AsNumberUnchecked(js_func_data(call_func));
   call->args = encoded;
   call->argc = (uint32_t)nargs;
   call->promise = js_mkundef();
@@ -397,12 +397,12 @@ static ant_value_t guest_promise_settled(ant_t *js, guest_call_t *call, ant_valu
 }
 
 static ant_value_t guest_promise_fulfilled(ant_params_t) {
-  guest_call_t *call = js_get_native(js->current_func, GUEST_CALL_NATIVE_TAG);
+  guest_call_t *call = js_get_native(call_func, GUEST_CALL_NATIVE_TAG);
   return call ? guest_promise_settled(js, call, nargs ? args[0] : js_mkundef(), true) : js_mkundef();
 }
 
 static ant_value_t guest_promise_rejected(ant_params_t) {
-  guest_call_t *call = js_get_native(js->current_func, GUEST_CALL_NATIVE_TAG);
+  guest_call_t *call = js_get_native(call_func, GUEST_CALL_NATIVE_TAG);
   return call ? guest_promise_settled(js, call, nargs ? args[0] : js_mkundef(), false) : js_mkundef();
 }
 

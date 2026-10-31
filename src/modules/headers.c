@@ -16,7 +16,6 @@
 
 #include "modules/headers.h"
 #include "modules/http.h"
-#include "modules/symbol.h"
 #include "modules/iterator.h"
 
 typedef ant_http_header_t hdr_entry_t;
@@ -631,7 +630,7 @@ bool advance_headers(ant_t *js, iterator_t *it, ant_value_t *out) {
 }
 
 static ant_value_t headers_iter_next(ant_params_t) {
-  return js_iter_next_result(js, advance_headers);
+  return js_iter_next_result(js, call_this, advance_headers);
 }
 
 static ant_value_t make_headers_iter(ant_t *js, ant_value_t headers_obj, int kind) {
@@ -655,10 +654,10 @@ static ant_value_t make_headers_iter(ant_t *js, ant_value_t headers_obj, int kin
 
 static ant_value_t js_headers_append(ant_params_t) {
   if (nargs < 2) return js_mkerr_typed(js, JS_ERR_TYPE, "Headers.append requires 2 arguments");
-  hdr_list_t *l = headers_get_data(js->this_val);
+  hdr_list_t *l = headers_get_data(call_this);
   
   if (!l) return js_mkerr(js, "Invalid Headers object");
-  ant_value_t guard_err = headers_require_mutable(js, js->this_val);
+  ant_value_t guard_err = headers_require_mutable(js, call_this);
   
   if (is_err(guard_err)) return guard_err;
   ant_value_t r = headers_append_pair(js, l, args[0], args[1]);
@@ -669,10 +668,10 @@ static ant_value_t js_headers_append(ant_params_t) {
 
 static ant_value_t js_headers_set(ant_params_t) {
   if (nargs < 2) return js_mkerr_typed(js, JS_ERR_TYPE, "Headers.set requires 2 arguments");
-  hdr_list_t *l = headers_get_data(js->this_val);
+  hdr_list_t *l = headers_get_data(call_this);
   
   if (!l) return js_mkerr(js, "Invalid Headers object");
-  ant_value_t guard_err = headers_require_mutable(js, js->this_val);
+  ant_value_t guard_err = headers_require_mutable(js, call_this);
   if (is_err(guard_err)) return guard_err;
 
   ant_value_t name_v  = args[0];
@@ -727,7 +726,7 @@ static ant_value_t js_headers_set(ant_params_t) {
 
 static ant_value_t js_headers_get(ant_params_t) {
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "Headers.get requires 1 argument");
-  hdr_list_t *l = headers_get_data(js->this_val);
+  hdr_list_t *l = headers_get_data(call_this);
   if (!l) return js_mknull();
 
   ant_value_t name_v = args[0];
@@ -797,7 +796,7 @@ static ant_value_t js_headers_get(ant_params_t) {
 
 static ant_value_t js_headers_has(ant_params_t) {
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "Headers.has requires 1 argument");
-  hdr_list_t *l = headers_get_data(js->this_val);
+  hdr_list_t *l = headers_get_data(call_this);
   if (!l) return js_false;
 
   ant_value_t name_v = args[0];
@@ -821,10 +820,10 @@ static ant_value_t js_headers_has(ant_params_t) {
 
 static ant_value_t js_headers_delete(ant_params_t) {
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "Headers.delete requires 1 argument");
-  hdr_list_t *l = headers_get_data(js->this_val);
+  hdr_list_t *l = headers_get_data(call_this);
   
   if (!l) return js_mkundef();
-  ant_value_t guard_err = headers_require_mutable(js, js->this_val);
+  ant_value_t guard_err = headers_require_mutable(js, call_this);
   if (is_err(guard_err)) return guard_err;
 
   ant_value_t name_v = args[0];
@@ -844,7 +843,7 @@ static ant_value_t js_headers_delete(ant_params_t) {
 }
 
 static ant_value_t js_headers_get_set_cookie(ant_params_t) {
-  hdr_list_t *l = headers_get_data(js->this_val);
+  hdr_list_t *l = headers_get_data(call_this);
   ant_value_t arr = js_mkarr(js);
   if (!l) return arr;
   for (hdr_entry_t *e = l->head; e; e = e->next) {
@@ -862,8 +861,7 @@ static ant_value_t js_headers_for_each(ant_params_t) {
   if (cbt != kTypeFunction && cbt != kTypeBuiltin)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Headers.forEach callback must be callable");
 
-  ant_value_t this_obj = js->this_val;
-  hdr_list_t *l = headers_get_data(this_obj);
+  hdr_list_t *l = headers_get_data(call_this);
   if (!l) return js_mkundef();
 
   ant_value_t this_arg = (nargs >= 2) ? args[1] : js_mkundef();
@@ -875,7 +873,7 @@ static ant_value_t js_headers_for_each(ant_params_t) {
     ant_value_t call_args[3] = {
       header_value_to_js(js, view[i].value, strlen(view[i].value)),
       js_mkstr(js, view[i].name,  strlen(view[i].name)),
-      this_obj
+      call_this
     };
     ant_value_t r = sv_vm_call(js->vm, js, cb, this_arg, call_args, 3, NULL, js_mkundef());
     if (is_err(r)) { free_sorted_view(view, count); return r; }
@@ -886,15 +884,15 @@ static ant_value_t js_headers_for_each(ant_params_t) {
 }
 
 static ant_value_t js_headers_keys(ant_params_t) {
-  return make_headers_iter(js, js->this_val, ITER_KEYS);
+  return make_headers_iter(js, call_this, ITER_KEYS);
 }
 
 static ant_value_t js_headers_values(ant_params_t) {
-  return make_headers_iter(js, js->this_val, ITER_VALUES);
+  return make_headers_iter(js, call_this, ITER_VALUES);
 }
 
 static ant_value_t js_headers_entries(ant_params_t) {
-  return make_headers_iter(js, js->this_val, ITER_ENTRIES);
+  return make_headers_iter(js, call_this, ITER_ENTRIES);
 }
 
 static ant_value_t headers_inspect_finish(ant_t *js, ant_value_t this_obj, ant_value_t body_obj) {
@@ -919,8 +917,7 @@ static ant_value_t headers_inspect_finish(ant_t *js, ant_value_t this_obj, ant_v
 }
 
 static ant_value_t headers_inspect(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  hdr_list_t *list = headers_get_data(this_obj);
+  hdr_list_t *list = headers_get_data(call_this);
   ant_value_t out = Ant_Object_CreateBare(js);
 
   if (!list) return js_mkerr(js, "Invalid Headers object");
@@ -952,7 +949,7 @@ static ant_value_t headers_inspect(ant_params_t) {
     free(combined);
   }
 
-  return headers_inspect_finish(js, this_obj, out);
+  return headers_inspect_finish(js, call_this, out);
 }
 
 static ant_value_t js_headers_ctor(ant_params_t) {
@@ -1226,7 +1223,6 @@ void init_headers_module(ant_t *js) {
   js_set_proto_init(js->builtins.headers_iter_proto, js->sym.iterator_proto);
   js_set(js, js->builtins.headers_iter_proto, "next", Ant_Function_Create(headers_iter_next));
   js_set_descriptor(js, js->builtins.headers_iter_proto, "next", 4, JS_DESC_W | JS_DESC_E | JS_DESC_C);
-  js_set_sym(js, js->builtins.headers_iter_proto, js->sym.iterator_sym, Ant_Function_Create(sym_this_cb));
   js_iter_register_advance(js, js->builtins.headers_iter_proto, advance_headers);
 
   js->builtins.headers_proto = Ant_Object_CreateBare(js);

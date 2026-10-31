@@ -233,14 +233,14 @@ static void eld_finalize(ant_t *js, ant_object_t *obj) {
   else free(m);
 }
 
-static ant_value_t eld_this(ant_t *js, perf_eld_monitor_t **out) {
-  *out = eld_monitor(js_getthis(js));
+static ant_value_t eld_this(ant_t *js, ant_value_t call_this, perf_eld_monitor_t **out) {
+  *out = eld_monitor(call_this);
   return *out ? js_mkundef() : js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
 }
 
 static ant_value_t js_eld_enable(ant_params_t) {
   perf_eld_monitor_t *m;
-  ant_value_t err = eld_this(js, &m);
+  ant_value_t err = eld_this(js, call_this, &m);
   if (is_err(err)) return err;
   if (m->enabled || m->closing || js->destroying) return js_false;
 
@@ -260,7 +260,7 @@ static ant_value_t js_eld_enable(ant_params_t) {
 
 static ant_value_t js_eld_disable(ant_params_t) {
   perf_eld_monitor_t *m;
-  ant_value_t err = eld_this(js, &m);
+  ant_value_t err = eld_this(js, call_this, &m);
   if (is_err(err)) return err;
   if (!m->enabled) return js_false;
 
@@ -271,7 +271,7 @@ static ant_value_t js_eld_disable(ant_params_t) {
 
 static ant_value_t js_eld_reset(ant_params_t) {
   perf_eld_monitor_t *m;
-  ant_value_t err = eld_this(js, &m);
+  ant_value_t err = eld_this(js, call_this, &m);
   if (is_err(err)) return err;
   hist_reset(&m->hist);
   m->prev = 0;
@@ -293,7 +293,7 @@ static ant_value_t eld_read_percentile(ant_t *js, ant_value_t arg, double *out) 
 
 static ant_value_t js_eld_percentile(ant_params_t) {
   perf_eld_monitor_t *m;
-  ant_value_t err = eld_this(js, &m);
+  ant_value_t err = eld_this(js, call_this, &m);
   if (is_err(err)) return err;
   double p = 0;
   err = eld_read_percentile(js, nargs > 0 ? args[0] : js_mkundef(), &p);
@@ -303,7 +303,7 @@ static ant_value_t js_eld_percentile(ant_params_t) {
 
 static ant_value_t js_eld_percentile_bigint(ant_params_t) {
   perf_eld_monitor_t *m;
-  ant_value_t err = eld_this(js, &m);
+  ant_value_t err = eld_this(js, call_this, &m);
   if (is_err(err)) return err;
   double p = 0;
   err = eld_read_percentile(js, nargs > 0 ? args[0] : js_mkundef(), &p);
@@ -313,7 +313,7 @@ static ant_value_t js_eld_percentile_bigint(ant_params_t) {
 
 static ant_value_t js_eld_percentiles(ant_params_t) {
   perf_eld_monitor_t *m;
-  ant_value_t err = eld_this(js, &m);
+  ant_value_t err = eld_this(js, call_this, &m);
   if (is_err(err)) return err;
 
   map_entry_t **entries = NULL;
@@ -340,7 +340,7 @@ static ant_value_t js_eld_percentiles(ant_params_t) {
 #define ELD_GETTER(name, expr)            \
   static ant_value_t name(ant_params_t) { \
     perf_eld_monitor_t *m;                \
-    ant_value_t err = eld_this(js, &m);   \
+    ant_value_t err = eld_this(js, call_this, &m);   \
     if (is_err(err)) return err;          \
     const perf_histogram_t *h = &m->hist; \
     (void)h;                              \

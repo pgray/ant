@@ -260,8 +260,6 @@ struct ant_isolate_t {
   bool terminating;
   vm_interrupt_t *interrupt_run;
   
-  ant_value_t this_val;
-  ant_value_t current_func;
   ant_value_t length_str;
   ant_value_t empty_str;
   ant_value_t ascii_chars[128];
@@ -645,9 +643,6 @@ struct ant_isolate_t {
 
 // TODO: rename
 static inline ant_value_t js_glob(ant_t *js) { return js->global; }
-static inline ant_value_t js_getthis(ant_t *js) { return js->this_val; }
-
-static inline void js_setthis(ant_t *js, ant_value_t val) { js->this_val = val; }
 static inline void js_set_filename(ant_t *js, const char *filename) { js->filename = filename; }
 
 static inline void ant_ic_epoch_bump(ant_t *js) {

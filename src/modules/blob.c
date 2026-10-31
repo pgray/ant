@@ -210,32 +210,32 @@ ant_value_t blob_create_shared(ant_t *js, blob_storage_t *storage, const char *t
 
 static ant_value_t blob_get_size(ant_params_t) {
   (void)args; (void)nargs;
-  blob_data_t *bd = blob_get_data(js->this_val);
+  blob_data_t *bd = blob_get_data(call_this);
   return Ant_Value_FromNumber(bd ? (double)bd->size : 0);
 }
 
 static ant_value_t blob_get_type(ant_params_t) {
   (void)args; (void)nargs;
-  blob_data_t *bd = blob_get_data(js->this_val);
+  blob_data_t *bd = blob_get_data(call_this);
   if (!bd || !bd->type) return js_mkstr(js, "", 0);
   return js_mkstr(js, bd->type, strlen(bd->type));
 }
 
 static ant_value_t file_get_name(ant_params_t) {
   (void)args; (void)nargs;
-  blob_data_t *bd = blob_get_data(js->this_val);
+  blob_data_t *bd = blob_get_data(call_this);
   if (!bd || !bd->name) return js_mkstr(js, "", 0);
   return js_mkstr(js, bd->name, strlen(bd->name));
 }
 
 static ant_value_t file_get_last_modified(ant_params_t) {
   (void)args; (void)nargs;
-  blob_data_t *bd = blob_get_data(js->this_val);
+  blob_data_t *bd = blob_get_data(call_this);
   return Ant_Value_FromNumber(bd ? (double)bd->last_modified : 0);
 }
 
 static ant_value_t js_blob_text(ant_params_t) {
-  blob_data_t *bd = blob_get_data(js->this_val);
+  blob_data_t *bd = blob_get_data(call_this);
   ant_value_t promise = js_mkpromise(js);
   
   ant_value_t str = (!bd || bd->size == 0)
@@ -247,7 +247,7 @@ static ant_value_t js_blob_text(ant_params_t) {
 }
 
 static ant_value_t js_blob_array_buffer(ant_params_t) {
-  blob_data_t *bd = blob_get_data(js->this_val);
+  blob_data_t *bd = blob_get_data(call_this);
   ant_value_t promise = js_mkpromise(js);
 
   size_t sz = (bd && bd->data) ? bd->size : 0;
@@ -260,7 +260,7 @@ static ant_value_t js_blob_array_buffer(ant_params_t) {
 }
 
 static ant_value_t js_blob_bytes(ant_params_t) {
-  blob_data_t *bd = blob_get_data(js->this_val);
+  blob_data_t *bd = blob_get_data(call_this);
   ant_value_t promise = js_mkpromise(js);
 
   size_t sz = (bd && bd->data) ? bd->size : 0;
@@ -278,7 +278,7 @@ static ant_value_t js_blob_bytes(ant_params_t) {
 }
 
 static ant_value_t js_blob_slice(ant_params_t) {
-  blob_data_t *bd = blob_get_data(js->this_val);
+  blob_data_t *bd = blob_get_data(call_this);
   size_t blob_size = bd ? bd->size : 0;
 
   ssize_t start = 0;
@@ -319,7 +319,7 @@ static ant_value_t js_blob_slice(ant_params_t) {
 }
 
 static ant_value_t blob_stream_pull(ant_params_t) {
-  ant_value_t blob_obj = js_get_slot(js->current_func, SLOT_DATA);
+  ant_value_t blob_obj = js_get_slot(call_func, SLOT_DATA);
   blob_data_t *bd = blob_get_data(blob_obj);
   ant_value_t ctrl = (nargs > 0) ? args[0] : js_mkundef();
 
@@ -335,7 +335,7 @@ static ant_value_t blob_stream_pull(ant_params_t) {
 }
 
 static ant_value_t js_blob_stream(ant_params_t) {
-  ant_value_t pull_fn = js_heavy_mkfun(js, blob_stream_pull, js->this_val);
+  ant_value_t pull_fn = js_heavy_mkfun(js, blob_stream_pull, call_this);
   return rs_create_stream(js, pull_fn, js_mkundef(), 1);
 }
 

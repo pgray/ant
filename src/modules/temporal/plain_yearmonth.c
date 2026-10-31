@@ -60,7 +60,7 @@ static ant_value_t temporal_plain_yearmonth_ctor(ant_params_t) {
     (int32_t)year, (uint8_t)month, ref_day, calendar, ArithmeticOverflow_Reject
   );
   if (!result.is_ok) return temporal_error(js, result.err);
-  return temporal_wrap_constructed(js, TEMPORAL_PLAIN_YEARMONTH, result.ok, call_new_target);
+  return temporal_wrap_constructed(js, call_this, TEMPORAL_PLAIN_YEARMONTH, result.ok, call_new_target);
 }
 
 static ant_value_t temporal_plain_yearmonth_from(ant_params_t) {
@@ -100,8 +100,8 @@ static ant_value_t temporal_plain_yearmonth_compare(ant_params_t) {
   return Ant_Value_FromNumber(comparison);
 }
 
-static PlainYearMonth *temporal_plain_yearmonth_this(ant_t *js, const char *method, ant_value_t *err) {
-  return temporal_unwrap(js, js_getthis(js), TEMPORAL_PLAIN_YEARMONTH, method, err);
+static PlainYearMonth *temporal_plain_yearmonth_this(ant_t *js, ant_value_t call_this, const char *method, ant_value_t *err) {
+  return temporal_unwrap(js, call_this, TEMPORAL_PLAIN_YEARMONTH, method, err);
 }
 
 #  define PLAIN_YEARMONTH_NUMBER_GETTER(name, capi)                                                                    \
@@ -109,7 +109,7 @@ static PlainYearMonth *temporal_plain_yearmonth_this(ant_t *js, const char *meth
       (void)args;                                                                                                      \
       (void)nargs;                                                                                                     \
       ant_value_t err = js_mkundef();                                                                                  \
-      PlainYearMonth *self = temporal_plain_yearmonth_this(js, "Temporal.PlainYearMonth.prototype." #name, &err);      \
+      PlainYearMonth *self = temporal_plain_yearmonth_this(js, call_this, "Temporal.PlainYearMonth.prototype." #name, &err);      \
       return self ? Ant_Value_FromNumber((double)capi(self)) : err;                                                                \
     }
 
@@ -123,14 +123,14 @@ static ant_value_t temporal_plain_yearmonth_get_calendar_id(ant_params_t) {
   (void)args;
   (void)nargs;
   ant_value_t err = js_mkundef();
-  PlainYearMonth *self = temporal_plain_yearmonth_this(js, "Temporal.PlainYearMonth.prototype.calendarId", &err);
+  PlainYearMonth *self = temporal_plain_yearmonth_this(js, call_this, "Temporal.PlainYearMonth.prototype.calendarId", &err);
   return self ? temporal_calendar_identifier(js, temporal_rs_PlainYearMonth_calendar(self)) : err;
 }
 static ant_value_t temporal_plain_yearmonth_get_month_code(ant_params_t) {
   (void)args;
   (void)nargs;
   ant_value_t err = js_mkundef();
-  PlainYearMonth *self = temporal_plain_yearmonth_this(js, "Temporal.PlainYearMonth.prototype.monthCode", &err);
+  PlainYearMonth *self = temporal_plain_yearmonth_this(js, call_this, "Temporal.PlainYearMonth.prototype.monthCode", &err);
   if (!self) return err;
   DiplomatWrite *write = diplomat_buffer_write_create(4);
   temporal_rs_PlainYearMonth_month_code(self, write);
@@ -140,14 +140,14 @@ static ant_value_t temporal_plain_yearmonth_get_in_leap_year(ant_params_t) {
   (void)args;
   (void)nargs;
   ant_value_t err = js_mkundef();
-  PlainYearMonth *self = temporal_plain_yearmonth_this(js, "Temporal.PlainYearMonth.prototype.inLeapYear", &err);
+  PlainYearMonth *self = temporal_plain_yearmonth_this(js, call_this, "Temporal.PlainYearMonth.prototype.inLeapYear", &err);
   return self ? js_bool(temporal_rs_PlainYearMonth_in_leap_year(self)) : err;
 }
 static ant_value_t temporal_plain_yearmonth_get_era(ant_params_t) {
   (void)args;
   (void)nargs;
   ant_value_t err = js_mkundef();
-  PlainYearMonth *self = temporal_plain_yearmonth_this(js, "Temporal.PlainYearMonth.prototype.era", &err);
+  PlainYearMonth *self = temporal_plain_yearmonth_this(js, call_this, "Temporal.PlainYearMonth.prototype.era", &err);
   if (!self) return err;
   DiplomatWrite *write = diplomat_buffer_write_create(8);
   temporal_rs_PlainYearMonth_era(self, write);
@@ -161,16 +161,16 @@ static ant_value_t temporal_plain_yearmonth_get_era_year(ant_params_t) {
   (void)args;
   (void)nargs;
   ant_value_t err = js_mkundef();
-  PlainYearMonth *self = temporal_plain_yearmonth_this(js, "Temporal.PlainYearMonth.prototype.eraYear", &err);
+  PlainYearMonth *self = temporal_plain_yearmonth_this(js, call_this, "Temporal.PlainYearMonth.prototype.eraYear", &err);
   if (!self) return err;
   temporal_rs_PlainYearMonth_era_year_result result = temporal_rs_PlainYearMonth_era_year(self);
   return result.is_ok ? Ant_Value_FromNumber(result.ok) : js_mkundef();
 }
 
-static ant_value_t temporal_plain_yearmonth_binary_duration(ant_native_params_t, bool subtract) {
+static ant_value_t temporal_plain_yearmonth_binary_duration(ant_native_params_t, ant_value_t call_this, bool subtract) {
   ant_value_t err = js_mkundef();
   PlainYearMonth *self = temporal_plain_yearmonth_this(
-    js, subtract ? "Temporal.PlainYearMonth.prototype.subtract" : "Temporal.PlainYearMonth.prototype.add", &err
+    js, call_this, subtract ? "Temporal.PlainYearMonth.prototype.subtract" : "Temporal.PlainYearMonth.prototype.add", &err
   );
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "Duration argument is required");
@@ -201,14 +201,14 @@ static ant_value_t temporal_plain_yearmonth_binary_duration(ant_native_params_t,
   return temporal_wrap(js, TEMPORAL_PLAIN_YEARMONTH, value);
 }
 static ant_value_t temporal_plain_yearmonth_add(ant_params_t) {
-  return temporal_plain_yearmonth_binary_duration(js, args, nargs, false);
+  return temporal_plain_yearmonth_binary_duration(js, args, nargs, call_this, false);
 }
 static ant_value_t temporal_plain_yearmonth_subtract(ant_params_t) {
-  return temporal_plain_yearmonth_binary_duration(js, args, nargs, true);
+  return temporal_plain_yearmonth_binary_duration(js, args, nargs, call_this, true);
 }
 static ant_value_t temporal_plain_yearmonth_equals(ant_params_t) {
   ant_value_t err = js_mkundef();
-  PlainYearMonth *self = temporal_plain_yearmonth_this(js, "Temporal.PlainYearMonth.prototype.equals", &err);
+  PlainYearMonth *self = temporal_plain_yearmonth_this(js, call_this, "Temporal.PlainYearMonth.prototype.equals", &err);
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "PlainYearMonth argument is required");
   PlainYearMonth *other;
@@ -217,10 +217,10 @@ static ant_value_t temporal_plain_yearmonth_equals(ant_params_t) {
   temporal_rs_PlainYearMonth_destroy(other);
   return js_bool(equal);
 }
-static ant_value_t temporal_plain_yearmonth_difference(ant_native_params_t, bool since) {
+static ant_value_t temporal_plain_yearmonth_difference(ant_native_params_t, ant_value_t call_this, bool since) {
   ant_value_t err = js_mkundef();
   PlainYearMonth *self = temporal_plain_yearmonth_this(
-    js, since ? "Temporal.PlainYearMonth.prototype.since" : "Temporal.PlainYearMonth.prototype.until", &err
+    js, call_this, since ? "Temporal.PlainYearMonth.prototype.since" : "Temporal.PlainYearMonth.prototype.until", &err
   );
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "PlainYearMonth argument is required");
@@ -250,14 +250,14 @@ static ant_value_t temporal_plain_yearmonth_difference(ant_native_params_t, bool
   return temporal_wrap(js, TEMPORAL_DURATION, value);
 }
 static ant_value_t temporal_plain_yearmonth_since(ant_params_t) {
-  return temporal_plain_yearmonth_difference(js, args, nargs, true);
+  return temporal_plain_yearmonth_difference(js, args, nargs, call_this, true);
 }
 static ant_value_t temporal_plain_yearmonth_until(ant_params_t) {
-  return temporal_plain_yearmonth_difference(js, args, nargs, false);
+  return temporal_plain_yearmonth_difference(js, args, nargs, call_this, false);
 }
 static ant_value_t temporal_plain_yearmonth_with(ant_params_t) {
   ant_value_t err = js_mkundef();
-  PlainYearMonth *self = temporal_plain_yearmonth_this(js, "Temporal.PlainYearMonth.prototype.with", &err);
+  PlainYearMonth *self = temporal_plain_yearmonth_this(js, call_this, "Temporal.PlainYearMonth.prototype.with", &err);
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "Date-like argument is required");
   for (int kind = TEMPORAL_DURATION; kind <= TEMPORAL_ZONED_DATETIME; kind++) {
@@ -281,7 +281,7 @@ static ant_value_t temporal_plain_yearmonth_with(ant_params_t) {
 }
 static ant_value_t temporal_plain_yearmonth_to_plain_date(ant_params_t) {
   ant_value_t err = js_mkundef();
-  PlainYearMonth *self = temporal_plain_yearmonth_this(js, "Temporal.PlainYearMonth.prototype.toPlainDate", &err);
+  PlainYearMonth *self = temporal_plain_yearmonth_this(js, call_this, "Temporal.PlainYearMonth.prototype.toPlainDate", &err);
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "day object is required");
   if (!is_object_type(args[0])) return js_mkerr_typed(js, JS_ERR_TYPE, "day must be provided in an object");
@@ -299,7 +299,7 @@ static ant_value_t temporal_plain_yearmonth_to_plain_date(ant_params_t) {
 }
 static ant_value_t temporal_plain_yearmonth_to_string(ant_params_t) {
   ant_value_t err = js_mkundef();
-  PlainYearMonth *self = temporal_plain_yearmonth_this(js, "Temporal.PlainYearMonth.prototype.toString", &err);
+  PlainYearMonth *self = temporal_plain_yearmonth_this(js, call_this, "Temporal.PlainYearMonth.prototype.toString", &err);
   if (!self) return err;
   DiplomatWrite *write = diplomat_buffer_write_create(20);
   temporal_to_string_options_t options;
@@ -313,7 +313,7 @@ static ant_value_t temporal_plain_yearmonth_to_string(ant_params_t) {
 static ant_value_t temporal_plain_yearmonth_to_string_default(ant_params_t) {
   (void)args;
   (void)nargs;
-  return temporal_plain_yearmonth_to_string(js, NULL, 0, js_mkundef());
+  return temporal_plain_yearmonth_to_string(js, NULL, 0, js_mkundef(), call_this, call_func);
 }
 static ant_value_t temporal_plain_yearmonth_value_of(ant_params_t) {
   (void)args;

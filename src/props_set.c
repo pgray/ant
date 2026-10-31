@@ -581,7 +581,7 @@ static inline bool descriptor_is_accessor(ant_t *js, ant_value_t desc) {
 
 static ant_value_t own_property_descriptor(ant_t *js, ant_value_t obj, ant_value_t key) {
   ant_value_t args[2] = { obj, key };
-  return builtin_object_getOwnPropertyDescriptor(js, args, 2, js_mkundef());
+  return builtin_object_getOwnPropertyDescriptor(js, args, 2, js_mkundef(), js_mkundef(), js_mkundef());
 }
 
 static inline ant_value_t set_receiver_write_target(ant_t *js, ant_value_t receiver) {

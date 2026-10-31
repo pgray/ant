@@ -60,13 +60,16 @@ static bool js_inspect_each_hidden(ant_t *js, ant_value_t obj, js_inspect_hidden
 
   bool ok = true;
   ant_offset_t count = js_arr_len(js, keys);
+  
   for (ant_offset_t i = 0; ok && i < count; i++) {
     ant_value_t args[2] = { obj, js_arr_get(js, keys, i) };
-    ant_value_t desc = builtin_object_getOwnPropertyDescriptor(js, args, 2, js_mkundef());
+    ant_value_t desc = builtin_object_getOwnPropertyDescriptor(js, args, 2, js_mkundef(), js_mkundef(), js_mkundef());
+    
     if (is_err(desc)) {
       Ant_Exception_Clear(js);
       continue;
     }
+    
     if (!is_object_type(desc) || js_truthy(js, js_get(js, desc, "enumerable"))) continue;
     GC_ROOT_PIN(js, desc);
     ok = visit(ctx, args[1], desc);

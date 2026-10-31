@@ -488,7 +488,7 @@ static ant_value_t zlib_process_chunk_sync(
 }
 
 static ant_value_t js_zlib_process_chunk(ant_params_t) {
-  zlib_stream_t *st = zlib_stream_ptr(js_getthis(js));
+  zlib_stream_t *st = zlib_stream_ptr(call_this);
   
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid zlib stream");
   if (st->ended) return js_mkarr(js);
@@ -528,7 +528,7 @@ static ant_value_t zlib_finish_callback(ant_t *js, ant_value_t cb, ant_value_t r
 }
 
 static ant_value_t js_zlib__transform(ant_params_t) {
-  zlib_stream_t *st = zlib_stream_ptr(js_getthis(js));
+  zlib_stream_t *st = zlib_stream_ptr(call_this);
   ant_value_t cb = nargs > 2 ? args[2] : js_mkundef();
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid zlib stream");
 
@@ -551,7 +551,7 @@ static ant_value_t js_zlib__transform(ant_params_t) {
 }
 
 static ant_value_t js_zlib__flush(ant_params_t) {
-  zlib_stream_t *st = zlib_stream_ptr(js_getthis(js));
+  zlib_stream_t *st = zlib_stream_ptr(call_this);
   ant_value_t cb = nargs > 0 ? args[0] : js_mkundef();
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid zlib stream");
 
@@ -562,8 +562,7 @@ static ant_value_t js_zlib__flush(ant_params_t) {
 }
 
 static ant_value_t js_zlib_flush(ant_params_t) {
-  zlib_stream_t *st = zlib_stream_ptr(js_getthis(js));
-  ant_value_t self = js_getthis(js);
+  zlib_stream_t *st = zlib_stream_ptr(call_this);
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid zlib stream");
 
   int flush = st->brotli ? 1 : Z_FULL_FLUSH;
@@ -576,7 +575,7 @@ static ant_value_t js_zlib_flush(ant_params_t) {
 
   if (st->destroyed || st->ended) {
     if (is_callable(cb)) queue_microtask_with_args(js, cb, NULL, 0);
-    return self;
+    return call_this;
   }
 
   ant_value_t r = st->brotli && !st->closed ? js_mkundef() : zlib_do_process(js, st, NULL, 0, flush);
@@ -591,7 +590,7 @@ static ant_value_t js_zlib_flush(ant_params_t) {
     }
     GC_ROOT_RESTORE(js, root_mark);
     if (Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
-    return self;
+    return call_this;
   }
 
   if (Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
@@ -601,13 +600,13 @@ static ant_value_t js_zlib_flush(ant_params_t) {
     queue_next_tick_with_args(js, cb, &null_val, 1);
   }
   
-  return self;
+  return call_this;
 }
 
 static ant_value_t js_zlib_reset(ant_params_t) {
-  zlib_stream_t *st = zlib_stream_ptr(js_getthis(js));
+  zlib_stream_t *st = zlib_stream_ptr(call_this);
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid zlib stream");
-  if (st->destroyed) return js_getthis(js);
+  if (st->destroyed) return call_this;
   if (st->closed) return zlib_binding_closed(js);
 
   if (st->brotli) {
@@ -623,11 +622,11 @@ static ant_value_t js_zlib_reset(ant_params_t) {
 
   st->bytes_written = 0;
   
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t js_zlib_params(ant_params_t) {
-  zlib_stream_t *st = zlib_stream_ptr(js_getthis(js));
+  zlib_stream_t *st = zlib_stream_ptr(call_this);
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid zlib stream");
   
   if (!zlib_kind_is_compress(st->kind) || st->brotli)
@@ -648,23 +647,22 @@ static ant_value_t js_zlib_params(ant_params_t) {
     sv_vm_call(js->vm, js, cb, js_mkundef(), &null_val, 1, NULL, js_mkundef());
   }
   
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t js_zlib_close(ant_params_t) {
-  ant_value_t self = js_getthis(js);
   ant_value_t destroy = js_get(js, stream_readable_prototype(js), "destroy");
-  ant_value_t result = sv_vm_call(js->vm, js, destroy, self, NULL, 0, NULL, js_mkundef());
+  ant_value_t result = sv_vm_call(js->vm, js, destroy, call_this, NULL, 0, NULL, js_mkundef());
   
   if (is_err(result)) return result;
   if (nargs > 0 && is_callable(args[0]))
     sv_vm_call(js->vm, js, args[0], js_mkundef(), NULL, 0, NULL, js_mkundef());
   
-  return self;
+  return call_this;
 }
 
 static ant_value_t js_zlib_handle_close(ant_params_t) {
-  zlib_stream_t *st = zlib_stream_ptr(js_get_slot(js_getthis(js), SLOT_DATA));
+  zlib_stream_t *st = zlib_stream_ptr(js_get_slot(call_this, SLOT_DATA));
   if (st) zlib_stream_release(st);
 
   if (nargs > 0 && is_callable(args[0]))
@@ -674,12 +672,12 @@ static ant_value_t js_zlib_handle_close(ant_params_t) {
 }
 
 static ant_value_t js_zlib__destroy(ant_params_t) {
-  zlib_stream_t *st = zlib_stream_ptr(js_getthis(js));
+  zlib_stream_t *st = zlib_stream_ptr(call_this);
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid zlib stream");
 
   st->destroyed = true;
   zlib_stream_release(st);
-  js_set(js, js_getthis(js), "_handle", js_mknull());
+  js_set(js, call_this, "_handle", js_mknull());
 
   if (nargs > 1 && is_callable(args[1]))
     return sv_vm_call(js->vm, js, args[1], js_mkundef(), args, 1, NULL, js_mkundef());
@@ -688,7 +686,7 @@ static ant_value_t js_zlib__destroy(ant_params_t) {
 }
 
 static ant_value_t js_zlib_get_bytes_written(ant_params_t) {
-  zlib_stream_t *st = zlib_stream_ptr(js_getthis(js));
+  zlib_stream_t *st = zlib_stream_ptr(call_this);
   if (!st) return Ant_Value_FromNumber(0);
   return Ant_Value_FromNumber((double)st->bytes_written);
 }

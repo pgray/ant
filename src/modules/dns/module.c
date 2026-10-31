@@ -25,32 +25,31 @@ static const char *const dns_order_names[] = {
   [DNS_ORDER_IPV6_FIRST] = "ipv6first",
 };
 
-dns_channel_t *dns_this_channel(ant_t *js) {
-  ant_value_t self = js_getthis(js);
-  dns_channel_t **cell = js_get_native(self, DNS_RESOLVER_NATIVE_TAG);
+dns_channel_t *dns_this_channel(ant_t *js, ant_value_t call_this) {
+  dns_channel_t **cell = js_get_native(call_this, DNS_RESOLVER_NATIVE_TAG);
   return cell ? *cell : dns_default_channel(js);
 }
 
 #define DNS_RECORD_TYPE(name, method, syscall, ares)                                                                   \
-  static ant_value_t dns_cb_##method(ant_params_t) { return dns_resolve_impl(js, args, nargs, DNS_RR_##name, false); } \
-  static ant_value_t dns_promise_##method(ant_params_t) { return dns_resolve_impl(js, args, nargs, DNS_RR_##name, true); }
+  static ant_value_t dns_cb_##method(ant_params_t) { return dns_resolve_impl(js, args, nargs, call_this, DNS_RR_##name, false); } \
+  static ant_value_t dns_promise_##method(ant_params_t) { return dns_resolve_impl(js, args, nargs, call_this, DNS_RR_##name, true); }
 #include "dns/record_types.h"
 
 static ant_value_t dns_cb_lookup(ant_params_t) { return dns_lookup_impl(js, args, nargs, false); }
 static ant_value_t dns_promise_lookup(ant_params_t) { return dns_lookup_impl(js, args, nargs, true); }
 static ant_value_t dns_cb_lookup_service(ant_params_t) { return dns_lookup_service_impl(js, args, nargs, false); }
 static ant_value_t dns_promise_lookup_service(ant_params_t) { return dns_lookup_service_impl(js, args, nargs, true); }
-static ant_value_t dns_cb_resolve(ant_params_t) { return dns_resolve_impl(js, args, nargs, -1, false); }
-static ant_value_t dns_promise_resolve(ant_params_t) { return dns_resolve_impl(js, args, nargs, -1, true); }
-static ant_value_t dns_cb_reverse(ant_params_t) { return dns_reverse_impl(js, args, nargs, false); }
-static ant_value_t dns_promise_reverse(ant_params_t) { return dns_reverse_impl(js, args, nargs, true); }
+static ant_value_t dns_cb_resolve(ant_params_t) { return dns_resolve_impl(js, args, nargs, call_this, -1, false); }
+static ant_value_t dns_promise_resolve(ant_params_t) { return dns_resolve_impl(js, args, nargs, call_this, -1, true); }
+static ant_value_t dns_cb_reverse(ant_params_t) { return dns_reverse_impl(js, args, nargs, call_this, false); }
+static ant_value_t dns_promise_reverse(ant_params_t) { return dns_reverse_impl(js, args, nargs, call_this, true); }
 
 static ant_value_t dns_get_servers(ant_params_t) {
-  return dns_channel_get_servers(js, dns_this_channel(js));
+  return dns_channel_get_servers(js, dns_this_channel(js, call_this));
 }
 
 static ant_value_t dns_set_servers(ant_params_t) {
-  return dns_channel_set_servers(js, dns_this_channel(js), nargs > 0 ? args[0] : js_mkundef());
+  return dns_channel_set_servers(js, dns_this_channel(js, call_this), nargs > 0 ? args[0] : js_mkundef());
 }
 
 static ant_value_t dns_set_default_result_order(ant_params_t) {
@@ -67,13 +66,13 @@ static ant_value_t dns_get_default_result_order(ant_params_t) {
 }
 
 static ant_value_t dns_resolver_cancel(ant_params_t) {
-  dns_channel_t *channel = dns_this_channel(js);
+  dns_channel_t *channel = dns_this_channel(js, call_this);
   if (channel && channel->ares) ares_cancel(channel->ares);
   return js_mkundef();
 }
 
 static ant_value_t dns_resolver_set_local_address(ant_params_t) {
-  dns_channel_t *channel = dns_this_channel(js);
+  dns_channel_t *channel = dns_this_channel(js, call_this);
   if (!channel || !channel->ares) return js_mkundef();
 
   for (int i = 0; i < 2 && i < nargs; i++) {

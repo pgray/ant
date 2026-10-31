@@ -407,11 +407,11 @@ static bool tls_parse_write_args(
 }
 
 static ant_value_t js_tls_context_close(ant_params_t) {
-  ant_tls_context_wrap_t *wrap = tls_context_data(js_getthis(js));
-  if (!wrap) return js_getthis(js);
+  ant_tls_context_wrap_t *wrap = tls_context_data(call_this);
+  if (!wrap) return call_this;
   tls_context_free(wrap);
   js_clear_native(wrap->obj, TLS_CONTEXT_NATIVE_TAG);
-  return js_getthis(js);
+  return call_this;
 }
 
 static void tls_init_context_proto(ant_t *js) {
@@ -559,7 +559,7 @@ static void tls_socket_on_connect(uv_connect_t *req, int status) {
 }
 
 static ant_value_t js_tls_socket_write(ant_params_t) {
-  ant_tls_socket_t *socket = tls_require_socket(js, js_getthis(js));
+  ant_tls_socket_t *socket = tls_require_socket(js, call_this);
   const uint8_t *bytes = NULL;
   
   size_t len = 0;
@@ -609,26 +609,26 @@ static ant_value_t js_tls_socket_write(ant_params_t) {
 }
 
 static ant_value_t js_tls_socket_end(ant_params_t) {
-  ant_tls_socket_t *socket = tls_require_socket(js, js_getthis(js));
-  ant_value_t result = js_getthis(js);
+  ant_tls_socket_t *socket = tls_require_socket(js, call_this);
+  ant_value_t result = call_this;
 
   if (!socket) return Ant_Exception_Current(js);
   if (nargs > 0 && vtype(args[0]) != kTypeUndefined && vtype(args[0]) != kTypeNull) {
-    result = js_tls_socket_write(js, args, nargs, js_mkundef());
+    result = js_tls_socket_write(js, args, nargs, js_mkundef(), call_this, call_func);
     if (is_err(result)) return result;
   }
   
   socket->write_ended = true;
   tls_socket_finish_writes(socket);
   
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t js_tls_socket_destroy(ant_params_t) {
-  ant_tls_socket_t *socket = tls_require_socket(js, js_getthis(js));
+  ant_tls_socket_t *socket = tls_require_socket(js, call_this);
   
   if (!socket) return Ant_Exception_Current(js);
-  if (socket->destroyed || socket->closing) return js_getthis(js);
+  if (socket->destroyed || socket->closing) return call_this;
 
   if (nargs > 0 && vtype(args[0]) != kTypeUndefined && vtype(args[0]) != kTypeNull) {
     ant_value_t err = args[0];
@@ -641,54 +641,54 @@ static ant_value_t js_tls_socket_destroy(ant_params_t) {
   socket->connecting = false;
   tls_socket_sync_state(socket);
   
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t js_tls_socket_pause(ant_params_t) {
-  ant_tls_socket_t *socket = tls_require_socket(js, js_getthis(js));
+  ant_tls_socket_t *socket = tls_require_socket(js, call_this);
   if (!socket) return Ant_Exception_Current(js);
   return stream_readable_pause(js, socket->obj);
 }
 
 static ant_value_t js_tls_socket_resume(ant_params_t) {
-  ant_tls_socket_t *socket = tls_require_socket(js, js_getthis(js));
+  ant_tls_socket_t *socket = tls_require_socket(js, call_this);
   if (!socket) return Ant_Exception_Current(js);
   tls_socket_resume_read(socket);
   return stream_readable_resume(js, socket->obj);
 }
 
 static ant_value_t js_tls_socket__read(ant_params_t) {
-  ant_tls_socket_t *socket = tls_require_socket(js, js_getthis(js));
+  ant_tls_socket_t *socket = tls_require_socket(js, call_this);
   if (!socket) return Ant_Exception_Current(js);
   tls_socket_resume_read(socket);
   return js_mkundef();
 }
 
 static ant_value_t js_tls_socket_setNoDelay(ant_params_t) {
-  ant_tls_socket_t *socket = tls_require_socket(js, js_getthis(js));
+  ant_tls_socket_t *socket = tls_require_socket(js, call_this);
   bool enable = nargs == 0 || js_truthy(js, args[0]);
   if (!socket) return Ant_Exception_Current(js);
   if (!socket->destroyed && !socket->closing) tlsuv_stream_nodelay(&socket->stream, enable ? 1 : 0);
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t js_tls_socket_setKeepAlive(ant_params_t) {
-  ant_tls_socket_t *socket = tls_require_socket(js, js_getthis(js));
+  ant_tls_socket_t *socket = tls_require_socket(js, call_this);
   bool enable = nargs > 0 && js_truthy(js, args[0]);
   unsigned int delay = nargs > 1 && vtype(args[1]) == kTypeNumber ? (unsigned int)(Ant_Value_AsNumberUnchecked(args[1]) / 1000.0) : 0;
   if (!socket) return Ant_Exception_Current(js);
   if (!socket->destroyed && !socket->closing) tlsuv_stream_keepalive(&socket->stream, enable ? 1 : 0, delay);
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t js_tls_socket_setTimeout(ant_params_t) {
-  ant_tls_socket_t *socket = tls_require_socket(js, js_getthis(js));
+  ant_tls_socket_t *socket = tls_require_socket(js, call_this);
   if (!socket) return Ant_Exception_Current(js);
   socket->timeout_ms = nargs > 0 && vtype(args[0]) == kTypeNumber && Ant_Value_AsNumberUnchecked(args[0]) > 0 ? (uint64_t)Ant_Value_AsNumberUnchecked(args[0]) : 0;
   tls_socket_sync_state(socket);
   if (nargs > 1 && is_callable(args[1]))
     eventemitter_add_listener(js, socket->obj, "timeout", args[1], true);
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t tls_sockaddr_object(ant_t *js, const struct sockaddr *addr) {
@@ -707,7 +707,7 @@ static ant_value_t tls_sockaddr_object(ant_t *js, const struct sockaddr *addr) {
 }
 
 static ant_value_t js_tls_socket_address(ant_params_t) {
-  ant_tls_socket_t *socket = tls_require_socket(js, js_getthis(js));
+  ant_tls_socket_t *socket = tls_require_socket(js, call_this);
   struct sockaddr_storage addr;
   int len = sizeof(addr);
 
@@ -718,35 +718,35 @@ static ant_value_t js_tls_socket_address(ant_params_t) {
 }
 
 static ant_value_t js_tls_socket_ref(ant_params_t) {
-  ant_tls_socket_t *socket = tls_require_socket(js, js_getthis(js));
+  ant_tls_socket_t *socket = tls_require_socket(js, call_this);
   if (!socket) return Ant_Exception_Current(js);
   if (
     uv_handle_get_type((uv_handle_t *)&socket->stream.watcher) != UV_UNKNOWN_HANDLE &&
     !uv_is_closing((uv_handle_t *)&socket->stream.watcher)
   ) uv_ref((uv_handle_t *)&socket->stream.watcher);
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t js_tls_socket_unref(ant_params_t) {
-  ant_tls_socket_t *socket = tls_require_socket(js, js_getthis(js));
+  ant_tls_socket_t *socket = tls_require_socket(js, call_this);
   if (!socket) return Ant_Exception_Current(js);
   if (
     uv_handle_get_type((uv_handle_t *)&socket->stream.watcher) != UV_UNKNOWN_HANDLE &&
     !uv_is_closing((uv_handle_t *)&socket->stream.watcher)
   ) uv_unref((uv_handle_t *)&socket->stream.watcher);
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t js_tls_socket_cork(ant_params_t) {
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t js_tls_socket_uncork(ant_params_t) {
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t js_tls_socket_getProtocol(ant_params_t) {
-  ant_tls_socket_t *socket = tls_require_socket(js, js_getthis(js));
+  ant_tls_socket_t *socket = tls_require_socket(js, call_this);
   const char *protocol = NULL;
   if (!socket) return Ant_Exception_Current(js);
   if (socket->destroyed || socket->closing) return js_mknull();
@@ -772,7 +772,7 @@ static ant_value_t js_tls_socket_renegotiate(ant_params_t) {
   else if (nargs > 0 && is_callable(args[0])) callback = args[0];
   if (is_callable(callback)) {
     ant_value_t cb_args[] = {js_mknull()};
-    sv_call_value(js, callback, js_getthis(js), cb_args, 1);
+    sv_call_value(js, callback, call_this, cb_args, 1);
   }
   return js_true;
 }
@@ -962,7 +962,7 @@ static ant_value_t js_tls_is_context(ant_params_t) {
 }
 
 static ant_value_t js_tls_secure_context_ctor(ant_params_t) {
-  return js_tls_create_context(js, args, nargs, js_mkundef());
+  return js_tls_create_context(js, args, nargs, js_mkundef(), call_this, call_func);
 }
 
 static ant_value_t js_tls_set_config_path(ant_params_t) {
@@ -1137,7 +1137,7 @@ static ant_value_t js_tls_connect_options(ant_t *js, ant_value_t options, ant_va
     vtype(js_get(js, options, "ca")) != kTypeUndefined  ||
     vtype(js_get(js, options, "key")) != kTypeUndefined ||
     vtype(js_get(js, options, "cert")) != kTypeUndefined)) {
-    value = js_tls_create_context(js, &options, 1, js_mkundef());
+    value = js_tls_create_context(js, &options, 1, js_mkundef(), js_mkundef(), js_mkundef());
     
     if (is_err(value)) {
       tls_socket_free(socket);
@@ -1313,7 +1313,7 @@ static ant_value_t tls_server_create_context(ant_t *js, ant_value_t options, boo
   ant_value_t ctx_options = 0;
 
   *request_cert = false;
-  if (vtype(options) != kTypeObject) return js_tls_create_context(js, NULL, 0, js_mkundef());
+  if (vtype(options) != kTypeObject) return js_tls_create_context(js, NULL, 0, js_mkundef(), js_mkundef(), js_mkundef());
 
   *request_cert = js_truthy(js, js_get(js, options, "requestCert"));
   value = js_get(js, options, "secureContext");
@@ -1334,7 +1334,7 @@ static ant_value_t tls_server_create_context(ant_t *js, ant_value_t options, boo
   tls_copy_connect_option(js, ctx_options, options, "allowPartialChain");
   
   if (*request_cert) tls_copy_connect_option(js, ctx_options, options, "ca");
-  return js_tls_create_context(js, &ctx_options, 1, js_mkundef());
+  return js_tls_create_context(js, &ctx_options, 1, js_mkundef(), js_mkundef(), js_mkundef());
 }
 
 static ant_value_t tls_server_create(ant_t *js, ant_value_t options, ant_value_t listener, ant_value_t new_target) {
@@ -1394,7 +1394,7 @@ static ant_value_t js_tls_server_ctor(ant_params_t) {
 }
 
 static ant_value_t js_tls_create_server(ant_params_t) {
-  return js_tls_server_ctor(js, args, nargs, js_mkundef());
+  return js_tls_server_ctor(js, args, nargs, js_mkundef(), call_this, call_func);
 }
 
 static int tls_server_bind(ant_tls_server_t *server, const char *host, int port) {
@@ -1430,14 +1430,14 @@ static int tls_server_bind(ant_tls_server_t *server, const char *host, int port)
 }
 
 static ant_value_t tls_server_emit_listening(ant_params_t) {
-  ant_value_t obj = js_get_slot(js->current_func, SLOT_DATA);
+  ant_value_t obj = js_get_slot(call_func, SLOT_DATA);
   ant_tls_server_t *server = tls_server_data(obj);
   if (server && server->listening) eventemitter_emit_args(js, obj, "listening", NULL, 0);
   return js_mkundef();
 }
 
 static ant_value_t js_tls_server_listen(ant_params_t) {
-  ant_tls_server_t *server = tls_require_server(js, js_getthis(js));
+  ant_tls_server_t *server = tls_require_server(js, call_this);
   net_listen_args_t parsed;
   int rc = 0;
 
@@ -1500,11 +1500,11 @@ static ant_value_t js_tls_server_listen(ant_params_t) {
   if (!is_err(emit)) queue_next_tick(js, emit);
   GC_ROOT_RESTORE(js, root_mark);
 
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t js_tls_server_close(ant_params_t) {
-  ant_tls_server_t *server = tls_require_server(js, js_getthis(js));
+  ant_tls_server_t *server = tls_require_server(js, call_this);
   ant_value_t callback = nargs > 0 && is_callable(args[0]) ? args[0] : js_mkundef();
 
   if (!server) return Ant_Exception_Current(js);
@@ -1514,7 +1514,7 @@ static ant_value_t js_tls_server_close(ant_params_t) {
       js_set(js, err, "code", js_mkstr(js, "ERR_SERVER_NOT_RUNNING", 22));
       sv_call_value(js, callback, js_mkundef(), &err, 1);
     }
-    return js_getthis(js);
+    return call_this;
   }
 
   if (is_callable(callback)) eventemitter_add_listener(js, server->obj, "close", callback, true);
@@ -1524,11 +1524,11 @@ static ant_value_t js_tls_server_close(ant_params_t) {
   tls_server_sync_state(server);
   tlsuv_listener_close(&server->listener, tls_server_listener_closed);
   
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t js_tls_server_address(ant_params_t) {
-  ant_tls_server_t *server = tls_require_server(js, js_getthis(js));
+  ant_tls_server_t *server = tls_require_server(js, call_this);
   struct sockaddr_storage addr;
   int len = sizeof(addr);
 
@@ -1540,17 +1540,17 @@ static ant_value_t js_tls_server_address(ant_params_t) {
 }
 
 static ant_value_t js_tls_server_getConnections(ant_params_t) {
-  ant_tls_server_t *server = tls_require_server(js, js_getthis(js));
+  ant_tls_server_t *server = tls_require_server(js, call_this);
   ant_value_t argv[2] = { js_mknull(), Ant_Value_FromNumber(0) };
 
   if (!server) return Ant_Exception_Current(js);
   argv[1] = Ant_Value_FromNumber((double)server->connections);
   if (nargs > 0 && is_callable(args[0])) sv_call_value(js, args[0], js_mkundef(), argv, 2);
-  return js_getthis(js);
+  return call_this;
 }
 
-static ant_value_t tls_server_set_ref(ant_t *js, bool ref) {
-  ant_tls_server_t *server = tls_require_server(js, js_getthis(js));
+static ant_value_t tls_server_set_ref(ant_t *js, ant_value_t call_this, bool ref) {
+  ant_tls_server_t *server = tls_require_server(js, call_this);
 
   if (!server) return Ant_Exception_Current(js);
   server->unref = !ref;
@@ -1560,15 +1560,15 @@ static ant_value_t tls_server_set_ref(ant_t *js, bool ref) {
     else uv_unref((uv_handle_t *)&server->listener);
   }
   
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t js_tls_server_ref(ant_params_t) {
-  return tls_server_set_ref(js, true);
+  return tls_server_set_ref(js, call_this, true);
 }
 
 static ant_value_t js_tls_server_unref(ant_params_t) {
-  return tls_server_set_ref(js, false);
+  return tls_server_set_ref(js, call_this, false);
 }
 
 static void tls_init_server_proto(ant_t *js) {
@@ -2035,8 +2035,7 @@ static void tls_load_root_certificates(ant_t *js, ant_value_t out) {
 #endif
 
 static ant_value_t js_tls_root_certificates(ant_params_t) {
-  ant_value_t getter = js->current_func;
-  ant_value_t cached = js_get_slot(getter, SLOT_DATA);
+  ant_value_t cached = js_get_slot(call_func, SLOT_DATA);
   ant_value_t out = 0;
 
   if (vtype(cached) == kTypeArray) return cached;
@@ -2046,9 +2045,9 @@ static ant_value_t js_tls_root_certificates(ant_params_t) {
   GC_ROOT_PIN(js, out);
   
   tls_load_root_certificates(js, out);
-  builtin_object_freeze(js, &out, 1, js_mkundef());
+  builtin_object_freeze(js, &out, 1, js_mkundef(), call_this, call_func);
   
-  js_set_slot_wb(js, getter, SLOT_DATA, out);
+  js_set_slot_wb(js, call_func, SLOT_DATA, out);
   GC_ROOT_RESTORE(js, root_mark);
   
   return out;

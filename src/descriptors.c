@@ -1451,7 +1451,7 @@ ant_value_t object_define_properties(ant_t *js, ant_value_t obj, ant_value_t pro
     return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert undefined or null to object");
 
   if (pt == kTypeString) {
-    props = builtin_Object(js, &props, 1, js_mkundef());
+    props = builtin_Object(js, &props, 1, js_mkundef(), js_mkundef(), js_mkundef());
     if (is_err(props)) return props;
   } else if (pt == kTypeBuiltin) props = js_cfunc_promote(js, props);
   else if (!is_object_type(props)) return obj;
@@ -1579,5 +1579,5 @@ ant_value_t js_from_accessor_descriptor(ant_t *js, ant_value_t getter, ant_value
 
 ant_value_t js_get_own_property_descriptor(ant_t *js, ant_value_t obj, ant_value_t key) {
   ant_value_t args[2] = { obj, key };
-  return builtin_object_getOwnPropertyDescriptor(js, args, 2, js_mkundef());
+  return builtin_object_getOwnPropertyDescriptor(js, args, 2, js_mkundef(), js_mkundef(), js_mkundef());
 }

@@ -50,7 +50,7 @@ static ant_value_t codec_flush_controller(ant_args_t) {
 }
 
 static ant_value_t tes_transform(ant_params_t) {
-  tes_state_t *st = (tes_state_t *)js_get_native(js->current_func, TES_NATIVE_TAG);
+  tes_state_t *st = (tes_state_t *)js_get_native(call_func, TES_NATIVE_TAG);
   
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid TextEncoderStream");
   ant_value_t ctrl_obj = codec_transform_controller(args, nargs);
@@ -135,7 +135,7 @@ static ant_value_t tes_transform(ant_params_t) {
 }
 
 static ant_value_t tes_flush(ant_params_t) {
-  tes_state_t *st = (tes_state_t *)js_get_native(js->current_func, TES_NATIVE_TAG);
+  tes_state_t *st = (tes_state_t *)js_get_native(call_func, TES_NATIVE_TAG);
   
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid TextEncoderStream");
   ant_value_t ctrl_obj = codec_flush_controller(args, nargs);
@@ -161,13 +161,13 @@ static ant_value_t js_tes_get_encoding(ant_params_t) {
 }
 
 static ant_value_t js_tes_get_readable(ant_params_t) {
-  ant_value_t ts_obj = tes_get_ts(js->this_val);
+  ant_value_t ts_obj = tes_get_ts(call_this);
   if (!ts_is_stream(ts_obj)) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid TextEncoderStream");
   return ts_stream_readable(ts_obj);
 }
 
 static ant_value_t js_tes_get_writable(ant_params_t) {
-  ant_value_t ts_obj = tes_get_ts(js->this_val);
+  ant_value_t ts_obj = tes_get_ts(call_this);
   if (!ts_is_stream(ts_obj)) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid TextEncoderStream");
   return ts_stream_writable(ts_obj);
 }
@@ -205,7 +205,7 @@ static ant_value_t js_tes_ctor(ant_params_t) {
 }
 
 static ant_value_t tds_transform(ant_params_t) {
-  td_state_t *st = (td_state_t *)js_get_native(js->current_func, TDS_NATIVE_TAG);
+  td_state_t *st = (td_state_t *)js_get_native(call_func, TDS_NATIVE_TAG);
   
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid TextDecoderStream");
   ant_value_t ctrl_obj = codec_transform_controller(args, nargs);
@@ -232,7 +232,7 @@ static ant_value_t tds_transform(ant_params_t) {
 }
 
 static ant_value_t tds_flush(ant_params_t) {
-  td_state_t *st = (td_state_t *)js_get_native(js->current_func, TDS_NATIVE_TAG);
+  td_state_t *st = (td_state_t *)js_get_native(call_func, TDS_NATIVE_TAG);
   
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid TextDecoderStream");
   ant_value_t ctrl_obj = codec_flush_controller(args, nargs);
@@ -252,7 +252,7 @@ static ant_value_t tds_flush(ant_params_t) {
 }
 
 static ant_value_t js_tds_get_encoding(ant_params_t) {
-  td_state_t *st = (td_state_t *)js_get_native(js->this_val, TDS_NATIVE_TAG);
+  td_state_t *st = (td_state_t *)js_get_native(call_this, TDS_NATIVE_TAG);
   if (!st) return js_mkstr(js, "utf-8", 5);
   switch (st->encoding) {
     case TD_ENC_UTF16LE: return js_mkstr(js, "utf-16le", 8);
@@ -264,23 +264,23 @@ static ant_value_t js_tds_get_encoding(ant_params_t) {
 }
 
 static ant_value_t js_tds_get_fatal(ant_params_t) {
-  td_state_t *st = (td_state_t *)js_get_native(js->this_val, TDS_NATIVE_TAG);
+  td_state_t *st = (td_state_t *)js_get_native(call_this, TDS_NATIVE_TAG);
   return (st && st->fatal) ? js_true : js_false;
 }
 
 static ant_value_t js_tds_get_ignore_bom(ant_params_t) {
-  td_state_t *st = (td_state_t *)js_get_native(js->this_val, TDS_NATIVE_TAG);
+  td_state_t *st = (td_state_t *)js_get_native(call_this, TDS_NATIVE_TAG);
   return (st && st->ignore_bom) ? js_true : js_false;
 }
 
 static ant_value_t js_tds_get_readable(ant_params_t) {
-  ant_value_t ts_obj = tds_get_ts(js->this_val);
+  ant_value_t ts_obj = tds_get_ts(call_this);
   if (!ts_is_stream(ts_obj)) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid TextDecoderStream");
   return ts_stream_readable(ts_obj);
 }
 
 static ant_value_t js_tds_get_writable(ant_params_t) {
-  ant_value_t ts_obj = tds_get_ts(js->this_val);
+  ant_value_t ts_obj = tds_get_ts(call_this);
   if (!ts_is_stream(ts_obj)) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid TextDecoderStream");
   return ts_stream_writable(ts_obj);
 }

@@ -329,7 +329,7 @@ static ant_value_t child_spawnargs_value(ant_t *js, char *const *argv) {
 }
 
 static ant_value_t child_spawn_failure_cb(ant_params_t) {
-  ant_value_t child = js_func_data(js->current_func);
+  ant_value_t child = js_func_data(call_func);
   child_process_t *cp = get_child_process(child);
   if (!cp) return js_mkundef();
 
@@ -515,9 +515,8 @@ static void on_stderr_read(uv_stream_t *stream, ssize_t nread, const uv_buf_t *b
 }
 
 static ant_value_t child_kill(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
   
-  child_process_t *cp = get_child_process(this_obj);
+  child_process_t *cp = get_child_process(call_this);
   if (!cp) return js_false;
   if (cp->exited) return js_false;
   
@@ -537,13 +536,13 @@ static ant_value_t child_kill(ant_params_t) {
   }
   
   int result = ant_process_stage_kill(&cp->process, sig);
-  if (result == 0) js_set(js, this_obj, "killed", js_true);
+  if (result == 0) js_set(js, call_this, "killed", js_true);
   return js_bool(result == 0);
 }
 
 static ant_value_t child_dispose(ant_params_t) {
-  if (js_truthy(js, js_get(js, js_getthis(js), "killed"))) return js_mkundef();
-  child_kill(js, NULL, 0, js_mkundef());
+  if (js_truthy(js, js_get(js, call_this, "killed"))) return js_mkundef();
+  child_kill(js, NULL, 0, js_mkundef(), call_this, call_func);
   return js_mkundef();
 }
 
@@ -668,10 +667,9 @@ static ant_value_t child_end_impl(child_process_t *cp) {
 }
 
 static ant_value_t child_ref(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  child_process_t *cp = get_child_process(this_obj);
+  child_process_t *cp = get_child_process(call_this);
   
-  if (!cp) return this_obj;
+  if (!cp) return call_this;
   cp->keep_alive = true;
   
   ant_process_stage_ref(&cp->process);
@@ -680,14 +678,13 @@ static ant_value_t child_ref(ant_params_t) {
     if (child_stdio_is_pipe(cp, i) && !uv_is_closing(h)) uv_ref(h);
   }
   
-  return this_obj;
+  return call_this;
 }
 
 static ant_value_t child_unref(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  child_process_t *cp = get_child_process(this_obj);
+  child_process_t *cp = get_child_process(call_this);
   
-  if (!cp) return this_obj;
+  if (!cp) return call_this;
   cp->keep_alive = false;
   
   ant_process_stage_unref(&cp->process);
@@ -696,7 +693,7 @@ static ant_value_t child_unref(ant_params_t) {
     if (child_stdio_is_pipe(cp, i) && !uv_is_closing(h)) uv_unref(h);
   }
   
-  return this_obj;
+  return call_this;
 }
 
 static ant_value_t child_process_ctor(ant_params_t) {
@@ -742,24 +739,22 @@ static uv_handle_t *child_stream_handle(child_process_t *cp, child_stream_kind_t
 
 static ant_value_t child_stream_ref(ant_params_t) {
   (void)args; (void)nargs;
-  ant_value_t this_obj = js_getthis(js);
-  child_stream_ctx_t *ctx = get_child_stream_ctx(this_obj);
-  if (!ctx || !ctx->cp) return this_obj;
+  child_stream_ctx_t *ctx = get_child_stream_ctx(call_this);
+  if (!ctx || !ctx->cp) return call_this;
 
   uv_handle_t *h = child_stream_handle(ctx->cp, ctx->kind);
   if (h && !uv_is_closing(h)) uv_ref(h);
-  return this_obj;
+  return call_this;
 }
 
 static ant_value_t child_stream_unref(ant_params_t) {
   (void)args; (void)nargs;
-  ant_value_t this_obj = js_getthis(js);
-  child_stream_ctx_t *ctx = get_child_stream_ctx(this_obj);
-  if (!ctx || !ctx->cp) return this_obj;
+  child_stream_ctx_t *ctx = get_child_stream_ctx(call_this);
+  if (!ctx || !ctx->cp) return call_this;
 
   uv_handle_t *h = child_stream_handle(ctx->cp, ctx->kind);
   if (h && !uv_is_closing(h)) uv_unref(h);
-  return this_obj;
+  return call_this;
 }
 
 static void child_stream_close(child_stream_ctx_t *ctx) {
@@ -779,10 +774,9 @@ static void child_stream_close(child_stream_ctx_t *ctx) {
 }
 
 static ant_value_t child_stream__destroy(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
   ant_value_t error = nargs > 0 ? args[0] : js_mknull();
   ant_value_t callback = nargs > 1 ? args[1] : js_mkundef();
-  child_stream_ctx_t *ctx = get_child_stream_ctx(this_obj);
+  child_stream_ctx_t *ctx = get_child_stream_ctx(call_this);
 
   if (ctx && ctx->cp) child_stream_close(ctx);
   child_stream_call_callback(js, callback, &error, 1);
@@ -790,8 +784,7 @@ static ant_value_t child_stream__destroy(ant_params_t) {
 }
 
 static ant_value_t child_stream__read(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  child_stream_ctx_t *ctx = get_child_stream_ctx(this_obj);
+  child_stream_ctx_t *ctx = get_child_stream_ctx(call_this);
   child_process_t *cp = NULL;
   bool *paused = NULL;
   uv_read_cb cb = NULL;
@@ -812,9 +805,8 @@ static ant_value_t child_stream__read(ant_params_t) {
 }
 
 static ant_value_t child_stream__write(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
   ant_value_t callback = nargs > 2 ? args[2] : js_mkundef();
-  child_stream_ctx_t *ctx = get_child_stream_ctx(this_obj);
+  child_stream_ctx_t *ctx = get_child_stream_ctx(call_this);
   ant_value_t result = 0;
 
   if (!ctx || !ctx->cp) return js_mkerr(js, "Invalid stream context");
@@ -830,9 +822,8 @@ static ant_value_t child_stream__write(ant_params_t) {
 }
 
 static ant_value_t child_stream__final(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
   ant_value_t callback = nargs > 0 ? args[0] : js_mkundef();
-  child_stream_ctx_t *ctx = get_child_stream_ctx(this_obj);
+  child_stream_ctx_t *ctx = get_child_stream_ctx(call_this);
 
   if (ctx && ctx->cp) (void)child_end_impl(ctx->cp);
   child_stream_call_callback(js, callback, NULL, 0);
@@ -1565,7 +1556,7 @@ static ant_value_t builtin_exec(ant_params_t) {
 }
 
 static ant_value_t exec_spawn_error_capture(ant_params_t) {
-  child_process_t *cp = get_child_process(js_func_data(js->current_func));
+  child_process_t *cp = get_child_process(js_func_data(call_func));
   if (cp && nargs > 0) cp->exec_spawn_error = args[0];
   return js_mkundef();
 }
@@ -1594,7 +1585,7 @@ static ant_value_t exec_command_error(
 }
 
 static ant_value_t exec_file_close_callback(ant_params_t) {
-  child_process_t *cp = get_child_process(js_func_data(js->current_func));
+  child_process_t *cp = get_child_process(js_func_data(call_func));
   if (!cp || !is_callable(cp->exec_callback)) return js_mkundef();
 
   ant_value_t exit_code_val = nargs > 0 ? args[0] : js_mknull();
@@ -1618,7 +1609,7 @@ static ant_value_t exec_file_close_callback(ant_params_t) {
 }
 
 static ant_value_t exec_file_promisify_callback(ant_params_t) {
-  ant_value_t state = js_func_data(js->current_func);
+  ant_value_t state = js_func_data(call_func);
   if (!is_object_type(state)) return js_mkundef();
 
   ant_value_t settled = js_get_slot(state, SLOT_SETTLED);
@@ -1649,7 +1640,7 @@ static ant_value_t exec_file_promisify_callback(ant_params_t) {
 }
 
 static ant_value_t exec_callback_promisified_call(ant_params_t) {
-  ant_value_t original = js_func_data(js->current_func);
+  ant_value_t original = js_func_data(call_func);
   if (!is_callable(original)) return js_mkerr(js, "exec promisify target is not callable");
 
   ant_value_t promise = js_mkpromise(js);
@@ -1674,7 +1665,7 @@ static ant_value_t exec_callback_promisified_call(ant_params_t) {
   GC_ROOT_PIN(js, state);
   
   ant_value_t call_result = sv_vm_call(
-    js->vm, js, original, js_getthis(js), 
+    js->vm, js, original, call_this, 
     call_args, nargs + 1, NULL, js_mkundef()
   );
   
@@ -1720,7 +1711,7 @@ static ant_value_t builtin_execFile(ant_params_t) {
   spawn_args[1] = argv;
   spawn_args[2] = options;
 
-  child = builtin_spawn(js, spawn_args, 3, js_mkundef());
+  child = builtin_spawn(js, spawn_args, 3, js_mkundef(), call_this, call_func);
   if (vtype(child) != kTypeObject || !is_callable(callback)) return child;
 
   child_process_t *spawned = get_child_process(child);
@@ -2846,7 +2837,7 @@ static ant_value_t builtin_fork(ant_params_t) {
   spawn_args[2] = Ant_Object_CreateBare(js);
 
   if (bundled) uv_os_setenv(ANT_INTERNAL_RUN_ENV, path_str);
-  ant_value_t result = builtin_spawn(js, spawn_args, 3, js_mkundef());
+  ant_value_t result = builtin_spawn(js, spawn_args, 3, js_mkundef(), call_this, call_func);
   if (bundled) uv_os_unsetenv(ANT_INTERNAL_RUN_ENV);
 
   free(path_str);

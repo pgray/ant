@@ -228,10 +228,9 @@ static ant_value_t intl_collator_compare_numeric(ant_params_t) {
 
 static ant_value_t intl_collator_resolved_options(ant_params_t) {
   ant_value_t obj = Ant_Object_Create(js);
-  ant_value_t this_obj = js_getthis(js);
   
-  ant_value_t locale = is_object_type(this_obj) 
-    ? js_get(js, this_obj, "locale") 
+  ant_value_t locale = is_object_type(call_this) 
+    ? js_get(js, call_this, "locale") 
     : js_mkundef();
   
   if (vtype(locale) != kTypeString) locale = js_mkstr(js, "en-US", 5);
@@ -280,7 +279,7 @@ static ant_value_t intl_numberformat_format(ant_params_t) {
 }
 
 static ant_value_t intl_numberformat_resolved_options(ant_params_t) {
-  return intl_collator_resolved_options(js, args, nargs, js_mkundef());
+  return intl_collator_resolved_options(js, args, nargs, js_mkundef(), call_this, call_func);
 }
 
 static void intl_dtf_extract_fields(ant_native_params_t, intl_dtf_fields_t *out) {
@@ -316,10 +315,9 @@ static ant_value_t intl_dtf_format(ant_params_t) {
 
 static ant_value_t intl_dtf_resolved_options(ant_params_t) {
   ant_value_t obj = Ant_Object_Create(js);
-  ant_value_t this_obj = js_getthis(js);
   
-  ant_value_t locale = is_object_type(this_obj) ? js_get(js, this_obj, "locale") : js_mkundef();
-  ant_value_t time_zone = is_object_type(this_obj) ? js_get(js, this_obj, "timeZone") : js_mkundef();
+  ant_value_t locale = is_object_type(call_this) ? js_get(js, call_this, "locale") : js_mkundef();
+  ant_value_t time_zone = is_object_type(call_this) ? js_get(js, call_this, "timeZone") : js_mkundef();
 
   if (vtype(locale) != kTypeString) locale = js_mkstr(js, "en-US", 5);
   if (vtype(time_zone) != kTypeString) time_zone = js_mkstr(js, "UTC", 3);
@@ -404,9 +402,8 @@ static ant_value_t intl_segmenter_segment(ant_params_t) {
   char *input_str = js_getstr(js, input, &input_len);
   ant_value_t segments = js_mkarr(js);
 
-  ant_value_t this_obj = js_getthis(js);
   size_t granularity_len = 0;
-  const char *granularity = intl_segmenter_granularity(js, this_obj, &granularity_len);
+  const char *granularity = intl_segmenter_granularity(js, call_this, &granularity_len);
   bool word_granularity = granularity_len == 4 && memcmp(granularity, "word", 4) == 0;
 
   for (size_t offset = 0; offset < input_len;) {
@@ -431,12 +428,11 @@ static ant_value_t intl_segmenter_segment(ant_params_t) {
 
 static ant_value_t intl_segmenter_resolved_options(ant_params_t) {
   ant_value_t obj = Ant_Object_Create(js);
-  ant_value_t this_obj = js_getthis(js);
 
   size_t granularity_len = 0;
-  const char *granularity = intl_segmenter_granularity(js, this_obj, &granularity_len);
+  const char *granularity = intl_segmenter_granularity(js, call_this, &granularity_len);
 
-  ant_value_t locale = is_object_type(this_obj) ? js_get(js, this_obj, "locale") : js_mkundef();
+  ant_value_t locale = is_object_type(call_this) ? js_get(js, call_this, "locale") : js_mkundef();
   if (vtype(locale) != kTypeString) locale = js_mkstr(js, "en-US", 5);
 
   js_set(js, obj, "locale", locale);

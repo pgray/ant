@@ -177,7 +177,7 @@ char *esm_file_url_to_path(ant_t *js, const char *specifier) {
   }
 
   ant_value_t encoded = js_mkstr(js, p, p_len);
-  ant_value_t decoded = js_decodeURIComponent(js, &encoded, 1, js_mkundef());
+  ant_value_t decoded = js_decodeURIComponent(js, &encoded, 1, js_mkundef(), js_mkundef(), js_mkundef());
 
   size_t len = 0;
   char *str = js_getstr(js, decoded, &len);
@@ -501,7 +501,7 @@ static ant_value_t esm_make_namespace_object(ant_t *js) {
 }
 
 static ant_value_t esm_require_export_getter(ant_params_t) {
-  ant_value_t data = js_func_data(js->current_func);
+  ant_value_t data = js_func_data(call_func);
   return js_get(js, js_arr_get(js, data, 0), js_getstr(js, js_arr_get(js, data, 1), NULL));
 }
 
@@ -2662,7 +2662,7 @@ ant_value_t js_esm_make_file_url(ant_t *js, const char *path) {
   ant_value_t raw_val = js_mkstr(js, raw, raw_len);
   free(raw);
 
-  return js_encodeURI(js, &raw_val, 1, js_mkundef());
+  return js_encodeURI(js, &raw_val, 1, js_mkundef(), js_mkundef(), js_mkundef());
 }
 
 void gc_mark_esm(ant_t *js, gc_mark_fn mark) {

@@ -35,12 +35,12 @@ static ant_value_t to_string_val(ant_t *js, ant_value_t val) {
   return coerce_to_str_hint(js, val, 1);
 }
 
-ant_value_t Ant_String_CoerceThis(ant_t *js, const char *name) {
-  uint8_t t = vtype(js->this_val);
-  if (t == kTypeString) return js->this_val;
+ant_value_t Ant_String_CoerceThis(ant_t *js, ant_value_t call_this, const char *name) {
+  uint8_t t = vtype(call_this);
+  if (t == kTypeString) return call_this;
   if (t == kTypeUndefined || t == kTypeNull)
     return js_mkerr_typed(js, JS_ERR_TYPE, "String.prototype.%s called on null or undefined", name);
-  return to_string_val(js, js->this_val);
+  return to_string_val(js, call_this);
 }
 
 static ant_value_t builtin_String(ant_params_t) {
@@ -57,9 +57,9 @@ static ant_value_t builtin_String(ant_params_t) {
     if (is_err(sval)) return sval;
   }
   
-  if (is_wrapper_ctor_target(js, js->this_val, call_new_target)) {
-    set_slot(js->this_val, SLOT_PRIMITIVE, sval);
-    ant_value_t length = mkprop_exact_attrs(js, js->this_val, js->length_str, Ant_Value_FromNumber((double)str_utf16_len(js, sval)), 0);
+  if (is_wrapper_ctor_target(js, call_this, call_new_target)) {
+    set_slot(call_this, SLOT_PRIMITIVE, sval);
+    ant_value_t length = mkprop_exact_attrs(js, call_this, js->length_str, Ant_Value_FromNumber((double)str_utf16_len(js, sval)), 0);
     if (is_err(length)) return length;
   }
   
@@ -483,11 +483,11 @@ ant_value_t js_string_intrinsic_call(
 }
 
 static ant_value_t builtin_string_indexOf(ant_params_t) {
-  return js_string_intrinsic_call(js, ANT_STRING_INTRINSIC_INDEX_OF, js->this_val, args, nargs);
+  return js_string_intrinsic_call(js, ANT_STRING_INTRINSIC_INDEX_OF, call_this, args, nargs);
 }
 
 static ant_value_t builtin_string_substring(ant_params_t) {
-  return js_string_intrinsic_call(js, ANT_STRING_INTRINSIC_SUBSTRING, js->this_val, args, nargs);
+  return js_string_intrinsic_call(js, ANT_STRING_INTRINSIC_SUBSTRING, call_this, args, nargs);
 }
 
 bool js_string_intrinsic_builtin_matches(ant_value_t func, ant_string_intrinsic_kind_t kind) {
@@ -500,7 +500,7 @@ bool js_string_intrinsic_builtin_matches(ant_value_t func, ant_string_intrinsic_
 }
 
 static ant_value_t builtin_string_substr(ant_params_t) {
-  ant_value_t str = Ant_String_CoerceThis(js, "substr");
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, "substr");
   if (is_err(str)) return str;
   ant_offset_t byte_len, str_off = vstr(js, str, &byte_len);
   const char *str_ptr = (char *)(uintptr_t)(str_off);
@@ -812,7 +812,7 @@ return_whole:
 }
 
 static ant_value_t builtin_string_split(ant_params_t) {
-  ant_value_t str = Ant_String_CoerceThis(js, "split");
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, "split");
   if (is_err(str)) return str;
 
   if (nargs > 0 && is_object_type(args[0])) {
@@ -837,7 +837,7 @@ static ant_value_t builtin_string_split(ant_params_t) {
 }
 
 static ant_value_t builtin_string_slice(ant_params_t) {
-  ant_value_t receiver = js->this_val;
+  ant_value_t receiver = call_this;
   if (str_is_heap_rope(receiver)) receiver = rope_cached_flat(receiver);
   ant_flat_string_t *flat = ant_str_flat_ptr(receiver);
   
@@ -872,7 +872,7 @@ static ant_value_t builtin_string_slice(ant_params_t) {
     return result;
   }
 
-  ant_value_t str = Ant_String_CoerceThis(js, "slice");
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, "slice");
   if (is_err(str)) return str;
 
   GC_ROOT_SAVE(root_mark, js);
@@ -910,7 +910,7 @@ ant_value_t js_string_slice(ant_t *js, ant_value_t str, double start, double end
 }
 
 static ant_value_t builtin_string_includes(ant_params_t) {
-  ant_value_t str = Ant_String_CoerceThis(js, "includes");
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, "includes");
   if (vtype(str) != kTypeString) return str;
   ant_value_t search = nargs > 0 ? args[0] : js_mkundef();
   
@@ -965,7 +965,7 @@ static inline ant_offset_t string_clamped_position(ant_t *js, ant_value_t value,
 }
 
 static ant_value_t builtin_string_startsWith(ant_params_t) {
-  ant_value_t str = Ant_String_CoerceThis(js, "startsWith");
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, "startsWith");
   if (is_err(str)) return str;
   if (nargs == 0) return mkval(kTypeBool, 0);
   ant_value_t search = args[0];
@@ -1005,7 +1005,7 @@ static ant_value_t builtin_string_startsWith(ant_params_t) {
 }
 
 static ant_value_t builtin_string_endsWith(ant_params_t) {
-  ant_value_t str = Ant_String_CoerceThis(js, "endsWith");
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, "endsWith");
   if (is_err(str)) return str;
   if (nargs == 0) return mkval(kTypeBool, 0);
   ant_value_t search = args[0];
@@ -1052,7 +1052,7 @@ static ant_value_t builtin_string_endsWith(ant_params_t) {
 }
 
 static ant_value_t builtin_string_template(ant_params_t) {
-  ant_value_t str = Ant_String_CoerceThis(js, "template");
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, "template");
   if (vtype(str) != kTypeString) return str;
   if (nargs < 1 || vtype(args[0]) != kTypeObject) return str;
   
@@ -1122,8 +1122,8 @@ static void html_attr_append_escaped(char *out, size_t *pos, const char *s, ant_
   } else out[(*pos)++] = s[i];
 }
 
-static ant_value_t builtin_string_html(ant_native_params_t, const char *name, const char *tag, const char *attr) {
-  ant_value_t str = Ant_String_CoerceThis(js, name);
+static ant_value_t builtin_string_html(ant_native_params_t, ant_value_t call_this, const char *name, const char *tag, const char *attr) {
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, name);
   if (is_err(str)) return str;
 
   ant_offset_t str_len, str_off = vstr(js, str, &str_len);
@@ -1180,13 +1180,13 @@ static ant_value_t builtin_string_html(ant_native_params_t, const char *name, co
 }
 #define STRING_HTML_METHOD(name, tag, attr, arity) \
   static ant_value_t builtin_string_##name(ant_params_t) { \
-    return builtin_string_html(js, args, nargs, #name, tag, attr); \
+    return builtin_string_html(js, args, nargs, call_this, #name, tag, attr); \
   }
 #include "string/html_methods.h"
 
 
 ant_value_t builtin_string_charCodeAt(ant_params_t) {
-  ant_value_t str = Ant_String_CoerceThis(js, "charCodeAt");
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, "charCodeAt");
   
   if (is_err(str)) return str;
   if (vtype(str) != kTypeString) return js_mkerr(js, "charCodeAt called on non-string");
@@ -1245,7 +1245,7 @@ bool js_try_char_code_at(
 }
 
 static ant_value_t builtin_string_codePointAt(ant_params_t) {
-  ant_value_t str = Ant_String_CoerceThis(js, "codePointAt");
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, "codePointAt");
   if (is_err(str)) return str;
   
   double idx_d = nargs < 1 ? 0.0 : js_to_number(js, args[0]);
@@ -1354,26 +1354,26 @@ static ant_value_t string_case_map(ant_t *js, ant_value_t str, bool upper) {
   return result;
 }
 
-static ant_value_t string_case_map_this(ant_t *js, const char *name, bool upper) {
-  ant_value_t str = Ant_String_CoerceThis(js, name);
+static ant_value_t string_case_map_this(ant_t *js, ant_value_t call_this, const char *name, bool upper) {
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, name);
   if (vtype(str) != kTypeString) return str;
   return string_case_map(js, str, upper);
 }
 
 static ant_value_t builtin_string_toLowerCase(ant_params_t) {
-  return string_case_map_this(js, "toLowerCase", false);
+  return string_case_map_this(js, call_this, "toLowerCase", false);
 }
 
 static ant_value_t builtin_string_toLocaleLowerCase(ant_params_t) {
-  return string_case_map_this(js, "toLocaleLowerCase", false);
+  return string_case_map_this(js, call_this, "toLocaleLowerCase", false);
 }
 
 static ant_value_t builtin_string_toUpperCase(ant_params_t) {
-  return string_case_map_this(js, "toUpperCase", true);
+  return string_case_map_this(js, call_this, "toUpperCase", true);
 }
 
 static ant_value_t builtin_string_toLocaleUpperCase(ant_params_t) {
-  return string_case_map_this(js, "toLocaleUpperCase", true);
+  return string_case_map_this(js, call_this, "toLocaleUpperCase", true);
 }
 
 static inline size_t string_trim_prefix_len(const char *p, size_t len) {
@@ -1389,7 +1389,7 @@ static inline size_t string_trim_suffix_len(const char *p, size_t len) {
 }
 
 static ant_value_t builtin_string_trim(ant_params_t) {
-  ant_value_t str = Ant_String_CoerceThis(js, "trim");
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, "trim");
   if (is_err(str)) return str;
   
   ant_offset_t str_len, str_off = vstr(js, str, &str_len);
@@ -1404,7 +1404,7 @@ static ant_value_t builtin_string_trim(ant_params_t) {
 }
 
 static ant_value_t builtin_string_trimStart(ant_params_t) {
-  ant_value_t str = Ant_String_CoerceThis(js, "trimStart");
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, "trimStart");
   if (is_err(str)) return str;
   
   ant_offset_t str_len, str_off = vstr(js, str, &str_len);
@@ -1418,7 +1418,7 @@ static ant_value_t builtin_string_trimStart(ant_params_t) {
 }
 
 static ant_value_t builtin_string_trimEnd(ant_params_t) {
-  ant_value_t str = Ant_String_CoerceThis(js, "trimEnd");
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, "trimEnd");
   if (is_err(str)) return str;
   
   ant_offset_t str_len, str_off = vstr(js, str, &str_len);
@@ -1432,7 +1432,7 @@ static ant_value_t builtin_string_trimEnd(ant_params_t) {
 }
 
 static ant_value_t builtin_string_repeat(ant_params_t) {
-  ant_value_t str = Ant_String_CoerceThis(js, "repeat");
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, "repeat");
   if (is_err(str)) return str;
 
   double count_d = 0;
@@ -1471,9 +1471,9 @@ static ant_value_t builtin_string_repeat(ant_params_t) {
   return result;
 }
 
-static ant_value_t string_pad_impl(ant_native_params_t, bool at_start) {
+static ant_value_t string_pad_impl(ant_native_params_t, ant_value_t call_this, bool at_start) {
   const char *name = at_start ? "padStart" : "padEnd";
-  ant_value_t str = Ant_String_CoerceThis(js, name);
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, name);
   if (vtype(str) != kTypeString) return str;
 
   GC_ROOT_SAVE(root_mark, js);
@@ -1549,15 +1549,15 @@ done:
 }
 
 static ant_value_t builtin_string_padStart(ant_params_t) {
-  return string_pad_impl(js, args, nargs, true);
+  return string_pad_impl(js, args, nargs, call_this, true);
 }
 
 static ant_value_t builtin_string_padEnd(ant_params_t) {
-  return string_pad_impl(js, args, nargs, false);
+  return string_pad_impl(js, args, nargs, call_this, false);
 }
 
 static ant_value_t builtin_string_charAt(ant_params_t) {
-  ant_value_t str = Ant_String_CoerceThis(js, "charAt");
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, "charAt");
   if (is_err(str)) return str;
   
   double idx_d = nargs < 1 ? 0.0 : js_to_number(js, args[0]);
@@ -1578,7 +1578,7 @@ static ant_value_t builtin_string_charAt(ant_params_t) {
 }
 
 static ant_value_t builtin_string_at(ant_params_t) {
-  ant_value_t str = Ant_String_CoerceThis(js, "at");
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, "at");
   if (is_err(str)) return str;
   
   double idx_d = 0.0;
@@ -1605,7 +1605,7 @@ static ant_value_t builtin_string_at(ant_params_t) {
 }
 
 static ant_value_t builtin_string_localeCompare(ant_params_t) {
-  ant_value_t str = Ant_String_CoerceThis(js, "localeCompare");
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, "localeCompare");
   if (is_err(str)) return str;
   if (nargs < 1) return Ant_Value_FromNumber(0);
   
@@ -1676,7 +1676,7 @@ done:
 }
 
 static ant_value_t builtin_string_lastIndexOf(ant_params_t) {
-  ant_value_t str = Ant_String_CoerceThis(js, "lastIndexOf");
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, "lastIndexOf");
   if (vtype(str) != kTypeString) return str;
   bool has_position = nargs >= 2 && vtype(args[1]) != kTypeUndefined;
   if (nargs < 1 || vtype(args[0]) != kTypeString || (has_position && vtype(args[1]) != kTypeNumber))
@@ -1702,11 +1702,11 @@ static ant_value_t builtin_string_lastIndexOf(ant_params_t) {
 }
 
 static ant_value_t builtin_string_concat(ant_params_t) {
-  if (vtype(js->this_val) == kTypeUndefined || vtype(js->this_val) == kTypeNull)
+  if (vtype(call_this) == kTypeUndefined || vtype(call_this) == kTypeNull)
     return js_mkerr_typed(js, JS_ERR_TYPE, "String.prototype.concat called on null or undefined");
   GC_ROOT_SAVE(root_mark, js);
   
-  ant_value_t str = Ant_String_CoerceThis(js, "concat");
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, "concat");
   
   GC_ROOT_PIN(js, str);
   if (is_err(str)) {
@@ -1796,14 +1796,14 @@ static ant_value_t builtin_string_concat(ant_params_t) {
 }
 
 static ant_value_t builtin_string_isWellFormed(ant_params_t) {
-  ant_value_t str = Ant_String_CoerceThis(js, "isWellFormed");
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, "isWellFormed");
   if (vtype(str) != kTypeString) return str;
   ant_offset_t str_len, str_off = vstr(js, str, &str_len);
   return js_bool(str_is_well_formed((const char *)(uintptr_t)str_off, (size_t)str_len));
 }
 
 static ant_value_t builtin_string_toWellFormed(ant_params_t) {
-  ant_value_t str = Ant_String_CoerceThis(js, "toWellFormed");
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, "toWellFormed");
   if (vtype(str) != kTypeString) return str;
   ant_offset_t str_len, str_off = vstr(js, str, &str_len);
   const char *str_ptr = (const char *)(uintptr_t)str_off;
@@ -1817,7 +1817,7 @@ static ant_value_t builtin_string_toWellFormed(ant_params_t) {
 }
 
 static ant_value_t builtin_string_normalize(ant_params_t) {
-  ant_value_t str = Ant_String_CoerceThis(js, "normalize");
+  ant_value_t str = Ant_String_CoerceThis(js, call_this, "normalize");
   if (is_err(str)) return str;
 
   ant_offset_t str_len, str_off = vstr(js, str, &str_len);
@@ -1986,22 +1986,21 @@ static ant_value_t builtin_string_raw(ant_params_t) {
   return string_builder_finalize(js, &sb);
 }
 
-static ant_value_t string_this_value(ant_t *js, const char *method) {
-  ant_value_t self = js->this_val;
-  if (vtype(self) == kTypeString) return self;
+static ant_value_t string_this_value(ant_t *js, ant_value_t call_this, const char *method) {
+  if (vtype(call_this) == kTypeString) return call_this;
   
-  ant_value_t wrapped = js_string_wrapper_value(self);
+  ant_value_t wrapped = js_string_wrapper_value(call_this);
   if (vtype(wrapped) == kTypeString) return wrapped;
   
   return js_mkerr_typed(js, JS_ERR_TYPE, "String.prototype.%s requires that 'this' be a String", method);
 }
 
 static ant_value_t builtin_string_valueOf(ant_params_t) {
-  return string_this_value(js, "valueOf");
+  return string_this_value(js, call_this, "valueOf");
 }
 
 ant_value_t builtin_string_toString(ant_params_t) {
-  return string_this_value(js, "toString");
+  return string_this_value(js, call_this, "toString");
 }
 
 void js_string_init_prototype(ant_t *js, ant_value_t string_proto) {

@@ -1255,7 +1255,7 @@ ant_value_t js_json_parse(ant_params_t) {
 
 ant_value_t json_parse_value(ant_t *js, ant_value_t value) {
   ant_value_t args[1] = { value };
-  return js_json_parse(js, args, 1, js_mkundef());
+  return js_json_parse(js, args, 1, js_mkundef(), js_mkundef(), js_mkundef());
 }
 
 static bool json_set_replacer(ant_t *js, json_cycle_ctx *ctx, ant_value_t replacer, ant_value_t *error_out) {
@@ -1449,7 +1449,7 @@ cleanup:
 
 ant_value_t json_stringify_value(ant_t *js, ant_value_t value) {
   ant_value_t args[1] = { value };
-  return js_json_stringify(js, args, 1, js_mkundef());
+  return js_json_stringify(js, args, 1, js_mkundef(), js_mkundef(), js_mkundef());
 }
 
 void init_json_module(ant_t *js) {

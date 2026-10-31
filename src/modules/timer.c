@@ -142,7 +142,7 @@ static timer_entry_t *timer_open_entry_of(ant_value_t handle) {
 }
 
 static ant_value_t timer_to_primitive(ant_params_t) {
-  timer_entry_t *entry = timer_entry_of(js_getthis(js));
+  timer_entry_t *entry = timer_entry_of(call_this);
   return entry ? Ant_Value_FromNumber((double)entry->timer_id) : js_mkundef();
 }
 
@@ -151,9 +151,8 @@ static inline immediate_entry_t *immediate_entry_of(ant_value_t handle) {
 }
 
 static ant_value_t timer_inspect(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  timer_entry_t *entry = timer_entry_of(this_obj);
-  immediate_entry_t *immediate = immediate_entry_of(this_obj);
+  timer_entry_t *entry = timer_entry_of(call_this);
+  immediate_entry_t *immediate = immediate_entry_of(call_this);
   
   ant_value_t refed = js_mknull();
   bool destroyed = true;
@@ -166,7 +165,7 @@ static ant_value_t timer_inspect(ant_params_t) {
     destroyed = false;
   }
 
-  ant_value_t tag_val = js_get_sym(js, this_obj, js->sym.toStringTag_sym);
+  ant_value_t tag_val = js_get_sym(js, call_this, js->sym.toStringTag_sym);
   const char *tag = vtype(tag_val) == kTypeString ? js_getstr(js, tag_val, NULL) : "Timeout";
 
   js_inspect_builder_t builder;
@@ -177,7 +176,7 @@ static ant_value_t timer_inspect(ant_params_t) {
     ? js_inspect_header(&builder, "%s (%d)", tag, entry->timer_id)
     : js_inspect_header(&builder, "%s", tag);
   
-  if (ok) ok = js_inspect_object_body(&builder, this_obj);
+  if (ok) ok = js_inspect_object_body(&builder, call_this);
   if (ok) ok = js_inspect_field(&builder, "Symbol(refed)", refed);
   if (ok) ok = js_inspect_field(&builder, "Symbol(destroyed)", js_bool(destroyed));
   if (ok) ok = js_inspect_close(&builder);
@@ -191,8 +190,7 @@ static ant_value_t timer_inspect(ant_params_t) {
 }
 
 static ant_value_t js_timer_ref(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  timer_entry_t *entry = timer_open_entry_of(this_obj);
+  timer_entry_t *entry = timer_open_entry_of(call_this);
   
   if (entry) {
     int was_refed = uv_has_ref((const uv_handle_t *)&entry->handle);
@@ -200,7 +198,7 @@ static ant_value_t js_timer_ref(ant_params_t) {
     if (entry->active && !was_refed) js->timers.active_refed_timer_count++;
   }
   
-  return this_obj;
+  return call_this;
 }
 
 static void timer_entry_unref(ant_t *js, timer_entry_t *entry) {
@@ -210,14 +208,13 @@ static void timer_entry_unref(ant_t *js, timer_entry_t *entry) {
 }
 
 static ant_value_t js_timer_unref(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  timer_entry_t *entry = timer_open_entry_of(this_obj);
+  timer_entry_t *entry = timer_open_entry_of(call_this);
   if (entry) timer_entry_unref(js, entry);
-  return this_obj;
+  return call_this;
 }
 
 static ant_value_t js_timer_has_ref(ant_params_t) {
-  timer_entry_t *entry = timer_open_entry_of(js_getthis(js));
+  timer_entry_t *entry = timer_open_entry_of(call_this);
   if (!entry) return js_false;
   return js_bool(uv_has_ref((const uv_handle_t *)&entry->handle) != 0);
 }
@@ -228,24 +225,24 @@ static void immediate_detach_handle(immediate_entry_t *entry) {
 }
 
 static ant_value_t js_immediate_ref(ant_params_t) {
-  immediate_entry_t *entry = immediate_entry_of(js_getthis(js));
+  immediate_entry_t *entry = immediate_entry_of(call_this);
   if (entry) entry->refed = true;
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t js_immediate_unref(ant_params_t) {
-  immediate_entry_t *entry = immediate_entry_of(js_getthis(js));
+  immediate_entry_t *entry = immediate_entry_of(call_this);
   if (entry) entry->refed = false;
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t js_immediate_has_ref(ant_params_t) {
-  immediate_entry_t *entry = immediate_entry_of(js_getthis(js));
+  immediate_entry_t *entry = immediate_entry_of(call_this);
   return js_bool(entry && entry->active && entry->refed);
 }
 
 static ant_value_t js_immediate_dispose(ant_params_t) {
-  immediate_entry_t *entry = immediate_entry_of(js_getthis(js));
+  immediate_entry_t *entry = immediate_entry_of(call_this);
   if (entry) entry->active = 0;
   return js_mkundef();
 }
@@ -365,16 +362,15 @@ static void timer_start(ant_t *js, timer_entry_t *entry, uint64_t timeout, uint6
 }
 
 static ant_value_t js_timer_refresh(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
   
-  timer_entry_t *entry = timer_open_entry_of(this_obj);
-  if (!entry) return this_obj;
+  timer_entry_t *entry = timer_open_entry_of(call_this);
+  if (!entry) return call_this;
 
   if (!entry->active) {
     if (vtype(entry->callback) == kTypeUndefined) {
-      entry->callback = js_get(js, this_obj, "callback");
-      if (!is_callable(entry->callback)) return this_obj;
-      if (timer_copy_args_from_object(js, entry, this_obj) != 0)
+      entry->callback = js_get(js, call_this, "callback");
+      if (!is_callable(entry->callback)) return call_this;
+      if (timer_copy_args_from_object(js, entry, call_this) != 0)
         return js_mkerr(js, "failed to allocate timer args");
       timer_entry_hold_young(js, entry);
     }
@@ -386,7 +382,7 @@ static ant_value_t js_timer_refresh(ant_params_t) {
   }
 
   timer_start(js, entry, entry->timeout_ms, entry->is_interval ? entry->timeout_ms : 0);
-  return this_obj;
+  return call_this;
 }
 
 // setTimeout(callback, delay, ...args)
@@ -460,7 +456,7 @@ static ant_value_t js_set_interval(ant_params_t) {
 }
 
 static ant_value_t js_timer_dispose(ant_params_t) {
-  timer_entry_t *entry = timer_open_entry_of(js_getthis(js));
+  timer_entry_t *entry = timer_open_entry_of(call_this);
   if (entry) timer_close_entry(js, entry);
   return js_mkundef();
 }
@@ -538,8 +534,8 @@ static ant_value_t js_queue_microtask(ant_params_t) {
   return js_mkundef();
 }
 
-static ant_value_t timers_promises_get_state(ant_t *js) {
-  return js_get_slot(js->current_func, SLOT_DATA);
+static ant_value_t timers_promises_get_state(ant_t *js, ant_value_t call_func) {
+  return js_get_slot(call_func, SLOT_DATA);
 }
 
 static void timers_promises_remove_abort_listener(ant_t *js, ant_value_t state) {
@@ -576,7 +572,7 @@ static void timers_promises_settle(ant_t *js, ant_value_t state, bool reject, an
 }
 
 static ant_value_t timers_promises_resolve(ant_params_t) {
-  ant_value_t state = timers_promises_get_state(js);
+  ant_value_t state = timers_promises_get_state(js, call_func);
   ant_value_t value = js_mkundef();
   if (!is_object_type(state)) return js_mkundef();
   value = js_get(js, state, "value");
@@ -585,7 +581,7 @@ static ant_value_t timers_promises_resolve(ant_params_t) {
 }
 
 static ant_value_t timers_promises_on_abort(ant_params_t) {
-  ant_value_t state = timers_promises_get_state(js);
+  ant_value_t state = timers_promises_get_state(js, call_func);
   ant_value_t signal = 0;
   ant_value_t handle = 0;
   ant_value_t is_immediate = 0;
@@ -600,8 +596,8 @@ static ant_value_t timers_promises_on_abort(ant_params_t) {
 
   if (vtype(handle) != kTypeUndefined && vtype(handle) != kTypeNull) {
     clear_args[0] = handle;
-    if (js_truthy(js, is_immediate)) js_clear_immediate(js, clear_args, 1, js_mkundef());
-    else js_clear_timeout(js, clear_args, 1, js_mkundef());
+    if (js_truthy(js, is_immediate)) js_clear_immediate(js, clear_args, 1, js_mkundef(), call_this, call_func);
+    else js_clear_timeout(js, clear_args, 1, js_mkundef(), call_this, call_func);
   }
 
   if (abort_signal_is_signal(signal)) reason = abort_signal_make_error(js, signal);
@@ -672,11 +668,11 @@ static ant_value_t timers_promises_schedule(
   js_set(js, state, "isImmediate", js_bool(is_immediate));
 
   callback = js_heavy_mkfun(js, timers_promises_resolve, state);
-  if (is_immediate) handle = js_set_immediate(js, &callback, 1, js_mkundef());
+  if (is_immediate) handle = js_set_immediate(js, &callback, 1, js_mkundef(), js_mkundef(), js_mkundef());
   else {
     args[0] = callback;
     args[1] = Ant_Value_FromNumber(delay_ms);
-    handle = js_set_timeout(js, args, 2, js_mkundef());
+    handle = js_set_timeout(js, args, 2, js_mkundef(), js_mkundef(), js_mkundef());
   }
 
   if (is_err(handle)) {
@@ -736,7 +732,7 @@ static ant_value_t timers_interval_shift_parked(ant_t *js, ant_value_t state) {
 
 static void timers_interval_stop(ant_t *js, ant_value_t state) {
   ant_value_t handle = js_get(js, state, "handle");
-  if (vtype(handle) != kTypeUndefined) js_clear_timeout(js, &handle, 1, js_mkundef());
+  if (vtype(handle) != kTypeUndefined) js_clear_timeout(js, &handle, 1, js_mkundef(), js_mkundef(), js_mkundef());
   js_set(js, state, "handle", js_mkundef());
   timers_promises_remove_abort_listener(js, state);
   js_set(js, state, "finished", js_true);
@@ -751,7 +747,7 @@ static void timers_interval_finish_parked(ant_t *js, ant_value_t state) {
 }
 
 static ant_value_t timers_interval_tick(ant_params_t) {
-  ant_value_t state = timers_promises_get_state(js);
+  ant_value_t state = timers_promises_get_state(js, call_func);
   if (!is_object_type(state) || js_truthy(js, js_get(js, state, "finished"))) return js_mkundef();
 
   ant_value_t parked = timers_interval_shift_parked(js, state);
@@ -763,7 +759,7 @@ static ant_value_t timers_interval_tick(ant_params_t) {
 }
 
 static ant_value_t timers_interval_on_abort(ant_params_t) {
-  ant_value_t state = timers_promises_get_state(js);
+  ant_value_t state = timers_promises_get_state(js, call_func);
   if (!is_object_type(state) || js_truthy(js, js_get(js, state, "finished"))) return js_mkundef();
 
   ant_value_t reason = abort_signal_make_error(js, js_get(js, state, "signal"));
@@ -793,7 +789,7 @@ static ant_value_t timers_interval_start(ant_t *js, ant_value_t state) {
     js_get(js, state, "delay"),
   };
   
-  ant_value_t handle = js_set_interval(js, args, 2, js_mkundef());
+  ant_value_t handle = js_set_interval(js, args, 2, js_mkundef(), js_mkundef(), js_mkundef());
   if (is_err(handle)) {
     js_set(js, state, "finished", js_true);
     return js_take_thrown(js, handle);
@@ -812,7 +808,7 @@ static ant_value_t timers_interval_start(ant_t *js, ant_value_t state) {
 }
 
 static ant_value_t timers_interval_next(ant_params_t) {
-  ant_value_t state = timers_promises_get_state(js);
+  ant_value_t state = timers_promises_get_state(js, call_func);
   ant_value_t promise = js_mkpromise(js);
   if (!is_object_type(state)) return promise;
 
@@ -861,14 +857,14 @@ static ant_value_t timers_interval_finish(ant_t *js, ant_value_t state) {
 
 static ant_value_t timers_interval_return(ant_params_t) {
   ant_value_t promise = js_mkpromise(js);
-  timers_interval_finish(js, timers_promises_get_state(js));
+  timers_interval_finish(js, timers_promises_get_state(js, call_func));
   js_resolve_promise(js, promise, Ant_Iterator_CreateResult(js, nargs > 0 ? args[0] : js_mkundef(), true));
   return promise;
 }
 
 static ant_value_t timers_interval_throw(ant_params_t) {
   ant_value_t promise = js_mkpromise(js);
-  timers_interval_finish(js, timers_promises_get_state(js));
+  timers_interval_finish(js, timers_promises_get_state(js, call_func));
   js_reject_promise(js, promise, nargs > 0 ? args[0] : js_mkundef());
   return promise;
 }
@@ -909,11 +905,11 @@ static ant_value_t js_timers_promises_setInterval(ant_params_t) {
 }
 
 static ant_value_t js_timers_promises_scheduler_wait(ant_params_t) {
-  return js_timers_promises_setTimeout(js, args, nargs, js_mkundef());
+  return js_timers_promises_setTimeout(js, args, nargs, js_mkundef(), call_this, call_func);
 }
 
 static ant_value_t js_timers_promises_scheduler_yield(ant_params_t) {
-  return js_timers_promises_setImmediate(js, args, nargs, js_mkundef());
+  return js_timers_promises_setImmediate(js, args, nargs, js_mkundef(), call_this, call_func);
 }
 
 void process_immediates(ant_t *js) {

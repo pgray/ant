@@ -220,8 +220,6 @@ void mir_emit_builtin_call_fast(
   MIR_reg_t r_fn = MIR_new_func_reg(ctx, fn->u.func, MIR_T_I64, name);
   snprintf(name, sizeof(name), "%s%d_bi_this", prefix, site);
   MIR_reg_t r_this = MIR_new_func_reg(ctx, fn->u.func, MIR_JSVAL, name);
-  snprintf(name, sizeof(name), "%s%d_bi_saved", prefix, site);
-  MIR_reg_t r_saved = MIR_new_func_reg(ctx, fn->u.func, MIR_JSVAL, name);
 
   MIR_label_t this_ok = MIR_new_label(ctx);
   MIR_label_t this_global = MIR_new_label(ctx);
@@ -274,22 +272,12 @@ void mir_emit_builtin_call_fast(
     MIR_new_uint_op(ctx, js_mkundef())));
   MIR_append_insn(ctx, fn, this_ok);
 
-  MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_MOV,
-    MIR_new_reg_op(ctx, r_saved),
-    MIR_new_mem_op(ctx, MIR_JSVAL, offsetof(ant_t, this_val), r_js, 0, 1)));
-  MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_MOV,
-    MIR_new_mem_op(ctx, MIR_JSVAL, offsetof(ant_t, this_val), r_js, 0, 1),
-    MIR_new_reg_op(ctx, r_this)));
-
-  MIR_append_insn(ctx, fn, MIR_new_call_insn(ctx, 7,
+  MIR_append_insn(ctx, fn, MIR_new_call_insn(ctx, 9,
     MIR_new_ref_op(ctx, cfunc_proto), MIR_new_reg_op(ctx, r_fn),
     MIR_new_reg_op(ctx, result), MIR_new_reg_op(ctx, r_js),
     MIR_new_reg_op(ctx, args), MIR_new_int_op(ctx, (int64_t)argc),
-    MIR_new_uint_op(ctx, js_mkundef())));
-
-  MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_MOV,
-    MIR_new_mem_op(ctx, MIR_JSVAL, offsetof(ant_t, this_val), r_js, 0, 1),
-    MIR_new_reg_op(ctx, r_saved)));
+    MIR_new_uint_op(ctx, js_mkundef()), MIR_new_reg_op(ctx, r_this),
+    MIR_new_reg_op(ctx, func)));
 
   MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_URSH,
     MIR_new_reg_op(ctx, r_tmp), MIR_new_reg_op(ctx, result),

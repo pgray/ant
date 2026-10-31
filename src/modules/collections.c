@@ -842,9 +842,8 @@ static inline ant_value_t collection_arg(ant_args_t, int i) {
 }
 
 static ant_value_t map_set(ant_params_t) {
-  ant_value_t this_val = js->this_val;
   
-  map_entry_t **map_ptr = get_map_from_obj(this_val);
+  map_entry_t **map_ptr = get_map_from_obj(call_this);
   if (!map_ptr) return collection_receiver_error(js, "Map.prototype.set");
 
   ant_value_t key = collection_arg(args, nargs, 0);
@@ -854,13 +853,13 @@ static ant_value_t map_set(ant_params_t) {
   if (!map_store_entry(js, map_ptr, key, key_val, value))
     return Ant_Error_CreateOutOfMemory(js);
 
-  ant_object_t *map_obj = js_obj_ptr(this_val);
+  ant_object_t *map_obj = js_obj_ptr(call_this);
   if (map_obj) {
     gc_write_barrier(js, map_obj, key_val);
     gc_write_barrier(js, map_obj, value);
   }
 
-  return this_val;
+  return call_this;
 }
 
 ant_value_t collections_map_get(ant_t *js, ant_value_t map, ant_value_t key) {
@@ -871,7 +870,7 @@ ant_value_t collections_map_get(ant_t *js, ant_value_t map, ant_value_t key) {
 }
 
 static ant_value_t map_get(ant_params_t) {
-  return collections_map_get(js, js->this_val, collection_arg(args, nargs, 0));
+  return collections_map_get(js, call_this, collection_arg(args, nargs, 0));
 }
 
 bool collections_is_map_get_builtin(ant_value_t func) {
@@ -941,7 +940,7 @@ ant_value_t collections_map_has(ant_t *js, ant_value_t map, ant_value_t key) {
 }
 
 static ant_value_t map_has(ant_params_t) {
-  return collections_map_has(js, js->this_val, collection_arg(args, nargs, 0));
+  return collections_map_has(js, call_this, collection_arg(args, nargs, 0));
 }
 
 bool collections_is_map_has_builtin(ant_value_t func) {
@@ -1032,8 +1031,7 @@ ant_value_t collections_map_numeric_template(
 }
 
 static ant_value_t map_upsert(ant_params_t) {
-  ant_value_t this_val = js->this_val;
-  map_entry_t **map_ptr = get_map_from_obj(this_val);
+  map_entry_t **map_ptr = get_map_from_obj(call_this);
   if (!map_ptr) return collection_receiver_error(js, "Map.prototype.upsert");
 
   ant_value_t key = collection_arg(args, nargs, 0);
@@ -1050,10 +1048,10 @@ static ant_value_t map_upsert(ant_params_t) {
   ant_value_t value;
 
   if (entry) {
-    ant_value_t call_args[3] = { entry->value, key, this_val };
+    ant_value_t call_args[3] = { entry->value, key, call_this };
     value = sv_vm_call(js->vm, js, update_fn, js_mkundef(), call_args, 3, NULL, js_mkundef());
   } else {
-    ant_value_t call_args[2] = { key, this_val };
+    ant_value_t call_args[2] = { key, call_this };
     value = sv_vm_call(js->vm, js, insert_fn, js_mkundef(), call_args, 2, NULL, js_mkundef());
   }
 
@@ -1063,7 +1061,7 @@ static ant_value_t map_upsert(ant_params_t) {
   if (!map_store_entry(js, map_ptr, key, key_val, value))
     return Ant_Error_CreateOutOfMemory(js);
 
-  ant_object_t *map_obj = js_obj_ptr(this_val);
+  ant_object_t *map_obj = js_obj_ptr(call_this);
   if (map_obj) {
     gc_write_barrier(js, map_obj, key_val);
     gc_write_barrier(js, map_obj, value);
@@ -1073,8 +1071,7 @@ static ant_value_t map_upsert(ant_params_t) {
 }
 
 static ant_value_t map_delete(ant_params_t) {
-  ant_value_t this_val = js->this_val;
-  map_entry_t **map_ptr = get_map_from_obj(this_val);
+  map_entry_t **map_ptr = get_map_from_obj(call_this);
 
   if (!map_ptr) return collection_receiver_error(js, "Map.prototype.delete");
   map_entry_t *entry = Ant_Map_Find(js, map_ptr, collection_arg(args, nargs, 0));
@@ -1088,8 +1085,7 @@ static ant_value_t map_delete(ant_params_t) {
 }
 
 static ant_value_t map_clear(ant_params_t) {
-  ant_value_t this_val = js->this_val;
-  map_entry_t **map_ptr = get_map_from_obj(this_val);
+  map_entry_t **map_ptr = get_map_from_obj(call_this);
   
   if (!map_ptr) return collection_receiver_error(js, "Map.prototype.clear");
   collections_map_clear(map_ptr);
@@ -1098,16 +1094,14 @@ static ant_value_t map_clear(ant_params_t) {
 }
 
 static ant_value_t map_size(ant_params_t) {
-  ant_value_t this_val = js->this_val;
-  map_entry_t **map_ptr = get_map_from_obj(this_val);
+  map_entry_t **map_ptr = get_map_from_obj(call_this);
   if (!map_ptr) return collection_receiver_error(js, "get Map.prototype.size");
   
   return Ant_Value_FromNumber((double)HASH_COUNT(*map_ptr));
 }
 
 static ant_value_t map_forEach(ant_params_t) {
-  ant_value_t this_val = js->this_val;
-  map_entry_t **map_ptr = get_map_from_obj(this_val);
+  map_entry_t **map_ptr = get_map_from_obj(call_this);
   if (!map_ptr) return collection_receiver_error(js, "Map.prototype.forEach");
 
   if (nargs < 1 || !is_callable(args[0]))
@@ -1120,7 +1114,7 @@ static ant_value_t map_forEach(ant_params_t) {
   ant_value_t result = js_mkundef();
   
   for (map_entry_t *entry; (entry = map_iter_take(&it));) {
-    ant_value_t call_args[3] = { entry->value, entry->key_val, this_val };
+    ant_value_t call_args[3] = { entry->value, entry->key_val, call_this };
     result = sv_callback_call(js->vm, js, &cb, call_args, 3);
     if (is_err(result)) break;
   }
@@ -1146,8 +1140,8 @@ bool advance_map(ant_t *js, iterator_t *it, ant_value_t *out) {
 }
 
 static ant_value_t map_iter_next(ant_params_t) {
-  if (!js_check_native_tag(js->this_val, MAP_ITER_NATIVE_TAG)) return collection_receiver_error(js, "Map Iterator.prototype.next");
-  return js_iter_next_result(js, advance_map);
+  if (!js_check_native_tag(call_this, MAP_ITER_NATIVE_TAG)) return collection_receiver_error(js, "Map Iterator.prototype.next");
+  return js_iter_next_result(js, call_this, advance_map);
 }
 
 static ant_value_t create_map_iterator(ant_t *js, ant_value_t map_obj, iter_type_t type, const char *method) {
@@ -1168,15 +1162,15 @@ static ant_value_t create_map_iterator(ant_t *js, ant_value_t map_obj, iter_type
 }
 
 static ant_value_t map_values(ant_params_t) {
-  return create_map_iterator(js, js->this_val, ITER_TYPE_MAP_VALUES, "Map.prototype.values");
+  return create_map_iterator(js, call_this, ITER_TYPE_MAP_VALUES, "Map.prototype.values");
 }
 
 static ant_value_t map_keys(ant_params_t) {
-  return create_map_iterator(js, js->this_val, ITER_TYPE_MAP_KEYS, "Map.prototype.keys");
+  return create_map_iterator(js, call_this, ITER_TYPE_MAP_KEYS, "Map.prototype.keys");
 }
 
 static ant_value_t map_entries(ant_params_t) {
-  return create_map_iterator(js, js->this_val, ITER_TYPE_MAP_ENTRIES, "Map.prototype.entries");
+  return create_map_iterator(js, call_this, ITER_TYPE_MAP_ENTRIES, "Map.prototype.entries");
 }
 
 bool advance_set(ant_t *js, iterator_t *it, ant_value_t *out) {
@@ -1188,8 +1182,8 @@ bool advance_set(ant_t *js, iterator_t *it, ant_value_t *out) {
 }
 
 static ant_value_t set_iter_next(ant_params_t) {
-  if (!js_check_native_tag(js->this_val, SET_ITER_NATIVE_TAG)) return collection_receiver_error(js, "Set Iterator.prototype.next");
-  return js_iter_next_result(js, advance_set);
+  if (!js_check_native_tag(call_this, SET_ITER_NATIVE_TAG)) return collection_receiver_error(js, "Set Iterator.prototype.next");
+  return js_iter_next_result(js, call_this, advance_set);
 }
 
 static ant_value_t create_set_iterator(ant_t *js, ant_value_t set_obj, iter_type_t type, const char *method) {
@@ -1210,18 +1204,17 @@ static ant_value_t create_set_iterator(ant_t *js, ant_value_t set_obj, iter_type
 }
 
 static ant_value_t set_add(ant_params_t) {
-  ant_value_t this_val = js->this_val;
-  set_entry_t **set_ptr = get_set_from_obj(this_val);
+  set_entry_t **set_ptr = get_set_from_obj(call_this);
   if (!set_ptr) return collection_receiver_error(js, "Set.prototype.add");
 
   ant_value_t value = collection_arg(args, nargs, 0);
   if (!set_store_entry(js, set_ptr, value))
     return Ant_Error_CreateOutOfMemory(js);
 
-  ant_object_t *set_obj = js_obj_ptr(this_val);
+  ant_object_t *set_obj = js_obj_ptr(call_this);
   if (set_obj) gc_write_barrier(js, set_obj, value);
 
-  return this_val;
+  return call_this;
 }
 
 ant_value_t collections_set_has(ant_t *js, ant_value_t set, ant_value_t value) {
@@ -1231,7 +1224,7 @@ ant_value_t collections_set_has(ant_t *js, ant_value_t set, ant_value_t value) {
 }
 
 static ant_value_t set_has(ant_params_t) {
-  return collections_set_has(js, js->this_val, collection_arg(args, nargs, 0));
+  return collections_set_has(js, call_this, collection_arg(args, nargs, 0));
 }
 
 bool collections_is_set_has_builtin(ant_value_t func) {
@@ -1239,8 +1232,7 @@ bool collections_is_set_has_builtin(ant_value_t func) {
 }
 
 static ant_value_t set_delete(ant_params_t) {
-  ant_value_t this_val = js->this_val;
-  set_entry_t **set_ptr = get_set_from_obj(this_val);
+  set_entry_t **set_ptr = get_set_from_obj(call_this);
   if (!set_ptr) return collection_receiver_error(js, "Set.prototype.delete");
 
   set_entry_t *entry = Ant_Set_Find(js, set_ptr, collection_arg(args, nargs, 0));
@@ -1254,8 +1246,7 @@ static ant_value_t set_delete(ant_params_t) {
 }
 
 static ant_value_t set_clear(ant_params_t) {
-  ant_value_t this_val = js->this_val;
-  set_entry_t **set_ptr = get_set_from_obj(this_val);
+  set_entry_t **set_ptr = get_set_from_obj(call_this);
   if (!set_ptr) return collection_receiver_error(js, "Set.prototype.clear");
 
   collections_set_clear(set_ptr);
@@ -1263,24 +1254,22 @@ static ant_value_t set_clear(ant_params_t) {
 }
 
 static ant_value_t set_size(ant_params_t) {
-  ant_value_t this_val = js->this_val;
-  set_entry_t **set_ptr = get_set_from_obj(this_val);
+  set_entry_t **set_ptr = get_set_from_obj(call_this);
   if (!set_ptr) return collection_receiver_error(js, "get Set.prototype.size");
   
   return Ant_Value_FromNumber((double)HASH_COUNT(*set_ptr));
 }
 
 static ant_value_t set_values(ant_params_t) {
-  return create_set_iterator(js, js->this_val, ITER_TYPE_SET_VALUES, "Set.prototype.values");
+  return create_set_iterator(js, call_this, ITER_TYPE_SET_VALUES, "Set.prototype.values");
 }
 
 static ant_value_t set_entries(ant_params_t) {
-  return create_set_iterator(js, js->this_val, ITER_TYPE_SET_ENTRIES, "Set.prototype.entries");
+  return create_set_iterator(js, call_this, ITER_TYPE_SET_ENTRIES, "Set.prototype.entries");
 }
 
 static ant_value_t set_forEach(ant_params_t) {
-  ant_value_t this_val = js->this_val;
-  set_entry_t **set_ptr = get_set_from_obj(this_val);
+  set_entry_t **set_ptr = get_set_from_obj(call_this);
   if (!set_ptr) return collection_receiver_error(js, "Set.prototype.forEach");
 
   if (nargs < 1 || !is_callable(args[0]))
@@ -1293,7 +1282,7 @@ static ant_value_t set_forEach(ant_params_t) {
   ant_value_t result = js_mkundef();
   
   for (set_entry_t *entry; (entry = set_iter_take(&it));) {
-    ant_value_t call_args[3] = { entry->value, entry->value, this_val };
+    ant_value_t call_args[3] = { entry->value, entry->value, call_this };
     result = sv_callback_call(js->vm, js, &cb, call_args, 3);
     if (is_err(result)) break;
   }
@@ -1483,7 +1472,7 @@ static set_key_status_t set_add_key_cb(ant_t *js, ant_value_t value, ant_value_t
 }
 
 static ant_value_t set_union(ant_params_t) {
-  set_entry_t **this_set = get_set_from_obj(js->this_val);
+  set_entry_t **this_set = get_set_from_obj(call_this);
   if (!this_set) return collection_receiver_error(js, "Set.prototype.union");
   
   set_record_t other;
@@ -1517,7 +1506,7 @@ static set_key_status_t set_intersection_key_cb(ant_t *js, ant_value_t value, an
 }
 
 static ant_value_t set_intersection(ant_params_t) {
-  set_entry_t **this_set = get_set_from_obj(js->this_val);
+  set_entry_t **this_set = get_set_from_obj(call_this);
   if (!this_set) return collection_receiver_error(js, "Set.prototype.intersection");
   
   set_record_t other;
@@ -1561,7 +1550,7 @@ static set_key_status_t set_delete_key_cb(ant_t *js, ant_value_t value, ant_valu
 }
 
 static ant_value_t set_difference(ant_params_t) {
-  set_entry_t **this_set = get_set_from_obj(js->this_val);
+  set_entry_t **this_set = get_set_from_obj(call_this);
   if (!this_set) return collection_receiver_error(js, "Set.prototype.difference");
   
   set_record_t other;
@@ -1623,7 +1612,7 @@ static set_key_status_t set_symmetric_difference_key_cb(ant_t *js, ant_value_t v
 }
 
 static ant_value_t set_symmetricDifference(ant_params_t) {
-  set_entry_t **this_set = get_set_from_obj(js->this_val);
+  set_entry_t **this_set = get_set_from_obj(call_this);
   if (!this_set) return collection_receiver_error(js, "Set.prototype.symmetricDifference");
   
   set_record_t other;
@@ -1641,7 +1630,7 @@ static ant_value_t set_symmetricDifference(ant_params_t) {
 }
 
 static ant_value_t set_isSubsetOf(ant_params_t) {
-  set_entry_t **this_set = get_set_from_obj(js->this_val);
+  set_entry_t **this_set = get_set_from_obj(call_this);
   if (!this_set) return collection_receiver_error(js, "Set.prototype.isSubsetOf");
   
   set_record_t other;
@@ -1679,7 +1668,7 @@ static set_key_status_t set_superset_key_cb(ant_t *js, ant_value_t value, ant_va
 }
 
 static ant_value_t set_isSupersetOf(ant_params_t) {
-  set_entry_t **this_set = get_set_from_obj(js->this_val);
+  set_entry_t **this_set = get_set_from_obj(call_this);
   if (!this_set) return collection_receiver_error(js, "Set.prototype.isSupersetOf");
   
   set_record_t other;
@@ -1703,7 +1692,7 @@ static set_key_status_t set_disjoint_key_cb(ant_t *js, ant_value_t value, ant_va
 }
 
 static ant_value_t set_isDisjointFrom(ant_params_t) {
-  set_entry_t **this_set = get_set_from_obj(js->this_val);
+  set_entry_t **this_set = get_set_from_obj(call_this);
   if (!this_set) return collection_receiver_error(js, "Set.prototype.isDisjointFrom");
   
   set_record_t other;
@@ -1733,9 +1722,8 @@ static ant_value_t set_isDisjointFrom(ant_params_t) {
 }
 
 static ant_value_t weakmap_set(ant_params_t) {
-  ant_value_t this_val = js->this_val;
   ant_object_t *object = NULL;
-  weakmap_table_t *table = get_weakmap_from_obj(this_val, &object);
+  weakmap_table_t *table = get_weakmap_from_obj(call_this, &object);
   if (!table) return collection_receiver_error(js, "WeakMap.prototype.set");
 
   ant_value_t key = collection_arg(args, nargs, 0);
@@ -1745,12 +1733,11 @@ static ant_value_t weakmap_set(ant_params_t) {
   if (!weakmap_store_entry(js, object, table, key, collection_arg(args, nargs, 1)))
     return Ant_Error_CreateOutOfMemory(js);
   
-  return this_val;
+  return call_this;
 }
 
 static ant_value_t weakmap_get(ant_params_t) {
-  ant_value_t this_val = js->this_val;
-  weakmap_table_t *table = get_weakmap_from_obj(this_val, NULL);
+  weakmap_table_t *table = get_weakmap_from_obj(call_this, NULL);
   if (!table) return collection_receiver_error(js, "WeakMap.prototype.get");
 
   ant_value_t key = collection_arg(args, nargs, 0);
@@ -1761,8 +1748,7 @@ static ant_value_t weakmap_get(ant_params_t) {
 }
 
 static ant_value_t weakmap_has(ant_params_t) {
-  ant_value_t this_val = js->this_val;
-  weakmap_table_t *table = get_weakmap_from_obj(this_val, NULL);
+  weakmap_table_t *table = get_weakmap_from_obj(call_this, NULL);
   if (!table) return collection_receiver_error(js, "WeakMap.prototype.has");
 
   ant_value_t key = collection_arg(args, nargs, 0);
@@ -1772,9 +1758,8 @@ static ant_value_t weakmap_has(ant_params_t) {
 }
 
 static ant_value_t weakmap_upsert(ant_params_t) {
-  ant_value_t this_val = js->this_val;
   ant_object_t *object = NULL;
-  weakmap_table_t *table = get_weakmap_from_obj(this_val, &object);
+  weakmap_table_t *table = get_weakmap_from_obj(call_this, &object);
   if (!table) return collection_receiver_error(js, "WeakMap.prototype.upsert");
 
   ant_value_t key_obj = collection_arg(args, nargs, 0);
@@ -1793,10 +1778,10 @@ static ant_value_t weakmap_upsert(ant_params_t) {
 
   ant_value_t value;
   if (entry) {
-    ant_value_t call_args[3] = { entry->value, key_obj, this_val };
+    ant_value_t call_args[3] = { entry->value, key_obj, call_this };
     value = sv_vm_call(js->vm, js, update_fn, js_mkundef(), call_args, 3, NULL, js_mkundef());
   } else {
-    ant_value_t call_args[2] = { key_obj, this_val };
+    ant_value_t call_args[2] = { key_obj, call_this };
     value = sv_vm_call(js->vm, js, insert_fn, js_mkundef(), call_args, 2, NULL, js_mkundef());
   }
 
@@ -1809,8 +1794,7 @@ static ant_value_t weakmap_upsert(ant_params_t) {
 }
 
 static ant_value_t weakmap_delete(ant_params_t) {
-  ant_value_t this_val = js->this_val;
-  weakmap_table_t *table = get_weakmap_from_obj(this_val, NULL);
+  weakmap_table_t *table = get_weakmap_from_obj(call_this, NULL);
   if (!table) return collection_receiver_error(js, "WeakMap.prototype.delete");
 
   ant_value_t key = collection_arg(args, nargs, 0);
@@ -1820,8 +1804,7 @@ static ant_value_t weakmap_delete(ant_params_t) {
 }
 
 static ant_value_t weakset_add(ant_params_t) {
-  ant_value_t this_val = js->this_val;
-  weakset_entry_t **ws_ptr = get_weakset_from_obj(this_val);
+  weakset_entry_t **ws_ptr = get_weakset_from_obj(call_this);
   if (!ws_ptr) return collection_receiver_error(js, "WeakSet.prototype.add");
 
   ant_value_t value_obj = collection_arg(args, nargs, 0);
@@ -1838,18 +1821,17 @@ static ant_value_t weakset_add(ant_params_t) {
     HASH_ADD(hh, *ws_ptr, value_obj, sizeof(ant_value_t), entry);
   }
 
-  ant_object_t *ws_obj = js_obj_ptr(this_val);
+  ant_object_t *ws_obj = js_obj_ptr(call_this);
   if (ws_obj) {
     gc_weak_remember_set(js, ws_obj, value_obj);
     gc_write_barrier(js, ws_obj, value_obj);
   }
   
-  return this_val;
+  return call_this;
 }
 
 static ant_value_t weakset_has(ant_params_t) {
-  ant_value_t this_val = js->this_val;
-  weakset_entry_t **ws_ptr = get_weakset_from_obj(this_val);
+  weakset_entry_t **ws_ptr = get_weakset_from_obj(call_this);
   if (!ws_ptr) return collection_receiver_error(js, "WeakSet.prototype.has");
 
   ant_value_t value_obj = collection_arg(args, nargs, 0);
@@ -1860,8 +1842,7 @@ static ant_value_t weakset_has(ant_params_t) {
 }
 
 static ant_value_t weakset_delete(ant_params_t) {
-  ant_value_t this_val = js->this_val;
-  weakset_entry_t **ws_ptr = get_weakset_from_obj(this_val);
+  weakset_entry_t **ws_ptr = get_weakset_from_obj(call_this);
   if (!ws_ptr) return collection_receiver_error(js, "WeakSet.prototype.delete");
 
   ant_value_t value_obj = collection_arg(args, nargs, 0);
@@ -1914,7 +1895,7 @@ static ant_value_t builtin_WeakRef(ant_params_t) {
   if (nargs < 1 || !can_be_held_weakly(args[0]))
     return js_mkerr(js, "WeakRef target must be an object");
   
-  ant_value_t wr_obj = js->this_val;
+  ant_value_t wr_obj = call_this;
   if (vtype(wr_obj) != kTypeObject) wr_obj = Ant_Object_CreateBare(js);
   if (is_err(wr_obj)) return wr_obj;
 
@@ -1932,9 +1913,8 @@ static ant_value_t builtin_WeakRef(ant_params_t) {
 }
 
 static ant_value_t weakref_deref(ant_params_t) {
-  ant_value_t this_val = js->this_val;
-  weakref_state_t *state = vtype(this_val) == kTypeObject
-    ? js_get_native(this_val, WEAKREF_NATIVE_TAG) : NULL;
+  weakref_state_t *state = vtype(call_this) == kTypeObject
+    ? js_get_native(call_this, WEAKREF_NATIVE_TAG) : NULL;
     
   if (!state) return js_mkerr_typed(
     js, JS_ERR_TYPE,
@@ -1963,8 +1943,7 @@ static ant_value_t builtin_FinalizationRegistry(ant_params_t) {
 }
 
 static ant_value_t finreg_register(ant_params_t) {
-  ant_value_t this_val = js->this_val;
-  if (vtype(this_val) != kTypeObject) return js_mkundef();
+  if (vtype(call_this) != kTypeObject) return js_mkundef();
   
   if (nargs < 1 || !can_be_held_weakly(args[0]))
     return js_mkerr(js, "FinalizationRegistry.register target must be an object");
@@ -1979,7 +1958,7 @@ static ant_value_t finreg_register(ant_params_t) {
   if (vtype(unregister_token) != kTypeUndefined && !can_be_held_weakly(unregister_token))
     return js_mkerr(js, "FinalizationRegistry.register token must be an object");
   
-  ant_value_t registrations = js_get_slot(this_val, SLOT_MAP);
+  ant_value_t registrations = js_get_slot(call_this, SLOT_MAP);
   if (vtype(registrations) != kTypeArray) return js_mkundef();
   
   ant_value_t entry = js_mkarr(js);
@@ -2002,14 +1981,13 @@ static ant_value_t finreg_register(ant_params_t) {
 }
 
 static ant_value_t finreg_unregister(ant_params_t) {
-  ant_value_t this_val = js->this_val;
-  if (vtype(this_val) != kTypeObject) return js_false;
+  if (vtype(call_this) != kTypeObject) return js_false;
   
   if (nargs < 1 || !can_be_held_weakly(args[0]))
     return js_mkerr(js, "FinalizationRegistry.unregister token must be an object");
   
   ant_value_t token = args[0];
-  ant_value_t registrations = js_get_slot(this_val, SLOT_MAP);
+  ant_value_t registrations = js_get_slot(call_this, SLOT_MAP);
   if (vtype(registrations) != kTypeArray) return js_false;
   
   ant_offset_t len = js_arr_len(js, registrations);
@@ -2275,7 +2253,7 @@ static ant_value_t builtin_Map(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Map constructor requires 'new'");
   }
   
-  ant_value_t map_obj = js->this_val;
+  ant_value_t map_obj = call_this;
   if (vtype(map_obj) != kTypeObject) map_obj = Ant_Object_CreateBare(js);
   if (is_err(map_obj)) return map_obj;
   js_obj_ptr(map_obj)->type_tag = kTypeMap;
@@ -2305,7 +2283,7 @@ static ant_value_t builtin_Set(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Set constructor requires 'new'");
   }
   
-  ant_value_t set_obj = js->this_val;
+  ant_value_t set_obj = call_this;
   if (vtype(set_obj) != kTypeObject) set_obj = Ant_Object_CreateBare(js);
   if (is_err(set_obj)) return set_obj;
   js_obj_ptr(set_obj)->type_tag = kTypeSet;
@@ -2335,7 +2313,7 @@ static ant_value_t builtin_WeakMap(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "WeakMap constructor requires 'new'");
   }
   
-  ant_value_t wm_obj = js->this_val;
+  ant_value_t wm_obj = call_this;
   if (vtype(wm_obj) != kTypeObject) wm_obj = Ant_Object_CreateBare(js);
   if (is_err(wm_obj)) return wm_obj;
   js_obj_ptr(wm_obj)->type_tag = kTypeWeakMap;
@@ -2367,7 +2345,7 @@ static ant_value_t builtin_WeakSet(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "WeakSet constructor requires 'new'");
   }
   
-  ant_value_t ws_obj = js->this_val;
+  ant_value_t ws_obj = call_this;
   if (vtype(ws_obj) != kTypeObject) ws_obj = Ant_Object_CreateBare(js);
   if (is_err(ws_obj)) return ws_obj;
   js_obj_ptr(ws_obj)->type_tag = kTypeWeakSet;

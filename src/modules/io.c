@@ -941,43 +941,43 @@ ant_value_t console_emit(ant_t *js, bool use_stderr, const char *prefix, ant_arg
   return console_emit_with_this(js, js_mkundef(), use_stderr, prefix, args, nargs);
 }
 
-ant_value_t console_emit_current(ant_t *js, bool use_stderr, const char *prefix, ant_args_t) {
-  return console_emit_with_this(js, js_getthis(js), use_stderr, prefix, args, nargs);
+ant_value_t console_emit_current(ant_t *js, ant_value_t call_this, bool use_stderr, const char *prefix, ant_args_t) {
+  return console_emit_with_this(js, call_this, use_stderr, prefix, args, nargs);
 }
 
 static ant_value_t js_console_log(ant_params_t) {
 #ifndef ANT_WASM_EMBED
   ant_inspector_console_api_called(js, "log", args, nargs);
 #endif
-  return console_emit_current(js, false, NULL, args, nargs);
+  return console_emit_current(js, call_this, false, NULL, args, nargs);
 }
 
 static ant_value_t js_console_error(ant_params_t) {
 #ifndef ANT_WASM_EMBED
   ant_inspector_console_api_called(js, "error", args, nargs);
 #endif
-  return console_emit_current(js, true, NULL, args, nargs);
+  return console_emit_current(js, call_this, true, NULL, args, nargs);
 }
 
 static ant_value_t js_console_warn(ant_params_t) {
 #ifndef ANT_WASM_EMBED
   ant_inspector_console_api_called(js, "warning", args, nargs);
 #endif
-  return console_emit_current(js, true, NULL, args, nargs);
+  return console_emit_current(js, call_this, true, NULL, args, nargs);
 }
 
 static ant_value_t js_console_info(ant_params_t) {
 #ifndef ANT_WASM_EMBED
   ant_inspector_console_api_called(js, "info", args, nargs);
 #endif
-  return console_emit_current(js, false, NULL, args, nargs);
+  return console_emit_current(js, call_this, false, NULL, args, nargs);
 }
 
 static ant_value_t js_console_debug(ant_params_t) {
 #ifndef ANT_WASM_EMBED
   ant_inspector_console_api_called(js, "debug", args, nargs);
 #endif
-  return console_emit_current(js, false, NULL, args, nargs);
+  return console_emit_current(js, call_this, false, NULL, args, nargs);
 }
 
 static ant_value_t js_console_assert(ant_params_t) {
@@ -987,15 +987,15 @@ static ant_value_t js_console_assert(ant_params_t) {
 #ifndef ANT_WASM_EMBED
   ant_inspector_console_api_called(js, "assert", args + 1, nargs - 1);
 #endif
-  return console_emit_current(js, true, "Assertion failed:", args + 1, nargs - 1);
+  return console_emit_current(js, call_this, true, "Assertion failed:", args + 1, nargs - 1);
 }
 
 static ant_value_t js_console_trace(ant_params_t) {
-  ant_value_t this_obj = console_get_effective_this(js, js_getthis(js));
+  ant_value_t this_obj = console_get_effective_this(js, call_this);
 #ifndef ANT_WASM_EMBED
   ant_inspector_console_api_called(js, "trace", args, nargs);
 #endif
-  console_emit_current(js, true, "Trace:", args, nargs);
+  console_emit_current(js, call_this, true, "Trace:", args, nargs);
   ant_value_t stack = js_capture_raw_stack(js);
   if (vtype(stack) == kTypeString) {
     size_t stack_len = 0;
@@ -1006,8 +1006,7 @@ static ant_value_t js_console_trace(ant_params_t) {
 }
 
 static ant_value_t js_console_clear(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  if (!io_no_color) console_write_string(js, this_obj, false, "\033[2J\033[H", 7);
+  if (!io_no_color) console_write_string(js, call_this, false, "\033[2J\033[H", 7);
   return js_mkundef();
 }
 
@@ -1020,14 +1019,13 @@ static double console_now_ms(void) {
 }
 
 static ant_value_t js_console_time(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
   const char *label = "default";
   
   if (nargs > 0 && vtype(args[0]) == kTypeString) label = js_getstr(js, args[0], NULL);
-  ant_value_t timers = console_get_state_map(js, this_obj, "timers");
+  ant_value_t timers = console_get_state_map(js, call_this, "timers");
   if (is_special_object(timers) && vtype(js_get(js, timers, label)) != kTypeUndefined) {
     ant_value_t warn_args[1] = { js_mkstr(js, "Timer already exists", 20) };
-    return console_emit_current(js, true, NULL, warn_args, 1);
+    return console_emit_current(js, call_this, true, NULL, warn_args, 1);
   }
   
   js_set(js, timers, label, Ant_Value_FromNumber(console_now_ms()));
@@ -1035,16 +1033,15 @@ static ant_value_t js_console_time(ant_params_t) {
 }
 
 static ant_value_t js_console_timeEnd(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
   const char *label = "default";
   
   if (nargs > 0 && vtype(args[0]) == kTypeString) label = js_getstr(js, args[0], NULL);
-  ant_value_t timers = console_get_state_map(js, this_obj, "timers");
+  ant_value_t timers = console_get_state_map(js, call_this, "timers");
   ant_value_t start = is_special_object(timers) ? js_get(js, timers, label) : js_mkundef();
   
   if (vtype(start) != kTypeNumber) {
     ant_value_t warn_args[1] = { js_mkstr(js, "Timer does not exist", 19) };
-    return console_emit_current(js, true, NULL, warn_args, 1);
+    return console_emit_current(js, call_this, true, NULL, warn_args, 1);
   }
   
   double elapsed = console_now_ms() - Ant_Value_AsNumberUnchecked(start);
@@ -1054,11 +1051,10 @@ static ant_value_t js_console_timeEnd(ant_params_t) {
   int len = snprintf(buf, sizeof(buf), "%s: %.3fms", label, elapsed);
   ant_value_t out_args[1] = { js_mkstr(js, buf, (size_t)(len > 0 ? len : 0)) };
   
-  return console_emit_current(js, false, NULL, out_args, 1);
+  return console_emit_current(js, call_this, false, NULL, out_args, 1);
 }
 
 static ant_value_t js_console_timeLog(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
   const char *label = "default";
   int extra_start = 0;
   
@@ -1067,12 +1063,12 @@ static ant_value_t js_console_timeLog(ant_params_t) {
     extra_start = 1;
   }
   
-  ant_value_t timers = console_get_state_map(js, this_obj, "timers");
+  ant_value_t timers = console_get_state_map(js, call_this, "timers");
   ant_value_t start = is_special_object(timers) ? js_get(js, timers, label) : js_mkundef();
   
   if (vtype(start) != kTypeNumber) {
     ant_value_t warn_args[1] = { js_mkstr(js, "Timer does not exist", 19) };
-    return console_emit_current(js, true, NULL, warn_args, 1);
+    return console_emit_current(js, call_this, true, NULL, warn_args, 1);
   }
   
   char buf[256];
@@ -1087,7 +1083,7 @@ static ant_value_t js_console_timeLog(ant_params_t) {
   GC_ROOT_PIN(js, out_args[0]);
   
   for (int i = extra_start; i < nargs; i++) out_args[i - extra_start + 1] = args[i];
-  ant_value_t result = console_emit_current(js, false, NULL, out_args, nargs - extra_start + 1);
+  ant_value_t result = console_emit_current(js, call_this, false, NULL, out_args, nargs - extra_start + 1);
   
   GC_ROOT_RESTORE(js, root_mark);
   free(out_args);
@@ -1096,11 +1092,10 @@ static ant_value_t js_console_timeLog(ant_params_t) {
 }
 
 static ant_value_t js_console_count(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
   const char *label = "default";
   
   if (nargs > 0 && vtype(args[0]) == kTypeString) label = js_getstr(js, args[0], NULL);
-  ant_value_t counts = console_get_state_map(js, this_obj, "counts");
+  ant_value_t counts = console_get_state_map(js, call_this, "counts");
   ant_value_t current = is_special_object(counts) ? js_get(js, counts, label) : js_mkundef();
   
   double next = vtype(current) == kTypeNumber ? Ant_Value_AsNumberUnchecked(current) + 1 : 1;
@@ -1110,33 +1105,30 @@ static ant_value_t js_console_count(ant_params_t) {
   int len = snprintf(buf, sizeof(buf), "%s: %.0f", label, next);
   ant_value_t out_args[1] = { js_mkstr(js, buf, (size_t)(len > 0 ? len : 0)) };
   
-  return console_emit_current(js, false, NULL, out_args, 1);
+  return console_emit_current(js, call_this, false, NULL, out_args, 1);
 }
 
 static ant_value_t js_console_countReset(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
   const char *label = "default";
   if (nargs > 0 && vtype(args[0]) == kTypeString) label = js_getstr(js, args[0], NULL);
-  ant_value_t counts = console_get_state_map(js, this_obj, "counts");
+  ant_value_t counts = console_get_state_map(js, call_this, "counts");
   js_delete_prop(js, counts, label, strlen(label));
   return js_mkundef();
 }
 
 static ant_value_t js_console_group(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  if (nargs > 0) console_emit_current(js, false, NULL, args, nargs);
-  console_set_group_level(js, this_obj, console_get_group_level(js, this_obj) + 1);
+  if (nargs > 0) console_emit_current(js, call_this, false, NULL, args, nargs);
+  console_set_group_level(js, call_this, console_get_group_level(js, call_this) + 1);
   return js_mkundef();
 }
 
 static ant_value_t js_console_group_end(ant_params_t) {
-  ant_value_t this_obj = js_getthis(js);
-  console_set_group_level(js, this_obj, console_get_group_level(js, this_obj) - 1);
+  console_set_group_level(js, call_this, console_get_group_level(js, call_this) - 1);
   return js_mkundef();
 }
 
 static ant_value_t js_console_group_collapsed(ant_params_t) {
-  return js_console_group(js, args, nargs, js_mkundef());
+  return js_console_group(js, args, nargs, js_mkundef(), call_this, call_func);
 }
 
 static const char *get_slot_name(internal_slot_t slot) {
@@ -1523,17 +1515,17 @@ static ant_value_t js_console_inspect(ant_params_t) {
 
 // TODO: replace stub with real
 static ant_value_t js_console_dir(ant_params_t) {
-  return js_console_log(js, args, nargs, js_mkundef());
+  return js_console_log(js, args, nargs, js_mkundef(), call_this, call_func);
 }
 
 // TODO: replace stub with real
 static ant_value_t js_console_dirxml(ant_params_t) {
-  return js_console_log(js, args, nargs, js_mkundef());
+  return js_console_log(js, args, nargs, js_mkundef(), call_this, call_func);
 }
 
 // TODO: replace stub with real
 static ant_value_t js_console_table(ant_params_t) {
-  return js_console_log(js, args, nargs, js_mkundef());
+  return js_console_log(js, args, nargs, js_mkundef(), call_this, call_func);
 }
 
 static void console_apply_methods(ant_t *js, ant_value_t console_obj) {

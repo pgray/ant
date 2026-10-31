@@ -240,8 +240,7 @@ static ant_value_t array_set_index_throw(ant_t *js, ant_value_t obj, ant_offset_
 static ant_value_t array_set_length_throw(ant_t *js, ant_value_t obj, ant_offset_t len);
 
 static ant_value_t builtin_array_push(ant_params_t) {
-  ant_value_t arr = js->this_val;
-  arr = array_method_receiver(js, arr, "push");
+  ant_value_t arr = array_method_receiver(js, call_this, "push");
   
   if (is_err(arr)) return arr;
   ant_offset_t string_len;
@@ -438,20 +437,18 @@ static ant_value_t array_splice_generic(
 }
 
 static ant_value_t builtin_array_pop(ant_params_t) {
-  ant_object_t *fast = array_mutable_dense(js, js->this_val);
+  ant_object_t *fast = array_mutable_dense(js, call_this);
   if (__builtin_expect(fast != NULL, 1)) {
     uint32_t len = fast->u.array.len;
     if (len == 0) return js_mkundef();
     ant_value_t last = fast->u.array.data[--len];
-    if (__builtin_expect(array_hole_reads_proto(js, fast, last), 0)) return array_pop_generic(js, js->this_val);
+    if (__builtin_expect(array_hole_reads_proto(js, fast, last), 0)) return array_pop_generic(js, call_this);
     fast->u.array.data[len] = T_EMPTY;
     fast->u.array.len = len;
     return is_empty_slot(last) ? js_mkundef() : last;
   }
   
-  ant_value_t arr = js->this_val;
-
-  arr = array_method_receiver(js, arr, "pop");
+  ant_value_t arr = array_method_receiver(js, call_this, "pop");
   if (is_err(arr)) return arr;
   ant_offset_t string_len;
   if (array_string_wrapper_length(js, arr, &string_len)) return array_string_wrapper_write_error(js, "length");
@@ -517,7 +514,7 @@ bool js_is_array_pop_builtin(ant_value_t func) {
 }
 
 static ant_value_t builtin_array_slice(ant_params_t) {
-  ant_value_t arr = js->this_val;
+  ant_value_t arr = call_this;
   ant_value_t string_val = unwrap_primitive(js, arr);
   bool string_like = (vtype(string_val) == kTypeString);
 
@@ -621,8 +618,7 @@ static ant_value_t builtin_array_slice(ant_params_t) {
 
 static ant_value_t array_join_body(ant_params_t) {
   if (sv_check_c_stack_overflow(js)) return js_mkerr_typed(js, JS_ERR_RANGE, "Maximum call stack size exceeded");
-  ant_value_t arr = js->this_val;
-  arr = array_method_receiver(js, arr, "join");
+  ant_value_t arr = array_method_receiver(js, call_this, "join");
   if (is_err(arr)) return arr;
 
   GC_ROOT_SAVE(root_mark, js);
@@ -1122,13 +1118,11 @@ bool js_is_array_includes_builtin(ant_value_t func) {
 }
 
 ant_value_t builtin_array_includes(ant_params_t) {
-  return js_array_includes_call(js, js->this_val, args, nargs);
+  return js_array_includes_call(js, call_this, args, nargs);
 }
 
 static ant_value_t builtin_array_every(ant_params_t) {
-  ant_value_t arr = js->this_val;
-  
-  arr = array_method_receiver(js, arr, "every");
+  ant_value_t arr = array_method_receiver(js, call_this, "every");
   if (is_err(arr)) return arr;
   
   ant_value_t callback = require_callback(js, args, nargs, "every");
@@ -1154,9 +1148,7 @@ static ant_value_t builtin_array_every(ant_params_t) {
 }
 
 static ant_value_t builtin_array_forEach(ant_params_t) {
-  ant_value_t arr = js->this_val;
-  
-  arr = array_method_receiver(js, arr, "forEach");
+  ant_value_t arr = array_method_receiver(js, call_this, "forEach");
   if (is_err(arr)) return arr;
   
   ant_value_t callback = require_callback(js, args, nargs, "forEach");
@@ -1181,9 +1173,7 @@ static ant_value_t builtin_array_forEach(ant_params_t) {
 }
 
 static ant_value_t builtin_array_reverse(ant_params_t) {
-  ant_value_t arr = js->this_val;
-
-  arr = array_method_receiver(js, arr, "reverse");
+  ant_value_t arr = array_method_receiver(js, call_this, "reverse");
   if (is_err(arr)) return arr;
   
   ant_offset_t string_len;
@@ -1278,9 +1268,7 @@ static ant_value_t builtin_array_reverse(ant_params_t) {
 }
 
 static ant_value_t builtin_array_map(ant_params_t) {
-  ant_value_t arr = js->this_val;
-  
-  arr = array_method_receiver(js, arr, "map");
+  ant_value_t arr = array_method_receiver(js, call_this, "map");
   if (is_err(arr)) return arr;
   
   ant_value_t callback = require_callback(js, args, nargs, "map");
@@ -1313,9 +1301,7 @@ static ant_value_t builtin_array_map(ant_params_t) {
 }
 
 static ant_value_t builtin_array_filter(ant_params_t) {
-  ant_value_t arr = js->this_val;
-  
-  arr = array_method_receiver(js, arr, "filter");
+  ant_value_t arr = array_method_receiver(js, call_this, "filter");
   if (is_err(arr)) return arr;
   
   ant_value_t callback = require_callback(js, args, nargs, "filter");
@@ -1350,9 +1336,7 @@ static ant_value_t builtin_array_filter(ant_params_t) {
 }
 
 static ant_value_t builtin_array_reduce(ant_params_t) {
-  ant_value_t arr = js->this_val;
-  
-  arr = array_method_receiver(js, arr, "reduce");
+  ant_value_t arr = array_method_receiver(js, call_this, "reduce");
   if (is_err(arr)) return arr;
   
   ant_value_t callback = require_callback(js, args, nargs, "reduce");
@@ -1475,8 +1459,7 @@ static inline ant_value_t flat_append_mapped_value(ant_t *js, ant_value_t mapped
 }
 
 static ant_value_t builtin_array_flat(ant_params_t) {
-  ant_value_t arr = js->this_val;
-  arr = array_method_receiver(js, arr, "flat");
+  ant_value_t arr = array_method_receiver(js, call_this, "flat");
   if (is_err(arr)) return arr;
   
   int depth = 1;
@@ -1496,8 +1479,7 @@ static ant_value_t builtin_array_flat(ant_params_t) {
 }
 
 static ant_value_t builtin_array_concat(ant_params_t) {
-  ant_value_t arr = js->this_val;
-  arr = array_method_receiver(js, arr, "concat");
+  ant_value_t arr = array_method_receiver(js, call_this, "concat");
   if (is_err(arr)) return arr;
   
   bool intrinsic = false;
@@ -1575,8 +1557,7 @@ static ant_value_t builtin_array_concat(ant_params_t) {
 }
 
 static ant_value_t builtin_array_at(ant_params_t) {
-  ant_value_t arr = js->this_val;
-  arr = array_method_receiver(js, arr, "at");
+  ant_value_t arr = array_method_receiver(js, call_this, "at");
   if (is_err(arr)) return arr;
   
   PROXY_AWARE_LENGTH_OR_RETURN(arr, len);
@@ -1595,8 +1576,7 @@ static ant_value_t builtin_array_at(ant_params_t) {
 }
 
 static ant_value_t builtin_array_fill(ant_params_t) {
-  ant_value_t arr = js->this_val;
-  arr = array_method_receiver(js, arr, "fill");
+  ant_value_t arr = array_method_receiver(js, call_this, "fill");
   if (is_err(arr)) return arr;
 
   ant_value_t value = nargs >= 1 ? args[0] : js_mkundef();
@@ -1644,8 +1624,8 @@ static ant_value_t builtin_array_fill(ant_params_t) {
   return arr;
 }
 
-static ant_value_t array_find_impl(ant_native_params_t, bool return_index, const char *name) {
-  ant_value_t arr = array_method_receiver(js, js->this_val, name);
+static ant_value_t array_find_impl(ant_native_params_t, ant_value_t call_this, bool return_index, const char *name) {
+  ant_value_t arr = array_method_receiver(js, call_this, name);
   if (is_err(arr)) return arr;
   
   ant_value_t callback = require_callback(js, args, nargs, name);
@@ -1671,15 +1651,15 @@ static ant_value_t array_find_impl(ant_native_params_t, bool return_index, const
 }
 
 static ant_value_t builtin_array_find(ant_params_t) {
-  return array_find_impl(js, args, nargs, false, "find");
+  return array_find_impl(js, args, nargs, call_this, false, "find");
 }
 
 static ant_value_t builtin_array_findIndex(ant_params_t) {
-  return array_find_impl(js, args, nargs, true, "findIndex");
+  return array_find_impl(js, args, nargs, call_this, true, "findIndex");
 }
 
-static ant_value_t array_find_last_impl(ant_native_params_t, bool return_index, const char *name) {
-  ant_value_t arr = array_method_receiver(js, js->this_val, name);
+static ant_value_t array_find_last_impl(ant_native_params_t, ant_value_t call_this, bool return_index, const char *name) {
+  ant_value_t arr = array_method_receiver(js, call_this, name);
   if (is_err(arr)) return arr;
   
   ant_value_t callback = require_callback(js, args, nargs, name);
@@ -1705,16 +1685,15 @@ static ant_value_t array_find_last_impl(ant_native_params_t, bool return_index, 
 }
 
 static ant_value_t builtin_array_findLast(ant_params_t) {
-  return array_find_last_impl(js, args, nargs, false, "findLast");
+  return array_find_last_impl(js, args, nargs, call_this, false, "findLast");
 }
 
 static ant_value_t builtin_array_findLastIndex(ant_params_t) {
-  return array_find_last_impl(js, args, nargs, true, "findLastIndex");
+  return array_find_last_impl(js, args, nargs, call_this, true, "findLastIndex");
 }
 
 static ant_value_t builtin_array_flatMap(ant_params_t) {
-  ant_value_t arr = js->this_val;
-  arr = array_method_receiver(js, arr, "flatMap");
+  ant_value_t arr = array_method_receiver(js, call_this, "flatMap");
   if (is_err(arr)) return arr;
   
   ant_value_t callback = require_callback(js, args, nargs, "flatMap");
@@ -1750,8 +1729,7 @@ static ant_value_t builtin_array_flatMap(ant_params_t) {
 }
 
 static ant_value_t builtin_array_indexOf(ant_params_t) {
-  ant_value_t arr = js->this_val;
-  arr = array_method_receiver(js, arr, "indexOf");
+  ant_value_t arr = array_method_receiver(js, call_this, "indexOf");
   if (is_err(arr)) return arr;
 
   if (nargs == 0) return Ant_Value_FromNumber(-1);  
@@ -1789,8 +1767,7 @@ static ant_value_t builtin_array_indexOf(ant_params_t) {
 }
 
 static ant_value_t builtin_array_lastIndexOf(ant_params_t) {
-  ant_value_t arr = js->this_val;
-  arr = array_method_receiver(js, arr, "lastIndexOf");
+  ant_value_t arr = array_method_receiver(js, call_this, "lastIndexOf");
   if (is_err(arr)) return arr;
   if (nargs == 0) return Ant_Value_FromNumber(-1);
   
@@ -1827,8 +1804,7 @@ static ant_value_t builtin_array_lastIndexOf(ant_params_t) {
 }
 
 static ant_value_t builtin_array_reduceRight(ant_params_t) {
-  ant_value_t arr = js->this_val;
-  arr = array_method_receiver(js, arr, "reduceRight");
+  ant_value_t arr = array_method_receiver(js, call_this, "reduceRight");
   if (is_err(arr)) return arr;
   if (nargs == 0 || vtype(args[0]) != kTypeFunction) {
     return js_mkerr(js, "reduceRight requires a function argument");
@@ -1858,12 +1834,12 @@ static ant_value_t builtin_array_reduceRight(ant_params_t) {
 }
 
 static ant_value_t builtin_array_shift(ant_params_t) {
-  ant_object_t *fast = array_mutable_dense(js, js->this_val);
+  ant_object_t *fast = array_mutable_dense(js, call_this);
   if (__builtin_expect(fast != NULL, 1)) {
     uint32_t len = fast->u.array.len;
     if (len == 0) return js_mkundef();
     if (__builtin_expect(fast->flags.may_have_holes && !array_proto_chain_plain(js, fast), 0))
-      return array_shift_generic(js, js->this_val);
+      return array_shift_generic(js, call_this);
     ant_value_t *data = fast->u.array.data;
     ant_value_t first = data[0];
     memmove(&data[0], &data[1], sizeof(ant_value_t) * (size_t)(len - 1));
@@ -1873,8 +1849,7 @@ static ant_value_t builtin_array_shift(ant_params_t) {
     return is_empty_slot(first) ? js_mkundef() : first;
   }
   
-  ant_value_t arr = js->this_val;
-  arr = array_method_receiver(js, arr, "shift");
+  ant_value_t arr = array_method_receiver(js, call_this, "shift");
   if (is_err(arr)) return arr;
   ant_offset_t string_len;
   if (array_string_wrapper_length(js, arr, &string_len)) return array_string_wrapper_write_error(js, "length");
@@ -1932,8 +1907,7 @@ static ant_value_t builtin_array_shift(ant_params_t) {
 }
 
 static ant_value_t builtin_array_unshift(ant_params_t) {
-  ant_value_t arr = js->this_val;
-  arr = array_method_receiver(js, arr, "unshift");
+  ant_value_t arr = array_method_receiver(js, call_this, "unshift");
   if (is_err(arr)) return arr;
   ant_offset_t string_len;
   if (array_string_wrapper_length(js, arr, &string_len)) return array_string_wrapper_write_error(js, "length");
@@ -2017,9 +1991,7 @@ static ant_value_t builtin_array_unshift(ant_params_t) {
 }
 
 static ant_value_t builtin_array_some(ant_params_t) {
-  ant_value_t arr = js->this_val;
-  
-  arr = array_method_receiver(js, arr, "some");
+  ant_value_t arr = array_method_receiver(js, call_this, "some");
   if (is_err(arr)) return arr;
   
   ant_value_t callback = require_callback(js, args, nargs, "some");
@@ -2072,7 +2044,7 @@ static inline bool array_sort_writes_dense(ant_value_t arr, ant_offset_t len) {
 }
 
 static ant_value_t builtin_array_sort(ant_params_t) {
-  ant_value_t arr = js->this_val;
+  ant_value_t arr = call_this;
   ant_value_t compareFn = js_mkundef();
   
   ant_value_t result = arr;
@@ -2272,8 +2244,7 @@ done:
 }
 
 static ant_value_t builtin_array_splice(ant_params_t) {
-  ant_value_t arr = js->this_val;
-  arr = array_method_receiver(js, arr, "splice");
+  ant_value_t arr = array_method_receiver(js, call_this, "splice");
   if (is_err(arr)) return arr;
   ant_offset_t string_len;
   if (array_string_wrapper_length(js, arr, &string_len)) return array_string_wrapper_write_error(js, "length");
@@ -2415,7 +2386,7 @@ static ant_value_t builtin_array_splice(ant_params_t) {
 }
 
 static ant_value_t builtin_array_copyWithin(ant_params_t) {
-  ant_value_t arr = js->this_val;
+  ant_value_t arr = call_this;
   ant_value_t result = arr;
   gc_temp_root_scope_t temp_roots = {0};
   
@@ -2548,8 +2519,7 @@ oom:
 }
 
 static ant_value_t builtin_array_toSorted(ant_params_t) {
-  ant_value_t arr = js->this_val;
-  arr = array_method_receiver(js, arr, "toSorted");
+  ant_value_t arr = array_method_receiver(js, call_this, "toSorted");
   if (is_err(arr)) return arr;
   
   PROXY_AWARE_LENGTH_OR_RETURN(arr, len);
@@ -2562,8 +2532,7 @@ static ant_value_t builtin_array_toSorted(ant_params_t) {
 }
 
 static ant_value_t builtin_array_toReversed(ant_params_t) {
-  ant_value_t arr = js->this_val;
-  arr = array_method_receiver(js, arr, "toReversed");
+  ant_value_t arr = array_method_receiver(js, call_this, "toReversed");
   if (is_err(arr)) return arr;
   
   PROXY_AWARE_LENGTH_OR_RETURN(arr, len);
@@ -2576,8 +2545,7 @@ static ant_value_t builtin_array_toReversed(ant_params_t) {
 }
 
 static ant_value_t builtin_array_toSpliced(ant_params_t) {
-  ant_value_t arr = js->this_val;
-  arr = array_method_receiver(js, arr, "toSpliced");
+  ant_value_t arr = array_method_receiver(js, call_this, "toSpliced");
   if (is_err(arr)) return arr;
   
   PROXY_AWARE_LENGTH_OR_RETURN(arr, len);
@@ -2609,8 +2577,7 @@ static ant_value_t builtin_array_toSpliced(ant_params_t) {
 }
 
 static ant_value_t builtin_array_with(ant_params_t) {
-  ant_value_t arr = js->this_val;
-  arr = array_method_receiver(js, arr, "with");
+  ant_value_t arr = array_method_receiver(js, call_this, "with");
   if (is_err(arr)) return arr;
   
   if (nargs < 2) return js_mkerr(js, "with requires index and value arguments");
@@ -2627,30 +2594,29 @@ static ant_value_t builtin_array_with(ant_params_t) {
 }
 
 static ant_value_t builtin_array_keys(ant_params_t) {
-  ant_value_t arr = array_method_receiver(js, js->this_val, "keys");
+  ant_value_t arr = array_method_receiver(js, call_this, "keys");
   return is_err(arr) ? arr : make_array_iterator(js, arr, ARR_ITER_KEYS);
 }
 
 static ant_value_t builtin_array_values(ant_params_t) {
-  ant_value_t arr = array_method_receiver(js, js->this_val, "values");
+  ant_value_t arr = array_method_receiver(js, call_this, "values");
   return is_err(arr) ? arr : make_array_iterator(js, arr, ARR_ITER_VALUES);
 }
 
 static ant_value_t builtin_array_entries(ant_params_t) {
-  ant_value_t arr = array_method_receiver(js, js->this_val, "entries");
+  ant_value_t arr = array_method_receiver(js, call_this, "entries");
   return is_err(arr) ? arr : make_array_iterator(js, arr, ARR_ITER_ENTRIES);
 }
 
 static ant_value_t builtin_array_toString(ant_params_t) {
-  ant_value_t arr = js->this_val;
   ant_value_t join_result;
   
-  if (js_try_invoke(js, arr, "join", NULL, 0, &join_result)) {
+  if (js_try_invoke(js, call_this, "join", NULL, 0, &join_result)) {
     if (is_err(join_result)) return join_result;
     return join_result;
   }
   
-  return builtin_object_toString(js, args, nargs, js_mkundef());
+  return builtin_object_toString(js, args, nargs, js_mkundef(), call_this, call_func);
 }
 
 static bool array_locale_uses_default_string_methods(ant_t *js) {
@@ -2759,8 +2725,7 @@ static bool array_try_builtin_string_locale(
 }
 
 static ant_value_t array_to_locale_string_body(ant_params_t) {
-  ant_value_t arr = js->this_val;
-  arr = array_method_receiver(js, arr, "toLocaleString");
+  ant_value_t arr = array_method_receiver(js, call_this, "toLocaleString");
   if (is_err(arr)) return arr;
 
   GC_ROOT_SAVE(root_mark, js);
@@ -2957,26 +2922,25 @@ static ant_value_t array_to_locale_string_body(ant_params_t) {
   return ret;
 }
 
-static ant_value_t array_join_guarded(ant_native_params_t, ant_value_t new_target, ant_cfunc_t body) {
-  ant_value_t receiver = js->this_val;
+static ant_value_t array_join_guarded(ant_native_params_t, ant_value_t call_this, ant_value_t call_func, ant_value_t new_target, ant_cfunc_t body) {
   for (ant_array_join_frame_t *frame = js->array_join_stack; frame; frame = frame->prev)
-    if (frame->receiver == receiver && is_object_type(receiver)) return js_mkstr(js, "", 0);
+    if (frame->receiver == call_this && is_object_type(call_this)) return js_mkstr(js, "", 0);
 
-  ant_array_join_frame_t frame = { js->array_join_stack, receiver };
+  ant_array_join_frame_t frame = { js->array_join_stack, call_this };
   js->array_join_stack = &frame;
   
-  ant_value_t result = body(js, args, nargs, new_target);
+  ant_value_t result = body(js, args, nargs, new_target, call_this, call_func);
   js->array_join_stack = frame.prev;
   
   return result;
 }
 
 static ant_value_t builtin_array_join(ant_params_t) {
-  return array_join_guarded(js, args, nargs, call_new_target, array_join_body);
+  return array_join_guarded(js, args, nargs, call_this, call_func, call_new_target, array_join_body);
 }
 
 static ant_value_t builtin_array_toLocaleString(ant_params_t) {
-  return array_join_guarded(js, args, nargs, call_new_target, array_to_locale_string_body);
+  return array_join_guarded(js, args, nargs, call_this, call_func, call_new_target, array_to_locale_string_body);
 }
 
 static ant_value_t builtin_Array_isArray(ant_params_t) {
@@ -3028,9 +2992,8 @@ static ant_value_t builtin_Array_from(ant_params_t) {
   ant_value_t mapFn = (nargs >= 2 && is_callable(args[1])) ? args[1] : js_mkundef();
   ant_value_t mapThis = (nargs >= 3) ? args[2] : js_mkundef();
 
-  ant_value_t ctor = js->this_val;
-  bool use_ctor = (vtype(ctor) == kTypeFunction || vtype(ctor) == kTypeBuiltin);
-  ant_value_t result = use_ctor ? array_alloc_from_ctor_with_length(js, ctor, 0) : mkarr(js);
+  bool use_ctor = (vtype(call_this) == kTypeFunction || vtype(call_this) == kTypeBuiltin);
+  ant_value_t result = use_ctor ? array_alloc_from_ctor_with_length(js, call_this, 0) : mkarr(js);
   if (is_err(result)) return result;
 
   bool result_is_proxy = is_proxy(result);
@@ -3128,9 +3091,8 @@ static ant_value_t builtin_Array_from(ant_params_t) {
 }
 
 static ant_value_t builtin_Array_of(ant_params_t) {
-  ant_value_t ctor = js->this_val;
-  bool use_ctor = (vtype(ctor) == kTypeFunction || vtype(ctor) == kTypeBuiltin);
-  ant_value_t arr = use_ctor ? array_alloc_from_ctor_with_length(js, ctor, (ant_offset_t)nargs) : mkarr(js);
+  bool use_ctor = (vtype(call_this) == kTypeFunction || vtype(call_this) == kTypeBuiltin);
+  ant_value_t arr = use_ctor ? array_alloc_from_ctor_with_length(js, call_this, (ant_offset_t)nargs) : mkarr(js);
   if (is_err(arr)) return arr;
 
   bool arr_is_proxy = is_proxy(arr);
@@ -3192,11 +3154,11 @@ static ant_value_t from_async_fail(ant_t *js, ant_value_t state, ant_value_t err
 }
 
 static ant_value_t from_async_on_rejected(ant_params_t) {
-  return from_async_reject(js, get_slot(js->current_func, SLOT_DATA), nargs > 0 ? args[0] : js_mkundef());
+  return from_async_reject(js, get_slot(call_func, SLOT_DATA), nargs > 0 ? args[0] : js_mkundef());
 }
 
 static ant_value_t from_async_on_closed(ant_params_t) {
-  ant_value_t state = get_slot(js->current_func, SLOT_DATA);
+  ant_value_t state = get_slot(call_func, SLOT_DATA);
   return from_async_reject(js, state, from_async_field(js, state, FROM_ASYNC_REASON));
 }
 
@@ -3248,7 +3210,7 @@ static ant_value_t from_async_close_and_reject(ant_t *js, ant_value_t state, ant
 }
 
 static ant_value_t from_async_on_close_rejected(ant_params_t) {
-  return from_async_close_and_reject(js, get_slot(js->current_func, SLOT_DATA), nargs > 0 ? args[0] : js_mkundef());
+  return from_async_close_and_reject(js, get_slot(call_func, SLOT_DATA), nargs > 0 ? args[0] : js_mkundef());
 }
 
 static ant_value_t from_async_step(ant_t *js, ant_value_t state);
@@ -3270,7 +3232,7 @@ static ant_value_t from_async_mapped(ant_t *js, ant_value_t state, ant_value_t v
 }
 
 static ant_value_t from_async_on_mapped(ant_params_t) {
-  return from_async_mapped(js, get_slot(js->current_func, SLOT_DATA), nargs > 0 ? args[0] : js_mkundef());
+  return from_async_mapped(js, get_slot(call_func, SLOT_DATA), nargs > 0 ? args[0] : js_mkundef());
 }
 
 static ant_value_t from_async_value(ant_t *js, ant_value_t state, ant_value_t value) {
@@ -3286,7 +3248,7 @@ static ant_value_t from_async_value(ant_t *js, ant_value_t state, ant_value_t va
 }
 
 static ant_value_t from_async_on_value(ant_params_t) {
-  return from_async_value(js, get_slot(js->current_func, SLOT_DATA), nargs > 0 ? args[0] : js_mkundef());
+  return from_async_value(js, get_slot(call_func, SLOT_DATA), nargs > 0 ? args[0] : js_mkundef());
 }
 
 static ant_value_t from_async_finish(ant_t *js, ant_value_t state) {
@@ -3316,7 +3278,7 @@ static ant_value_t from_async_next_result(ant_t *js, ant_value_t state, ant_valu
 }
 
 static ant_value_t from_async_on_next_result(ant_params_t) {
-  return from_async_next_result(js, get_slot(js->current_func, SLOT_DATA), nargs > 0 ? args[0] : js_mkundef());
+  return from_async_next_result(js, get_slot(call_func, SLOT_DATA), nargs > 0 ? args[0] : js_mkundef());
 }
 
 static ant_value_t from_async_step(ant_t *js, ant_value_t state) {
@@ -3374,7 +3336,7 @@ static ant_value_t from_async_open_iterator(ant_t *js, ant_value_t items, ant_va
 }
 
 static ant_value_t from_async_start(
-  ant_t *js, ant_value_t ctor, ant_value_t items,
+  ant_t *js, ant_value_t call_this, ant_value_t ctor, ant_value_t items,
   ant_value_t mapfn, ant_value_t this_arg, ant_value_t promise
 ) {
   if (vtype(mapfn) != kTypeUndefined && !is_callable(mapfn))
@@ -3384,7 +3346,7 @@ static ant_value_t from_async_start(
     vtype(items) == kTypeNull ? "null" : "undefined"
   );
 
-  ant_value_t lookup = is_object_type(items) ? items : builtin_Object(js, &items, 1, js_mkundef());
+  ant_value_t lookup = is_object_type(items) ? items : builtin_Object(js, &items, 1, js_mkundef(), call_this, js_mkundef());
   if (is_err(lookup)) return lookup;
 
   GC_ROOT_SAVE(mark, js);
@@ -3443,7 +3405,7 @@ static ant_value_t builtin_Array_fromAsync(ant_params_t) {
   GC_ROOT_PIN(js, promise);
   
   ant_value_t started = from_async_start(
-    js, js->this_val, nargs > 0 ? args[0] : js_mkundef(),
+    js, call_this, call_this, nargs > 0 ? args[0] : js_mkundef(),
     nargs > 1 ? args[1] : js_mkundef(), nargs > 2 ? args[2] : js_mkundef(), promise
   );
   

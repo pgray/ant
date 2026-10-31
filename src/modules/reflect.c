@@ -189,7 +189,7 @@ static ant_value_t reflect_get_own_property_descriptor(ant_params_t) {
   if (is_err(target)) return target;
   
   ant_value_t call_args[2] = { target, nargs > 1 ? args[1] : js_mkundef() };
-  return builtin_object_getOwnPropertyDescriptor(js, call_args, 2, js_mkundef());
+  return builtin_object_getOwnPropertyDescriptor(js, call_args, 2, js_mkundef(), call_this, call_func);
 }
 
 static ant_value_t reflect_define_property(ant_params_t) {

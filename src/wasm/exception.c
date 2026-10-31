@@ -149,16 +149,15 @@ static bool wasm_is_exception(ant_value_t value) {
 }
 
 ant_value_t js_wasm_exception_get_arg(ant_params_t) {
-  ant_value_t self = js->this_val;
-  if (!wasm_is_exception(self))
+  if (!wasm_is_exception(call_this))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Receiver is not a WebAssembly.Exception");
   if (nargs < 1 || !wasm_is_tag(args[0]))
     return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Exception.getArg(): Argument 0 must be a WebAssembly.Tag");
-  if (vdata(js_get_slot(self, SLOT_DATA)) != vdata(args[0]))
+  if (vdata(js_get_slot(call_this, SLOT_DATA)) != vdata(args[0]))
     return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Exception.getArg(): First argument does not match the exception tag");
 
   double index = nargs > 1 ? js_to_number(js, args[1]) : 0;
-  ant_value_t payload = js_get_slot(self, SLOT_AUX);
+  ant_value_t payload = js_get_slot(call_this, SLOT_AUX);
   ant_offset_t count = js_arr_len(js, payload);
   if (!isfinite(index) || index < 0 || index >= (double)count || index != floor(index))
     return js_mkerr_typed(js, JS_ERR_RANGE, "WebAssembly.Exception.getArg(): Index out of range");
@@ -167,17 +166,15 @@ ant_value_t js_wasm_exception_get_arg(ant_params_t) {
 }
 
 ant_value_t js_wasm_exception_is(ant_params_t) {
-  ant_value_t self = js->this_val;
-  if (!wasm_is_exception(self))
+  if (!wasm_is_exception(call_this))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Receiver is not a WebAssembly.Exception");
   if (nargs < 1 || !wasm_is_tag(args[0]))
     return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Exception.is(): Argument 0 must be a WebAssembly.Tag");
-  return js_bool(vdata(js_get_slot(self, SLOT_DATA)) == vdata(args[0]));
+  return js_bool(vdata(js_get_slot(call_this, SLOT_DATA)) == vdata(args[0]));
 }
 
 ant_value_t js_wasm_exception_stack_getter(ant_params_t) {
-  ant_value_t self = js->this_val;
-  if (!wasm_is_exception(self))
+  if (!wasm_is_exception(call_this))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Receiver is not a WebAssembly.Exception");
-  return js_get_slot(self, SLOT_ENTRIES);
+  return js_get_slot(call_this, SLOT_ENTRIES);
 }

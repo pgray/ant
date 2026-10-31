@@ -143,13 +143,10 @@ static inline __attribute__((always_inline)) ant_value_t sv_execute_call_plan(
   }
 
   case SV_CALL_EXEC_UNCURRIED_NATIVE: {
-    ant_value_t saved_func = js->current_func;
-    js->current_func = plan->func;
-    ant_value_t result = sv_call_native(
-      js, plan->closure->bound_this,
-      plan->ctx.this_val, plan->ctx.args, plan->ctx.argc, js_mkundef()
+    ant_value_t result = sv_invoke_builtin(
+      js, plan->closure->bound_this, plan->ctx.this_val,
+      plan->func, plan->ctx.args, plan->ctx.argc, js_mkundef()
     );
-    js->current_func = saved_func;
     sv_call_cleanup(js, &plan->ctx);
     return result;
   }}
@@ -192,7 +189,7 @@ ant_value_t sv_vm_call(
     ant_value_t native_this = sv_call_normalize_this(js, this_val, mode);
 
     if (out_this) *out_this = native_this;
-    ant_value_t native_res = sv_call_builtin_this(js, func, native_this, args, argc, js_mkundef());
+    ant_value_t native_res = sv_invoke_builtin(js, func, native_this, func, args, argc, js_mkundef());
     sv_vm_maybe_checkpoint_microtasks(js);
     return native_res;
   }

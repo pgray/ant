@@ -492,7 +492,7 @@ static ant_value_t proxy_host_desc(ant_t *js, ant_proxy_state_t *data, ant_value
   
   if (!key || lkp(js, target, key, key_len).obj) {
     ant_value_t args[2] = { target, key_val };
-    return builtin_object_getOwnPropertyDescriptor(js, args, 2, js_mkundef());
+    return builtin_object_getOwnPropertyDescriptor(js, args, 2, js_mkundef(), js_mkundef(), js_mkundef());
   }
   
   ant_value_t value = data->host->get(js, target, key, key_len);
@@ -1166,7 +1166,7 @@ ant_value_t proxy_get_own_property_descriptor(ant_t *js, ant_value_t proxy, ant_
       return proxy_trap_error(js, "getOwnPropertyDescriptor", "trap returned neither object nor undefined");
 
     ant_value_t target_args[2] = { target, key_val };
-    ant_value_t target_desc = builtin_object_getOwnPropertyDescriptor(js, target_args, 2, js_mkundef());
+    ant_value_t target_desc = builtin_object_getOwnPropertyDescriptor(js, target_args, 2, js_mkundef(), js_mkundef(), js_mkundef());
     if (is_err(target_desc)) return target_desc;
     bool target_exists = vtype(target_desc) != kTypeUndefined;
     
@@ -1220,7 +1220,7 @@ ant_value_t proxy_get_own_property_descriptor(ant_t *js, ant_value_t proxy, ant_
   }
 
   ant_value_t args[2] = { target, key_val };
-  return builtin_object_getOwnPropertyDescriptor(js, args, 2, js_mkundef());
+  return builtin_object_getOwnPropertyDescriptor(js, args, 2, js_mkundef(), js_mkundef(), js_mkundef());
 }
 
 ant_value_t proxy_has_own(ant_t *js, ant_value_t proxy, ant_value_t key_val) {
@@ -1273,7 +1273,7 @@ ant_value_t proxy_define_property(ant_t *js, ant_value_t proxy, ant_value_t key_
     if (is_err(result) || !js_truthy(js, result)) return result;
 
     ant_value_t target_args[2] = { target, key_val };
-    ant_value_t target_desc = builtin_object_getOwnPropertyDescriptor(js, target_args, 2, js_mkundef());
+    ant_value_t target_desc = builtin_object_getOwnPropertyDescriptor(js, target_args, 2, js_mkundef(), js_mkundef(), js_mkundef());
     if (is_err(target_desc)) return target_desc;
 
     bool target_exists = vtype(target_desc) != kTypeUndefined;
@@ -1473,8 +1473,7 @@ static ant_value_t builtin_Proxy(ant_params_t) {
 
 static ant_value_t proxy_revoke_fn(ant_params_t) {
   (void)args; (void)nargs;
-  ant_value_t func = js->current_func;
-  ant_value_t ref_slot = get_slot(func, SLOT_PROXY_REF);
+  ant_value_t ref_slot = get_slot(call_func, SLOT_PROXY_REF);
   
   if (vtype(ref_slot) != kTypeUndefined && vdata(ref_slot) != 0) {
     ant_proxy_state_t *data = get_proxy_data(ref_slot);

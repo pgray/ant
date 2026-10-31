@@ -1201,7 +1201,7 @@ static ant_value_t js_stdin_ref(ant_params_t) {
   if (!ps) return Ant_Error_CreateOutOfMemory(js);
   ps->stdin_state.refed = true;
   if (stdin_handle_live(&ps->stdin_state)) uv_ref(&ps->stdin_state.h.handle);
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t js_stdin_unref(ant_params_t) {
@@ -1209,7 +1209,7 @@ static ant_value_t js_stdin_unref(ant_params_t) {
   if (!ps) return Ant_Error_CreateOutOfMemory(js);
   ps->stdin_state.refed = false;
   if (stdin_handle_live(&ps->stdin_state)) uv_unref(&ps->stdin_state.h.handle);
-  return js_getthis(js);
+  return call_this;
 }
 
 static ant_value_t process_write_stream(ant_native_params_t, FILE *stream, int fd) {

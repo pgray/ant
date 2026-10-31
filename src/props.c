@@ -435,7 +435,7 @@ ant_value_t js_prop_load_from(ant_t *js, ant_value_t receiver, ant_prop_loc_t of
 
 ant_value_t js_call_getter(ant_t *js, ant_value_t receiver, ant_value_t getter) {
   if (vtype(getter) != kTypeBuiltin) return call_proto_accessor(js, receiver, getter, true, NULL, 0, false);
-  return sv_call_builtin_this(js, getter, receiver, NULL, 0, js_mkundef());
+  return sv_invoke_builtin(js, getter, receiver, getter, NULL, 0, js_mkundef());
 }
 
 ant_value_t js_define_own_prop(ant_t *js, ant_value_t obj, const char *key, size_t klen, ant_value_t v) {

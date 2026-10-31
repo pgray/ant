@@ -661,7 +661,7 @@ static ant_value_t sh_runtime_submit(ant_params_t) {
 }
 
 static ant_value_t sh_accumulate_fulfilled(ant_params_t) {
-  ant_value_t context = js_func_data(js->current_func);
+  ant_value_t context = js_func_data(call_func);
   ant_value_t result = nargs > 0 ? args[0] : js_mkundef();
 
   sh_output_accumulator_t *accumulator = js_get_native(context, SH_OUTPUT_ACCUMULATOR_TAG);

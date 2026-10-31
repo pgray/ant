@@ -11,8 +11,7 @@
 #include "esm/builtin_bundle.h"
 
 static ant_value_t builtin_import_tla_resolve(ant_params_t) {
-  ant_value_t me = js->current_func;
-  return get_slot(me, SLOT_DATA);
+  return get_slot(call_func, SLOT_DATA);
 }
 
 static inline bool js_has_module_filename(const char *filename) {
@@ -55,8 +54,8 @@ static ant_value_t js_get_execution_module_ctx(ant_t *js) {
   return js_module_eval_active_ctx(js);
 }
 
-static ant_value_t js_get_import_owner_module_ctx(ant_t *js) {
-  ant_value_t module_ctx = js_module_ctx_from_func(js->current_func);
+static ant_value_t js_get_import_owner_module_ctx(ant_t *js, ant_value_t call_func) {
+  ant_value_t module_ctx = js_module_ctx_from_func(call_func);
   if (is_object_type(module_ctx)) return module_ctx;
   return js_get_execution_module_ctx(js);
 }
@@ -71,7 +70,7 @@ static const char *js_get_execution_module_filename(ant_t *js) {
 ant_value_t js_builtin_import(ant_params_t) {
   if (nargs < 1) return js_mkerr(js, "import() requires a string specifier");
 
-  ant_value_t module_ctx = js_get_import_owner_module_ctx(js);
+  ant_value_t module_ctx = js_get_import_owner_module_ctx(js, call_func);
   const char *base_path = js_get_module_ctx_filename(js, module_ctx);
 
   if (!js_has_module_filename(base_path))
@@ -179,13 +178,12 @@ static ant_value_t builtin_import_meta_resolve(ant_params_t) {
   if (nargs < 1) return js_mkerr(js, "import.meta.resolve() requires a string specifier");
 
   const char *base_path = NULL;
-  ant_value_t import_meta = js_getthis(js);
   ant_value_t module_ctx = js_mkundef();
 
-  if (is_object_type(import_meta)) module_ctx = js_get_slot(import_meta, SLOT_MODULE_CTX);
+  if (is_object_type(call_this)) module_ctx = js_get_slot(call_this, SLOT_MODULE_CTX);
 
   if (!is_object_type(module_ctx))
-    module_ctx = js_get_import_owner_module_ctx(js);
+    module_ctx = js_get_import_owner_module_ctx(js, call_func);
 
   base_path = js_get_module_ctx_filename(js, module_ctx);
   if (!js_has_module_filename(base_path))

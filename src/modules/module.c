@@ -77,8 +77,7 @@ static ant_value_t builtin_module_isBuiltin(ant_params_t) {
 }
 
 static ant_value_t builtin_module_deregisterHooks(ant_params_t) {
-  ant_value_t self = js->current_func;
-  ant_value_t hook = js_get_slot(self, SLOT_DATA);
+  ant_value_t hook = js_get_slot(call_func, SLOT_DATA);
   if (vtype(hook) == kTypeUndefined || vtype(js->modules.hooks) != kTypeArray) return js_mkundef();
 
   GC_ROOT_SAVE(root_mark, js);
@@ -98,7 +97,7 @@ static ant_value_t builtin_module_deregisterHooks(ant_params_t) {
   }
 
   js->modules.hooks = remaining;
-  js_set_slot(self, SLOT_DATA, js_mkundef());
+  js_set_slot(call_func, SLOT_DATA, js_mkundef());
 
   GC_ROOT_RESTORE(js, root_mark);
   return js_mkundef();
@@ -190,9 +189,9 @@ static ant_value_t module_constants(ant_t *js) {
 static ant_value_t builtin_module_constructor(ant_params_t) {
   if (nargs && vtype(args[0]) != kTypeUndefined && vtype(args[0]) != kTypeString)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Module id must be a string");
-  if (!is_object_type(js->this_val)) return js_mkerr_typed(js, JS_ERR_TYPE, "Module requires an object receiver");
+  if (!is_object_type(call_this)) return js_mkerr_typed(js, JS_ERR_TYPE, "Module requires an object receiver");
   const char *id = nargs && vtype(args[0]) == kTypeString ? js_getstr(js, args[0], NULL) : "";
-  return esm_init_cjs_module(js, js->this_val, id, nargs > 1 ? args[1] : js_mkundef());
+  return esm_init_cjs_module(js, call_this, id, nargs > 1 ? args[1] : js_mkundef());
 }
 
 ant_value_t module_library(ant_t *js) {

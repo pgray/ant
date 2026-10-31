@@ -582,7 +582,7 @@ static bool ant_c_number_to_arg(
 }
 
 static ant_value_t ant_c_function_call(ant_params_t) {
-  ant_c_function_t *function = js_get_native(js->current_func, ANT_C_FUNCTION_NATIVE_TAG);
+  ant_c_function_t *function = js_get_native(call_func, ANT_C_FUNCTION_NATIVE_TAG);
   if (!function) return js_mkerr(js, "Ant.unsafe.c() compiled function is no longer available");
   
   if (nargs != (int)function->arg_count) return js_mkerr(js, 
@@ -873,7 +873,7 @@ static ant_value_t ant_c_compile(ant_t *js, ant_value_t source_value, ant_value_
 static ant_value_t ant_c_configured_tag(ant_params_t) {
   ant_value_t source = ant_c_template_source(js, args, nargs);
   if (is_err(source)) return source;
-  return ant_c_compile(js, source, js_get_slot(js->current_func, SLOT_DATA));
+  return ant_c_compile(js, source, js_get_slot(call_func, SLOT_DATA));
 }
 
 static ant_value_t js_unsafe_c(ant_params_t) {

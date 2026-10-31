@@ -155,7 +155,6 @@ static ant_t *isolate_init(void *buf, size_t len, const ant_isolate_options_t *o
   
   realm_init_core(js);
   
-  js->this_val = js->global;
   js->owns_mem = false;
   js->max_size = 0;
   
@@ -505,6 +504,7 @@ static inline js_eval_result_t js_eval_bytecode_mode_result(
   };
 }
 
+// TODO: cleanup
 static inline ant_value_t js_eval_bytecode_mode(
   ant_t *js, const char *buf, size_t len,
   sv_compile_mode_t mode, bool parse_strict,
@@ -516,43 +516,32 @@ static inline ant_value_t js_eval_bytecode_mode(
   ).value;
 }
 
-ant_value_t js_eval_bytecode(ant_t *js, const char *buf, size_t len) {
-  return js_eval_bytecode_mode(
-    js, buf, len, SV_COMPILE_SCRIPT, 
-    false, js_mkundef(), js_mkundef(), js_mkundef()
-  );
-}
-
-ant_value_t js_eval_bytecode_module(ant_t *js, const char *buf, size_t len) {
-  return js_eval_bytecode_mode(
-    js, buf, len, SV_COMPILE_MODULE, 
-    false, js_mkundef(), js_mkundef(), js_mkundef()
-  );
-}
-
-ant_value_t js_eval_bytecode_eval(ant_t *js, const char *buf, size_t len) {
-  return js_eval_bytecode_mode(
-    js, buf, len, SV_COMPILE_EVAL, 
-    false, js->global, js->global, js_mkundef()
-  );
-}
-
-ant_value_t js_eval_bytecode_eval_with_strict(ant_t *js, const char *buf, size_t len, bool inherit_strict) {
-  return js_eval_bytecode_mode(
-    js, buf, len, SV_COMPILE_EVAL, 
-    inherit_strict, js->global, js->global, js_mkundef()
-  );
-}
-
+// TODO: cleanup
 ant_value_t js_eval_bytecode_eval_in_env_with_strict(
-  ant_t *js, const char *buf, size_t len,
-  bool inherit_strict, ant_value_t this_val, ant_value_t eval_env,
+  ant_t *js, const char *buf, size_t len, bool inherit_strict, 
+  ant_value_t this_val, ant_value_t eval_env,
   ant_value_t new_target, bool allows_new_target
 ) {
   return js_eval_bytecode_mode(
     js, buf, len, allows_new_target ? SV_COMPILE_EVAL_FUNCTION : SV_COMPILE_EVAL,
     inherit_strict, this_val, eval_env, new_target
   );
+}
+
+ant_value_t js_eval_bytecode(ant_t *js, const char *buf, size_t len) {
+  return js_eval_bytecode_mode(js, buf, len, SV_COMPILE_SCRIPT, false, js_mkundef(), js_mkundef(), js_mkundef());
+}
+
+ant_value_t js_eval_bytecode_module(ant_t *js, const char *buf, size_t len) {
+  return js_eval_bytecode_mode(js, buf, len, SV_COMPILE_MODULE, false, js_mkundef(), js_mkundef(), js_mkundef());
+}
+
+ant_value_t js_eval_bytecode_eval(ant_t *js, const char *buf, size_t len) {
+  return js_eval_bytecode_mode(js, buf, len, SV_COMPILE_EVAL, false, js->global, js->global, js_mkundef());
+}
+
+ant_value_t js_eval_bytecode_eval_with_strict(ant_t *js, const char *buf, size_t len, bool inherit_strict) {
+  return js_eval_bytecode_mode(js, buf, len, SV_COMPILE_EVAL, inherit_strict, js->global, js->global, js_mkundef());
 }
 
 ant_value_t js_vm_script_compile(ant_t *js, const char *buf, size_t len) {
@@ -589,40 +578,23 @@ ant_value_t js_function_from_source(ant_t *js, ant_value_t *params_and_body, int
   return build_dynamic_function(js, params_and_body, nargs, js_mkundef(), false, false);
 }
 
-js_eval_result_t js_eval_bytecode_repl(
-  ant_t *js, const char *buf, size_t len
-) {
-  return js_eval_bytecode_mode_result(
-    js, buf, len, SV_COMPILE_REPL,
-    false, js_mkundef(), js_mkundef(), js_mkundef()
-  );
-}
-
-static inline ant_value_t sv_call_object_builtin(
-  ant_t *js, ant_value_t this_val, ant_call_params_t
-) {
-  ant_value_t saved_this = js->this_val;
-  js->this_val = this_val;
-  
-  ant_value_t res = sv_invoke_native(js, builtin_Object, args, nargs, new_target);
-  js->this_val = saved_this;
-  
-  return res;
+js_eval_result_t js_eval_bytecode_repl(ant_t *js, const char *buf, size_t len) {
+  return js_eval_bytecode_mode_result(js, buf, len, SV_COMPILE_REPL, false, js_mkundef(), js_mkundef(), js_mkundef());
 }
 
 ant_value_t sv_call_native(ant_t *js, ant_value_t func, ant_value_t this_val, ant_call_params_t) {
-  if (vtype(func) == kTypeBuiltin) return sv_call_builtin_this(js, func, this_val, args, nargs, new_target);
+  if (vtype(func) == kTypeBuiltin) return sv_invoke_builtin(js, func, this_val, func, args, nargs, new_target);
   
   if (vtype(func) == kTypeFunction) {
     ant_object_t *func_obj = js_obj_ptr(js_func_obj(func));
     ant_value_t cfunc_slot = obj_extra_get(func_obj, SLOT_CFUNC);
     
     if (vtype(cfunc_slot) == kTypeBuiltin)
-      return sv_call_native_closure(js, func, cfunc_slot, this_val, args, nargs, new_target);
+      return sv_invoke_builtin(js, cfunc_slot, this_val, func, args, nargs, new_target);
       
     ant_value_t builtin_slot = obj_extra_get(func_obj, SLOT_BUILTIN);
     if (vtype(builtin_slot) == kTypeNumber && (int)Ant_Value_AsNumberUnchecked(builtin_slot) == BUILTIN_OBJECT)
-      return sv_call_object_builtin(js, this_val, args, nargs, new_target);
+      return sv_invoke_native(js, builtin_Object, this_val, func, args, nargs, new_target);
   }
 
   return js_mkerr_typed(js, JS_ERR_TYPE, "%s is not a function", typestr(vtype(func)));
