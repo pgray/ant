@@ -62,7 +62,7 @@ static void location_set(ant_t *js, ant_value_t location, const char *name, cons
 static ant_value_t make_global_location(ant_t *js, const char *href) {
   url_state_t url;
   bool http = Ant_URL_ParseLocation(href, &url) == 0;
-  if (!http && parse_url_to_state(href, NULL, &url) != 0) return js_mkundef();
+  if (!http && parse_url_to_state(href, NULL, &url) != 0) return Ant_Value_Undefined;
 
   const char *colon = url.port[0] ? ":" : "";
   size_t host_len = strlen(url.hostname) + strlen(colon) + strlen(url.port);
@@ -70,7 +70,7 @@ static ant_value_t make_global_location(ant_t *js, const char *href) {
   
   char *host = malloc(host_len + 1);
   char *origin = malloc(origin_len + 1);
-  ant_value_t location = js_mkundef();
+  ant_value_t location = Ant_Value_Undefined;
 
   if (host && origin) {
     snprintf(host, host_len + 1, "%s%s%s", url.hostname, colon, url.port);
@@ -145,10 +145,10 @@ ant_value_t js_report_error(ant_params_t) {
     ant_value_t msg_str  = js_mkstr(js, msg, strlen(msg));
     ant_value_t file_str = js_mkstr(js, filename, strlen(filename));
     ant_value_t call_args[5] = { msg_str, file_str, Ant_Value_FromNumber(lineno), Ant_Value_FromNumber(colno), error };
-    sv_vm_call(js->vm, js, handler, global, call_args, 5, NULL, js_mkundef());
+    sv_vm_call(js->vm, js, handler, global, call_args, 5, NULL, Ant_Value_Undefined);
   }
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t globals_rejection_event(
@@ -178,7 +178,7 @@ bool js_fire_unhandled_rejection(ant_t *js, ant_value_t promise_val, ant_value_t
   if (is_err(event)) return false;
   
   ant_value_t call_args[1] = { event };
-  sv_vm_call(js->vm, js, handler, global, call_args, 1, NULL, js_mkundef());
+  sv_vm_call(js->vm, js, handler, global, call_args, 1, NULL, Ant_Value_Undefined);
   
   return true;
 }
@@ -194,7 +194,7 @@ void js_fire_rejection_handled(ant_t *js, ant_value_t promise_val, ant_value_t r
   if (is_err(event)) return;
   
   ant_value_t call_args[1] = { event };
-  sv_vm_call(js->vm, js, handler, global, call_args, 1, NULL, js_mkundef());
+  sv_vm_call(js->vm, js, handler, global, call_args, 1, NULL, Ant_Value_Undefined);
 }
 
 void init_globals_module(ant_t *js) {
@@ -204,7 +204,7 @@ void init_globals_module(ant_t *js) {
   const char *href = js->runtime.location;
   if (!href && (js->runtime.flags & ANT_RUNTIME_WEB_COMPAT)) href = file_href = location_file_href();
 
-  ant_value_t location = href ? make_global_location(js, href) : js_mkundef();
+  ant_value_t location = href ? make_global_location(js, href) : Ant_Value_Undefined;
   free(file_href);
   
   if (is_object_type(location)) {

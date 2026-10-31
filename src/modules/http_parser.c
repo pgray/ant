@@ -54,8 +54,8 @@ static ant_value_t http_parser_head_object(ant_t *js, const ant_http1_parsed_req
 
   js_set(js, out, "method", js_mkstr(js, parsed->method, strlen(parsed->method)));
   js_set(js, out, "target", js_mkstr(js, parsed->target, strlen(parsed->target)));
-  js_set(js, out, "host", parsed->host ? js_mkstr(js, parsed->host, strlen(parsed->host)) : js_mknull());
-  js_set(js, out, "contentType", parsed->content_type ? js_mkstr(js, parsed->content_type, strlen(parsed->content_type)) : js_mknull());
+  js_set(js, out, "host", parsed->host ? js_mkstr(js, parsed->host, strlen(parsed->host)) : Ant_Value_Null);
+  js_set(js, out, "contentType", parsed->content_type ? js_mkstr(js, parsed->content_type, strlen(parsed->content_type)) : Ant_Value_Null);
   js_set(js, out, "rawHeaders", http_parser_raw_headers_array(js, parsed));
   js_set(js, out, "contentLength", Ant_Value_FromNumber((double)parsed->content_length));
   js_set(js, out, "absoluteTarget", js_bool(parsed->absolute_target));
@@ -94,7 +94,7 @@ static ant_value_t js_http_parser_parse_request(ant_params_t) {
   const uint8_t *bytes = NULL;
   
   size_t len = 0;
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
 
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "parseRequest requires 1 argument");
   if (!http_parser_input_bytes(js, args[0], &bytes, &len, &err)) return err;
@@ -108,7 +108,7 @@ static ant_value_t js_http_parser_parse_request(ant_params_t) {
     &parsed, &error_reason, &error_code
   );
   
-  if (result == ANT_HTTP1_PARSE_INCOMPLETE) return js_mknull();
+  if (result == ANT_HTTP1_PARSE_INCOMPLETE) return Ant_Value_Null;
   if (result == ANT_HTTP1_PARSE_ERROR) return http_parser_make_error(js, error_reason, error_code, parsed.consumed_len);
 
   ant_value_t body = http_parser_make_buffer(js, parsed.body, parsed.body_len);
@@ -159,8 +159,8 @@ static ant_value_t js_http_parser_feed_request_parser(ant_params_t) {
 
   const uint8_t *bytes = NULL;
   size_t len = 0;
-  ant_value_t err = js_mkundef();
-  if (!http_parser_input_bytes(js, nargs > 1 ? args[1] : js_mkundef(), &bytes, &len, &err)) return err;
+  ant_value_t err = Ant_Value_Undefined;
+  if (!http_parser_input_bytes(js, nargs > 1 ? args[1] : Ant_Value_Undefined, &bytes, &len, &err)) return err;
 
   ant_http1_parsed_request_t head;
   size_t consumed = 0;
@@ -199,7 +199,7 @@ static ant_value_t js_http_parser_feed_request_parser(ant_params_t) {
 
 static ant_value_t js_http_parser_free_request_parser(ant_params_t) {
   if (nargs > 0) http_request_parser_free(args[0]);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t internal_http_parser_library(ant_t *js) {

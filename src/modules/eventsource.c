@@ -418,7 +418,7 @@ static ant_value_t js_eventsource_close(ant_params_t) {
   eventsource_state_t *es = eventsource_data(call_this);
   if (!es) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid EventSource");
   eventsource_close(js, es);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t eventsource_invalid_this(ant_t *js, ant_value_t this_obj) {

@@ -17,7 +17,7 @@ static inline void sv_clear_completion(sv_vm_t *vm) {
   if (vm->fp < 0) return;
   sv_frame_t *frame = &vm->frames[vm->fp];
   frame->completion.kind = SV_COMPLETION_NONE;
-  frame->completion.value = js_mkundef();
+  frame->completion.value = Ant_Value_Undefined;
   frame->completion.jump_ip = NULL;
   frame->completion.jump_finallies = 0;
   frame->completion.jump_pops = 0;
@@ -50,7 +50,7 @@ static inline ant_value_t sv_op_try_push(sv_vm_t *vm, ant_t *js, uint8_t *ip, sv
   h->saved_sp = vm->sp;
   frame->handler_top = (uint16_t)vm->handler_depth;
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline void sv_op_try_pop(sv_vm_t *vm) {
@@ -91,7 +91,7 @@ static inline ant_value_t sv_op_finally(sv_vm_t *vm, ant_t *js, uint8_t *ip) {
   sv_clear_completion(vm);
   frame->handler_top = (uint16_t)vm->handler_depth;
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline uint8_t *sv_vm_unwind_for_return(sv_vm_t *vm, ant_value_t ret) {
@@ -126,11 +126,11 @@ static inline uint8_t *sv_vm_unwind_for_jump(
     frame->handler_top = (uint16_t)i;
     vm->sp = h->saved_sp;
     frame->completion.kind = SV_COMPLETION_JUMP;
-    frame->completion.value = js_mkundef();
+    frame->completion.value = Ant_Value_Undefined;
     frame->completion.jump_ip = target_ip;
     frame->completion.jump_finallies = (uint16_t)(n_fin - 1);
     frame->completion.jump_pops = (uint16_t)(n_pop > used ? n_pop - used : 0);
-    vm->stack[vm->sp++] = js_mkundef();
+    vm->stack[vm->sp++] = Ant_Value_Undefined;
     return h->ip;
   }
 
@@ -227,7 +227,7 @@ static inline uint8_t *sv_vm_throw(sv_vm_t *vm, ant_value_t err, int min_fp) {
         sv_frame_t *dropped = &vm->frames[drop];
         if (vtype(dropped->arguments_obj) != kTypeUndefined) {
           js_arguments_detach(js, dropped->arguments_obj);
-          dropped->arguments_obj = js_mkundef();
+          dropped->arguments_obj = Ant_Value_Undefined;
         }
         
         if (dropped->bp) sv_close_upvalues_from_slot(vm, dropped->bp);

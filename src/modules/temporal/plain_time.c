@@ -36,7 +36,7 @@ bool temporal_plain_time_from_value(
 static ant_value_t temporal_plain_time_ctor(ant_params_t) {
   if (vtype(call_new_target) == kTypeUndefined) return temporal_require_new(js, "Temporal.PlainTime");
   int64_t fields[6] = {0};
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   for (int i = 0; i < 6 && i < nargs; i++)
     if (!temporal_integer(js, args[i], 0, &fields[i], &err)) return err;
   if (fields[0] < 0 || fields[0] > UINT8_MAX || fields[1] < 0 || fields[1] > UINT8_MAX ||
@@ -52,14 +52,14 @@ static ant_value_t temporal_plain_time_ctor(ant_params_t) {
 
 static ant_value_t temporal_plain_time_from(ant_params_t) {
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "Temporal.PlainTime.from requires an argument");
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   ArithmeticOverflow_option overflow = {0};
   if (vtype(args[0]) == kTypeString || js_get_native(args[0], TEMPORAL_PLAIN_TIME_TAG) ||
       js_get_native(args[0], TEMPORAL_PLAIN_DATETIME_TAG) ||
       js_get_native(args[0], TEMPORAL_ZONED_DATETIME_TAG)) {
     PlainTime *time;
     if (!temporal_plain_time_from_value(js, args[0], &time, &err)) return err;
-    if (!temporal_overflow_option(js, nargs > 1 ? args[1] : js_mkundef(), &overflow, &err)) {
+    if (!temporal_overflow_option(js, nargs > 1 ? args[1] : Ant_Value_Undefined, &overflow, &err)) {
       temporal_rs_PlainTime_destroy(time);
       return err;
     }
@@ -67,7 +67,7 @@ static ant_value_t temporal_plain_time_from(ant_params_t) {
   }
   PartialTime partial;
   if (!temporal_partial_time(js, args[0], &partial, true, &err)) return err;
-  if (!temporal_overflow_option(js, nargs > 1 ? args[1] : js_mkundef(), &overflow, &err)) return err;
+  if (!temporal_overflow_option(js, nargs > 1 ? args[1] : Ant_Value_Undefined, &overflow, &err)) return err;
   temporal_rs_PlainTime_from_partial_result result =
     temporal_rs_PlainTime_from_partial(partial, overflow);
   if (!result.is_ok) return temporal_error(js, result.err);
@@ -77,7 +77,7 @@ static ant_value_t temporal_plain_time_from(ant_params_t) {
 static ant_value_t temporal_plain_time_compare(ant_params_t) {
   if (nargs < 2) return js_mkerr_typed(js, JS_ERR_TYPE, "Temporal.PlainTime.compare requires two arguments");
   PlainTime *one = NULL, *two = NULL;
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   if (!temporal_plain_time_from_value(js, args[0], &one, &err)) return err;
   if (!temporal_plain_time_from_value(js, args[1], &two, &err)) {
     temporal_rs_PlainTime_destroy(one); return err;
@@ -94,7 +94,7 @@ static PlainTime *temporal_plain_time_this(ant_t *js, ant_value_t call_this, con
 
 #define PLAIN_TIME_GETTER(name, capi) \
   static ant_value_t temporal_plain_time_get_##name(ant_params_t) { \
-    (void)args; (void)nargs; ant_value_t err = js_mkundef(); \
+    (void)args; (void)nargs; ant_value_t err = Ant_Value_Undefined; \
     PlainTime *self = temporal_plain_time_this(js, call_this, "Temporal.PlainTime.prototype." #name, &err); \
     return self ? Ant_Value_FromNumber((double)capi(self)) : err; \
   }
@@ -109,7 +109,7 @@ PLAIN_TIME_GETTER(nanosecond, temporal_rs_PlainTime_nanosecond)
 static ant_value_t temporal_plain_time_binary_duration(
   ant_native_params_t, ant_value_t call_this, bool subtract
 ) {
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   PlainTime *self = temporal_plain_time_this(js, call_this,
     subtract ? "Temporal.PlainTime.prototype.subtract" : "Temporal.PlainTime.prototype.add", &err);
   if (!self) return err;
@@ -140,7 +140,7 @@ static ant_value_t temporal_plain_time_subtract(ant_params_t) {
 }
 
 static ant_value_t temporal_plain_time_equals(ant_params_t) {
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   PlainTime *self = temporal_plain_time_this(js, call_this, "Temporal.PlainTime.prototype.equals", &err);
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "PlainTime argument is required");
@@ -154,7 +154,7 @@ static ant_value_t temporal_plain_time_equals(ant_params_t) {
 static ant_value_t temporal_plain_time_difference(
   ant_native_params_t, ant_value_t call_this, bool since
 ) {
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   PlainTime *self = temporal_plain_time_this(js, call_this,
     since ? "Temporal.PlainTime.prototype.since" : "Temporal.PlainTime.prototype.until", &err);
   if (!self) return err;
@@ -162,7 +162,7 @@ static ant_value_t temporal_plain_time_difference(
   PlainTime *other;
   if (!temporal_plain_time_from_value(js, args[0], &other, &err)) return err;
   DifferenceSettings settings;
-  if (!temporal_difference_settings(js, nargs > 1 ? args[1] : js_mkundef(), &settings, &err)) {
+  if (!temporal_difference_settings(js, nargs > 1 ? args[1] : Ant_Value_Undefined, &settings, &err)) {
     temporal_rs_PlainTime_destroy(other); return err;
   }
   Duration *value = NULL;
@@ -189,7 +189,7 @@ static ant_value_t temporal_plain_time_until(ant_params_t) {
 }
 
 static ant_value_t temporal_plain_time_with(ant_params_t) {
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   PlainTime *self = temporal_plain_time_this(js, call_this, "Temporal.PlainTime.prototype.with", &err);
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "Time-like argument is required");
@@ -197,20 +197,20 @@ static ant_value_t temporal_plain_time_with(ant_params_t) {
   PartialTime partial;
   if (!temporal_partial_time(js, args[0], &partial, true, &err)) return err;
   ArithmeticOverflow_option overflow = {0};
-  if (!temporal_overflow_option(js, nargs > 1 ? args[1] : js_mkundef(), &overflow, &err)) return err;
+  if (!temporal_overflow_option(js, nargs > 1 ? args[1] : Ant_Value_Undefined, &overflow, &err)) return err;
   temporal_rs_PlainTime_with_result result = temporal_rs_PlainTime_with(self, partial, overflow);
   if (!result.is_ok) return temporal_error(js, result.err);
   return temporal_wrap(js, TEMPORAL_PLAIN_TIME, result.ok);
 }
 
 static ant_value_t temporal_plain_time_to_string(ant_params_t) {
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   PlainTime *self = temporal_plain_time_this(js, call_this, "Temporal.PlainTime.prototype.toString", &err);
   if (!self) return err;
   DiplomatWrite *write = diplomat_buffer_write_create(24);
   if (!write) return js_mkerr_typed(js, JS_ERR_INTERNAL, "Temporal string allocation failed");
   temporal_to_string_options_t options;
-  if (!temporal_to_string_options(js, nargs > 0 ? args[0] : js_mkundef(),
+  if (!temporal_to_string_options(js, nargs > 0 ? args[0] : Ant_Value_Undefined,
       TEMPORAL_TOSTRING_DIGITS | TEMPORAL_TOSTRING_ROUNDING_MODE |
         TEMPORAL_TOSTRING_SMALLEST_UNIT,
       &options, &err)) {
@@ -226,11 +226,11 @@ static ant_value_t temporal_plain_time_to_string(ant_params_t) {
 }
 
 static ant_value_t temporal_plain_time_to_string_default(ant_params_t) {
-  (void)args; (void)nargs; return temporal_plain_time_to_string(js, NULL, 0, js_mkundef(), call_this, call_func);
+  (void)args; (void)nargs; return temporal_plain_time_to_string(js, NULL, 0, Ant_Value_Undefined, call_this, call_func);
 }
 
 static ant_value_t temporal_plain_time_round(ant_params_t) {
-  ant_value_t err = js_mkundef(); PlainTime *self = temporal_plain_time_this(js, call_this, "Temporal.PlainTime.prototype.round", &err);
+  ant_value_t err = Ant_Value_Undefined; PlainTime *self = temporal_plain_time_this(js, call_this, "Temporal.PlainTime.prototype.round", &err);
   if (!self) return err; if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "round options are required");
   RoundingOptions options; if (!temporal_rounding_options(js, args[0], true, false, &options, &err)) return err;
   temporal_rs_PlainTime_round_result result = temporal_rs_PlainTime_round(self, options);

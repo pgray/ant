@@ -161,7 +161,7 @@ static bool instanceof_via_has_instance(ant_t *js, ant_value_t l, ant_value_t r,
   if (is_err(has_instance)) *out = has_instance;
   else if (hit == kTypeFunction || hit == kTypeBuiltin) {
     ant_value_t args[1] = { l };
-    ant_value_t result = sv_vm_call(js->vm, js, has_instance, r, args, 1, NULL, js_mkundef());
+    ant_value_t result = sv_vm_call(js->vm, js, has_instance, r, args, 1, NULL, Ant_Value_Undefined);
     *out = is_err(result) ? result : js_bool(js_truthy(js, result));
   } else if (hit != kTypeUndefined && hit != kTypeNull)
     *out = js_mkerr_typed(js, JS_ERR_TYPE, "Symbol.hasInstance is not callable");
@@ -172,7 +172,7 @@ static bool instanceof_via_has_instance(ant_t *js, ant_value_t l, ant_value_t r,
 
 static ant_value_t proxy_ordinary_has_instance(ant_t *js, ant_value_t l, ant_value_t r, uint8_t ltype) {
   if (ltype != kTypeObject && ltype != kTypeArray && ltype != kTypeFunction && ltype != kTypePromise && ltype != kTypeGenerator)
-    return js_false;
+    return Ant_Value_False;
   
   ant_value_t proto_val = proxy_get(js, r, "prototype", 9);
   if (is_err(proto_val)) return proto_val;
@@ -223,16 +223,16 @@ ant_value_t ordinary_has_instance(ant_t *js, ant_value_t l, ant_value_t r) {
   uint8_t ltype = vtype(l);
   if (is_proxy(r)) {
     uint8_t ttype = vtype(proxy_read_target(js, r));
-    return ttype == kTypeFunction || ttype == kTypeBuiltin ? proxy_ordinary_has_instance(js, l, r, ltype) : js_false;
+    return ttype == kTypeFunction || ttype == kTypeBuiltin ? proxy_ordinary_has_instance(js, l, r, ltype) : Ant_Value_False;
   }
   if (vtype(r) == kTypeBuiltin) return handle_cfunc_instanceof(js, l, r, ltype);
-  if (vtype(r) != kTypeFunction) return js_false;
+  if (vtype(r) != kTypeFunction) return Ant_Value_False;
 
   ant_value_t bound_target = js_resolve_bound_target(r);
   if (bound_target != r) return do_instanceof(js, l, bound_target);
 
   if (ltype != kTypeObject && ltype != kTypeArray && ltype != kTypeFunction && ltype != kTypePromise && ltype != kTypeGenerator)
-    return js_false;
+    return Ant_Value_False;
   
   ant_prop_loc_t proto_off = lkp_interned(js_func_obj(r), js->intern.prototype);
   ant_value_t ctor_proto = proto_off.obj ? js_prop_load(proto_off) : js_get(js, r, "prototype");
@@ -277,7 +277,7 @@ static inline bool try_array_key_membership(
   ant_value_t *result
 ) {
   if (is_length_key(name, name_len) && real_array_obj_ptr(array)) {
-    *result = js_true;
+    *result = Ant_Value_True;
     return true;
   }
 
@@ -286,7 +286,7 @@ static inline bool try_array_key_membership(
   if (!parse_array_index(name, name_len, array_len, &index)) return false;
 
   if (!arr_has(js, array, (ant_offset_t)index)) return false;
-  *result = js_true;
+  *result = Ant_Value_True;
   
   return true;
 }
@@ -334,24 +334,24 @@ static ant_value_t in_lookup(ant_t *js, ant_value_t r, property_key_view_t *key)
       return is_err(result) ? result : js_bool(js_truthy(js, result));
     }
     
-    ant_value_t exotic = key->is_symbol ? js_mkundef() : exotic_own_get(js, js_as_obj(cur), ptr, key->bytes, key->length);
+    ant_value_t exotic = key->is_symbol ? Ant_Value_Undefined : exotic_own_get(js, js_as_obj(cur), ptr, key->bytes, key->length);
     if (vtype(exotic) != kTypeUndefined) return js_bool(exotic != T_EMPTY);
     
     ant_value_t own = object_has_own_key(js, js_object_view(cur), key);
-    if (own != js_false) return own;
+    if (own != Ant_Value_False) return own;
   } while (
     proto_walk_next(js, &cur, &cur_t, PROTO_WALK_F_LOOKUP) &&
     !proto_walk_overflow_guard_hit_cycle(js, &guard, cur, cur_t, PROTO_WALK_F_LOOKUP)
   );
 
-  return js_false;
+  return Ant_Value_False;
 }
 
 ant_value_t js_in_str(ant_t *js, ant_value_t r, const char *key, size_t key_len) {
   if (vtype(r) == kTypeBuiltin) r = js_cfunc_promote(js, r);
   if (is_err(r)) return r;
   
-  property_key_view_t view = { .js_key = js_mkundef(), .bytes = key, .length = key_len };
+  property_key_view_t view = { .js_key = Ant_Value_Undefined, .bytes = key, .length = key_len };
   return in_lookup(js, r, &view);
 }
 

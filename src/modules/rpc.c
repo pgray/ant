@@ -194,7 +194,7 @@ static ant_value_t rpc_parse_integrity_options(
 ) {
   if (integrity) *integrity = WIRECALL_INTEGRITY_DEFAULT;
   if (has_mac_key) *has_mac_key = false;
-  if (!is_object_type(options)) return js_mkundef();
+  if (!is_object_type(options)) return Ant_Value_Undefined;
 
   ant_value_t iv = js_get(js, options, "integrity");
   if (vtype(iv) == kTypeNumber) {
@@ -231,7 +231,7 @@ static ant_value_t rpc_parse_integrity_options(
   if ((*integrity & WIRECALL_INTEGRITY_MAC) && !*has_mac_key)
     return js_mkerr_typed(js, JS_ERR_TYPE, "rpc integrity 'mac' requires macKey");
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t rpc_get_error_value(ant_t *js, const char *prefix, const char *name, ant_value_t reason) {
@@ -252,7 +252,7 @@ static ant_value_t rpc_get_error_value(ant_t *js, const char *prefix, const char
 static int rpc_write_js_value(ant_t *js, wirecall_writer *writer, ant_value_t value, const char **error) {
   uint8_t type = vtype(value);
   if (type == kTypeNull) return wirecall_writer_null(writer);
-  if (type == kTypeBool) return wirecall_writer_bool(writer, value == js_true || vdata(value) != 0);
+  if (type == kTypeBool) return wirecall_writer_bool(writer, value == Ant_Value_True || vdata(value) != 0);
   if (type == kTypeNumber) return wirecall_writer_f64(writer, Ant_Value_AsNumberUnchecked(value));
   if (type == kTypeBigInt) {
     if (bigint_is_negative(js, value)) {
@@ -309,10 +309,10 @@ static ant_value_t rpc_values_to_js_array(ant_t *js, const wirecall_value *value
   GC_ROOT_PIN(js, arr);
 
   for (size_t i = 0; i < count; i++) {
-    ant_value_t value = js_mkundef();
+    ant_value_t value = Ant_Value_Undefined;
     switch (values[i].type) {
       case WIRECALL_TYPE_NULL:
-        value = js_mknull();
+        value = Ant_Value_Null;
         break;
       case WIRECALL_TYPE_BOOL:
         value = js_bool(values[i].as.boolean);
@@ -394,7 +394,7 @@ static void rpc_route_unlink(rpc_route_t *route) {
 
 static void rpc_route_free(rpc_route_t *route) {
   if (!route) return;
-  route->handler = js_mkundef();
+  route->handler = Ant_Value_Undefined;
   free(route->name);
   free(route);
 }
@@ -413,7 +413,7 @@ static void rpc_route_finalizer(void *user_data) {
   rpc_route_t *route = (rpc_route_t *)user_data;
   if (!route) return;
   atomic_store_explicit(&route->removed, true, memory_order_release);
-  route->handler = js_mkundef();
+  route->handler = Ant_Value_Undefined;
   rpc_route_release(route);
 }
 
@@ -511,16 +511,16 @@ static void rpc_complete_task(rpc_deferred_task_t *task, ant_value_t result, boo
 
 static ant_value_t rpc_task_promise_resolve(ant_params_t) {
   rpc_deferred_task_t *task = (rpc_deferred_task_t *)js_get_native(call_func, RPC_TASK_NATIVE_TAG);
-  rpc_complete_task(task, nargs > 0 ? args[0] : js_mkundef(), false);
+  rpc_complete_task(task, nargs > 0 ? args[0] : Ant_Value_Undefined, false);
   rpc_task_release(task);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t rpc_task_promise_reject(ant_params_t) {
   rpc_deferred_task_t *task = (rpc_deferred_task_t *)js_get_native(call_func, RPC_TASK_NATIVE_TAG);
-  rpc_complete_task(task, nargs > 0 ? args[0] : js_mkundef(), true);
+  rpc_complete_task(task, nargs > 0 ? args[0] : Ant_Value_Undefined, true);
   rpc_task_release(task);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void rpc_run_task(ant_t *js, rpc_deferred_task_t *task) {
@@ -539,7 +539,7 @@ static void rpc_run_task(ant_t *js, rpc_deferred_task_t *task) {
   }
 
   ant_value_t call_args[] = { args_arr };
-  ant_value_t result = sv_vm_call(js->vm, js, task->route->handler, js_mkundef(), call_args, 1, NULL, js_mkundef());
+  ant_value_t result = sv_vm_call(js->vm, js, task->route->handler, Ant_Value_Undefined, call_args, 1, NULL, Ant_Value_Undefined);
   GC_ROOT_PIN(js, result);
 
   bool result_is_awaitable = vtype(result) == kTypePromise || (is_object_type(result) && is_callable(js_get(js, result, "then")));
@@ -767,7 +767,7 @@ static ant_value_t rpc_server_listen(ant_params_t) {
   else host = strdup("127.0.0.1");
   if (!host) {
     ant_value_t error = Ant_Exception_Pending(js)
-      ? js_take_thrown(js, js_mkundef())
+      ? js_take_thrown(js, Ant_Value_Undefined)
       : Ant_Error_ConsumeMarker(js, Ant_Error_CreateOutOfMemory(js));
     js_reject_promise(js, promise, error);
     return promise;
@@ -853,7 +853,7 @@ static ant_value_t rpc_server_close(ant_params_t) {
   if (!server) return Ant_Exception_Current(js);
   ant_value_t promise = js_mkpromise(js);
   rpc_server_close_impl(server);
-  js_resolve_promise(js, promise, js_mkundef());
+  js_resolve_promise(js, promise, Ant_Value_Undefined);
   return promise;
 }
 
@@ -865,7 +865,7 @@ static ant_value_t rpc_server_ctor(ant_params_t) {
   if (!server) return Ant_Error_CreateOutOfMemory(js);
   server->js = js;
   server->obj = call_this;
-  server->listen_promise = js_mkundef();
+  server->listen_promise = Ant_Value_Undefined;
   pthread_mutex_init(&server->task_mutex, NULL);
 
   if (wirecall_server_init(&server->server) != 0) {
@@ -882,7 +882,7 @@ static ant_value_t rpc_server_ctor(ant_params_t) {
     ant_iter_t iter = js_prop_iter_begin(js, args[0]);
     const char *key = NULL;
     size_t key_len = 0;
-    ant_value_t handler = js_mkundef();
+    ant_value_t handler = Ant_Value_Undefined;
     while (js_prop_iter_next(&iter, &key, &key_len, &handler)) {
       ant_value_t name = js_mkstr(js, key, key_len);
       ant_value_t r = rpc_server_register_impl(js, call_this, server, name, handler);
@@ -1012,7 +1012,7 @@ static void rpc_client_async_cb(uv_async_t *handle) {
           client->connected = false;
           close_after_drain = true;
         }
-        js_resolve_promise(js, op->promise, js_mkundef());
+        js_resolve_promise(js, op->promise, Ant_Value_Undefined);
       }
     } else {
       js_reject_promise(js, op->promise, js_mkerr(js, "%s", op->error[0] ? op->error : "RpcClient operation failed"));
@@ -1121,7 +1121,7 @@ static ant_value_t rpc_client_close(ant_params_t) {
   if (!client) return Ant_Exception_Current(js);
   ant_value_t promise = js_mkpromise(js);
   if (client->closed || client->closing) {
-    js_resolve_promise(js, promise, js_mkundef());
+    js_resolve_promise(js, promise, Ant_Value_Undefined);
     return promise;
   }
   rpc_client_op_t *op = calloc(1, sizeof(*op));

@@ -603,17 +603,17 @@ static void crash_report_print_upload_error(const char *message) {
 }
 
 static ant_value_t crash_report_noop(ant_params_t) {
-  if (crash_report_status_printed) return js_mkundef();
+  if (crash_report_status_printed) return Ant_Value_Undefined;
   crash_report_status_printed = true;
 
   if (args && nargs > 0) crash_report_print_upload_error(js_str(js, args[0]));
   else crash_report_print_upload_failed();
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t crash_report_print_url(ant_params_t) {
-  if (nargs < 1) return js_mkundef();
+  if (nargs < 1) return Ant_Value_Undefined;
 
   size_t len = 0;
   const char *s = vtype(args[0]) == kTypeString ? js_getstr(js, args[0], &len) : NULL;
@@ -623,7 +623,7 @@ static ant_value_t crash_report_print_url(ant_params_t) {
       crash_report_status_printed = true;
       crash_report_print_upload_failed();
     }
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   crash_report_status_printed = true;
@@ -634,7 +634,7 @@ static ant_value_t crash_report_print_url(ant_params_t) {
 }
 
 static ant_value_t crash_report_response_text(ant_params_t) {
-  if (nargs < 1) return js_mkundef();
+  if (nargs < 1) return Ant_Value_Undefined;
 
   ant_value_t text_fn = js_getprop_fallback(js, args[0], "text");
   if (is_err(text_fn)) return text_fn;
@@ -645,10 +645,10 @@ static ant_value_t crash_report_response_text(ant_params_t) {
       crash_report_print_upload_failed();
       fputs("Response.text is not available.\n", stderr);
     }
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
-  ant_value_t text_promise = sv_vm_call(js->vm, js, text_fn, args[0], NULL, 0, NULL, js_mkundef());
+  ant_value_t text_promise = sv_vm_call(js->vm, js, text_fn, args[0], NULL, 0, NULL, Ant_Value_Undefined);
   if (is_err(text_promise)) return text_promise;
 
   ant_value_t print_promise = js_promise_then(
@@ -661,7 +661,7 @@ static ant_value_t crash_report_response_text(ant_params_t) {
   promise_mark_handled(text_promise);
   promise_mark_handled(print_promise);
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void crash_report_url(char *out, size_t out_cap) {
@@ -701,7 +701,7 @@ static char *crash_read_stdin(size_t *len) {
 }
 
 static ant_value_t crash_get(ant_t *js, ant_value_t obj, const char *key) {
-  if (!is_object_type(obj)) return js_mkundef();
+  if (!is_object_type(obj)) return Ant_Value_Undefined;
   return js_get(js, obj, key);
 }
 
@@ -885,7 +885,7 @@ int ant_crash_run_internal_report(ant_t *js) {
     return EXIT_SUCCESS;
   }
 
-  ant_value_t report_json = js_json_stringify(js, &report, 1, js_mkundef(), js_mkundef(), js_mkundef());
+  ant_value_t report_json = js_json_stringify(js, &report, 1, Ant_Value_Undefined, Ant_Value_Undefined, Ant_Value_Undefined);
   if (vtype(report_json) != kTypeString) {
     crash_report_print_upload_failed();
     free(payload);
@@ -913,7 +913,7 @@ int ant_crash_run_internal_report(ant_t *js) {
   js_set(js, init, "body", js_mkstr(js, report_payload, report_payload_len));
 
   ant_value_t fetch_args[2] = { js_mkstr(js, url, strlen(url)), init };
-  ant_value_t fetch_promise = ant_fetch(js, fetch_args, 2, js_mkundef(), js_mkundef(), js_mkundef());
+  ant_value_t fetch_promise = ant_fetch(js, fetch_args, 2, Ant_Value_Undefined, Ant_Value_Undefined, Ant_Value_Undefined);
 
   if (is_err(fetch_promise)) {
     crash_report_status_printed = true;

@@ -6,7 +6,7 @@ static ant_value_t regexp_match_fast_global(ant_t *js, const regexp_fast_t *fast
 
   regexp_fast_scan_t scan;
   regexp_fast_scan_begin(js, &scan, fast, str);
-  ant_value_t error = js_mkundef();
+  ant_value_t error = Ant_Value_Undefined;
   for (;;) {
     PCRE2_SIZE *ovector;
     uint32_t ovcount;
@@ -20,7 +20,7 @@ static ant_value_t regexp_match_fast_global(ant_t *js, const regexp_fast_t *fast
   regexp_fast_scan_end(js, &scan);
 
   if (is_err(error)) return error;
-  return scan.count == 0 ? js_mknull() : matches;
+  return scan.count == 0 ? Ant_Value_Null : matches;
 }
 
 ant_value_t regexp_match_fast(ant_t *js, ant_value_t rx, const regexp_fast_t *fast, ant_value_t str) {
@@ -52,7 +52,7 @@ static ant_value_t regexp_symbol_match_impl(ant_t *js, ant_value_t rx, ant_value
   for (;;) {
     ant_value_t result = regexp_exec_abstract(js, rx, str);
     if (is_err(result)) return result;
-    if (vtype(result) == kTypeNull) return n == 0 ? js_mknull() : mkval(kTypeArray, vdata(A));
+    if (vtype(result) == kTypeNull) return n == 0 ? Ant_Value_Null : mkval(kTypeArray, vdata(A));
 
     ant_value_t match_str = js_tostring_val(js, js_arr_get(js, result, 0));
     if (is_err(match_str)) return match_str;
@@ -90,7 +90,7 @@ ant_value_t regexp_matchall_next(ant_params_t) {
   uint32_t state = vtype(state_val) == kTypeNumber ? (uint32_t)Ant_Value_AsNumberUnchecked(state_val) : MATCHALL_DONE;
   
   if (state & MATCHALL_DONE)
-    return js_iter_result(js, false, js_mkundef());
+    return js_iter_result(js, false, Ant_Value_Undefined);
 
   regexp_fast_t fast;
   if (regexp_fast_get(js, rx, REGEXP_FAST_PRISTINE, &fast)) {
@@ -98,7 +98,7 @@ ant_value_t regexp_matchall_next(ant_params_t) {
     if (is_err(result)) return result;
     if (vtype(result) == kTypeNull || !(state & MATCHALL_GLOBAL))
       js_set_slot(call_this, SLOT_MATCHALL_STATE, Ant_Value_FromNumber(state | MATCHALL_DONE));
-    if (vtype(result) == kTypeNull) return js_iter_result(js, false, js_mkundef());
+    if (vtype(result) == kTypeNull) return js_iter_result(js, false, Ant_Value_Undefined);
     if (state & MATCHALL_GLOBAL) {
       ant_offset_t match_len;
       vstr(js, js_arr_get(js, result, 0), &match_len);
@@ -120,7 +120,7 @@ ant_value_t regexp_matchall_next(ant_params_t) {
 
   if (vtype(result) == kTypeNull) {
     js_set_slot(call_this, SLOT_MATCHALL_STATE, Ant_Value_FromNumber(state | MATCHALL_DONE));
-    return js_iter_result(js, false, js_mkundef());
+    return js_iter_result(js, false, Ant_Value_Undefined);
   }
 
   if (state & MATCHALL_GLOBAL) {
@@ -153,7 +153,7 @@ static ant_value_t regexp_matchall_fast(ant_t *js, ant_value_t rx, const regexp_
   js_set_proto_init(matcher, js->builtins.regexp_proto);
   ant_value_t flags = regexp_flags_value(js, rx);
   if (!regexp_literal_init_fast(js, matcher, js_get_slot(rx, SLOT_DATA), flags, fast->compiled))
-    return js_mkundef();
+    return Ant_Value_Undefined;
   ant_object_prop_set_unchecked(
     js_obj_ptr(matcher), REGEXP_LAST_INDEX_SLOT,
     ant_object_prop_get_unchecked(fast->obj, fast->li_slot)
@@ -251,7 +251,7 @@ ant_value_t builtin_string_matchAll(ant_params_t) {
 
   ant_value_t ctor_args[2] = { pattern_str, js_mkstr(js, "g", 1) };
   ant_value_t regexp_ctor = js->builtins.regexp_ctor_value;
-  ant_value_t rx = sv_vm_call(js->vm, js, regexp_ctor, js_mkundef(), ctor_args, 2, NULL, regexp_ctor);
+  ant_value_t rx = sv_vm_call(js->vm, js, regexp_ctor, Ant_Value_Undefined, ctor_args, 2, NULL, regexp_ctor);
   if (is_err(rx)) return rx;
 
   ant_value_t ma_args[1] = { str };
@@ -322,7 +322,7 @@ ant_value_t builtin_string_search(ant_params_t) {
   ant_value_t str = Ant_String_CoerceThis(js, call_this, "search");
   
   if (is_err(str)) return str;
-  ant_value_t pattern = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t pattern = nargs > 0 ? args[0] : Ant_Value_Undefined;
 
   if (is_object_type(pattern)) {
     regexp_fast_t fast;
@@ -345,7 +345,7 @@ ant_value_t builtin_string_match(ant_params_t) {
   ant_value_t str = Ant_String_CoerceThis(js, call_this, "match");
   
   if (is_err(str)) return str;
-  ant_value_t pattern = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t pattern = nargs > 0 ? args[0] : Ant_Value_Undefined;
 
   if (is_object_type(pattern)) {
     regexp_fast_t fast;

@@ -660,7 +660,7 @@ ant_value_t js_mkstr_utf8_try(ant_t *js, const void *ptr, size_t len, size_t *ou
 
   bool ascii;
   *out_valid = utf8_copy_valid_prefix(bytes, (const char *)ptr, len, &ascii);
-  return *out_valid == len ? mkstr_utf8_finish(str, ascii) : js_mkundef();
+  return *out_valid == len ? mkstr_utf8_finish(str, ascii) : Ant_Value_Undefined;
 }
 
 ant_value_t js_mkstr_utf8(ant_t *js, const void *ptr, size_t len) {
@@ -762,7 +762,7 @@ ant_value_t js_mkrope(ant_t *js, ant_value_t left, ant_value_t right, ant_offset
   rope->mark_epoch = 0;
   rope->left = left;
   rope->right = right;
-  rope->cached = js_mkundef();
+  rope->cached = Ant_Value_Undefined;
   
   return ant_mkrope_value(rope);
 }

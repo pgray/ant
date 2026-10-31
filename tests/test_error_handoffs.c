@@ -51,19 +51,19 @@ _Static_assert(sizeof(((ant_object_t *)0)->u) == 16,
 
 static ant_value_t handled_native_failure(ant_params_t) {
   assert(!Ant_Exception_Pending(js));
-  ant_value_t failure = js_throw(js, js_mkundef());
+  ant_value_t failure = js_throw(js, Ant_Value_Undefined);
   assert(is_err(failure));
   assert(vtype(js_take_thrown(js, failure)) == kTypeUndefined);
   return Ant_Value_FromNumber(42);
 }
 
 static ant_value_t forgotten_native_failure(ant_params_t) {
-  js_throw(js, js_mknull());
+  js_throw(js, Ant_Value_Null);
   return Ant_Value_FromNumber(42);
 }
 
 static ant_value_t detached_native_failure(ant_params_t) {
-  ant_value_t failure = js_throw(js, js_mknull());
+  ant_value_t failure = js_throw(js, Ant_Value_Null);
   Ant_Exception_Clear(js);
   return failure;
 }
@@ -98,9 +98,9 @@ static void CheckFunctionAllocationFailure(ant_t *js) {
   sv_debug_enable(SV_DEBUG_GC_DISABLE);
   ant_fixed_arena_t closures = ExhaustArena(&js->closure_arena);
   for (int has_oom = 0; has_oom < 2; has_oom++) {
-    js->exception_oom = has_oom ? oom : js_mkundef();
+    js->exception_oom = has_oom ? oom : Ant_Value_Undefined;
     for (int pending = 0; pending < 2; pending++) {
-      ant_value_t previous = pending ? js_throw(js, Ant_Value_FromNumber(73)) : js_mkundef();
+      ant_value_t previous = pending ? js_throw(js, Ant_Value_FromNumber(73)) : Ant_Value_Undefined;
       ant_value_t result = js_obj_to_func_ex(js, obj, SV_CALL_HAS_BOUND_THIS);
       assert(is_err(result) && Ant_Exception_Peek(js) == result);
       if (pending) assert(result == previous);
@@ -116,7 +116,7 @@ static void CheckFunctionAllocationFailure(ant_t *js) {
   }
 
   // If even the fallback Error cannot be allocated, return a tagged failure.
-  js->exception_oom = js_mkundef();
+  js->exception_oom = Ant_Value_Undefined;
   ant_fixed_arena_t objects = ExhaustArena(&js->obj_arena);
   ant_value_t result = js_obj_to_func_ex(js, obj, 0);
   js->obj_arena = objects;
@@ -124,15 +124,12 @@ static void CheckFunctionAllocationFailure(ant_t *js) {
   Ant_Exception_Clear(js);
   js->exception_oom = oom;
 
-  ant_value_t saved_this = js->this_val;
   ant_value_t targets[] = { native, proxy };
   for (size_t i = 0; i < sizeof(targets) / sizeof(targets[0]); i++) {
-    js->this_val = targets[i];
-    result = js_as_cfunc(bind)(js, NULL, 0, js_mkundef());
+    result = js_as_cfunc(bind)(js, NULL, 0, Ant_Value_Undefined, targets[i], bind);
     assert(result == oom && Ant_Exception_Peek(js) == result);
     Ant_Exception_Clear(js);
   }
-  js->this_val = saved_this;
   js->closure_arena = closures;
   if (!saved_gc_disabled) sv_debug_disable(SV_DEBUG_GC_DISABLE);
   assert(vtype(js_obj_to_func_ex(js, obj, 0)) == kTypeFunction);
@@ -160,7 +157,7 @@ static ant_value_t collect_finally_completion(ant_params_t) {
   gc_run(js);
   assert(gc_obj_is_marked(js, js_obj_ptr(value)));
   assert(js_get(js, value, "answer") == Ant_Value_FromNumber(42));
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void CheckFinallyCompletionRoots(ant_t *js) {
@@ -185,7 +182,7 @@ static void CheckFinallyCompletionRoots(ant_t *js) {
     "yield 1; try { throw 0; } catch {} } })();"
     "__finallyGenerator.next();";
   ant_value_t status = js_eval_bytecode(js, suspended, strlen(suspended));
-  if (is_err(status)) print_error_value(js, status, js_mkundef(), "suspended finally: ");
+  if (is_err(status)) print_error_value(js, status, Ant_Value_Undefined, "suspended finally: ");
   assert(!is_err(status));
   gc_run_minor(js);
   gc_run(js);
@@ -217,25 +214,25 @@ static ant_value_t StartTestAwait(ant_t *js, ant_value_t value, coroutine_t **co
     "globalThis.__awaitOutput = (async function() {"
     "await __awaitGate; const value = await __awaitInput;"
     "globalThis.__awaitResumed = true; return value; })();";
-  js_set(js, js->global, "__awaitResumed", js_false);
+  js_set(js, js->global, "__awaitResumed", Ant_Value_False);
   bool was_draining = js->microtasks_draining;
   js->microtasks_draining = true;
   ant_value_t status = js_eval_bytecode(js, source, strlen(source));
   assert(!is_err(status));
   coroutine_t *captured = GateAwaitCoroutine(js, gate);
   coroutine_retain(captured);
-  Ant_Coroutine_SettleAndResume(js, captured, js_mkundef(), false);
+  Ant_Coroutine_SettleAndResume(js, captured, Ant_Value_Undefined, false);
   js->microtasks_draining = was_draining;
   assert(captured->await_registered && captured->awaited_promise != gate);
   assert(captured->act && captured->act->frame_count > 0);
   *coro = captured;
-  js_set(js, js->global, "__awaitGate", js_mkundef());
+  js_set(js, js->global, "__awaitGate", Ant_Value_Undefined);
   GC_ROOT_RESTORE(js, gate_mark);
   ant_value_t output = js_get(js, js->global, "__awaitOutput");
   assert(vtype(output) == kTypePromise);
   promise_mark_handled(output);
-  js_set(js, js->global, "__awaitInput", js_mkundef());
-  js_set(js, js->global, "__awaitOutput", js_mkundef());
+  js_set(js, js->global, "__awaitInput", Ant_Value_Undefined);
+  js_set(js, js->global, "__awaitOutput", Ant_Value_Undefined);
   return output;
 }
 
@@ -243,7 +240,7 @@ static void CheckAwaitValueRoots(ant_t *js) {
   for (int input_kind = 0; input_kind < 3; input_kind++) {
   for (int cancel = 0; cancel < 2; cancel++) {
     GC_ROOT_SAVE(mark, js);
-    ant_value_t output = js_mkundef();
+    ant_value_t output = Ant_Value_Undefined;
     GC_ROOT_PIN(js, output);
     GC_ROOT_SAVE(input_mark, js);
     ant_value_t awaited = js_mkpromise(js);
@@ -277,7 +274,7 @@ static void CheckAwaitValueRoots(ant_t *js) {
     }
     process_microtasks(js);
     assert(!coro->await_registered);
-    ant_value_t resumed = js_mkundef();
+    ant_value_t resumed = Ant_Value_Undefined;
     js_promise_settlement_t state = js_promise_get_settlement(js, output, &resumed);
     assert(state == (cancel ? JS_PROMISE_PENDING :
       input_kind == 2 ? JS_PROMISE_REJECTED : JS_PROMISE_FULFILLED));
@@ -296,7 +293,7 @@ static void RegisterTestAwait(ant_t *js, coroutine_t *coro, ant_value_t value) {
     assert(result.state == JS_AWAIT_PENDING);
   } else {
     assert(queue_await_resume_job(coro, value));
-    coro->awaited_promise = js_mkundef();
+    coro->awaited_promise = Ant_Value_Undefined;
     coro->await_registered = true;
   }
 }
@@ -339,7 +336,7 @@ static void CheckCancelledAwaitReplacement(ant_t *js) {
         process_microtasks(js);
       }
       assert(!coro->await_registered);
-      ant_value_t resumed = js_mkundef();
+      ant_value_t resumed = Ant_Value_Undefined;
       js_promise_settlement_t state = js_promise_get_settlement(js, output, &resumed);
       assert(state == (next_kind == 3 ? JS_PROMISE_REJECTED : JS_PROMISE_FULFILLED));
       assert(resumed == Ant_Value_FromNumber(22));
@@ -364,7 +361,7 @@ static void CheckExplicitAwaitResume(ant_t *js) {
     Ant_Coroutine_SettleAndResume(js, coro, value, rejected);
     process_microtasks(js);
 
-    ant_value_t resumed = js_mkundef();
+    ant_value_t resumed = Ant_Value_Undefined;
     js_promise_settlement_t state = js_promise_get_settlement(js, output, &resumed);
     assert(state == (rejected ? JS_PROMISE_REJECTED : JS_PROMISE_FULFILLED));
     assert(resumed == value && !Ant_Exception_Pending(js));
@@ -378,11 +375,11 @@ static ant_value_t check_callback(ant_params_t) {
   assert(!Ant_Exception_Pending(js));
   assert(nargs > 0 && args[0] == expected_reason);
   callback_calls++;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t throwing_callback(ant_params_t) {
-  check_callback(js, args, nargs, call_new_target);
+  check_callback(js, args, nargs, call_new_target, call_this, call_func);
   return js_throw(js, callback_throw);
 }
 
@@ -420,12 +417,12 @@ static ant_value_t FailOnceAttachment(ant_params_t) {
 
 static ant_value_t RemoveOnceListener(ant_params_t) {
   once_removes++;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t UnrelatedAbortListener(ant_params_t) {
   once_unrelated_aborts++;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void CheckOnceAttachmentCleanup(ant_t *js) {
@@ -439,7 +436,7 @@ static void CheckOnceAttachmentCleanup(ant_t *js) {
   GC_ROOT_PIN(js, reason);
   ant_value_t event_name = js_mkstr(js, "ready", 5);
   GC_ROOT_PIN(js, event_name);
-  ant_value_t reasons[] = { js_mkundef(), js_mknull(), reason };
+  ant_value_t reasons[] = { Ant_Value_Undefined, Ant_Value_Null, reason };
   const struct { const char *name; bool getter; } failures[] = {
     { "on", true }, { "once", true }, { "once", false }
   };
@@ -447,10 +444,10 @@ static void CheckOnceAttachmentCleanup(ant_t *js) {
   for (size_t failure = 0; failure < sizeof(failures) / sizeof(failures[0]); failure++) {
     for (size_t i = 0; i < sizeof(reasons) / sizeof(reasons[0]); i++) {
       GC_ROOT_SAVE(case_mark, js);
-      once_signal = abort_signal_create_dependent(js, js_mkundef());
+      once_signal = abort_signal_create_dependent(js, Ant_Value_Undefined);
       assert(abort_signal_is_signal(once_signal));
       GC_ROOT_PIN(js, once_signal);
-      once_saved_abort = js_mkundef();
+      once_saved_abort = Ant_Value_Undefined;
       GC_ROOT_PIN(js, once_saved_abort);
       ant_value_t target = Ant_Object_CreateBare(js);
       GC_ROOT_PIN(js, target);
@@ -468,7 +465,7 @@ static void CheckOnceAttachmentCleanup(ant_t *js) {
       expected_reason = reasons[i];
       once_removes = once_unrelated_aborts = 0;
       ant_value_t args[] = { target, event_name, options };
-      ant_value_t p = js_as_cfunc(once)(js, args, 3, js_mkundef());
+      ant_value_t p = js_as_cfunc(once)(js, args, 3, Ant_Value_Undefined, Ant_Value_Undefined, once);
       GC_ROOT_PIN(js, p);
       assert(vtype(p) == kTypePromise && !Ant_Exception_Pending(js));
       promise_mark_handled(p);
@@ -480,9 +477,9 @@ static void CheckOnceAttachmentCleanup(ant_t *js) {
       gc_mark_eventemitter_object(js, once_signal, InspectOnceAbortListener);
       assert(once_abort_edges == 1);
       // Even a saved callback must ignore the settled, failed operation.
-      ant_value_t result = sv_vm_call(js->vm, js, once_saved_abort, once_signal, NULL, 0, NULL, js_mkundef());
+      ant_value_t result = sv_vm_call(js->vm, js, once_saved_abort, once_signal, NULL, 0, NULL, Ant_Value_Undefined);
       assert(!is_err(result) && !Ant_Exception_Pending(js) && once_removes == 0);
-      signal_do_abort(js, once_signal, js_mknull());
+      signal_do_abort(js, once_signal, Ant_Value_Null);
       assert(once_unrelated_aborts == 1 && once_removes == 0);
       check_rejected(p, expected_reason);
       GC_ROOT_RESTORE(js, case_mark);
@@ -546,21 +543,21 @@ static void CheckSandboxExceptionRecords(ant_t *js) {
   ant_value_t record = Ant_Exception_Raise(js, error, stack);
   GC_ROOT_PIN(js, record);
   // Serialize an older record while a different completion is current.
-  Ant_Exception_Raise(js, Ant_Value_FromNumber(73), js_mkundef());
-  CheckSandboxDiagnostic(js, record, js_mkundef(), "TypeError", "sandbox diagnostic",
+  Ant_Exception_Raise(js, Ant_Value_FromNumber(73), Ant_Value_Undefined);
+  CheckSandboxDiagnostic(js, record, Ant_Value_Undefined, "TypeError", "sandbox diagnostic",
     "captured sandbox stack", "captured sandbox stack");
-  record = Ant_Exception_Raise(js, error, js_mkundef());
+  record = Ant_Exception_Raise(js, error, Ant_Value_Undefined);
   Ant_Exception_Clear(js);
-  CheckSandboxDiagnostic(js, record, js_mkundef(), "TypeError", "sandbox diagnostic", "", "sandbox diagnostic");
+  CheckSandboxDiagnostic(js, record, Ant_Value_Undefined, "TypeError", "sandbox diagnostic", "", "sandbox diagnostic");
   CheckSandboxDiagnostic(js, record, stack, "TypeError", "sandbox diagnostic",
     "captured sandbox stack", "captured sandbox stack");
-  CheckSandboxDiagnostic(js, error, js_mkundef(), "TypeError", "sandbox diagnostic", "", "");
+  CheckSandboxDiagnostic(js, error, Ant_Value_Undefined, "TypeError", "sandbox diagnostic", "", "");
   record = Ant_Exception_Raise(js, Ant_Value_FromNumber(73), stack);
   Ant_Exception_Clear(js);
-  CheckSandboxDiagnostic(js, record, js_mkundef(), "Error", "73", "captured sandbox stack", "captured sandbox stack");
-  record = Ant_Exception_Raise(js, js_mkundef(), js_mkundef());
+  CheckSandboxDiagnostic(js, record, Ant_Value_Undefined, "Error", "73", "captured sandbox stack", "captured sandbox stack");
+  record = Ant_Exception_Raise(js, Ant_Value_Undefined, Ant_Value_Undefined);
   Ant_Exception_Clear(js);
-  CheckSandboxDiagnostic(js, record, js_mkundef(), "Error", "undefined", "", "undefined");
+  CheckSandboxDiagnostic(js, record, Ant_Value_Undefined, "Error", "undefined", "", "undefined");
   GC_ROOT_RESTORE(js, mark);
 }
 
@@ -576,7 +573,7 @@ static void CheckSandboxUncaughtFrames(ant_t *js) {
   sandbox_error_frames = 0;
   for (unsigned i = 0; i < sizeof(values) / sizeof(values[0]); i++) {
     sandbox_expected_display = i < 2 ? captured : "sandbox diagnostic";
-    Ant_Exception_Raise(js, values[i], i < 2 ? stack : js_mkundef());
+    Ant_Exception_Raise(js, values[i], i < 2 ? stack : Ant_Value_Undefined);
     assert(sandbox_send_uncaught_throw(js));
     assert(!Ant_Exception_Pending(js) && sandbox_error_frames == i + 1);
     assert(!sandbox_send_uncaught_throw(js));
@@ -587,10 +584,10 @@ static void CheckSandboxUncaughtFrames(ant_t *js) {
 
 static void CheckFormattedErrorValues(ant_t *js) {
   GC_ROOT_SAVE(mark, js);
-  ant_value_t error = js_mkundef();
+  ant_value_t error = Ant_Value_Undefined;
   GC_ROOT_PIN(js, error);
   for (int pending = 0; pending < 2; pending++) {
-    ant_value_t previous = pending ? js_throw(js, js_mkundef()) : js_mkundef();
+    ant_value_t previous = pending ? js_throw(js, Ant_Value_Undefined) : Ant_Value_Undefined;
     js_err_type_t type = pending ? JS_ERR_TYPE | JS_ERR_NO_STACK : JS_ERR_GENERIC;
     error = Ant_Error_CreateFormatted(js, type, "%s %d%%", "literal %s", 25);
     assert(vtype(error) == kTypeObject && Ant_Exception_Peek(js) == previous);
@@ -611,12 +608,12 @@ static void CheckErrorMessage(ant_t *js, ant_value_t error, const char *expected
 
 static void CheckLongErrorMessages(ant_t *js) {
   GC_ROOT_SAVE(mark, js);
-  ant_value_t previous = js_throw(js, js_mkundef());
+  ant_value_t previous = js_throw(js, Ant_Value_Undefined);
   GC_ROOT_PIN(js, previous);
   ant_value_t props = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, props);
   js_set(js, props, "code", Ant_Value_FromNumber(73));
-  ant_value_t error = js_mkundef();
+  ant_value_t error = Ant_Value_Undefined;
   GC_ROOT_PIN(js, error);
 
   const size_t lengths[] = {0, 251, 252, 253, 255, 256, 257, 4096, 16384, 20000};
@@ -635,7 +632,7 @@ static void CheckLongErrorMessages(ant_t *js) {
     assert(Ant_Exception_Peek(js) == previous);
 
     size_t payload_len = 0;
-    uint8_t *payload = ant_sandbox_build_error_payload(js, error, js_mkundef(), &payload_len);
+    uint8_t *payload = ant_sandbox_build_error_payload(js, error, Ant_Value_Undefined, &payload_len);
     assert(payload);
     error = ant_sandbox_decode_error_value(js, payload, payload_len);
     memset(payload, 0, payload_len);
@@ -675,10 +672,10 @@ int main(void) {
   char stack_base;
   ant_t *js = Ant_Create(nullptr);
   assert(js);
-  Ant_Exception_Set(js, js_true);
-  assert(!Ant_Exception_Pending(js) && Ant_Exception_Peek(js) == js_mkundef());
+  Ant_Exception_Set(js, Ant_Value_True);
+  assert(!Ant_Exception_Pending(js) && Ant_Exception_Peek(js) == Ant_Value_Undefined);
   Ant_Exception_Set(js, Ant_Value_FromNumber(7));
-  assert(!Ant_Exception_Pending(js) && Ant_Exception_Peek(js) == js_mkundef());
+  assert(!Ant_Exception_Pending(js) && Ant_Exception_Peek(js) == Ant_Value_Undefined);
   js_setstackbase(js, &stack_base);
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, expected_reason);
@@ -700,7 +697,7 @@ int main(void) {
   js_reject_promise(js, p, error);
   assert(Ant_Exception_Pending(js) && Ant_Exception_Value(js, Ant_Exception_Peek(js)) == error);
   check_rejected(p, error);
-  js_take_thrown(js, js_mkundef());
+  js_take_thrown(js, Ant_Value_Undefined);
 
   // Delivering an old payload marker must preserve a newer pending exception.
   p = promise(js);
@@ -710,9 +707,9 @@ int main(void) {
   js_reject_promise(js, p, marker);
   assert(Ant_Exception_Pending(js) && Ant_Exception_Value(js, Ant_Exception_Peek(js)) == callback_throw && Ant_Exception_Stack(js, Ant_Exception_Peek(js)) == saved_stack);
   check_rejected(p, error);
-  js_take_thrown(js, js_mkundef());
+  js_take_thrown(js, Ant_Value_Undefined);
 
-  ant_value_t reasons[] = { js_mkundef(), js_mknull(), js_false, Ant_Value_FromNumber(17), error };
+  ant_value_t reasons[] = { Ant_Value_Undefined, Ant_Value_Null, Ant_Value_False, Ant_Value_FromNumber(17), error };
   for (size_t i = 0; i < sizeof(reasons) / sizeof(reasons[0]); i++) {
     expected_reason = reasons[i];
     p = promise(js);
@@ -729,11 +726,11 @@ int main(void) {
 
     ant_value_t args[9] = { js_throw(js, expected_reason), Ant_Value_FromNumber(42) };
     ant_value_t original = args[0];
-    ant_value_t result = Ant_Error_CallCallback(js, Ant_Function_Create(check_callback), js_mkundef(), args, 9);
+    ant_value_t result = Ant_Error_CallCallback(js, Ant_Function_Create(check_callback), Ant_Value_Undefined, args, 9);
     assert(!is_err(result) && !Ant_Exception_Pending(js) && args[0] == original && args[1] == Ant_Value_FromNumber(42));
     callback_throw = expected_reason;
     args[0] = js_throw(js, expected_reason);
-    result = Ant_Error_CallCallback(js, Ant_Function_Create(throwing_callback), js_mkundef(), args, 2);
+    result = Ant_Error_CallCallback(js, Ant_Function_Create(throwing_callback), Ant_Value_Undefined, args, 2);
     assert(is_err(result) && Ant_Exception_Pending(js) && Ant_Exception_Value(js, Ant_Exception_Peek(js)) == callback_throw);
     js_take_thrown(js, result);
   }
@@ -741,26 +738,26 @@ int main(void) {
 
   p = promise(js);
   js_resolve_promise(js, p, Ant_Value_FromNumber(99));
-  js_reject_promise(js, p, js_throw(js, js_mkundef()));
+  js_reject_promise(js, p, js_throw(js, Ant_Value_Undefined));
   ant_promise_state_t *settled = ant_object_promise_state(js_obj_ptr(js_as_obj(p)));
   assert(!Ant_Exception_Pending(js) && settled->state == 1 && settled->value == Ant_Value_FromNumber(99));
 
   // Internal observation queues setup failures; it does not call the owner inline.
-  expected_reason = js_mkundef();
+  expected_reason = Ant_Value_Undefined;
   p = promise(js);
   js_set_getter_desc(js, js_as_obj(p), "constructor", 11, Ant_Function_Create(constructor_getter), JS_DESC_C);
-  Ant_Promise_Observe(js, p, js_mkundef(), Ant_Function_Create(check_callback));
+  Ant_Promise_Observe(js, p, Ant_Value_Undefined, Ant_Function_Create(check_callback));
   assert(!Ant_Exception_Pending(js) && callback_calls == 10);
   process_microtasks(js);
   assert(callback_calls == 11 && !Ant_Exception_Pending(js));
 
   // A completion retains its own payload and stack after another throw and
   // after the ambient propagation handle has been cleared.
-  ant_value_t first = js_throw(js, js_mkundef());
+  ant_value_t first = js_throw(js, Ant_Value_Undefined);
   GC_ROOT_PIN(js, first);
   ant_value_t first_stack = Ant_Exception_Stack(js, first);
   GC_ROOT_PIN(js, first_stack);
-  ant_value_t second = js_throw(js, js_mknull());
+  ant_value_t second = js_throw(js, Ant_Value_Null);
   GC_ROOT_PIN(js, second);
   assert(first != second && gc_value_is_heap_ref(first));
   assert(!gc_value_is_heap_ref(SV_JIT_RETRY_INTERP));
@@ -778,10 +775,10 @@ int main(void) {
   ant_value_t ordinary = Ant_Error_Create(js, JS_ERR_TYPE, "ordinary value");
   assert(!is_err(ordinary) && Ant_Exception_Peek(js) == second);
 
-  ant_value_t success = sv_invoke_native(js, handled_native_failure, NULL, 0, js_mkundef());
+  ant_value_t success = sv_invoke_native(js, handled_native_failure, Ant_Value_Undefined, Ant_Value_Undefined, NULL, 0, Ant_Value_Undefined);
   assert(success == Ant_Value_FromNumber(42) && Ant_Exception_Peek(js) == second);
   Ant_Exception_Clear(js);
-  ant_value_t escaped = sv_invoke_native(js, forgotten_native_failure, NULL, 0, js_mkundef());
+  ant_value_t escaped = sv_invoke_native(js, forgotten_native_failure, Ant_Value_Undefined, Ant_Value_Undefined, NULL, 0, Ant_Value_Undefined);
   assert(is_err(escaped) && Ant_Exception_Peek(js) == escaped);
   assert(vtype(js_take_thrown(js, escaped)) == kTypeNull);
 
@@ -789,7 +786,7 @@ int main(void) {
   // already cleared its current handle. An escaped record supersedes a parent.
   for (int scoped = 0; scoped < 2; scoped++) {
     if (scoped) js_throw(js, error);
-    escaped = sv_invoke_native(js, detached_native_failure, NULL, 0, js_mkundef());
+    escaped = sv_invoke_native(js, detached_native_failure, Ant_Value_Undefined, Ant_Value_Undefined, NULL, 0, Ant_Value_Undefined);
     assert(is_err(escaped) && Ant_Exception_Peek(js) == escaped);
     assert(vtype(js_take_thrown(js, escaped)) == kTypeNull);
   }
@@ -797,11 +794,11 @@ int main(void) {
   // Constructor targets need the separate native frame even without an outer
   // exception. Exercise both reasons for scoped entry without C-stack roots.
   for (int pending = 0; pending < 2; pending++) {
-    ant_value_t caller_exception = pending ? js_throw(js, error) : js_mkundef();
+    ant_value_t caller_exception = pending ? js_throw(js, error) : Ant_Value_Undefined;
     ant_value_t target = Ant_Object_CreateBare(js);
     sv_native_frame_t *parent_frame = js->vm->native_frame;
     js_setstackbase(js, NULL);
-    success = sv_invoke_native(js, collect_native_target, NULL, 0, target);
+    success = sv_invoke_native(js, collect_native_target, Ant_Value_Undefined, Ant_Value_Undefined, NULL, 0, target);
     js_setstackbase(js, &stack_base);
     assert(success == target && js->vm->native_frame == parent_frame);
     assert(Ant_Exception_Peek(js) == caller_exception);
@@ -812,10 +809,10 @@ int main(void) {
   // The VM's builtin fast path must enforce the same scope as other native
   // entries, including when it is called without an active JS frame.
   second = js_throw(js, error);
-  success = sv_vm_call(js->vm, js, Ant_Function_Create(handled_native_failure), js_mkundef(), NULL, 0, NULL, js_mkundef());
+  success = sv_vm_call(js->vm, js, Ant_Function_Create(handled_native_failure), Ant_Value_Undefined, NULL, 0, NULL, Ant_Value_Undefined);
   assert(success == Ant_Value_FromNumber(42) && Ant_Exception_Peek(js) == second);
   Ant_Exception_Clear(js);
-  escaped = sv_vm_call(js->vm, js, Ant_Function_Create(forgotten_native_failure), js_mkundef(), NULL, 0, NULL, js_mkundef());
+  escaped = sv_vm_call(js->vm, js, Ant_Function_Create(forgotten_native_failure), Ant_Value_Undefined, NULL, 0, NULL, Ant_Value_Undefined);
   assert(is_err(escaped) && Ant_Exception_Peek(js) == escaped);
   assert(vtype(js_take_thrown(js, escaped)) == kTypeNull);
 

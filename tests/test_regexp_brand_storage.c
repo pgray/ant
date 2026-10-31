@@ -24,10 +24,10 @@ int main(void) {
   assert(!ptr->flags.regexp_brand && js_get_slot(object, SLOT_REGEXP_FLAGS_STRING) == Ant_Value_FromNumber(1));
   js_set_slot_wb(js, object, SLOT_REGEXP_FLAGS_STRING, flags);
   assert(ptr->flags.regexp_brand);
-  js_set_slot(object, SLOT_REGEXP_FLAGS_STRING, js_mkundef());
+  js_set_slot(object, SLOT_REGEXP_FLAGS_STRING, Ant_Value_Undefined);
   assert(!ptr->flags.regexp_brand);
-  js_set_slot(object, SLOT_ARGUMENTS_OBJECT, js_true);
-  assert(!ptr->flags.regexp_brand && js_get_slot(object, SLOT_ARGUMENTS_OBJECT) == js_true);
+  js_set_slot(object, SLOT_ARGUMENTS_OBJECT, Ant_Value_True);
+  assert(!ptr->flags.regexp_brand && js_get_slot(object, SLOT_ARGUMENTS_OBJECT) == Ant_Value_True);
   // Adding unrelated native storage must not change the cached brand.
   js_set_slot_wb(js, object, SLOT_REGEXP_FLAGS_STRING, flags);
   js_set_slot(object, SLOT_DATA, Ant_Value_FromNumber(9));

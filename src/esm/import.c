@@ -21,12 +21,12 @@ static inline bool js_has_module_filename(const char *filename) {
 static ant_value_t js_get_import_func(ant_t *js) {
   ant_value_t glob = js_glob(js);
   ant_prop_loc_t import_off = lkp(js, glob, "import", 6);
-  if (!import_off.obj) return js_mkundef();
+  if (!import_off.obj) return Ant_Value_Undefined;
   return js_prop_load(import_off);
 }
 
 static ant_value_t js_get_module_ctx_import_meta(ant_t *js, ant_value_t module_ctx) {
-  if (!is_object_type(module_ctx)) return js_mkundef();
+  if (!is_object_type(module_ctx)) return Ant_Value_Undefined;
   return js_get(js, module_ctx, "meta");
 }
 
@@ -39,9 +39,9 @@ static const char *js_get_module_ctx_filename(ant_t *js, ant_value_t module_ctx)
 }
 
 static ant_value_t js_module_ctx_from_func(ant_value_t func) {
-  if (vtype(func) != kTypeFunction) return js_mkundef();
+  if (vtype(func) != kTypeFunction) return Ant_Value_Undefined;
   ant_value_t module_ctx = get_slot(js_func_obj(func), SLOT_MODULE_CTX);
-  return is_object_type(module_ctx) ? module_ctx : js_mkundef();
+  return is_object_type(module_ctx) ? module_ctx : Ant_Value_Undefined;
 }
 
 static ant_value_t js_get_execution_module_ctx(ant_t *js) {
@@ -76,7 +76,7 @@ ant_value_t js_builtin_import(ant_params_t) {
   if (!js_has_module_filename(base_path))
     base_path = js_get_execution_module_filename(js);
 
-  ant_value_t attrs = js_mkundef();
+  ant_value_t attrs = Ant_Value_Undefined;
   if (nargs >= 2 && vtype(args[1]) != kTypeUndefined) {
     if (!is_object_type(args[1])) {
       ant_value_t err = js_take_thrown(js, js_mkerr_typed(js, JS_ERR_TYPE, "The second argument to import() must be an object"));
@@ -107,7 +107,7 @@ ant_value_t js_builtin_import(ant_params_t) {
         return js_promise_reject_with_ctor(js, js->sym.promise_ctor, reason);
       }
 
-      ant_value_t key = js_mkundef();
+      ant_value_t key = Ant_Value_Undefined;
       GC_ROOT_PIN(js, key);
 
       ant_offset_t key_count = js_arr_len(js, keys);
@@ -131,7 +131,7 @@ ant_value_t js_builtin_import(ant_params_t) {
     }
   }
 
-  ant_value_t tla_promise = js_mkundef();
+  ant_value_t tla_promise = Ant_Value_Undefined;
   ant_value_t ns = js_esm_import_dynamic_ex(js, args[0], base_path, attrs, &tla_promise);
 
   if (is_err(ns)) {
@@ -142,7 +142,7 @@ ant_value_t js_builtin_import(ant_params_t) {
   if (vtype(tla_promise) == kTypePromise) {
     ant_value_t resolve_fn = js_make_data_cfunc(js, ns, builtin_import_tla_resolve);
     ant_value_t then_args[] = { resolve_fn };
-    return js_promise_then(js, tla_promise, then_args[0], js_mkundef());
+    return js_promise_then(js, tla_promise, then_args[0], Ant_Value_Undefined);
   }
 
   return js_promise_assimilate_awaitable(js, ns);
@@ -178,7 +178,7 @@ static ant_value_t builtin_import_meta_resolve(ant_params_t) {
   if (nargs < 1) return js_mkerr(js, "import.meta.resolve() requires a string specifier");
 
   const char *base_path = NULL;
-  ant_value_t module_ctx = js_mkundef();
+  ant_value_t module_ctx = Ant_Value_Undefined;
 
   if (is_object_type(call_this)) module_ctx = js_get_slot(call_this, SLOT_MODULE_CTX);
 
@@ -228,7 +228,7 @@ static inline void js_set_import_meta_path_dirname(
 static ant_value_t js_create_import_meta_for_context(
   ant_t *js, ant_value_t module_ctx, const char *filename, bool is_main
 ) {
-  if (!filename) return js_mkundef();
+  if (!filename) return Ant_Value_Undefined;
 
   ant_value_t import_meta = mkobj(js, 0);
   if (is_err(import_meta)) return import_meta;
@@ -267,9 +267,9 @@ static ant_value_t js_create_import_meta_for_context(
   }
 
   setprop_cstr(js, import_meta, "env", 3, js->builtins.process_env);
-  setprop_cstr(js, import_meta, "main", 4, is_main ? js_true : js_false);
+  setprop_cstr(js, import_meta, "main", 4, is_main ? Ant_Value_True : Ant_Value_False);
 
-  ant_value_t resolve_fn = js_heavy_mkfun(js, builtin_import_meta_resolve, js_mkundef());
+  ant_value_t resolve_fn = js_heavy_mkfun(js, builtin_import_meta_resolve, Ant_Value_Undefined);
   if (vtype(resolve_fn) == kTypeFunction)
     js_set_slot_wb(js, js_func_obj(resolve_fn), SLOT_MODULE_CTX, module_ctx);
   setprop_cstr(js, import_meta, "resolve", 7, resolve_fn);
@@ -281,7 +281,7 @@ ant_value_t js_create_module_context(ant_t *js, const char *filename, bool is_ma
   GC_ROOT_SAVE(root_mark, js);
   if (!js_has_module_filename(filename)) {
     GC_ROOT_RESTORE(js, root_mark);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   ant_value_t module_ctx = Ant_Object_CreateBare(js);
@@ -331,7 +331,7 @@ ant_value_t js_get_module_import_binding(ant_t *js) {
 
   if (!is_object_type(module_ctx) || vtype(import_meta) != kTypeObject) {
     GC_ROOT_RESTORE(js, root_mark);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   ant_value_t import_obj = Ant_Object_CreateBare(js);

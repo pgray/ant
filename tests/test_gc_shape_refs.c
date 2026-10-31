@@ -50,7 +50,7 @@ int main(void) {
   gc_run(js);
   assert(gc_obj_is_marked(js, js_obj_ptr(ordinary)));
 
-  js_set(js, owner, "gc_accessor", js_mkundef());
+  js_set(js, owner, "gc_accessor", Ant_Value_Undefined);
   int32_t slot = ant_shape_lookup_interned(ptr->shape, intern_string(js, "gc_accessor", 11));
   assert(slot >= 0);
   ant_shape_prop_t *prop = ant_shape_prop_mut_at(ptr->shape, (uint32_t)slot);

@@ -42,7 +42,7 @@ int main(void) {
   assert(js);
   js_setstackbase(js, &stack_base);
   GC_ROOT_SAVE(roots, js);
-  ant_value_t a = js_mkundef(), b = js_mkundef(), c = js_mkundef();
+  ant_value_t a = Ant_Value_Undefined, b = Ant_Value_Undefined, c = Ant_Value_Undefined;
   GC_ROOT_PIN(js, a);
   GC_ROOT_PIN(js, b);
   GC_ROOT_PIN(js, c);
@@ -108,7 +108,7 @@ int main(void) {
   json_layout_cache_clear(js);
   a = parse_record(js, 128, 99);
   original = js_obj_ptr(a)->shape;
-  a = b = c = js_mkundef();
+  a = b = c = Ant_Value_Undefined;
   gc_run(js);
   a = parse_record(js, 128, 99);
   assert(js_obj_ptr(a)->shape == original);

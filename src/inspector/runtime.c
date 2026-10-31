@@ -112,7 +112,7 @@ static bool inspector_append_preview_value(ant_t *js, ant_value_t value, sbuf_t 
     case kTypeNull:
       return sbuf_append(out, "\"type\":\"object\",\"subtype\":\"null\",\"value\":\"null\"");
     case kTypeBool:
-      return sbuf_appendf(out, "\"type\":\"boolean\",\"value\":\"%s\"", value == js_true ? "true" : "false");
+      return sbuf_appendf(out, "\"type\":\"boolean\",\"value\":\"%s\"", value == Ant_Value_True ? "true" : "false");
     case kTypeNumber: {
       double n = Ant_Value_AsNumberUnchecked(value);
       if (isnan(n)) return sbuf_append(out, "\"type\":\"number\",\"value\":\"NaN\"");
@@ -203,7 +203,7 @@ static bool inspector_append_object_preview(
   ant_iter_t iter = js_prop_iter_begin(js, value);
   const char *key = NULL;
   size_t key_len = 0;
-  ant_value_t prop = js_mkundef();
+  ant_value_t prop = Ant_Value_Undefined;
   size_t count = 0;
   const size_t limit = 8;
   bool overflow = false;
@@ -273,7 +273,7 @@ bool inspector_value_to_remote_object(ant_t *js, ant_value_t value, sbuf_t *out)
     case kTypeNull:
       return sbuf_append(out, "{\"type\":\"object\",\"subtype\":\"null\",\"value\":null}");
     case kTypeBool:
-      return sbuf_appendf(out, "{\"type\":\"boolean\",\"value\":%s}", value == js_true ? "true" : "false");
+      return sbuf_appendf(out, "{\"type\":\"boolean\",\"value\":%s}", value == Ant_Value_True ? "true" : "false");
     case kTypeNumber: {
       double n = Ant_Value_AsNumberUnchecked(value);
       if (isnan(n)) return sbuf_append(out, "{\"type\":\"number\",\"unserializableValue\":\"NaN\",\"description\":\"NaN\"}");
@@ -483,7 +483,7 @@ void inspector_replay_console_events(inspector_client_t *client) {
 
 static bool inspector_exception_description(ant_t *js, ant_value_t err, sbuf_t *out) {
   if (!js || !out) return false;
-  ant_value_t stack = js_mkundef();
+  ant_value_t stack = Ant_Value_Undefined;
 
   if (is_err(err)) {
     stack = Ant_Exception_Stack(js, err);
@@ -556,7 +556,7 @@ static void inspector_send_eval_result_kind(
   ant_value_t completion = !force_exception && !is_err(result) && Ant_Exception_Pending(js)
     ? Ant_Exception_Peek(js) : result;
   bool exception = force_exception || is_err(completion);
-  ant_value_t exception_value = exception ? Ant_Exception_Value(js, completion) : js_mkundef();
+  ant_value_t exception_value = exception ? Ant_Exception_Value(js, completion) : Ant_Value_Undefined;
   gc_temp_root_scope_t roots;
   gc_temp_root_scope_begin(js, &roots);
   sbuf_t b = {0};
@@ -611,9 +611,9 @@ static uint32_t inspector_current_await_id(ant_t *js, ant_value_t call_func) {
 
 static ant_value_t inspector_await_fulfilled(ant_params_t) {
   inspector_await_t *pending = inspector_take_pending_await(inspector_current_await_id(js, call_func));
-  if (!pending) return js_mkundef();
+  if (!pending) return Ant_Value_Undefined;
 
-  ant_value_t value = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t value = nargs > 0 ? args[0] : Ant_Value_Undefined;
   for (inspector_client_t *client = g_inspector.clients; client; client = client->next) {
     if (client->id == pending->client_id) {
       inspector_send_eval_result_kind(client, pending->request_id, value, false);
@@ -621,14 +621,14 @@ static ant_value_t inspector_await_fulfilled(ant_params_t) {
     }
   }
   free(pending);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t inspector_await_rejected(ant_params_t) {
   inspector_await_t *pending = inspector_take_pending_await(inspector_current_await_id(js, call_func));
-  if (!pending) return js_mkundef();
+  if (!pending) return Ant_Value_Undefined;
 
-  ant_value_t reason = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t reason = nargs > 0 ? args[0] : Ant_Value_Undefined;
   for (inspector_client_t *client = g_inspector.clients; client; client = client->next) {
     if (client->id == pending->client_id) {
       inspector_send_eval_result_kind(client, pending->request_id, reason, true);
@@ -636,7 +636,7 @@ static ant_value_t inspector_await_rejected(ant_params_t) {
     }
   }
   free(pending);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static bool inspector_defer_eval_result(
@@ -697,7 +697,7 @@ void inspector_await_promise(inspector_client_t *client, int id, yyjson_val *par
   const char *object_id = object_id_val && yyjson_is_str(object_id_val)
     ? yyjson_get_str(object_id_val)
     : NULL;
-  ant_value_t promise = js_mkundef();
+  ant_value_t promise = Ant_Value_Undefined;
   if (!inspector_object_for_id(object_id, &promise) || vtype(promise) != kTypePromise) {
     inspector_send_error(client, id, -32602, "Runtime.awaitPromise requires a promise objectId");
     return;
@@ -739,7 +739,7 @@ void inspector_eval(inspector_client_t *client, int id, yyjson_val *params) {
   bool await_promise = inspector_param_bool(params, "awaitPromise");
 
   if (inspector_param_bool(params, "throwOnSideEffect")) {
-    ant_value_t safe_result = js_mkundef();
+    ant_value_t safe_result = Ant_Value_Undefined;
     if (inspector_eval_safe_expr(client->js, expr, expr_len, &safe_result)) {
       inspector_send_eval_completion(client, id, safe_result, await_promise);
     } else inspector_send_side_effect_blocked(client, id);
@@ -769,7 +769,7 @@ void inspector_get_properties(inspector_client_t *client, int id, yyjson_val *pa
   yyjson_val *object_id_val = params ? yyjson_obj_get(params, "objectId") : NULL;
   const char *object_id = object_id_val && yyjson_is_str(object_id_val) ? yyjson_get_str(object_id_val) : NULL;
   bool own_only = inspector_param_bool(params, "ownProperties");
-  ant_value_t object = js_mkundef();
+  ant_value_t object = Ant_Value_Undefined;
   if (!inspector_object_for_id(object_id, &object)) {
     inspector_send_error(client, id, -32000, "Could not find object with given id");
     return;
@@ -783,7 +783,7 @@ void inspector_get_properties(inspector_client_t *client, int id, yyjson_val *pa
     ant_iter_t iter = js_prop_iter_begin(client->js, cur);
     const char *key = NULL;
     size_t key_len = 0;
-    ant_value_t value = js_mkundef();
+    ant_value_t value = Ant_Value_Undefined;
     while (js_prop_iter_next(&iter, &key, &key_len, &value)) {
       bool error_stack = key_len == 5 && !memcmp(key, "stack", 5) && (
         vtype(js_get_slot(cur, SLOT_ERROR_STACK)) != kTypeUndefined ||
@@ -856,7 +856,7 @@ void inspector_global_lexical_scope_names(inspector_client_t *client, int id) {
   const char *key = NULL;
   
   size_t key_len = 0;
-  ant_value_t value = js_mkundef();
+  ant_value_t value = Ant_Value_Undefined;
   
   while (js_prop_iter_next(&iter, &key, &key_len, &value)) {
     if (sv_global_lexical_lookup(client->js, key, key_len, NULL)) continue;

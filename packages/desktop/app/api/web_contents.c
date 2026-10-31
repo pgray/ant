@@ -8,7 +8,7 @@ static ant_value_t DesktopWebContentsAction(ant_t *js, WebContentsAction action)
   ant_desktop_window_state_t *window = ant_desktop_window_from_value(js, js_getthis(js));
   if (!window) return js_mkerr(js, "invalid WebContents receiver");
   if (!action(window)) return js_mkerr(js, "Chromium is not running for this BrowserWindow");
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t DesktopWebContentsOpenDevTools(ant_params_t) {
@@ -32,13 +32,13 @@ ant_value_t DesktopWebContentsInspectElement(ant_params_t) {
   if (!ant_desktop_platform_inspect(window, (int)Ant_Value_AsNumberUnchecked(args[0]), (int)Ant_Value_AsNumberUnchecked(args[1])))
     return js_mkerr(js, "Chromium is not running for this BrowserWindow");
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t DesktopWebContentsIsDevToolsOpened(ant_params_t) {
   ant_desktop_window_state_t *window = ant_desktop_window_from_value(js, js_getthis(js));
   if (!window) return js_mkerr(js, "invalid WebContents receiver");
-  return window->devtools_open ? js_true : js_false;
+  return window->devtools_open ? Ant_Value_True : Ant_Value_False;
 }
 
 ant_value_t DesktopWebContentsReload(ant_params_t) {
@@ -58,7 +58,7 @@ ant_value_t DesktopWebContentsSend(ant_params_t) {
   ant_value_t encode = window->desktop->encode;
   if (!is_callable(encode)) return js_mkerr(js, "desktop IPC bridge is unavailable");
 
-  ant_value_t value = nargs > 1 ? args[1] : js_mkundef();
+  ant_value_t value = nargs > 1 ? args[1] : Ant_Value_Undefined;
   ant_value_t encoded = ant_desktop_call_function(js, encode, js_glob(js), &value, 1);
 
   if (is_err(encoded)) return encoded;
@@ -70,5 +70,5 @@ ant_value_t DesktopWebContentsSend(ant_params_t) {
   if (!ant_desktop_platform_send_ipc(window, 2, 0, channel, channel_length, payload, payload_length))
     return js_mkerr(js, "Chromium is not running for this BrowserWindow");
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }

@@ -61,7 +61,7 @@ const headers_data_t *response_get_header_data(ant_value_t obj) {
 
 ant_value_t response_get_websocket(ant_value_t obj) {
   response_data_t *data = response_get_data(obj);
-  return data ? data->websocket : js_mkundef();
+  return data ? data->websocket : Ant_Value_Undefined;
 }
 
 void response_set_websocket(ant_value_t obj, ant_value_t websocket) {
@@ -99,7 +99,7 @@ static response_data_t *data_new(void) {
   if (!d) return NULL;
   d->status = 200;
   d->url_list_size = 0;
-  d->websocket = js_mkundef();
+  d->websocket = Ant_Value_Undefined;
   return d;
 }
 
@@ -122,7 +122,7 @@ static response_data_t *data_dup(const response_data_t *src) {
   d->body_storage = (d->body_type || src->body_data)
     ? RESPONSE_BODY_STORAGE_OWNED
     : RESPONSE_BODY_STORAGE_NONE;
-  d->websocket = js_mkundef();
+  d->websocket = Ant_Value_Undefined;
   d->headers_immutable = src->headers_immutable;
   d->pending_headers = headers_data_copy(src->pending_headers);
   if (src->pending_headers && !d->pending_headers) {
@@ -301,8 +301,8 @@ static bool extract_body(
   *out_data = NULL;
   *out_size = 0;
   *out_type = NULL;
-  *out_stream = js_mkundef();
-  *err_out = js_mkundef();
+  *out_stream = Ant_Value_Undefined;
+  *err_out = Ant_Value_Undefined;
 
   if (vtype(body_val) == kTypeNull || vtype(body_val) == kTypeUndefined) return true;
   if (extract_buffer_source_body(js, body_val, out_data, out_size, err_out)) return true;
@@ -366,7 +366,7 @@ static ant_value_t response_effective_body_type(
   if (is_err(ct) || vtype(ct) == kTypeString) return ct;
   return d && d->body_type
     ? js_mkstr(js, d->body_type, strlen(d->body_type))
-    : js_mkundef();
+    : Ant_Value_Undefined;
 }
 
 static void strip_utf8_bom(const uint8_t **data, size_t *size) {
@@ -457,7 +457,7 @@ uint8_t *body_concat_uint8_chunks(
   TypedArrayData *ta = NULL;
 
   *out_size = 0;
-  *err_out = js_mkundef();
+  *err_out = Ant_Value_Undefined;
 
   for (ant_offset_t i = 0; i < n; i++) {
     ant_value_t chunk = js_arr_get(js, chunks, i);
@@ -498,9 +498,9 @@ static ant_value_t stream_body_read(ant_params_t);
 static ant_value_t stream_body_rejected(ant_params_t) {
   ant_value_t state = js_get_slot(call_func, SLOT_DATA);
   ant_value_t promise = js_get(js, state, "promise");
-  ant_value_t reason = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t reason = (nargs > 0) ? args[0] : Ant_Value_Undefined;
   js_reject_promise(js, promise, reason);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void stream_schedule_next_read(ant_t *js, ant_value_t state, ant_value_t reader) {
@@ -512,7 +512,7 @@ static void stream_schedule_next_read(ant_t *js, ant_value_t state, ant_value_t 
 
 static ant_value_t stream_body_read(ant_params_t) {
   ant_value_t state = js_get_slot(call_func, SLOT_DATA);
-  ant_value_t result = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t result = (nargs > 0) ? args[0] : Ant_Value_Undefined;
   
   ant_value_t promise = js_get(js, state, "promise");
   ant_value_t reader = js_get(js, state, "reader");
@@ -522,14 +522,14 @@ static ant_value_t stream_body_read(ant_params_t) {
   ant_value_t done_val = js_get(js, result, "done");
   ant_value_t value = js_get(js, result, "value");
 
-  if (vtype(done_val) == kTypeBool && done_val == js_true) {
+  if (vtype(done_val) == kTypeBool && done_val == Ant_Value_True) {
     size_t size = 0;
-    ant_value_t chunk_err = js_mkundef();
+    ant_value_t chunk_err = Ant_Value_Undefined;
     uint8_t *data = body_concat_uint8_chunks(js, chunks, &size, &chunk_err);
     
     if (is_err(chunk_err)) {
       js_reject_promise(js, promise, chunk_err);
-      return js_mkundef();
+      return Ant_Value_Undefined;
     }
     
     ant_value_t type_v = js_get(js, state, "type");
@@ -537,18 +537,18 @@ static ant_value_t stream_body_read(ant_params_t) {
     resolve_body_promise(js, promise, data, size, body_type, mode, true);
     free(data);
     
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (vtype(value) != kTypeUndefined && vtype(value) != kTypeNull) js_arr_push(js, chunks, value);
   stream_schedule_next_read(js, state, reader);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t consume_body_from_stream(
   ant_t *js, ant_value_t stream, ant_value_t promise, int mode, const char *body_type
 ) {
-  ant_value_t reader = rs_reader_create(js, stream, js_mkundef());
+  ant_value_t reader = rs_reader_create(js, stream, Ant_Value_Undefined);
 
   if (is_err(reader)) {
     js_reject_promise(js, promise, reader);
@@ -560,7 +560,7 @@ static ant_value_t consume_body_from_stream(
   js_set(js, state, "reader", reader);
   js_set(js, state, "chunks", js_mkarr(js));
   js_set(js, state, "mode", Ant_Value_FromNumber(mode));
-  js_set(js, state, "type", body_type ? js_mkstr(js, body_type, strlen(body_type)) : js_mkundef());
+  js_set(js, state, "type", body_type ? js_mkstr(js, body_type, strlen(body_type)) : Ant_Value_Undefined);
 
   stream_schedule_next_read(js, state, reader);
   return promise;
@@ -569,7 +569,7 @@ static ant_value_t consume_body_from_stream(
 static ant_value_t consume_body(ant_t *js, ant_value_t call_this, int mode) {
   response_data_t *d = response_get_data(call_this);
   ant_value_t promise = js_mkpromise(js);
-  ant_value_t type_value = js_mkundef();
+  ant_value_t type_value = Ant_Value_Undefined;
   ant_value_t stream = 0;
   const char *body_type = NULL;
 
@@ -682,7 +682,7 @@ static ant_value_t response_init_status(ant_t *js, ant_value_t init, response_da
   }
 
   resp->status = (int)status_num;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t response_init_status_text(ant_t *js, ant_value_t init, response_data_t *resp) {
@@ -707,7 +707,7 @@ static ant_value_t response_init_status_text(ant_t *js, ant_value_t init, respon
   if (!dup) return Ant_Error_CreateOutOfMemory(js);
   free(resp->status_text);
   resp->status_text = dup;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static bool response_init_direct_headers(
@@ -756,13 +756,13 @@ static ant_value_t response_apply_body(
   ant_t *js, ant_value_t resp_obj, ant_value_t headers, response_data_t *resp,
   ant_value_t body_val, const char *content_type_override
 ) {
-  ant_value_t body_err = js_mkundef();
-  ant_value_t body_stream = js_mkundef();
+  ant_value_t body_err = Ant_Value_Undefined;
+  ant_value_t body_stream = Ant_Value_Undefined;
   uint8_t *body_data = NULL;
   size_t body_size = 0;
   char *body_type = NULL;
 
-  if (vtype(body_val) == kTypeNull || vtype(body_val) == kTypeUndefined) return js_mkundef();
+  if (vtype(body_val) == kTypeNull || vtype(body_val) == kTypeUndefined) return Ant_Value_Undefined;
 
   if (vtype(body_val) == kTypeString) {
     if (is_null_body_status(resp->status)) {
@@ -790,7 +790,7 @@ static ant_value_t response_apply_body(
         ? !response_apply_content_type_data(headers_get_data(headers), header_type)
         : !response_apply_pending_content_type(resp, header_type))
       return Ant_Error_CreateOutOfMemory(js);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (!extract_body(js, body_val, &body_data, &body_size, &body_type, &body_stream, &body_err)) {
@@ -825,7 +825,7 @@ static ant_value_t response_apply_body(
       : !response_apply_pending_content_type(resp, header_type))
     return Ant_Error_CreateOutOfMemory(js);
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t response_init_common(
@@ -835,13 +835,13 @@ static ant_value_t response_init_common(
 ) {
   response_data_t *resp = response_get_data(resp_obj);
   ant_value_t headers = js_get_slot(resp_obj, SLOT_RESPONSE_HEADERS);
-  ant_value_t step = js_mkundef();
+  ant_value_t step = Ant_Value_Undefined;
   const ant_shape_t *direct_init_shape = NULL;
 
   if (!resp) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid Response object");
   resp->headers_immutable = immutable_headers;
   if (vtype(init) != kTypeUndefined) {
-    ant_value_t init_headers = js_mkundef();
+    ant_value_t init_headers = Ant_Value_Undefined;
     bool direct_headers = response_init_direct_headers(
       js, init, &init_headers, &direct_init_shape);
     if (!direct_headers)
@@ -879,8 +879,8 @@ static ant_value_t response_init_object(
   js_set_native(obj, resp, RESPONSE_NATIVE_TAG);
   js_set_finalizer(obj, response_finalize);
 
-  js_set_slot_wb(js, obj, SLOT_RESPONSE_HEADERS, js_mkundef());
-  js_set_slot_wb(js, obj, SLOT_RESPONSE_BODY_STREAM, js_mkundef());
+  js_set_slot_wb(js, obj, SLOT_RESPONSE_HEADERS, Ant_Value_Undefined);
+  js_set_slot_wb(js, obj, SLOT_RESPONSE_BODY_STREAM, Ant_Value_Undefined);
   
   return obj;
 }
@@ -892,8 +892,8 @@ static ant_value_t response_new(ant_t *js, bool immutable_headers) {
 }
 
 static ant_value_t js_response_ctor(ant_params_t) {
-  ant_value_t body = (nargs >= 1) ? args[0] : js_mknull();
-  ant_value_t init = (nargs >= 2 && vtype(args[1]) != kTypeUndefined) ? args[1] : js_mkundef();
+  ant_value_t body = (nargs >= 1) ? args[0] : Ant_Value_Null;
+  ant_value_t init = (nargs >= 2 && vtype(args[1]) != kTypeUndefined) ? args[1] : Ant_Value_Undefined;
   ant_value_t obj = 0;
   ant_value_t step = 0;
 
@@ -947,7 +947,7 @@ static ant_value_t js_response_error(ant_params_t) {
 }
 
 static ant_value_t js_response_redirect(ant_params_t) {
-  ant_value_t url_v = (nargs >= 1) ? args[0] : js_mkundef();
+  ant_value_t url_v = (nargs >= 1) ? args[0] : Ant_Value_Undefined;
   ant_value_t status_v = (nargs >= 2) ? args[1] : Ant_Value_FromNumber(302);
   ant_value_t obj = 0;
   ant_value_t headers = 0;
@@ -1007,7 +1007,7 @@ static ant_value_t js_response_redirect(ant_params_t) {
 }
 
 static ant_value_t js_response_json_static(ant_params_t) {
-  ant_value_t init = (nargs >= 2 && vtype(args[1]) != kTypeUndefined) ? args[1] : js_mkundef();
+  ant_value_t init = (nargs >= 2 && vtype(args[1]) != kTypeUndefined) ? args[1] : Ant_Value_Undefined;
   ant_value_t stringify = 0;
   ant_value_t obj = 0;
   ant_value_t step = 0;
@@ -1034,7 +1034,7 @@ static ant_value_t js_response_json_static(ant_params_t) {
 static ant_value_t res_body_pull(ant_params_t) {
   ant_value_t resp_obj = js_get_slot(call_func, SLOT_DATA);
   response_data_t *d = response_get_data(resp_obj);
-  ant_value_t ctrl = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t ctrl = (nargs > 0) ? args[0] : Ant_Value_Undefined;
 
   if (d && d->body_data && d->body_size > 0) {
     ArrayBufferData *ab = create_array_buffer_data(js, d->body_size);
@@ -1049,7 +1049,7 @@ static ant_value_t res_body_pull(ant_params_t) {
   }
 
   rs_controller_close(js, ctrl);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 #define RES_GETTER_START(name)                                                 \
@@ -1103,11 +1103,11 @@ RES_GETTER_END
 
 RES_GETTER_START(body)
   ant_value_t stored_stream = js_get_slot(this, SLOT_RESPONSE_BODY_STREAM);
-  if (!d->has_body) return js_mknull();
+  if (!d->has_body) return Ant_Value_Null;
   if (rs_is_stream(stored_stream)) return stored_stream;
-  if (d->body_used) return js_mknull();
+  if (d->body_used) return Ant_Value_Null;
   ant_value_t pull = js_heavy_mkfun(js, res_body_pull, this);
-  ant_value_t stream = rs_create_stream(js, pull, js_mkundef(), 1.0);
+  ant_value_t stream = rs_create_stream(js, pull, Ant_Value_Undefined, 1.0);
   if (!is_err(stream)) js_set_slot_wb(js, this, SLOT_RESPONSE_BODY_STREAM, stream);
   return stream;
 RES_GETTER_END
@@ -1160,13 +1160,13 @@ static ant_value_t response_inspect(ant_params_t) {
   ant_value_t out = Ant_Object_CreateBare(js);
   ant_value_t err = 0;
 
-  if (!response_inspect_set(js, out, "type", js_res_get_type(js, NULL, 0, js_mkundef(), call_this, call_func), &err)) return err;
-  if (!response_inspect_set(js, out, "url", js_res_get_url(js, NULL, 0, js_mkundef(), call_this, call_func), &err)) return err;
-  if (!response_inspect_set(js, out, "redirected", js_res_get_redirected(js, NULL, 0, js_mkundef(), call_this, call_func), &err)) return err;
-  if (!response_inspect_set(js, out, "status", js_res_get_status(js, NULL, 0, js_mkundef(), call_this, call_func), &err)) return err;
-  if (!response_inspect_set(js, out, "ok", js_res_get_ok(js, NULL, 0, js_mkundef(), call_this, call_func), &err)) return err;
-  if (!response_inspect_set(js, out, "statusText", js_res_get_status_text(js, NULL, 0, js_mkundef(), call_this, call_func), &err)) return err;
-  if (!response_inspect_set(js, out, "headers", js_res_get_headers(js, NULL, 0, js_mkundef(), call_this, call_func), &err)) return err;
+  if (!response_inspect_set(js, out, "type", js_res_get_type(js, NULL, 0, Ant_Value_Undefined, call_this, call_func), &err)) return err;
+  if (!response_inspect_set(js, out, "url", js_res_get_url(js, NULL, 0, Ant_Value_Undefined, call_this, call_func), &err)) return err;
+  if (!response_inspect_set(js, out, "redirected", js_res_get_redirected(js, NULL, 0, Ant_Value_Undefined, call_this, call_func), &err)) return err;
+  if (!response_inspect_set(js, out, "status", js_res_get_status(js, NULL, 0, Ant_Value_Undefined, call_this, call_func), &err)) return err;
+  if (!response_inspect_set(js, out, "ok", js_res_get_ok(js, NULL, 0, Ant_Value_Undefined, call_this, call_func), &err)) return err;
+  if (!response_inspect_set(js, out, "statusText", js_res_get_status_text(js, NULL, 0, Ant_Value_Undefined, call_this, call_func), &err)) return err;
+  if (!response_inspect_set(js, out, "headers", js_res_get_headers(js, NULL, 0, Ant_Value_Undefined, call_this, call_func), &err)) return err;
 
   return response_inspect_finish(js, call_this, out);
 }
@@ -1188,7 +1188,7 @@ static ant_value_t js_response_clone(ant_params_t) {
   if (!nd) return Ant_Error_CreateOutOfMemory(js);
 
   src_headers = js_get_slot(call_this, SLOT_RESPONSE_HEADERS);
-  new_headers = js_mkundef();
+  new_headers = Ant_Value_Undefined;
   if (headers_is_headers(src_headers)) {
     new_headers = headers_create_empty(js);
     if (is_err(new_headers)) {
@@ -1209,7 +1209,7 @@ static ant_value_t js_response_clone(ant_params_t) {
   js_set_native(obj, nd, RESPONSE_NATIVE_TAG);
   js_set_finalizer(obj, response_finalize);
   js_set_slot_wb(js, obj, SLOT_RESPONSE_HEADERS, new_headers);
-  js_set_slot_wb(js, obj, SLOT_RESPONSE_BODY_STREAM, js_mkundef());
+  js_set_slot_wb(js, obj, SLOT_RESPONSE_BODY_STREAM, Ant_Value_Undefined);
 
   src_stream = js_get_slot(call_this, SLOT_RESPONSE_BODY_STREAM);
   if (!rs_is_stream(src_stream)) return obj;

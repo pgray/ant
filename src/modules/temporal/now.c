@@ -241,38 +241,38 @@ static ant_value_t temporal_now_instant(ant_params_t) {
 }
 
 static ant_value_t temporal_now_zoned_datetime_iso(ant_params_t) {
-  ZonedDateTime *value; ant_value_t err = js_mkundef();
-  if (!temporal_now_zdt(js, nargs > 0 ? args[0] : js_mkundef(), &value, &err)) return err;
+  ZonedDateTime *value; ant_value_t err = Ant_Value_Undefined;
+  if (!temporal_now_zdt(js, nargs > 0 ? args[0] : Ant_Value_Undefined, &value, &err)) return err;
   return temporal_wrap(js, TEMPORAL_ZONED_DATETIME, value);
 }
 
 static ant_value_t temporal_now_plain_datetime_iso(ant_params_t) {
-  ZonedDateTime *zdt; ant_value_t err = js_mkundef();
-  if (!temporal_now_zdt(js, nargs > 0 ? args[0] : js_mkundef(), &zdt, &err)) return err;
+  ZonedDateTime *zdt; ant_value_t err = Ant_Value_Undefined;
+  if (!temporal_now_zdt(js, nargs > 0 ? args[0] : Ant_Value_Undefined, &zdt, &err)) return err;
   PlainDateTime *value = temporal_rs_ZonedDateTime_to_plain_datetime(zdt);
   temporal_rs_ZonedDateTime_destroy(zdt);
   return temporal_wrap(js, TEMPORAL_PLAIN_DATETIME, value);
 }
 
 static ant_value_t temporal_now_plain_date_iso(ant_params_t) {
-  ZonedDateTime *zdt; ant_value_t err = js_mkundef();
-  if (!temporal_now_zdt(js, nargs > 0 ? args[0] : js_mkundef(), &zdt, &err)) return err;
+  ZonedDateTime *zdt; ant_value_t err = Ant_Value_Undefined;
+  if (!temporal_now_zdt(js, nargs > 0 ? args[0] : Ant_Value_Undefined, &zdt, &err)) return err;
   PlainDate *value = temporal_rs_ZonedDateTime_to_plain_date(zdt);
   temporal_rs_ZonedDateTime_destroy(zdt);
   return temporal_wrap(js, TEMPORAL_PLAIN_DATE, value);
 }
 
 static ant_value_t temporal_now_plain_time_iso(ant_params_t) {
-  ZonedDateTime *zdt; ant_value_t err = js_mkundef();
-  if (!temporal_now_zdt(js, nargs > 0 ? args[0] : js_mkundef(), &zdt, &err)) return err;
+  ZonedDateTime *zdt; ant_value_t err = Ant_Value_Undefined;
+  if (!temporal_now_zdt(js, nargs > 0 ? args[0] : Ant_Value_Undefined, &zdt, &err)) return err;
   PlainTime *value = temporal_rs_ZonedDateTime_to_plain_time(zdt);
   temporal_rs_ZonedDateTime_destroy(zdt);
   return temporal_wrap(js, TEMPORAL_PLAIN_TIME, value);
 }
 
 static ant_value_t temporal_now_time_zone_id(ant_params_t) {
-  (void)args; (void)nargs; TimeZone zone; ant_value_t err = js_mkundef();
-  if (!temporal_now_zone(js, js_mkundef(), &zone, &err)) return err;
+  (void)args; (void)nargs; TimeZone zone; ant_value_t err = Ant_Value_Undefined;
+  if (!temporal_now_zone(js, Ant_Value_Undefined, &zone, &err)) return err;
   return temporal_time_zone_identifier(js, zone);
 }
 

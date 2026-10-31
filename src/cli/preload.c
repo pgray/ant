@@ -59,7 +59,7 @@ static ant_value_t preload_specifier(ant_t *js, const char *file) {
   char *resolved = resolve_js_file(file);
   if (!resolved) {
     crfprintf(stderr, msg.preload_not_found, file);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   char *real = esm_is_url(resolved) ? NULL : realpath(resolved, NULL);

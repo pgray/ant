@@ -124,7 +124,7 @@ static ant_value_t zlib_read_brotli_params(
 ) {
   ant_value_t params = js_get(js, opts_val, "params");
   if (vtype(params) == kTypeUndefined || vtype(params) == kTypeNull)
-    return js_mkundef();
+    return Ant_Value_Undefined;
   
   if (!is_object_type(params))
     return js_mkerr_typed(js, JS_ERR_TYPE, "options.params must be an object");
@@ -155,7 +155,7 @@ static ant_value_t zlib_read_brotli_params(
     out->value[id] = value;
   }
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t zlib_read_options(
@@ -165,7 +165,7 @@ static ant_value_t zlib_read_options(
   zlib_options_t *out
 ) {
   *out = zlib_default_options(kind);
-  if (!is_object_type(opts_val)) return js_mkundef();
+  if (!is_object_type(opts_val)) return Ant_Value_Undefined;
 
   if (!zlib_option_int(js, opts_val, "level", &out->level) ||
       !zlib_option_int(js, opts_val, "windowBits", &out->window_bits) ||
@@ -221,13 +221,13 @@ static ant_value_t zlib_read_options(
   if (base_window < 8 || base_window > 15)
     return js_mkerr_typed(js, JS_ERR_RANGE, "windowBits out of range");
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t pick_callback(ant_args_t) {
   if (nargs > 2 && is_callable(args[2])) return args[2];
   if (nargs > 1 && is_callable(args[1])) return args[1];
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static zlib_stream_t *zlib_stream_ptr(ant_value_t obj) {
@@ -260,7 +260,7 @@ static ant_value_t zlib_binding_closed(ant_t *js) {
 
 static ant_value_t zlib_stream_ready(ant_t *js, zlib_stream_t *st) {
   if (st->closed) return zlib_binding_closed(js);
-  if (st->initialized) return js_mkundef();
+  if (st->initialized) return Ant_Value_Undefined;
 
   bool compress = zlib_kind_is_compress(st->kind);
   int ret = compress
@@ -270,12 +270,12 @@ static ant_value_t zlib_stream_ready(ant_t *js, zlib_stream_t *st) {
   if (ret != Z_OK) return js_mkerr(js, "zlib init failed");
   st->initialized = true;
 
-  if (!st->opts.dictionary || !zlib_kind_presets_dictionary(st->kind)) return js_mkundef();
+  if (!st->opts.dictionary || !zlib_kind_presets_dictionary(st->kind)) return Ant_Value_Undefined;
   ret = compress
     ? deflateSetDictionary(&st->strm, st->opts.dictionary, (uInt)st->opts.dictionary_len)
     : inflateSetDictionary(&st->strm, st->opts.dictionary, (uInt)st->opts.dictionary_len);
 
-  return ret == Z_OK ? js_mkundef() : js_mkerr(js, "zlib dictionary load failed");
+  return ret == Z_OK ? Ant_Value_Undefined : js_mkerr(js, "zlib dictionary load failed");
 }
 
 static void zlib_stream_finalizer(ant_t *js, ant_value_t value, void *state) {
@@ -298,8 +298,8 @@ static ant_value_t zlib_make_buffer(ant_t *js, const uint8_t *data, size_t len) 
 static ant_value_t zlib_emit_data(ant_t *js, ant_value_t obj, const uint8_t *data, size_t len) {
   ant_value_t buf = zlib_make_buffer(js, data, len);
   if (is_err(buf)) return buf;
-  stream_readable_push(js, obj, buf, js_mkundef());
-  return js_mkundef();
+  stream_readable_push(js, obj, buf, Ant_Value_Undefined);
+  return Ant_Value_Undefined;
 }
 
 typedef struct { ant_t *js; ant_value_t obj; ant_value_t error; } brotli_emit_ctx_t;
@@ -364,19 +364,19 @@ static ant_value_t zlib_do_process(
   const uint8_t *input, size_t input_len,
   int flush
 ) {
-  if (st->ended) return js_mkundef();
+  if (st->ended) return Ant_Value_Undefined;
   ant_value_t ready = zlib_stream_ready(js, st);
   if (is_err(ready)) return ready;
 
   if (st->brotli) {
-    brotli_emit_ctx_t ctx = { js, st->obj, js_mkundef() };
+    brotli_emit_ctx_t ctx = { js, st->obj, Ant_Value_Undefined };
     int rc;
 
     if (flush == Z_FINISH) rc = brotli_stream_finish(st->brotli, brotli_emit_cb, &ctx);
     else rc = brotli_stream_process(st->brotli, input, input_len, brotli_emit_cb, &ctx);
 
     if (is_err(ctx.error)) return ctx.error;
-    if (Ant_Exception_Pending(js)) return js_mkundef();
+    if (Ant_Exception_Pending(js)) return Ant_Value_Undefined;
     
     if (rc < 0 && st->kind == ZLIB_KIND_BROTLI_DECOMPRESS) {
       const char *error_name = NULL;
@@ -385,7 +385,7 @@ static ant_value_t zlib_do_process(
     }
     
     if (rc < 0) return js_mkerr(js, "brotli operation failed");
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   bool compress = zlib_kind_is_compress(st->kind);
@@ -397,7 +397,7 @@ static ant_value_t zlib_do_process(
   st->strm.avail_in = input ? (uInt)input_len : 0;
 
   int ret;
-  ant_value_t result = js_mkundef();
+  ant_value_t result = Ant_Value_Undefined;
   do {
     st->strm.next_out = out;
     st->strm.avail_out = (uInt)chunk_size;
@@ -422,7 +422,7 @@ static ant_value_t zlib_do_process(
       // Like Node, unused input after DEFLATE EOF ends the readable side;
       // ws appends its trailer here, then checks endEmitted in flush().
       if ((st->kind == ZLIB_KIND_INFLATE || st->kind == ZLIB_KIND_INFLATE_RAW) && st->strm.avail_in > 0)
-        stream_readable_push(js, st->obj, js_mknull(), js_mkundef());
+        stream_readable_push(js, st->obj, Ant_Value_Null, Ant_Value_Undefined);
       break;
     }
   } while (st->strm.avail_out == 0);
@@ -514,22 +514,22 @@ static ant_value_t zlib_finish_callback(ant_t *js, ant_value_t cb, ant_value_t r
     ant_value_t error = js_take_thrown(js, result);
 
     GC_ROOT_PIN(js, error);
-    ant_value_t r = is_callable(cb) ? sv_vm_call(js->vm, js, cb, js_mkundef(), &error, 1, NULL, js_mkundef()) : js_mkundef();
+    ant_value_t r = is_callable(cb) ? sv_vm_call(js->vm, js, cb, Ant_Value_Undefined, &error, 1, NULL, Ant_Value_Undefined) : Ant_Value_Undefined;
 
     GC_ROOT_RESTORE(js, root_mark);
-    return is_err(r) ? r : js_mkundef();
+    return is_err(r) ? r : Ant_Value_Undefined;
   }
 
   if (Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
-  if (!is_callable(cb)) return js_mkundef();
+  if (!is_callable(cb)) return Ant_Value_Undefined;
 
-  ant_value_t r = sv_vm_call(js->vm, js, cb, js_mkundef(), NULL, 0, NULL, js_mkundef());
-  return is_err(r) ? r : js_mkundef();
+  ant_value_t r = sv_vm_call(js->vm, js, cb, Ant_Value_Undefined, NULL, 0, NULL, Ant_Value_Undefined);
+  return is_err(r) ? r : Ant_Value_Undefined;
 }
 
 static ant_value_t js_zlib__transform(ant_params_t) {
   zlib_stream_t *st = zlib_stream_ptr(call_this);
-  ant_value_t cb = nargs > 2 ? args[2] : js_mkundef();
+  ant_value_t cb = nargs > 2 ? args[2] : Ant_Value_Undefined;
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid zlib stream");
 
   const uint8_t *bytes = NULL;
@@ -542,7 +542,7 @@ static ant_value_t js_zlib__transform(ant_params_t) {
     if (s) { bytes = (const uint8_t *)s; len = slen; }
   }
 
-  ant_value_t r = js_mkundef();
+  ant_value_t r = Ant_Value_Undefined;
   if (bytes) {
     st->bytes_written += (uint32_t)len;
     r = zlib_do_process(js, st, bytes, len, Z_NO_FLUSH);
@@ -552,7 +552,7 @@ static ant_value_t js_zlib__transform(ant_params_t) {
 
 static ant_value_t js_zlib__flush(ant_params_t) {
   zlib_stream_t *st = zlib_stream_ptr(call_this);
-  ant_value_t cb = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t cb = nargs > 0 ? args[0] : Ant_Value_Undefined;
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid zlib stream");
 
   ant_value_t r = zlib_do_process(js, st, NULL, 0, Z_FINISH);
@@ -566,7 +566,7 @@ static ant_value_t js_zlib_flush(ant_params_t) {
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid zlib stream");
 
   int flush = st->brotli ? 1 : Z_FULL_FLUSH;
-  ant_value_t cb = js_mkundef();
+  ant_value_t cb = Ant_Value_Undefined;
   if (nargs > 0 && is_callable(args[0])) cb = args[0];
   else {
     if (nargs > 0 && vtype(args[0]) == kTypeNumber) flush = (int)Ant_Value_AsNumberUnchecked(args[0]);
@@ -578,7 +578,7 @@ static ant_value_t js_zlib_flush(ant_params_t) {
     return call_this;
   }
 
-  ant_value_t r = st->brotli && !st->closed ? js_mkundef() : zlib_do_process(js, st, NULL, 0, flush);
+  ant_value_t r = st->brotli && !st->closed ? Ant_Value_Undefined : zlib_do_process(js, st, NULL, 0, flush);
   if (is_err(r)) {
     GC_ROOT_SAVE(root_mark, js);
     r = js_take_thrown(js, r);
@@ -586,7 +586,7 @@ static ant_value_t js_zlib_flush(ant_params_t) {
     eventemitter_emit_args(js, st->obj, "error", &r, 1);
     if (!Ant_Exception_Pending(js) && is_callable(cb)) {
       ant_value_t argv[1] = { r };
-      sv_vm_call(js->vm, js, cb, js_mkundef(), argv, 1, NULL, js_mkundef());
+      sv_vm_call(js->vm, js, cb, Ant_Value_Undefined, argv, 1, NULL, Ant_Value_Undefined);
     }
     GC_ROOT_RESTORE(js, root_mark);
     if (Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
@@ -596,7 +596,7 @@ static ant_value_t js_zlib_flush(ant_params_t) {
   if (Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
 
   if (is_callable(cb)) {
-    ant_value_t null_val = js_mknull();
+    ant_value_t null_val = Ant_Value_Null;
     queue_next_tick_with_args(js, cb, &null_val, 1);
   }
   
@@ -641,10 +641,10 @@ static ant_value_t js_zlib_params(ant_params_t) {
   if (deflateParams(&st->strm, level, strategy) != Z_OK)
     return js_mkerr(js, "zlib params failed");
 
-  ant_value_t cb = nargs > 2 && is_callable(args[2]) ? args[2] : js_mkundef();
+  ant_value_t cb = nargs > 2 && is_callable(args[2]) ? args[2] : Ant_Value_Undefined;
   if (is_callable(cb)) {
-    ant_value_t null_val = js_mknull();
-    sv_vm_call(js->vm, js, cb, js_mkundef(), &null_val, 1, NULL, js_mkundef());
+    ant_value_t null_val = Ant_Value_Null;
+    sv_vm_call(js->vm, js, cb, Ant_Value_Undefined, &null_val, 1, NULL, Ant_Value_Undefined);
   }
   
   return call_this;
@@ -652,11 +652,11 @@ static ant_value_t js_zlib_params(ant_params_t) {
 
 static ant_value_t js_zlib_close(ant_params_t) {
   ant_value_t destroy = js_get(js, stream_readable_prototype(js), "destroy");
-  ant_value_t result = sv_vm_call(js->vm, js, destroy, call_this, NULL, 0, NULL, js_mkundef());
+  ant_value_t result = sv_vm_call(js->vm, js, destroy, call_this, NULL, 0, NULL, Ant_Value_Undefined);
   
   if (is_err(result)) return result;
   if (nargs > 0 && is_callable(args[0]))
-    sv_vm_call(js->vm, js, args[0], js_mkundef(), NULL, 0, NULL, js_mkundef());
+    sv_vm_call(js->vm, js, args[0], Ant_Value_Undefined, NULL, 0, NULL, Ant_Value_Undefined);
   
   return call_this;
 }
@@ -666,9 +666,9 @@ static ant_value_t js_zlib_handle_close(ant_params_t) {
   if (st) zlib_stream_release(st);
 
   if (nargs > 0 && is_callable(args[0]))
-    sv_vm_call(js->vm, js, args[0], js_mkundef(), NULL, 0, NULL, js_mkundef());
+    sv_vm_call(js->vm, js, args[0], Ant_Value_Undefined, NULL, 0, NULL, Ant_Value_Undefined);
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_zlib__destroy(ant_params_t) {
@@ -677,12 +677,12 @@ static ant_value_t js_zlib__destroy(ant_params_t) {
 
   st->destroyed = true;
   zlib_stream_release(st);
-  js_set(js, call_this, "_handle", js_mknull());
+  js_set(js, call_this, "_handle", Ant_Value_Null);
 
   if (nargs > 1 && is_callable(args[1]))
-    return sv_vm_call(js->vm, js, args[1], js_mkundef(), args, 1, NULL, js_mkundef());
+    return sv_vm_call(js->vm, js, args[1], Ant_Value_Undefined, args, 1, NULL, Ant_Value_Undefined);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_zlib_get_bytes_written(ant_params_t) {
@@ -733,7 +733,7 @@ static ant_value_t zlib_create_stream(ant_t *js, zlib_kind_t kind, ant_value_t o
       ? js->builtins.zlib_protos[kind]
       : js->builtins.zlib_transform_proto;
   
-  ant_value_t obj = stream_construct_duplex(js, proto, opts_val, js_mkundef());
+  ant_value_t obj = stream_construct_duplex(js, proto, opts_val, Ant_Value_Undefined);
   if (is_err(obj)) {
     zlib_stream_release(st);
     free(st);
@@ -755,39 +755,39 @@ static ant_value_t zlib_create_stream(ant_t *js, zlib_kind_t kind, ant_value_t o
 }
 
 static ant_value_t js_create_gzip(ant_params_t) {
-  return zlib_create_stream(js, ZLIB_KIND_GZIP, nargs > 0 ? args[0] : js_mkundef());
+  return zlib_create_stream(js, ZLIB_KIND_GZIP, nargs > 0 ? args[0] : Ant_Value_Undefined);
 }
 
 static ant_value_t js_create_gunzip(ant_params_t) {
-  return zlib_create_stream(js, ZLIB_KIND_GUNZIP, nargs > 0 ? args[0] : js_mkundef());
+  return zlib_create_stream(js, ZLIB_KIND_GUNZIP, nargs > 0 ? args[0] : Ant_Value_Undefined);
 }
 
 static ant_value_t js_create_deflate(ant_params_t) {
-  return zlib_create_stream(js, ZLIB_KIND_DEFLATE, nargs > 0 ? args[0] : js_mkundef());
+  return zlib_create_stream(js, ZLIB_KIND_DEFLATE, nargs > 0 ? args[0] : Ant_Value_Undefined);
 }
 
 static ant_value_t js_create_inflate(ant_params_t) {
-  return zlib_create_stream(js, ZLIB_KIND_INFLATE, nargs > 0 ? args[0] : js_mkundef());
+  return zlib_create_stream(js, ZLIB_KIND_INFLATE, nargs > 0 ? args[0] : Ant_Value_Undefined);
 }
 
 static ant_value_t js_create_deflate_raw(ant_params_t) {
-  return zlib_create_stream(js, ZLIB_KIND_DEFLATE_RAW, nargs > 0 ? args[0] : js_mkundef());
+  return zlib_create_stream(js, ZLIB_KIND_DEFLATE_RAW, nargs > 0 ? args[0] : Ant_Value_Undefined);
 }
 
 static ant_value_t js_create_inflate_raw(ant_params_t) {
-  return zlib_create_stream(js, ZLIB_KIND_INFLATE_RAW, nargs > 0 ? args[0] : js_mkundef());
+  return zlib_create_stream(js, ZLIB_KIND_INFLATE_RAW, nargs > 0 ? args[0] : Ant_Value_Undefined);
 }
 
 static ant_value_t js_create_unzip(ant_params_t) {
-  return zlib_create_stream(js, ZLIB_KIND_UNZIP, nargs > 0 ? args[0] : js_mkundef());
+  return zlib_create_stream(js, ZLIB_KIND_UNZIP, nargs > 0 ? args[0] : Ant_Value_Undefined);
 }
 
 static ant_value_t js_create_brotli_compress(ant_params_t) {
-  return zlib_create_stream(js, ZLIB_KIND_BROTLI_COMPRESS, nargs > 0 ? args[0] : js_mkundef());
+  return zlib_create_stream(js, ZLIB_KIND_BROTLI_COMPRESS, nargs > 0 ? args[0] : Ant_Value_Undefined);
 }
 
 static ant_value_t js_create_brotli_decompress(ant_params_t) {
-  return zlib_create_stream(js, ZLIB_KIND_BROTLI_DECOMPRESS, nargs > 0 ? args[0] : js_mkundef());
+  return zlib_create_stream(js, ZLIB_KIND_BROTLI_DECOMPRESS, nargs > 0 ? args[0] : Ant_Value_Undefined);
 }
 
 typedef struct { 
@@ -960,7 +960,7 @@ static ant_value_t get_input_bytes(ant_t *js, ant_value_t val, const uint8_t **o
   ArrayBufferData *ab = buffer_get_arraybuffer_data(val);
   
   if (ab && ab->is_detached) return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot perform Construct on a detached ArrayBuffer");
-  if (is_object_type(val) && buffer_source_get_bytes(js, val, out_bytes, out_len)) return js_mkundef();
+  if (is_object_type(val) && buffer_source_get_bytes(js, val, out_bytes, out_len)) return Ant_Value_Undefined;
   
   size_t slen = 0;
   char *s = js_getstr(js, val, &slen);
@@ -969,7 +969,7 @@ static ant_value_t get_input_bytes(ant_t *js, ant_value_t val, const uint8_t **o
   *out_bytes = (const uint8_t *)s;
   *out_len = slen;
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t zlib_sync_fn(ant_native_params_t, zlib_kind_t kind) {
@@ -978,7 +978,7 @@ static ant_value_t zlib_sync_fn(ant_native_params_t, zlib_kind_t kind) {
   size_t len = 0;
   ant_value_t input = get_input_bytes(js, args[0], &bytes, &len);
   if (is_err(input)) return input;
-  return zlib_sync_op(js, kind, bytes, len, nargs > 1 ? args[1] : js_mkundef());
+  return zlib_sync_op(js, kind, bytes, len, nargs > 1 ? args[1] : Ant_Value_Undefined);
 }
 
 static ant_value_t zlib_async_fn(ant_native_params_t, zlib_kind_t kind) {
@@ -991,19 +991,19 @@ static ant_value_t zlib_async_fn(ant_native_params_t, zlib_kind_t kind) {
   ant_value_t input = get_input_bytes(js, args[0], &bytes, &len);
   if (is_err(input)) return input;
 
-  ant_value_t opts = (nargs > 1 && is_object_type(args[1])) ? args[1] : js_mkundef();
+  ant_value_t opts = (nargs > 1 && is_object_type(args[1])) ? args[1] : Ant_Value_Undefined;
   ant_value_t result = zlib_sync_op(js, kind, bytes, len, opts);
 
   if (is_callable(cb)) {
     if (is_err(result)) {
       ant_value_t argv[1] = { js_take_thrown(js, result) };
-      sv_vm_call(js->vm, js, cb, js_mkundef(), argv, 1, NULL, js_mkundef());
+      sv_vm_call(js->vm, js, cb, Ant_Value_Undefined, argv, 1, NULL, Ant_Value_Undefined);
     } else {
-      ant_value_t null_val = js_mknull();
+      ant_value_t null_val = Ant_Value_Null;
       ant_value_t argv[2] = { null_val, result };
-      sv_vm_call(js->vm, js, cb, js_mkundef(), argv, 2, NULL, js_mkundef());
+      sv_vm_call(js->vm, js, cb, Ant_Value_Undefined, argv, 2, NULL, Ant_Value_Undefined);
     }
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   return result;

@@ -72,7 +72,7 @@ static bool current_call_host(ant_guest_t *g, guest_host_call_t *call) {
 
 ant_value_t guest_current_host_call(ant_t *js, ant_guest_t *g, guest_host_call_t *call) {
   call->done = true;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void current_rearm(ant_guest_t *g);
@@ -191,7 +191,7 @@ ant_value_t guest_current_start(ant_t *js, ant_guest_t *g) {
   }
 
   current_rearm(g);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t guest_current_submit(ant_t *js, ant_guest_t *g, guest_call_t *call) {

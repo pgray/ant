@@ -91,7 +91,7 @@ static void jit_emit_in_field_fast(
   sv_asm_load(a, MIR_T_P, r_t2, r_ic, offsetof(sv_ic_entry_t, cached_shape));
   sv_asm_i64_bne(a, slow, r_t, r_t2);
   if (kind == SV_GF_IC_OWN) {
-    mir_load_imm(c->ctx, c->jit_func, dst, js_true);
+    mir_load_imm(c->ctx, c->jit_func, dst, Ant_Value_True);
     sv_asm_jump(a, done);
     return;
   }
@@ -124,7 +124,7 @@ static void jit_emit_in_field_fast(
   }
   
   sv_asm_bind(a, result);
-  mir_load_imm(c->ctx, c->jit_func, dst, kind == SV_GF_IC_MISSING ? js_false : js_true);
+  mir_load_imm(c->ctx, c->jit_func, dst, kind == SV_GF_IC_MISSING ? Ant_Value_False : Ant_Value_True);
   sv_asm_jump(a, done);
 }
 

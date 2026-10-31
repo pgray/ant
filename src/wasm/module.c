@@ -55,7 +55,7 @@ ant_value_t wasm_module_from_bytes(ant_t *js, ant_value_t value, ant_value_t *ou
 
   char error_buf[128] = {0};
 
-  *out_module = js_mkundef();
+  *out_module = Ant_Value_Undefined;
   if (js->codegen_blocked & ANT_CODEGEN_NO_WASM)
     return wasm_make_compile_error(js, "Wasm code generation disallowed by embedder");
 
@@ -92,11 +92,11 @@ ant_value_t wasm_module_from_bytes(ant_t *js, ant_value_t value, ant_value_t *ou
     js_set_slot_wb(js, *out_module, SLOT_MAP, value);
   }
   wasm_byte_vec_delete(&binary);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t js_wasm_module_ctor(ant_params_t) {
-  ant_value_t module = js_mkundef();
+  ant_value_t module = Ant_Value_Undefined;
   ant_value_t err;
 
   if (vtype(call_new_target) == kTypeUndefined)
@@ -232,13 +232,13 @@ ant_value_t js_wasm_validate(ant_params_t) {
   bool ok;
   char error_buf[128] = {0};
 
-  if (nargs < 1) return js_false;
-  if (!ensure_wasm_engine()) return js_false;
-  if (!(store = wasm_store_new(g_wasm_engine))) return js_false;
+  if (nargs < 1) return Ant_Value_False;
+  if (!ensure_wasm_engine()) return Ant_Value_False;
+  if (!(store = wasm_store_new(g_wasm_engine))) return Ant_Value_False;
   
   if (!wasm_buffer_source_to_vec(js, args[0], &binary, error_buf, sizeof(error_buf))) {
     wasm_store_delete(store);
-    return js_false;
+    return Ant_Value_False;
   }
 
   ok = wasm_module_validate(store, &binary);
@@ -250,7 +250,7 @@ ant_value_t js_wasm_validate(ant_params_t) {
 
 ant_value_t js_wasm_compile(ant_params_t) {
   ant_value_t promise = js_mkpromise(js);
-  ant_value_t module = js_mkundef();
+  ant_value_t module = Ant_Value_Undefined;
   ant_value_t err;
 
   if (nargs < 1) {

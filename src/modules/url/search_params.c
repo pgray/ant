@@ -67,13 +67,13 @@ static bool usp_entry_matches(ant_t *js, ant_value_t entry, const char *key, con
 
 static ant_value_t usp_optional_value(ant_t *js, ant_value_t *args, int nargs, const char **out) {
   *out = NULL;
-  if (nargs < 2 || is_undefined(args[1])) return js_mkundef();
+  if (nargs < 2 || is_undefined(args[1])) return Ant_Value_Undefined;
 
   ant_value_t value = url_string_value(js, args[1]);
   if (is_err(value)) return value;
 
   *out = js_getstr(js, value, NULL);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void usp_push_decoded_pair(ant_t *js, ant_value_t arr, const char *start, size_t len) {
@@ -215,7 +215,7 @@ static ant_value_t usp_get(ant_params_t) {
 
   const char *key = js_getstr(js, key_sv, NULL);
   ant_value_t entries = usp_entries(call_this);
-  if (!key || !entries) return js_mknull();
+  if (!key || !entries) return Ant_Value_Null;
 
   ant_offset_t len = js_arr_len(js, entries);
   for (ant_offset_t i = 0; i < len; i++) {
@@ -223,7 +223,7 @@ static ant_value_t usp_get(ant_params_t) {
     if (usp_entry_has_key(js, entry, key)) return js_arr_get(js, entry, 1);
   }
 
-  return js_mknull();
+  return Ant_Value_Null;
 }
 
 static ant_value_t usp_getAll(ant_params_t) {
@@ -253,7 +253,7 @@ static ant_value_t usp_has(ant_params_t) {
   if (is_err(key_sv)) return key_sv;
 
   const char *key = js_getstr(js, key_sv, NULL);
-  if (!key) return js_false;
+  if (!key) return Ant_Value_False;
 
   const char *value = NULL;
   ant_value_t converted = usp_optional_value(js, args, nargs, &value);
@@ -262,9 +262,9 @@ static ant_value_t usp_has(ant_params_t) {
   ant_value_t entries = usp_entries(call_this);
   ant_offset_t len = usp_entry_count(js, entries);
   for (ant_offset_t i = 0; i < len; i++)
-    if (usp_entry_matches(js, js_arr_get(js, entries, i), key, value)) return js_true;
+    if (usp_entry_matches(js, js_arr_get(js, entries, i), key, value)) return Ant_Value_True;
 
-  return js_false;
+  return Ant_Value_False;
 }
 
 static ant_value_t usp_set(ant_params_t) {
@@ -277,7 +277,7 @@ static ant_value_t usp_set(ant_params_t) {
   if (is_err(value_sv)) return value_sv;
 
   const char *key = js_getstr(js, key_sv, NULL);
-  if (!key) return js_mkundef();
+  if (!key) return Ant_Value_Undefined;
 
   ant_value_t entries = usp_entries(call_this);
   ant_offset_t len = usp_entry_count(js, entries);
@@ -298,7 +298,7 @@ static ant_value_t usp_set(ant_params_t) {
   if (!found) js_arr_push(js, next, usp_make_entry(js, key_sv, value_sv));
   usp_replace_entries(js, call_this, next);
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t usp_append(ant_params_t) {
@@ -311,12 +311,12 @@ static ant_value_t usp_append(ant_params_t) {
   if (is_err(value_sv)) return value_sv;
 
   ant_value_t entries = usp_entries(call_this);
-  if (!entries) return js_mkundef();
+  if (!entries) return Ant_Value_Undefined;
 
   js_arr_push(js, entries, usp_make_entry(js, key_sv, value_sv));
   usp_push_to_url(js, call_this);
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t usp_delete(ant_params_t) {
@@ -326,7 +326,7 @@ static ant_value_t usp_delete(ant_params_t) {
   if (is_err(key_sv)) return key_sv;
 
   const char *key = js_getstr(js, key_sv, NULL);
-  if (!key) return js_mkundef();
+  if (!key) return Ant_Value_Undefined;
 
   const char *value = NULL;
   ant_value_t converted = usp_optional_value(js, args, nargs, &value);
@@ -342,7 +342,7 @@ static ant_value_t usp_delete(ant_params_t) {
   }
 
   usp_replace_entries(js, call_this, next);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t usp_toString(ant_params_t) {
@@ -360,21 +360,21 @@ static ant_value_t usp_callback_type_error(ant_t *js, ant_value_t value) {
 }
 
 static ant_value_t usp_forEach(ant_params_t) {
-  if (nargs < 1 || !is_callable(args[0])) return usp_callback_type_error(js, nargs > 0 ? args[0] : js_mkundef());
+  if (nargs < 1 || !is_callable(args[0])) return usp_callback_type_error(js, nargs > 0 ? args[0] : Ant_Value_Undefined);
 
   ant_value_t callback = args[0];
-  ant_value_t this_arg = nargs >= 2 ? args[1] : js_mkundef();
+  ant_value_t this_arg = nargs >= 2 ? args[1] : Ant_Value_Undefined;
   ant_value_t entries = usp_entries(call_this);
   ant_offset_t len = usp_entry_count(js, entries);
 
   for (ant_offset_t i = 0; i < len; i++) {
     ant_value_t entry = js_arr_get(js, entries, i);
     ant_value_t call_args[3] = { js_arr_get(js, entry, 1), js_arr_get(js, entry, 0), call_this };
-    ant_value_t result = sv_vm_call(js->vm, js, callback, this_arg, call_args, 3, NULL, js_mkundef());
+    ant_value_t result = sv_vm_call(js->vm, js, callback, this_arg, call_args, 3, NULL, Ant_Value_Undefined);
     if (is_err(result)) return result;
   }
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t usp_size_get(ant_params_t) {
@@ -401,10 +401,10 @@ static void usp_sort_entries(ant_t *js, ant_value_t *items, ant_offset_t len) {
 static ant_value_t usp_sort(ant_params_t) {
   ant_value_t entries = usp_entries(call_this);
   ant_offset_t len = usp_entry_count(js, entries);
-  if (len <= 1) return js_mkundef();
+  if (len <= 1) return Ant_Value_Undefined;
 
   ant_value_t *items = malloc(sizeof(ant_value_t) * (size_t)len);
-  if (!items) return js_mkundef();
+  if (!items) return Ant_Value_Undefined;
 
   for (ant_offset_t i = 0; i < len; i++) items[i] = js_arr_get(js, entries, i);
   usp_sort_entries(js, items, len);
@@ -414,7 +414,7 @@ static ant_value_t usp_sort(ant_params_t) {
   free(items);
 
   usp_replace_entries(js, call_this, next);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t usp_iter_value(ant_t *js, uint32_t kind, ant_value_t entry) {
@@ -427,14 +427,14 @@ static ant_value_t usp_iter_value(ant_t *js, uint32_t kind, ant_value_t entry) {
 
 static ant_value_t usp_iter_next(ant_params_t) {
   ant_value_t state_v = js_get_slot(call_this, SLOT_ITER_STATE);
-  if (vtype(state_v) != kTypeNumber) return js_iter_result(js, false, js_mkundef());
+  if (vtype(state_v) != kTypeNumber) return js_iter_result(js, false, Ant_Value_Undefined);
 
   uint32_t state = (uint32_t)Ant_Value_AsNumberUnchecked(state_v);
   uint32_t kind = iter_state_kind(state);
   uint32_t idx = iter_state_index(state);
 
   ant_value_t entries = usp_entries(js_get_slot(call_this, SLOT_DATA));
-  if ((ant_offset_t)idx >= usp_entry_count(js, entries)) return js_iter_result(js, false, js_mkundef());
+  if ((ant_offset_t)idx >= usp_entry_count(js, entries)) return js_iter_result(js, false, Ant_Value_Undefined);
 
   js_set_slot(call_this, SLOT_ITER_STATE, Ant_Value_FromNumber((double)iter_state_pack(kind, idx + 1)));
   return js_iter_result(js, true, usp_iter_value(js, kind, js_arr_get(js, entries, (ant_offset_t)idx)));
@@ -478,7 +478,7 @@ static ant_value_t usp_pair_items_from_iterable(ant_t *js, ant_value_t pair, ant
   GC_ROOT_PIN(js, it.next_fn);
 
   size_t count = 0;
-  ant_value_t value = js_mkundef();
+  ant_value_t value = Ant_Value_Undefined;
   while (js_iter_next(js, &it, &value)) {
     if (count < 2) {
       items[count] = value;
@@ -489,7 +489,7 @@ static ant_value_t usp_pair_items_from_iterable(ant_t *js, ant_value_t pair, ant
 
   GC_ROOT_RESTORE(js, root_mark);
   if (Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
-  return count == 2 ? js_mkundef() : usp_invalid_tuple(js);
+  return count == 2 ? Ant_Value_Undefined : usp_invalid_tuple(js);
 }
 
 static ant_value_t usp_pair_items(ant_t *js, ant_value_t pair, ant_value_t items[2]) {
@@ -498,13 +498,13 @@ static ant_value_t usp_pair_items(ant_t *js, ant_value_t pair, ant_value_t items
 
   items[0] = js_arr_get(js, pair, 0);
   items[1] = js_arr_get(js, pair, 1);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t usp_add_pair(ant_t *js, ant_value_t entries, ant_value_t pair) {
   if (!is_object_type(pair) && !is_callable(pair)) return usp_invalid_tuple(js);
 
-  ant_value_t items[2] = { js_mkundef(), js_mkundef() };
+  ant_value_t items[2] = { Ant_Value_Undefined, Ant_Value_Undefined };
   ant_value_t status = usp_pair_items(js, pair, items);
   if (is_err(status)) return status;
 
@@ -515,7 +515,7 @@ static ant_value_t usp_add_pair(ant_t *js, ant_value_t entries, ant_value_t pair
   if (is_err(value)) return value;
 
   js_arr_push(js, entries, usp_make_entry(js, key, value));
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t usp_init_from_primitive(ant_t *js, ant_value_t obj, ant_value_t init) {
@@ -545,7 +545,7 @@ static ant_value_t usp_add_array_pairs(ant_t *js, ant_value_t entries, ant_value
     ant_value_t status = usp_add_pair(js, entries, js_arr_get(js, init, i));
     if (is_err(status)) return status;
   }
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t usp_add_iterated_pairs(ant_t *js, ant_value_t entries, ant_value_t init) {
@@ -557,8 +557,8 @@ static ant_value_t usp_add_iterated_pairs(ant_t *js, ant_value_t entries, ant_va
   GC_ROOT_PIN(js, it.iterator);
   GC_ROOT_PIN(js, it.next_fn);
 
-  ant_value_t status = js_mkundef();
-  ant_value_t pair = js_mkundef();
+  ant_value_t status = Ant_Value_Undefined;
+  ant_value_t pair = Ant_Value_Undefined;
   while (js_iter_next(js, &it, &pair)) {
     status = usp_add_pair(js, entries, pair);
     if (!is_err(status)) continue;
@@ -616,7 +616,7 @@ static ant_value_t js_URLSearchParams(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Class constructor URLSearchParams cannot be invoked without 'new'");
 
   ant_value_t entries = js_mkarr(js);
-  ant_value_t obj = usp_new(js, js_mkundef(), entries);
+  ant_value_t obj = usp_new(js, Ant_Value_Undefined, entries);
   if (nargs < 1 || is_undefined(args[0]) || is_null(args[0])) return obj;
 
   ant_value_t init = args[0];

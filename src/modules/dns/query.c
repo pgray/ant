@@ -49,7 +49,7 @@ static ant_value_t dns_rr_txt(ant_t *js, const ares_dns_rr_t *rr) {
 static ant_value_t dns_rr_value(ant_t *js, const ares_dns_rr_t *rr, dns_rr_t kind, dns_shape_t shape) {
   ares_dns_rec_type_t type = ares_dns_rr_get_type(rr);
   bool tagged = shape == DNS_SHAPE_ANY;
-  ant_value_t obj = js_mkundef();
+  ant_value_t obj = Ant_Value_Undefined;
 
   switch (kind) {
     case DNS_RR_A:
@@ -138,7 +138,7 @@ static ant_value_t dns_rr_value(ant_t *js, const ares_dns_rr_t *rr, dns_rr_t kin
     }
 
     default:
-      return js_mkundef();
+      return Ant_Value_Undefined;
   }
 
   if (tagged) js_set(js, obj, "type", dns_str(js, dns_rr_info[kind].name));
@@ -169,7 +169,7 @@ static ant_value_t dns_records(ant_t *js, const ares_dns_record_t *rec, dns_rr_t
     for (size_t i = 0; i < countof(dns_any_order); i++) dns_collect(js, list, rec, count, dns_any_order[i], shape);
   } else dns_collect(js, list, rec, count, kind, shape);
 
-  ant_value_t result = js_arr_len(js, list) == 0 ? js_mkundef()
+  ant_value_t result = js_arr_len(js, list) == 0 ? Ant_Value_Undefined
     : kind == DNS_RR_SOA ? js_arr_get(js, list, 0) : list;
   
   GC_ROOT_RESTORE(js, mark);
@@ -221,7 +221,7 @@ static ant_value_t dns_query_issue(
   req->channel = channel;
   req->owner = call_this;
 
-  ant_value_t result = vtype(req->promise) == kTypePromise ? req->promise : js_mkundef();
+  ant_value_t result = vtype(req->promise) == kTypePromise ? req->promise : Ant_Value_Undefined;
   GC_ROOT_SAVE(mark, js);
   GC_ROOT_PIN(js, result);
 
@@ -250,9 +250,9 @@ static int dns_rr_from_name(ant_t *js, ant_value_t value) {
 }
 
 ant_value_t dns_resolve_impl(ant_native_params_t, ant_value_t call_this, int rr, bool promises) {
-  ant_value_t hostname = nargs > 0 ? args[0] : js_mkundef();
-  ant_value_t second = nargs > 1 ? args[1] : js_mkundef();
-  ant_value_t callback = promises ? js_mkundef() : nargs > 2 ? args[2] : js_mkundef();
+  ant_value_t hostname = nargs > 0 ? args[0] : Ant_Value_Undefined;
+  ant_value_t second = nargs > 1 ? args[1] : Ant_Value_Undefined;
+  ant_value_t callback = promises ? Ant_Value_Undefined : nargs > 2 ? args[2] : Ant_Value_Undefined;
   bool ttl = false;
 
   if (rr < 0) {
@@ -275,8 +275,8 @@ ant_value_t dns_resolve_impl(ant_native_params_t, ant_value_t call_this, int rr,
 }
 
 ant_value_t dns_reverse_impl(ant_native_params_t, ant_value_t call_this, bool promises) {
-  ant_value_t ip = nargs > 0 ? args[0] : js_mkundef();
-  ant_value_t callback = promises ? js_mkundef() : nargs > 1 ? args[1] : js_mkundef();
+  ant_value_t ip = nargs > 0 ? args[0] : Ant_Value_Undefined;
+  ant_value_t callback = promises ? Ant_Value_Undefined : nargs > 1 ? args[1] : Ant_Value_Undefined;
   if (vtype(ip) != kTypeString) return Ant_Error_CreateInvalidArgType(js, "ip", "of type string", ip);
   
   ant_value_t nul = Ant_Error_CheckNoNullBytes(js, "name", ip);

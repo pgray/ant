@@ -85,7 +85,7 @@ void gc_weak_remember_map(
 }
 
 void gc_weak_remember_set(ant_t *js, ant_object_t *obj, ant_value_t key) {
-  gc_weak_remember_edge(js, obj, key, js_mkundef(), kTypeWeakSet);
+  gc_weak_remember_edge(js, obj, key, Ant_Value_Undefined, kTypeWeakSet);
 }
 
 void gc_weak_keep_alive(ant_t *js, ant_value_t value) {
@@ -437,7 +437,7 @@ static void gc_weak_prune_collection(ant_t *js, ant_object_t *obj) {
   ant_value_t collection = js_obj_from_ptr(obj);
   weakref_state_t *weakref = js_get_native(collection, WEAKREF_NATIVE_TAG);
   if (weakref && !js->weak_gc.key_alive(js, weakref->target))
-    weakref->target = js_mkundef();
+    weakref->target = Ant_Value_Undefined;
 
   if (obj->type_tag == kTypeWeakMap) {
     weakmap_table_t *table = js_get_native(collection, WEAKMAP_NATIVE_TAG);

@@ -15,8 +15,7 @@ static inline ant_value_t js_to_index_fast(ant_t *js, ant_value_t value, size_t 
     if (__builtin_expect(
       number >= 0.0 && number <= MAX_SAFE_INTEGER &&
       number <= (double)SIZE_MAX, 1 )
-	) { *out = (size_t)number; return js_mkundef(); }
-  }
+	) { *out = (size_t)number; return Ant_Value_Undefined; }}
   return js_to_index_slow(js, value, out);
 }
 
@@ -26,8 +25,7 @@ static inline ant_value_t js_to_length_fast(ant_t *js, ant_value_t value, size_t
     if (__builtin_expect(
       number >= 0.0 && number <= MAX_SAFE_INTEGER &&
       number <= (double)SIZE_MAX, 1)
-	) { *out = (size_t)number; return js_mkundef(); }
-  }
+	) { *out = (size_t)number; return Ant_Value_Undefined; }}
   return js_to_length_slow(js, value, out);
 }
 

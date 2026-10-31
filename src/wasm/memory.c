@@ -13,7 +13,7 @@ __attribute__((noinline, cold)) void wasm_detach_moved_views(ant_t *js) {
     if (!wasm_view_moved(handle)) continue;
     ArrayBufferData *cached = buffer_get_arraybuffer_data(handle->memory_buffer);
     if (cached && !cached->is_detached) buffer_detach(js, cached);
-    handle->memory_buffer = js_mkundef();
+    handle->memory_buffer = Ant_Value_Undefined;
     Ant_List_Remove(handle);
   }
 }
@@ -53,7 +53,7 @@ static bool wasm_parse_memory_descriptor(ant_t *js, ant_value_t descriptor, wasm
 
   limits->min = initial_pages;
   limits->max = maximum_pages;
-  *err = js_mkundef();
+  *err = Ant_Value_Undefined;
   return true;
 }
 
@@ -117,9 +117,9 @@ ant_value_t js_wasm_memory_grow(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_RANGE, "Failed to grow memory by %u pages", delta);
 
   wasm_detach_external_arraybuffer(js, handle->memory_buffer);
-  handle->memory_buffer = js_mkundef();
+  handle->memory_buffer = Ant_Value_Undefined;
   Ant_List_Remove(handle);
-  js_set_slot_wb(js, call_this, SLOT_AUX, js_mkundef());
+  js_set_slot_wb(js, call_this, SLOT_AUX, Ant_Value_Undefined);
 
   return Ant_Value_FromNumber((double)old_size);
 }
@@ -135,7 +135,7 @@ ant_value_t js_wasm_memory_ctor(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Memory constructor requires 'new'");
   if (!ensure_wasm_engine())
     return js_mkerr(js, "Failed to initialize WebAssembly engine");
-  if (!wasm_parse_memory_descriptor(js, nargs > 0 ? args[0] : js_mkundef(), &limits, &err))
+  if (!wasm_parse_memory_descriptor(js, nargs > 0 ? args[0] : Ant_Value_Undefined, &limits, &err))
     return err;
 
   store = wasm_store_new(g_wasm_engine);
@@ -152,7 +152,7 @@ ant_value_t js_wasm_memory_ctor(ant_params_t) {
 
   result = wasm_wrap_extern_object(
     js, WASM_EXTERN_WRAP_MEMORY, js->builtins.wasm_memory_proto, BRAND_WASM_MEMORY,
-    store, true, memory, js_mkundef()
+    store, true, memory, Ant_Value_Undefined
   );
   if (vtype(result) != kTypeObject) {
     wasm_memory_delete(memory);

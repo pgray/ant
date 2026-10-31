@@ -15,7 +15,7 @@ ant_value_t Ant_Silver_InvokeNativeScoped(ant_t *js, ant_cfunc_t fn, ant_value_t
 ant_value_t sv_invoke_builtin_in_realm(ant_t *js, const ant_cfunc_meta_t *meta, ant_value_t this_val, ant_value_t func, ant_call_params_t);
 
 static inline ant_value_t sv_call_native_this(ant_t *js, ant_cfunc_t fn, ant_value_t this_val, ant_args_t) {
-  return fn(js, args, nargs, js_mkundef(), this_val, js_mkundef());
+  return fn(js, args, nargs, Ant_Value_Undefined, this_val, Ant_Value_Undefined);
 }
 
 static inline ant_value_t Ant_Silver_FinishNativeCall(ant_t *js, ant_value_t result) {
@@ -117,14 +117,14 @@ static inline bool sv_call_mode_is_construct(sv_call_mode_t mode) {
 }
 
 static inline ant_value_t sv_call_normalize_this(ant_t *js, ant_value_t this_val, sv_call_mode_t mode) {
-  if (mode == SV_CALL_MODE_NORMAL && sv_is_nullish_this(this_val)) return js_mkundef();
+  if (mode == SV_CALL_MODE_NORMAL && sv_is_nullish_this(this_val)) return Ant_Value_Undefined;
   return this_val;
 }
 
 static inline ant_value_t sv_construct_prototype_from_object(
   ant_t *js, ant_value_t proto_source, ant_object_t *ptr
 ) {
-  ant_value_t proto = js_mkundef();
+  ant_value_t proto = Ant_Value_Undefined;
 
   int32_t slot = ptr && !ptr->flags.is_exotic && ptr->shape
     ? ant_shape_lookup_interned(ptr->shape, js->intern.prototype) : -1;
@@ -185,7 +185,7 @@ static inline ant_value_t sv_construct_prototype_cached(
 static inline ant_value_t sv_construct_prototype_from(
   ant_t *js, ant_value_t proto_source
 ) {
-  ant_value_t source_obj = js_mkundef();
+  ant_value_t source_obj = Ant_Value_Undefined;
   uint8_t source_type = vtype(proto_source);
 
   if (source_type == kTypeFunction) source_obj = js_func_obj(proto_source);
@@ -225,7 +225,7 @@ static inline ant_value_t sv_prepare_construct_meta(
   if (
     requested_new_target == func &&
     vtype(target) == kTypeObject && is_proxy(target)
-  ) return js_mkundef();
+  ) return Ant_Value_Undefined;
 
   ant_value_t proto_source =
     requested_new_target == func
@@ -236,7 +236,7 @@ static inline ant_value_t sv_prepare_construct_meta(
   if (
     source_type != kTypeFunction && source_type != kTypeBuiltin &&
     !is_object_type(proto_source)
-  ) return js_mkundef();
+  ) return Ant_Value_Undefined;
 
   return sv_construct_prototype_from(js, proto_source);
 }
@@ -264,7 +264,7 @@ static inline ant_value_t sv_call_resolve_bound(
   }
 
   if (flags & SV_CALL_HAS_SUPER) ctx->super_val = closure->super_val;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline void sv_call_cleanup(ant_t *js, sv_call_ctx_t *ctx) {
@@ -313,8 +313,8 @@ static inline bool sv_native_direct_allowed(const ant_t *js) {
 }
 
 static inline ant_value_t sv_call_value(ant_t *js, ant_value_t fn, ant_value_t this_val, ant_args_t) {
-  if (vtype(fn) == kTypeBuiltin) return sv_invoke_builtin(js, fn, this_val, fn, args, nargs, js_mkundef());
-  return sv_vm_call(js->vm, js, fn, this_val, args, nargs, NULL, js_mkundef());
+  if (vtype(fn) == kTypeBuiltin) return sv_invoke_builtin(js, fn, this_val, fn, args, nargs, Ant_Value_Undefined);
+  return sv_vm_call(js->vm, js, fn, this_val, args, nargs, NULL, Ant_Value_Undefined);
 }
 
 static inline bool sv_closure_is_plain_sync(const sv_closure_t *closure) {
@@ -338,7 +338,7 @@ static constexpr uint32_t SV_CALLBACK_DIRECT_FLAGS =
   SV_CALL_HAS_EVAL_ENV;
 
 static inline sv_callback_t sv_callback_prepare(ant_t *js, ant_value_t func, ant_value_t this_val) {
-  sv_callback_t cb = { func, this_val, js_mkundef(), NULL, false };
+  sv_callback_t cb = { func, this_val, Ant_Value_Undefined, NULL, false };
   if (vtype(func) != kTypeFunction) return cb;
 
   sv_closure_t *closure = js_func_closure(func);
@@ -359,7 +359,7 @@ static inline ant_value_t sv_callback_call(
   sv_vm_t *vm, ant_t *js, const sv_callback_t *cb, ant_value_t *args, int argc
 ) {
   if (!cb->closure) 
-    return sv_vm_call(vm, js, cb->func, cb->this_val, args, argc, NULL, js_mkundef());
+    return sv_vm_call(vm, js, cb->func, cb->this_val, args, argc, NULL, Ant_Value_Undefined);
   
   if (cb->stack_overflow) 
     return Ant_Error_CreateStackOverflow(js);
@@ -369,7 +369,7 @@ static inline ant_value_t sv_callback_call(
   sv_call_ctx_t ctx = {
     .this_val = cb->this_val,
     .super_val = cb->super_val,
-    .new_target = js_mkundef(),
+    .new_target = Ant_Value_Undefined,
     .args = args,
     .argc = argc,
     .alloc = NULL,
@@ -491,8 +491,8 @@ static inline ant_value_t sv_call_closure_fast(
 ) {
   sv_call_ctx_t ctx = {
     .this_val = (closure->call_flags & SV_CALL_IS_ARROW) ? closure->bound_this : this_val,
-    .super_val = (closure->call_flags & SV_CALL_HAS_SUPER) ? closure->super_val : js_mkundef(),
-    .new_target = js_mkundef(),
+    .super_val = (closure->call_flags & SV_CALL_HAS_SUPER) ? closure->super_val : Ant_Value_Undefined,
+    .new_target = Ant_Value_Undefined,
     .args = args,
     .argc = nargs,
     .alloc = NULL,

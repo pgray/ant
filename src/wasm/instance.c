@@ -84,7 +84,7 @@ static ant_value_t wasm_wrap_export_value(ant_t *js, ant_value_t instance_obj, c
     }
     default:
       (void)export_type;
-      return js_mkundef();
+      return Ant_Value_Undefined;
   }
 }
 
@@ -94,7 +94,7 @@ ant_value_t js_wasm_instance_exports_getter(ant_params_t) {
 }
 
 static ant_value_t wasm_property_get_nested(ant_t *js, ant_value_t base, const wasm_name_t *name) {
-  if (!is_object_type(base)) return js_mkundef();
+  if (!is_object_type(base)) return Ant_Value_Undefined;
   return js_getprop_fallback(js, base, name && name->data ? name->data : "");
 }
 
@@ -111,7 +111,7 @@ static wasm_trap_t *wasm_import_func_callback(void *env_ptr, const wasm_val_vec_
   ant_t *js = env->js;
   
   ant_value_t *js_args = NULL;
-  ant_value_t result = js_mkundef();
+  ant_value_t result = Ant_Value_Undefined;
   wasm_message_t trap_msg = WASM_EMPTY_VEC;
 
   wasm_sync_memory_views(js);
@@ -130,8 +130,8 @@ static wasm_trap_t *wasm_import_func_callback(void *env_ptr, const wasm_val_vec_
   }
 
   result = sv_vm_call(
-    js->vm, js, env->fn, js_mkundef(), 
-    js_args, args ? (int)args->size : 0, NULL, js_mkundef()
+    js->vm, js, env->fn, Ant_Value_Undefined, 
+    js_args, args ? (int)args->size : 0, NULL, Ant_Value_Undefined
   );
   free(js_args);
 
@@ -190,17 +190,17 @@ ant_value_t wasm_instantiate_module(ant_t *js, ant_value_t module_obj, ant_value
   
   wasm_trap_t *trap = NULL;
   wasm_instance_t *instance = NULL;
-  ant_value_t import_error = js_mkundef();
-  ant_value_t instance_obj = js_mkundef();
+  ant_value_t import_error = Ant_Value_Undefined;
+  ant_value_t instance_obj = Ant_Value_Undefined;
   ant_value_t exports_obj = Ant_Object_CreateBare(js);
-  *out_instance = js_mkundef();
+  *out_instance = Ant_Value_Undefined;
 
   if (!module_handle) 
     return js_mkerr_typed(js, JS_ERR_TYPE, "Expected a WebAssembly.Module");
 
   if (wasi_module_has_wasi_imports(module_handle->module)
       && wasi_module_is_command_or_reactor(module_handle->module)) {
-    ant_value_t wasi_opts = is_object_type(import_obj) ? js_get(js, import_obj, "wasi") : js_mkundef();
+    ant_value_t wasi_opts = is_object_type(import_obj) ? js_get(js, import_obj, "wasi") : Ant_Value_Undefined;
     if (is_err(wasi_opts)) return wasi_opts;
 
     if (!is_object_type(import_obj) || is_object_type(wasi_opts)) {
@@ -211,7 +211,7 @@ ant_value_t wasm_instantiate_module(ant_t *js, ant_value_t module_obj, ant_value
         return js_mkerr(js, "WASI: cannot extract module bytes");
       *out_instance = wasi_instantiate(js, (const uint8_t *)binary.data, binary.size, module_obj, wasi_opts);
       wasm_byte_vec_delete(&binary);
-      return is_err(*out_instance) ? *out_instance : js_mkundef();
+      return is_err(*out_instance) ? *out_instance : Ant_Value_Undefined;
     }
   }
 
@@ -427,7 +427,7 @@ ant_value_t wasm_instantiate_module(ant_t *js, ant_value_t module_obj, ant_value
   if (is_object_type(import_obj)) js_set_slot_wb(js, instance_obj, SLOT_MAP, import_obj);
 
   *out_instance = instance_obj;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 
 import_setup_failed:
   free(imports);
@@ -442,8 +442,8 @@ import_setup_failed:
 }
 
 ant_value_t js_wasm_instance_ctor(ant_params_t) {
-  ant_value_t instance = js_mkundef();
-  ant_value_t import_obj = (nargs >= 2 && is_object_type(args[1])) ? args[1] : js_mkundef();
+  ant_value_t instance = Ant_Value_Undefined;
+  ant_value_t import_obj = (nargs >= 2 && is_object_type(args[1])) ? args[1] : Ant_Value_Undefined;
   ant_value_t err;
 
   if (vtype(call_new_target) == kTypeUndefined) return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Instance constructor requires 'new'");
@@ -465,9 +465,9 @@ ant_value_t wasm_instantiate_result(ant_t *js, ant_value_t module, ant_value_t i
 
 ant_value_t js_wasm_instantiate(ant_params_t) {
   ant_value_t promise = js_mkpromise(js);
-  ant_value_t module = js_mkundef();
-  ant_value_t instance = js_mkundef();
-  ant_value_t import_obj = (nargs >= 2 && is_object_type(args[1])) ? args[1] : js_mkundef();
+  ant_value_t module = Ant_Value_Undefined;
+  ant_value_t instance = Ant_Value_Undefined;
+  ant_value_t import_obj = (nargs >= 2 && is_object_type(args[1])) ? args[1] : Ant_Value_Undefined;
   ant_value_t err;
 
   if (nargs < 1) {

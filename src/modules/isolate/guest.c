@@ -104,7 +104,7 @@ static void guest_handle_drop(ant_guest_t *g, uint32_t id) {
     g->handle_free_ids = ids;
     g->handle_free_cap = cap;
   }
-  g->handles[id] = js_mkundef();
+  g->handles[id] = Ant_Value_Undefined;
   g->handle_live[id] = 0;
   g->handle_free_ids[g->handle_free++] = id;
 }
@@ -150,18 +150,18 @@ static void guest_apply_releases(ant_guest_t *g) {
 static ant_value_t guest_wire_encode(ant_t *js, ant_value_t value, bool error, guest_value_t *out) {
   if (vtype(value) == kTypeUndefined) {
     *out = (guest_value_t){ .kind = GUEST_VALUE_UNDEFINED };
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   ant_wire_t *wire = NULL;
   ant_value_t r = error
     ? ant_wire_serialize_error(js, value, &wire)
-    : ant_wire_serialize(js, value, js_mkundef(), js_mkundef(), &wire);
+    : ant_wire_serialize(js, value, Ant_Value_Undefined, Ant_Value_Undefined, &wire);
   
   if (is_err(r)) return r;
   *out = (guest_value_t){ .kind = GUEST_VALUE_WIRE, .wire = wire };
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t guest_wire_out(ant_t *js, ant_value_t value, guest_value_t *out) {
@@ -175,12 +175,12 @@ static ant_value_t guest_child_encode(ant_t *js, ant_guest_t *g, ant_value_t val
   if (!id) return Ant_Error_CreateOutOfMemory(js);
   *out = (guest_value_t){ .kind = GUEST_VALUE_REF, .id = id, .type = guest_type_of(value) };
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void guest_error_out(ant_t *js, ant_value_t error, guest_value_t *out) {
   if (!is_err(guest_wire_encode(js, error, true, out))) return;
-  js_take_thrown(js, js_mkundef());
+  js_take_thrown(js, Ant_Value_Undefined);
 
   ant_value_t text = js_tostring_val(js, error);
   if (is_err(text)) {
@@ -188,7 +188,7 @@ static void guest_error_out(ant_t *js, ant_value_t error, guest_value_t *out) {
     text = js_mkstr(js, "Uncaught exception in isolate", 29);
   }
 
-  if (is_err(guest_wire_out(js, text, out))) js_take_thrown(js, js_mkundef());
+  if (is_err(guest_wire_out(js, text, out))) js_take_thrown(js, Ant_Value_Undefined);
 }
 
 static void guest_call_throw(ant_t *js, guest_call_t *call, ant_value_t completion) {
@@ -217,7 +217,7 @@ static ant_value_t guest_child_decode(ant_t *js, ant_guest_t *g, guest_value_t *
   case GUEST_VALUE_CALLBACK:
     return js_heavy_mkfun(js, guest_child_callback_fn, Ant_Value_FromNumber((double)v->id));
   default:
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 }
 
@@ -243,7 +243,7 @@ static ant_value_t guest_child_callback_fn(ant_params_t) {
   call->callback = (uint32_t)Ant_Value_AsNumberUnchecked(js_func_data(call_func));
   call->args = encoded;
   call->argc = (uint32_t)nargs;
-  call->promise = js_mkundef();
+  call->promise = Ant_Value_Undefined;
 
   for (int i = 0; i < nargs; i++) {
     ant_value_t r = guest_wire_out(js, args[i], &encoded[i]);
@@ -255,7 +255,7 @@ static ant_value_t guest_child_callback_fn(ant_params_t) {
 
   if (!g->call_host(g, call)) return js_interrupt_raise(js);
   bool terminated = call->status == GUEST_STATUS_DISPOSED || js_interrupt_pending(js);
-  ant_value_t result = terminated ? js_mkundef() : guest_host_value_to_child(js, call->status, &call->result);
+  ant_value_t result = terminated ? Ant_Value_Undefined : guest_host_value_to_child(js, call->status, &call->result);
   guest_host_call_free(call);
 
   return terminated ? js_interrupt_raise(js) : result;
@@ -393,17 +393,17 @@ static ant_value_t guest_promise_settled(ant_t *js, guest_call_t *call, ant_valu
   } else guest_call_throw(js, call, value);
 
   g->complete(g, call);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t guest_promise_fulfilled(ant_params_t) {
   guest_call_t *call = js_get_native(call_func, GUEST_CALL_NATIVE_TAG);
-  return call ? guest_promise_settled(js, call, nargs ? args[0] : js_mkundef(), true) : js_mkundef();
+  return call ? guest_promise_settled(js, call, nargs ? args[0] : Ant_Value_Undefined, true) : Ant_Value_Undefined;
 }
 
 static ant_value_t guest_promise_rejected(ant_params_t) {
   guest_call_t *call = js_get_native(call_func, GUEST_CALL_NATIVE_TAG);
-  return call ? guest_promise_settled(js, call, nargs ? args[0] : js_mkundef(), false) : js_mkundef();
+  return call ? guest_promise_settled(js, call, nargs ? args[0] : Ant_Value_Undefined, false) : Ant_Value_Undefined;
 }
 
 static bool guest_finish_value(ant_t *js, ant_guest_t *g, guest_call_t *call, ant_value_t value) {
@@ -466,11 +466,11 @@ static bool guest_op_property(ant_t *js, ant_guest_t *g, guest_call_t *call) {
   const char *name = js_getstr(js, key, NULL);
   if (call->op == GUEST_OP_GET) return guest_finish_value(js, g, call, js_getprop_fallback(js, target, name));
 
-  ant_value_t value = call->argc > 1 ? guest_child_decode(js, g, &call->args[1]) : js_mkundef();
+  ant_value_t value = call->argc > 1 ? guest_child_decode(js, g, &call->args[1]) : Ant_Value_Undefined;
   if (is_err(value)) return guest_finish_value(js, g, call, value);
   js_set(js, target, name, value);
 
-  return guest_finish_value(js, g, call, Ant_Exception_Pending(js) ? js_take_thrown(js, js_mkundef()) : js_mkundef());
+  return guest_finish_value(js, g, call, Ant_Exception_Pending(js) ? js_take_thrown(js, Ant_Value_Undefined) : Ant_Value_Undefined);
 }
 
 static bool guest_op_apply(ant_t *js, ant_guest_t *g, guest_call_t *call) {
@@ -483,10 +483,10 @@ static bool guest_op_apply(ant_t *js, ant_guest_t *g, guest_call_t *call) {
   if (argc && !argv) return guest_finish_value(js, g, call, Ant_Error_CreateOutOfMemory(js));
 
   GC_ROOT_SAVE(mark, js);
-  ant_value_t self = call->argc ? guest_child_decode(js, g, &call->args[0]) : js_mkundef();
+  ant_value_t self = call->argc ? guest_child_decode(js, g, &call->args[0]) : Ant_Value_Undefined;
   GC_ROOT_PIN(js, self);
 
-  ant_value_t result = is_err(self) ? self : js_mkundef();
+  ant_value_t result = is_err(self) ? self : Ant_Value_Undefined;
   for (uint32_t i = 0; i < argc && !is_err(result); i++) {
     argv[i] = guest_child_decode(js, g, &call->args[i + 1]);
     if (is_err(argv[i])) result = argv[i];
@@ -496,7 +496,7 @@ static bool guest_op_apply(ant_t *js, ant_guest_t *g, guest_call_t *call) {
   if (!is_err(result)) {
     vm_interrupt_t interrupt = { .js = js, .timeout_ms = call->timeout_ms };
     vm_interrupt_begin(&interrupt);
-    result = sv_vm_call(js->vm, js, fn, self, argv, (int)argc, NULL, js_mkundef());
+    result = sv_vm_call(js->vm, js, fn, self, argv, (int)argc, NULL, Ant_Value_Undefined);
     result = vm_interrupt_end(&interrupt, result);
   }
 
@@ -538,7 +538,7 @@ void guest_child_execute(ant_guest_t *g, guest_call_t *call) {
   case GUEST_OP_HEAP: guest_op_heap(js, call); break;
   }
 
-  if (Ant_Exception_Pending(js)) js_take_thrown(js, js_mkundef());
+  if (Ant_Exception_Pending(js)) js_take_thrown(js, Ant_Value_Undefined);
   process_microtasks(js);
 
   atomic_fetch_add_explicit(&g->cpu_ns, guest_thread_cpu_ns() - cpu_start, memory_order_relaxed);

@@ -95,7 +95,7 @@ static ant_value_t string_to_number_arg(
   *out = js_to_number(js, value);
   GC_ROOT_RESTORE(js, root_mark);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t string_to_integer_or_infinity(
@@ -240,8 +240,8 @@ static ant_value_t string_index_of_strings(
 static ant_value_t string_index_of_impl(ant_t *js, ant_value_t this_val, ant_args_t) {
   GC_ROOT_SAVE(root_mark, js);
   ant_value_t receiver = this_val;
-  ant_value_t search_arg = nargs > 0 ? args[0] : js_mkundef();
-  ant_value_t position_arg = nargs > 1 ? args[1] : js_mkundef();
+  ant_value_t search_arg = nargs > 0 ? args[0] : Ant_Value_Undefined;
+  ant_value_t position_arg = nargs > 1 ? args[1] : Ant_Value_Undefined;
   
   GC_ROOT_PIN(js, receiver);
   GC_ROOT_PIN(js, search_arg);
@@ -401,8 +401,8 @@ static ant_value_t string_substring_strings(
 static ant_value_t string_substring_impl(ant_t *js, ant_value_t this_val, ant_args_t) {
   GC_ROOT_SAVE(root_mark, js);
   ant_value_t receiver = this_val;
-  ant_value_t start_arg = nargs > 0 ? args[0] : js_mkundef();
-  ant_value_t end_arg = nargs > 1 ? args[1] : js_mkundef();
+  ant_value_t start_arg = nargs > 0 ? args[0] : Ant_Value_Undefined;
+  ant_value_t end_arg = nargs > 1 ? args[1] : Ant_Value_Undefined;
   
   GC_ROOT_PIN(js, receiver);
   GC_ROOT_PIN(js, start_arg);
@@ -538,7 +538,7 @@ static ant_value_t string_split_code_units(ant_t *js, ant_value_t str, ant_value
   GC_ROOT_PIN(js, str);
   GC_ROOT_PIN(js, arr);
   
-  ant_value_t part = js_mkundef();
+  ant_value_t part = Ant_Value_Undefined;
   GC_ROOT_PIN(js, part);
 
   ant_offset_t len;
@@ -607,7 +607,7 @@ static ant_value_t string_split_impl(ant_t *js, ant_value_t str, ant_args_t) {
   if (is_err(arr)) return arr;
 
   uint32_t limit;
-  ant_value_t limit_status = regexp_split_limit(js, nargs >= 2 ? args[1] : js_mkundef(), &limit);
+  ant_value_t limit_status = regexp_split_limit(js, nargs >= 2 ? args[1] : Ant_Value_Undefined, &limit);
   if (is_err(limit_status)) return limit_status;
   
   if (limit == 0) return mkval(kTypeArray, vdata(arr));
@@ -720,7 +720,7 @@ static ant_value_t string_split_impl(ant_t *js, ant_value_t str, ant_args_t) {
         PCRE2_SIZE cap_start = ovector[2*i];
         PCRE2_SIZE cap_end = ovector[2*i+1];
         if (cap_start == PCRE2_UNSET) {
-          arr_set(js, arr, idx, js_mkundef());
+          arr_set(js, arr, idx, Ant_Value_Undefined);
         } else {
           part = js_mkstr_byte_range(js, str_ptr, cap_start, cap_end - cap_start);
           arr_set(js, arr, idx, part);
@@ -817,7 +817,7 @@ static ant_value_t builtin_string_split(ant_params_t) {
 
   if (nargs > 0 && is_object_type(args[0])) {
     ant_value_t fast_result;
-    if (regexp_split_try_fast(js, args[0], str, nargs >= 2 ? args[1] : js_mkundef(), &fast_result)) return fast_result;
+    if (regexp_split_try_fast(js, args[0], str, nargs >= 2 ? args[1] : Ant_Value_Undefined, &fast_result)) return fast_result;
     bool called = false;
     ant_value_t call_args[2];
     int call_nargs = 1;
@@ -912,7 +912,7 @@ ant_value_t js_string_slice(ant_t *js, ant_value_t str, double start, double end
 static ant_value_t builtin_string_includes(ant_params_t) {
   ant_value_t str = Ant_String_CoerceThis(js, call_this, "includes");
   if (vtype(str) != kTypeString) return str;
-  ant_value_t search = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t search = nargs > 0 ? args[0] : Ant_Value_Undefined;
   
   if (vtype(str) != kTypeString) 
     return js_mkerr(js, "includes called on non-string");
@@ -939,7 +939,7 @@ static ant_value_t builtin_string_includes(ant_params_t) {
   ant_offset_t str_len, search_len;
   ant_offset_t search_off = vstr(js, search, &search_len);
   ant_offset_t str_off = vstr(js, str, &str_len);
-  if (search_len == 0) { result = js_true; goto done; }
+  if (search_len == 0) { result = Ant_Value_True; goto done; }
 
   size_t start = 0;
   if (position > 0.0) {
@@ -1085,7 +1085,7 @@ static ant_value_t builtin_string_template(ant_params_t) {
     
     ant_prop_loc_t prop_off = lkp(js, data, str_ptr + key_start, key_end - key_start);
     if (prop_off.obj) {
-      ant_value_t err = js_mkundef();
+      ant_value_t err = Ant_Value_Undefined;
       ant_value_t value = js_prop_load(prop_off);
       if (!string_template_append_value(js, &sb, value, &err)) {
         string_builder_dispose(&sb);
@@ -1132,7 +1132,7 @@ static ant_value_t builtin_string_html(ant_native_params_t, ant_value_t call_thi
   size_t tag_len = strlen(tag);
   size_t attr_len = attr ? strlen(attr) : 0;
   
-  ant_value_t attr_val = js_mkundef();
+  ant_value_t attr_val = Ant_Value_Undefined;
   ant_offset_t value_len = 0;
   
   const char *value_ptr = NULL;
@@ -1250,17 +1250,17 @@ static ant_value_t builtin_string_codePointAt(ant_params_t) {
   
   double idx_d = nargs < 1 ? 0.0 : js_to_number(js, args[0]);
   if (isnan(idx_d)) idx_d = 0.0;
-  if (isinf(idx_d) || idx_d > (double)LONG_MAX) return js_mkundef();
+  if (isinf(idx_d) || idx_d > (double)LONG_MAX) return Ant_Value_Undefined;
   
   long idx_l = (long) idx_d;
-  if (idx_l < 0) return js_mkundef();
+  if (idx_l < 0) return Ant_Value_Undefined;
   
   ant_offset_t byte_len;
   ant_offset_t str_off = vstr(js, str, &byte_len);
   const char *str_data = (const char *)(uintptr_t)(str_off);
   
   uint32_t cp = utf16_codepoint_at(str_data, byte_len, idx_l);
-  if (cp == 0xFFFFFFFF) return js_mkundef();
+  if (cp == 0xFFFFFFFF) return Ant_Value_Undefined;
   
   return Ant_Value_FromNumber((double) cp);
 }
@@ -1595,11 +1595,11 @@ static ant_value_t builtin_string_at(ant_params_t) {
   size_t utf16_len = (size_t)str_utf16_len(js, str);
   
   if (idx_d < 0) idx_d += (double)utf16_len;
-  if (idx_d < 0 || idx_d >= (double)utf16_len) return js_mkundef();
+  if (idx_d < 0 || idx_d >= (double)utf16_len) return Ant_Value_Undefined;
   size_t idx = (size_t)idx_d;
   
   uint32_t code_unit = utf16_code_unit_at(str_data, byte_len, idx);
-  if (code_unit == 0xFFFFFFFF) return js_mkundef();
+  if (code_unit == 0xFFFFFFFF) return Ant_Value_Undefined;
   
   return js_string_from_utf16_code_unit(js, code_unit);
 }
@@ -1649,8 +1649,8 @@ static __attribute__((noinline)) ant_value_t string_last_index_of_strings(
 
 static __attribute__((noinline)) 
 ant_value_t string_last_index_of_slow(ant_t *js, ant_value_t str, ant_args_t) {
-  ant_value_t search = nargs > 0 ? args[0] : js_mkundef();
-  ant_value_t position_arg = nargs > 1 ? args[1] : js_mkundef();
+  ant_value_t search = nargs > 0 ? args[0] : Ant_Value_Undefined;
+  ant_value_t position_arg = nargs > 1 ? args[1] : Ant_Value_Undefined;
 
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, str);
@@ -1961,9 +1961,9 @@ static ant_value_t builtin_string_raw(ant_params_t) {
   char static_buf[256];
   string_builder_init(&sb, static_buf, sizeof(static_buf));
   
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   for (size_t i = 0; i < literal_count; i++) {
-    ant_value_t chunk = js_mkundef();
+    ant_value_t chunk = Ant_Value_Undefined;
     if (vtype(raw) == kTypeArray) chunk = js_arr_get(js, raw, (ant_offset_t)i);
     else {
       char key[32];

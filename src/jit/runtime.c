@@ -354,7 +354,7 @@ __attribute__((noinline)) ant_value_t sv_jit_try_osr(
   func->jit_loop_hot = true;
 
   sv_closure_t *closure;
-  ant_value_t osr_closure_value = js_mkundef();
+  ant_value_t osr_closure_value = Ant_Value_Undefined;
   
   size_t root_mark = 0;
   bool synthetic_closure = false;
@@ -384,9 +384,9 @@ __attribute__((noinline)) ant_value_t sv_jit_try_osr(
     
     closure->call_flags = SV_CALL_BORROWED_UPVALS;
     closure->js = js;
-    closure->bound_this = js_mkundef();
-    closure->super_val = js_mkundef();
-    closure->module_ctx = js_mkundef();
+    closure->bound_this = Ant_Value_Undefined;
+    closure->super_val = Ant_Value_Undefined;
+    closure->module_ctx = Ant_Value_Undefined;
     closure->gc_epoch = gc_get_epoch(js);
   }
 

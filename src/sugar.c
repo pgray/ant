@@ -125,7 +125,7 @@ static bool coroutine_detach_await_registration(coroutine_t *coro) {
   bool direct_resume = coro->await_resume_job != NULL;
   
   coro->await_registered = false;
-  coro->awaited_promise = js_mkundef();
+  coro->awaited_promise = Ant_Value_Undefined;
   coro->await_resume_job = NULL;
 
   if (!direct_resume && js && vtype(promise) == kTypePromise)
@@ -145,7 +145,7 @@ void coroutine_abandon_await(coroutine_t *coro) {
   if (!coro) return;
   
   coro->await_registered = false;
-  coro->awaited_promise = js_mkundef();
+  coro->awaited_promise = Ant_Value_Undefined;
   
   bool held = (coro->hold_bits & CORO_HOLD_AWAIT) != 0;
   coro->hold_bits &= (uint8_t)~CORO_HOLD_AWAIT;
@@ -255,7 +255,7 @@ static void resume_coroutine_if_suspended(
 
 void Ant_Coroutine_ResumeAwaitJob(ant_t *js, coroutine_t *coro, ant_value_t value, bool is_error) {
   coro->await_registered = false;
-  coro->awaited_promise = js_mkundef();
+  coro->awaited_promise = Ant_Value_Undefined;
   coro->await_resume_job = NULL;
   resume_coroutine_if_suspended(js, coro, value, is_error);
 }

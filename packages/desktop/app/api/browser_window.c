@@ -48,42 +48,42 @@ ant_value_t DesktopBrowserWindowClose(ant_params_t) {
   ant_desktop_window_state_t *window = RequireWindow(js);
   if (!window) return js_mkerr(js, "invalid BrowserWindow receiver");
   ant_desktop_platform_close(window);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t DesktopBrowserWindowShow(ant_params_t) {
   ant_desktop_window_state_t *window = RequireWindow(js);
   if (!window) return js_mkerr(js, "invalid BrowserWindow receiver");
   ant_desktop_platform_show(window);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t DesktopBrowserWindowHide(ant_params_t) {
   ant_desktop_window_state_t *window = RequireWindow(js);
   if (!window) return js_mkerr(js, "invalid BrowserWindow receiver");
   ant_desktop_platform_hide(window);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t DesktopBrowserWindowMinimize(ant_params_t) {
   ant_desktop_window_state_t *window = RequireWindow(js);
   if (!window) return js_mkerr(js, "invalid BrowserWindow receiver");
   ant_desktop_platform_minimize(window);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t DesktopBrowserWindowRestore(ant_params_t) {
   ant_desktop_window_state_t *window = RequireWindow(js);
   if (!window) return js_mkerr(js, "invalid BrowserWindow receiver");
   ant_desktop_platform_restore(window);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t DesktopBrowserWindowMaximize(ant_params_t) {
   ant_desktop_window_state_t *window = RequireWindow(js);
   if (!window) return js_mkerr(js, "invalid BrowserWindow receiver");
   ant_desktop_platform_maximize(window);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t DesktopBrowserWindowSetAlwaysOnTop(ant_params_t) {
@@ -91,7 +91,7 @@ ant_value_t DesktopBrowserWindowSetAlwaysOnTop(ant_params_t) {
   if (!window) return js_mkerr(js, "invalid BrowserWindow receiver");
   if (nargs < 1 || vtype(args[0]) != kTypeBool) { return js_mkerr(js, "setAlwaysOnTop(flag) requires a boolean"); }
   ant_desktop_platform_set_always_on_top(window, js_truthy(js, args[0]));
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t DesktopBrowserWindowSetTitle(ant_params_t) {
@@ -101,7 +101,7 @@ ant_value_t DesktopBrowserWindowSetTitle(ant_params_t) {
   size_t length = 0;
   const char *title = js_getstr(js, args[0], &length);
   ant_desktop_platform_set_title(window, title, length);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t DesktopBrowserWindowSetFullScreen(ant_params_t) {
@@ -109,5 +109,5 @@ ant_value_t DesktopBrowserWindowSetFullScreen(ant_params_t) {
   if (!window) return js_mkerr(js, "invalid BrowserWindow receiver");
   if (nargs < 1 || vtype(args[0]) != kTypeBool) { return js_mkerr(js, "setFullScreen(flag) requires a boolean"); }
   ant_desktop_platform_set_full_screen(window, js_truthy(js, args[0]));
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }

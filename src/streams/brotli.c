@@ -257,22 +257,22 @@ ant_value_t brotli_stream_transform(
   ant_t *js, brotli_stream_state_t *st,
   ant_value_t ctrl_obj, const uint8_t *input, size_t input_len
 ) {
-  brotli_js_emit_ctx_t emit = { .js = js, .ctrl_obj = ctrl_obj, .error = js_mkundef() };
+  brotli_js_emit_ctx_t emit = { .js = js, .ctrl_obj = ctrl_obj, .error = Ant_Value_Undefined };
   if (brotli_stream_process(st, input, input_len, brotli_enqueue_chunk_cb, &emit) != 0) {
     if (is_err(emit.error)) return emit.error;
     return js_mkerr_typed(js, JS_ERR_TYPE, st && st->decompress ? "Decompression failed" : "Compression failed");
   }
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t brotli_stream_flush(
   ant_t *js, brotli_stream_state_t *st,
   ant_value_t ctrl_obj
 ) {
-  brotli_js_emit_ctx_t emit = { .js = js, .ctrl_obj = ctrl_obj, .error = js_mkundef() };
+  brotli_js_emit_ctx_t emit = { .js = js, .ctrl_obj = ctrl_obj, .error = Ant_Value_Undefined };
   if (brotli_stream_finish(st, brotli_enqueue_chunk_cb, &emit) != 0) {
     if (is_err(emit.error)) return emit.error;
     return js_mkerr_typed(js, JS_ERR_TYPE, st && st->decompress ? "Decompression failed" : "Compression failed");
   }
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }

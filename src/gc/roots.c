@@ -110,7 +110,7 @@ bool gc_temp_root_push(gc_temp_root_scope_t *scope, ant_value_t value) {
 ant_value_t *gc_temp_root_slots(gc_temp_root_scope_t *scope, size_t count) {
   if (!scope || !gc_temp_root_grow(scope, count ? count : 1)) return NULL;
   ant_value_t *slots = scope->items + scope->len;
-  for (size_t i = 0; i < count; i++) slots[i] = js_mkundef();
+  for (size_t i = 0; i < count; i++) slots[i] = Ant_Value_Undefined;
   scope->len += count;
   return slots;
 }

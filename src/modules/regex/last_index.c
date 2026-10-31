@@ -170,11 +170,11 @@ __attribute__((noinline)) ant_value_t regexp_read_lastindex_slow(
     li_val = ant_object_prop_get_unchecked(lastindex_obj, lastindex_slot);
   else {
     ant_prop_loc_t lastindex_off = lkp(js, regexp, "lastIndex", 9);
-    li_val = lastindex_off.obj ? js_prop_load(lastindex_off) : js_mkundef();
+    li_val = lastindex_off.obj ? js_prop_load(lastindex_off) : Ant_Value_Undefined;
   }
   if (vtype(li_val) == kTypeNumber) {
     *out = Ant_Value_AsNumberUnchecked(li_val);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
   GC_ROOT_SAVE(li_mark, js);
   GC_ROOT_PIN(js, regexp);
@@ -184,5 +184,5 @@ __attribute__((noinline)) ant_value_t regexp_read_lastindex_slow(
   GC_ROOT_RESTORE(js, li_mark);
   if (is_err(status)) return status;
   *out = (double)length;
-  return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : js_mkundef();
+  return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : Ant_Value_Undefined;
 }

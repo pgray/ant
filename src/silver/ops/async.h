@@ -63,9 +63,9 @@ static inline void sv_async_init_activation(
     .super_val = super_val,
     .new_target = new_target,
     .async_func = async_func,
-    .owner_gen = js_mkundef(),
+    .owner_gen = Ant_Value_Undefined,
     .args = NULL,
-    .awaited_promise = js_mkundef(),
+    .awaited_promise = Ant_Value_Undefined,
     .async_promise = promise,
     .active_parent = NULL,
     .is_generator = false,
@@ -78,17 +78,17 @@ static inline void sv_async_init_activation(
 
 static inline ant_value_t sv_capture_tla_module_ctx(ant_t *js, coroutine_t *coro) {
   if (!js || !coro || !js->modules.module_stack || vtype(js->modules.module_stack->module_ns) != kTypeObject)
-    return js_mkundef();
+    return Ant_Value_Undefined;
 
   ant_module_t *ctx = calloc(1, sizeof(ant_module_t));
   if (!ctx) return js_mkerr(js, "out of memory for TLA module context");
 
   *ctx = *js->modules.module_stack;
   ctx->prev = NULL;
-  ctx->prev_import_meta_prop = js_mkundef();
+  ctx->prev_import_meta_prop = Ant_Value_Undefined;
   coro->module_eval_ctx = ctx;
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_start_tla(
@@ -111,7 +111,7 @@ static inline ant_value_t sv_start_tla(
     
     sv_async_init_activation(
       coro, js, promise, this_val,
-      js_mkundef(), js_mkundef(), js_mkundef(), 0
+      Ant_Value_Undefined, Ant_Value_Undefined, Ant_Value_Undefined, 0
     );
     
     ant_value_t module_res = sv_capture_tla_module_ctx(js, coro);
@@ -173,7 +173,7 @@ static inline sv_await_result_t sv_await_register(
 ) {
   sv_await_result_t out = {
     .state = SV_AWAIT_READY,
-    .value = js_mkundef(),
+    .value = Ant_Value_Undefined,
   };
 
   coroutine_t *coro = js->active_async_coro;
@@ -192,7 +192,7 @@ static inline sv_await_result_t sv_await_register(
       return out;
     }
 
-    coro->awaited_promise = js_mkundef();
+    coro->awaited_promise = Ant_Value_Undefined;
     coro->await_registered = true;
     
     out.state = SV_AWAIT_SUSPENDED;

@@ -44,7 +44,7 @@ NSString *CapabilityManifest(ant_t *js, ant_value_t options, NSString **error) {
   for (ant_offset_t index = 0; index < count; index++) {
     ant_value_t capability = js_arr_get(js, capabilities, index);
     NSString *channel = OptionString(js, capability, "channel");
-    ant_value_t access = is_object_type(capability) ? js_get(js, capability, "access") : js_mkundef();
+    ant_value_t access = is_object_type(capability) ? js_get(js, capability, "access") : Ant_Value_Undefined;
     if (!IsValidIpcChannel(channel) || !is_array_value(access)) {
       if (error) { *error = @"each IPC capability needs a safe channel and access array"; }
       return nil;

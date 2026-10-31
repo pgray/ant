@@ -105,10 +105,10 @@ static ant_value_t domexception_ctor(ant_params_t) {
   js_set(js, call_this, "name",    js_mkstr(js, name, name_len));
   js_set(js, call_this, "code",    Ant_Value_FromNumber(code));
 
-  js_set_slot(call_this, SLOT_ERROR_BRAND, js_true);
+  js_set_slot(call_this, SLOT_ERROR_BRAND, Ant_Value_True);
   js_capture_stack_above(js, call_func, call_this, call_new_target);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t make_dom_exception(ant_t *js, const char *message, const char *name) {
@@ -124,7 +124,7 @@ ant_value_t make_dom_exception(ant_t *js, const char *message, const char *name)
   js_set(js, obj, "code",    Ant_Value_FromNumber(code));
   
   js_set_tostringtag(js, obj, js_mkstr(js, "DOMException", 12));
-  js_set_slot(obj, SLOT_ERROR_BRAND, js_true);
+  js_set_slot(obj, SLOT_ERROR_BRAND, Ant_Value_True);
 
   return obj;
 }

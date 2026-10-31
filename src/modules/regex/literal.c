@@ -88,7 +88,7 @@ ant_value_t regexp_flags_value(ant_t *js, ant_value_t rx) {
   ant_value_t flags = js_get_slot(rx, SLOT_REGEXP_FLAGS_STRING);
   if (vtype(flags) == kTypeString) return flags;
   compiled_regex_cache_entry_t *compiled = js_get_native(rx, REGEXP_NATIVE_TAG);
-  return compiled ? regexp_flags_string_for_mask(js, compiled->flags_mask) : js_mkundef();
+  return compiled ? regexp_flags_string_for_mask(js, compiled->flags_mask) : Ant_Value_Undefined;
 }
 
 ant_value_t regexp_create_literal(ant_t *js, ant_value_t pattern, ant_value_t flags) {
@@ -116,7 +116,7 @@ ant_value_t regexp_literal_exec_call(
   ) {
     regexp_fast_t fast = { .compiled = compiled, .flags = compiled->flags_mask };
     compiled->active_refs++;
-    ant_value_t result = regexp_exec_run(js, js_mkundef(), &fast, 0, arg, false);
+    ant_value_t result = regexp_exec_run(js, Ant_Value_Undefined, &fast, 0, arg, false);
     compiled_regex_cache_release(compiled);
     return result;
   }
@@ -171,7 +171,7 @@ ant_value_t regexp_literal_replace_call(
   ant_value_t replace_fn = js_getprop_fallback(js, str, "replace");
   if (is_err(replace_fn)) return replace_fn;
   ant_value_t call_args[2] = { regexp_obj, replacement };
-  return sv_vm_call(js->vm, js, replace_fn, str, call_args, 2, NULL, js_mkundef());
+  return sv_vm_call(js->vm, js, replace_fn, str, call_args, 2, NULL, Ant_Value_Undefined);
 }
 
 ant_value_t regexp_string_pattern_call(ant_t *js, ant_value_t str, ant_value_t pattern, bool search) {
@@ -189,7 +189,7 @@ ant_value_t regexp_string_pattern_call(ant_t *js, ant_value_t str, ant_value_t p
     regexp_fast_t fast = { .compiled = compiled };
     ant_value_t result = search
       ? regexp_search_fast(js, &fast, str)
-      : regexp_match_fast(js, js_mkundef(), &fast, str);
+      : regexp_match_fast(js, Ant_Value_Undefined, &fast, str);
     compiled_regex_cache_release(compiled);
     return result;
   }
@@ -202,5 +202,5 @@ ant_value_t regexp_string_pattern_call(ant_t *js, ant_value_t str, ant_value_t p
   if (!is_callable(method))
     return js_mkerr_typed(js, JS_ERR_TYPE, "RegExp.prototype[%s] is not a function", search ? "@@search" : "@@match");
   ant_value_t call_args[1] = { str };
-  return sv_vm_call(js->vm, js, method, rx, call_args, 1, NULL, js_mkundef());
+  return sv_vm_call(js->vm, js, method, rx, call_args, 1, NULL, Ant_Value_Undefined);
 }

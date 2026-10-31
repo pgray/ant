@@ -86,10 +86,10 @@ void jit_emit_literals(jit_compile_t *c) {
       mir_load_imm(c->ctx, c->jit_func, vstack_push_const(&c->vs, mkval(kTypeNull, 0)), mkval(kTypeNull, 0));
       break;
     case OP_TRUE:
-      mir_load_imm(c->ctx, c->jit_func, vstack_push_const(&c->vs, js_true), js_true);
+      mir_load_imm(c->ctx, c->jit_func, vstack_push_const(&c->vs, Ant_Value_True), Ant_Value_True);
       break;
     case OP_FALSE:
-      mir_load_imm(c->ctx, c->jit_func, vstack_push_const(&c->vs, js_false), js_false);
+      mir_load_imm(c->ctx, c->jit_func, vstack_push_const(&c->vs, Ant_Value_False), Ant_Value_False);
       break;
 
     case OP_THIS: {
@@ -114,7 +114,7 @@ void jit_emit_literals(jit_compile_t *c) {
       uint8_t which = sv_get_u8(c->ip + 1);
       MIR_reg_t dst = vstack_push(&c->vs);
       if (which == SV_SPECIAL_ARGUMENTS && c->forward_arguments) {
-        mir_load_imm(c->ctx, c->jit_func, dst, js_mkundef());
+        mir_load_imm(c->ctx, c->jit_func, dst, Ant_Value_Undefined);
       } else if (which == SV_SPECIAL_ARGUMENTS && c->func->is_strict) {
         MIR_append_insn(c->ctx, c->jit_func,
                         MIR_new_call_insn(c->ctx, 7,

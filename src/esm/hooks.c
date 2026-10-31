@@ -47,7 +47,7 @@ static ant_value_t esm_hook_make_next(ant_t *js, ant_value_t next_fn, const esm_
   js_set(js, data, "hooks", chain->hooks);
   js_set(js, data, "level", Ant_Value_FromNumber((double)level));
   js_set(js, data, "ctx", chain->ctx);
-  js_set(js, data, "base", chain->base ? js_mkstr(js, chain->base, strlen(chain->base)) : js_mkundef());
+  js_set(js, data, "base", chain->base ? js_mkstr(js, chain->base, strlen(chain->base)) : Ant_Value_Undefined);
   js_set(js, data, "require", js_bool(chain->is_require));
 
   ant_value_t obj = Ant_Object_CreateBare(js);
@@ -67,12 +67,12 @@ static bool esm_hook_next_was_called(ant_t *js, ant_value_t next) {
 
 static ant_value_t builtin_esm_next_resolve(ant_params_t) {
   ant_value_t data = js_func_data(call_func);
-  js_set(js, data, "called", js_true);
+  js_set(js, data, "called", Ant_Value_True);
 
   int level = (int)Ant_Value_AsNumberUnchecked(js_get(js, data, "level"));
   ant_value_t base_val = js_get(js, data, "base");
 
-  ant_value_t spec = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t spec = nargs > 0 ? args[0] : Ant_Value_Undefined;
 
   esm_chain_t chain = {
     .hooks = js_get(js, data, "hooks"),
@@ -99,10 +99,10 @@ static ant_value_t builtin_esm_next_resolve(ant_params_t) {
 
 static ant_value_t builtin_esm_next_load(ant_params_t) {
   ant_value_t data = js_func_data(call_func);
-  js_set(js, data, "called", js_true);
+  js_set(js, data, "called", Ant_Value_True);
 
   int level = (int)Ant_Value_AsNumberUnchecked(js_get(js, data, "level"));
-  ant_value_t url = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t url = nargs > 0 ? args[0] : Ant_Value_Undefined;
 
   esm_chain_t chain = {
     .hooks = js_get(js, data, "hooks"),
@@ -126,7 +126,7 @@ static ant_value_t esm_run_hook_level(
   GC_ROOT_PIN(js, next);
 
   ant_value_t call_args[3] = { arg0, ctx, next };
-  ant_value_t result = sv_vm_call(js->vm, js, fn, js_mkundef(), call_args, 3, NULL, js_mkundef());
+  ant_value_t result = sv_vm_call(js->vm, js, fn, Ant_Value_Undefined, call_args, 3, NULL, Ant_Value_Undefined);
 
   GC_ROOT_PIN(js, result);
   if (is_err(result)) goto done;
@@ -340,7 +340,7 @@ static ant_value_t esm_run_load_chain(ant_t *js, const esm_chain_t *chain, int l
     ant_module_format_t fmt = esm_decide_module_format(js, path);
     if (fmt == MODULE_EVAL_FORMAT_CJS) js_set(js, out, "format", js_mkstr(js, "commonjs", 8));
     else if (fmt == MODULE_EVAL_FORMAT_ESM) js_set(js, out, "format", js_mkstr(js, "module", 6));
-    else js_set(js, out, "format", js_mknull());
+    else js_set(js, out, "format", Ant_Value_Null);
   }
 
   free(path);
@@ -512,7 +512,7 @@ ant_value_t esm_import_via_hooks(
   if (!fs_path) {
     if (!source) {
       GC_ROOT_RESTORE(js, root_mark);
-      return js_mkundef();
+      return Ant_Value_Undefined;
     }
     *handled = true;
     ant_value_t ns = esm_get_or_load_ex(js, specifier, url, url, format, source, source_len, true, kind_hint);

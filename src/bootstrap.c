@@ -84,8 +84,8 @@ void ant_bootstrap_realm_intrinsics(ant_t *js) {
 }
 
 bool ant_bootstrap_bare(ant_t *js) {
-  js->primordials = js_mkundef();
-  for (size_t i = 0; i < ANT_PRIMORDIAL_COUNT; i++) js->primordial_values[i] = js_mkundef();
+  js->primordials = Ant_Value_Undefined;
+  for (size_t i = 0; i < ANT_PRIMORDIAL_COUNT; i++) js->primordial_values[i] = Ant_Value_Undefined;
   js->Ant = Ant_Object_Create(js);
 
   init_well_known_symbols(js);

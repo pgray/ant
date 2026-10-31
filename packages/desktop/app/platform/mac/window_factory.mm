@@ -17,8 +17,8 @@ ant_value_t DesktopBrowserWindowCtor(ant_params_t) {
   NSInteger width = 900;
   NSInteger height = 600;
   NSString *title = @"Ant Desktop";
-  ant_value_t options = nargs > 0 ? args[0] : js_mkundef();
-  ant_value_t web_preferences = is_object_type(options) ? js_get(js, options, "webPreferences") : js_mkundef();
+  ant_value_t options = nargs > 0 ? args[0] : Ant_Value_Undefined;
+  ant_value_t web_preferences = is_object_type(options) ? js_get(js, options, "webPreferences") : Ant_Value_Undefined;
   BOOL sandbox = OptionBool(js, web_preferences, "sandbox", YES);
   BOOL node_integration = NO;
   if (is_object_type(web_preferences)) {
@@ -169,7 +169,7 @@ ant_value_t DesktopBrowserWindowCtor(ant_params_t) {
   }
 
   ant_value_t traffic_light_position =
-    is_object_type(options) ? js_get(js, options, "trafficLightPosition") : js_mkundef();
+    is_object_type(options) ? js_get(js, options, "trafficLightPosition") : Ant_Value_Undefined;
   if (is_object_type(traffic_light_position)) {
     double traffic_x = OptionNumber(js, traffic_light_position, "x", 12);
     double traffic_y = OptionNumber(js, traffic_light_position, "y", 12);
@@ -270,7 +270,7 @@ ant_value_t LoadURL(ant_t *js, ant_desktop_window_state_t *state, NSString *url,
                                   app_root.UTF8String, state->capability_manifest, state->preload_path, state->sandbox,
                                   state->node_integration, state->context_isolation, state->transparent_browser)) {
     state->load_pending = false;
-    state->load_promise = js_mkundef();
+    state->load_promise = Ant_Value_Undefined;
     return js_mkerr(js, "failed to create embedded Chromium view");
   }
   return promise;

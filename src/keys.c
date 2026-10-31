@@ -177,7 +177,7 @@ ant_value_t object_enum(ant_t *js, ant_value_t obj, enum obj_enum_mode mode) {
   if (wrapper || (is_arr && ant_shape_may_have_index_keys(ptr->shape))) return object_enum_collect(js, obj, mode);
   
   object_enum_sink_t sink;
-  sink.error = js_mkundef();
+  sink.error = Ant_Value_Undefined;
   sink.count = 0;
   sink.spilled = false;
   
@@ -211,7 +211,7 @@ ant_value_t object_enum(ant_t *js, ant_value_t obj, enum obj_enum_mode mode) {
     : typed_live && arr_fill_numeric_typed(js, sink.arr, typed));
   
   for (ant_offset_t i = filled ? elem_len : 0; i < elem_len; i++) {
-    ant_value_t v = js_mkundef();
+    ant_value_t v = Ant_Value_Undefined;
     if (doff) v = dense_get(doff, i);
     else if (!buffer_typedarray_data_read_index(js, typed, (size_t)i, &v)) {
       if (is_err(v)) return v;
@@ -467,7 +467,7 @@ static ant_value_t for_in_keys_add(ant_t *js, ant_value_t out, ant_value_t seen,
   GC_ROOT_PIN(js, seen);
   GC_ROOT_PIN(js, key);
   
-  if (vtype(key) != kTypeString) return js_mkundef();
+  if (vtype(key) != kTypeString) return Ant_Value_Undefined;
 
   ant_offset_t key_len = 0;
   ant_offset_t key_off = vstr(js, key, &key_len);
@@ -475,7 +475,7 @@ static ant_value_t for_in_keys_add(ant_t *js, ant_value_t out, ant_value_t seen,
 
   if (lkp(js, seen, key_ptr, key_len).obj) goto done;
 
-  ant_value_t mark = setprop_cstr(js, seen, key_ptr, key_len, js_true);
+  ant_value_t mark = setprop_cstr(js, seen, key_ptr, key_len, Ant_Value_True);
   if (is_err(mark)) {
     GC_ROOT_RESTORE(js, root_mark);
     return mark;
@@ -484,7 +484,7 @@ static ant_value_t for_in_keys_add(ant_t *js, ant_value_t out, ant_value_t seen,
   if (vtype(out) == kTypeArray) js_arr_push(js, out, key);
 done:
   GC_ROOT_RESTORE(js, root_mark);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t for_in_keys_add_cstr(
@@ -502,7 +502,7 @@ static ant_value_t for_in_keys_add_cstr(
 
   if (lkp_interned(seen, interned).obj) goto done;
 
-  ant_value_t mark = mkprop_interned(js, seen, interned, js_true, 0);
+  ant_value_t mark = mkprop_interned(js, seen, interned, Ant_Value_True, 0);
   if (is_err(mark)) {
     GC_ROOT_RESTORE(js, root_mark);
     return mark;
@@ -516,7 +516,7 @@ static ant_value_t for_in_keys_add_cstr(
 
 done:
   GC_ROOT_RESTORE(js, root_mark);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t for_in_keys_add_indices(ant_t *js, ant_value_t out, ant_value_t seen, ant_offset_t len) {
@@ -536,7 +536,7 @@ static ant_value_t for_in_keys_add_indices(ant_t *js, ant_value_t out, ant_value
   }
   
   GC_ROOT_RESTORE(js, root_mark);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t for_in_keys_collect_ordinary_own(
@@ -544,7 +544,7 @@ static ant_value_t for_in_keys_collect_ordinary_own(
 ) {
   bool is_arr = (vtype(obj) == kTypeArray);
   uint32_t count = ant_shape_count(ptr->shape);
-  ant_value_t r = js_mkundef();
+  ant_value_t r = Ant_Value_Undefined;
 
   if (!is_arr) {
     bool has_index_key = false;
@@ -569,7 +569,7 @@ static ant_value_t for_in_keys_collect_ordinary_own(
         r = for_in_keys_add_cstr(js, out, seen, key, intern_length(key), enumerable);
         if (is_err(r)) return r;
       }
-      return js_mkundef();
+      return Ant_Value_Undefined;
     }
   }
 
@@ -636,19 +636,19 @@ static ant_value_t for_in_keys_collect_ordinary_own(
     if (is_err(r)) return r;
   }
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t for_in_keys_add_exotic_indices(
   ant_t *js, ant_value_t out, ant_value_t seen, ant_value_t obj, ant_object_t *ptr
 ) {
-  if (vtype(obj) != kTypeObject) return js_mkundef();
+  if (vtype(obj) != kTypeObject) return Ant_Value_Undefined;
   ant_value_t prim = get_slot(obj, SLOT_PRIMITIVE);
   if (vtype(prim) == kTypeString) return for_in_keys_add_indices(js, out, seen, str_utf16_len(js, prim));
   TypedArrayData *typed = ptr->flags.is_exotic ? buffer_get_typedarray_data(obj) : NULL;
   if (Ant_Buffer_ViewIsLive(typed))
     return for_in_keys_add_indices(js, out, seen, (ant_offset_t)typed->length);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_value_t for_in_keys_collect_chain(
@@ -738,7 +738,7 @@ static bool copy_key_of(ant_t *js, ant_value_t key, copy_key_t *out) {
   
   size_t len = 0;
   const char *str = vtype(key) == kTypeString ? js_getstr(js, key, &len) : NULL;
-  *out = (copy_key_t){ .sym = js_mkundef(), .interned = str ? intern_string(js, str, len) : NULL };
+  *out = (copy_key_t){ .sym = Ant_Value_Undefined, .interned = str ? intern_string(js, str, len) : NULL };
   
   return out->interned != NULL;
 }
@@ -747,7 +747,7 @@ static bool copy_excluded_key_of(ant_t *js, ant_value_t key, copy_key_t *out) {
   ant_flat_string_t *flat = ant_str_flat_ptr(key);
   const char *interned = flat ? intern_find_flat(js, flat->bytes, (size_t)flat->len) : NULL;
   if (!interned) return copy_key_of(js, key, out);
-  *out = (copy_key_t){ .sym = js_mkundef(), .interned = interned };
+  *out = (copy_key_t){ .sym = Ant_Value_Undefined, .interned = interned };
   return true;
 }
 
@@ -785,9 +785,9 @@ static ant_value_t copy_define_slow(ant_t *js, ant_value_t dst, copy_key_t key, 
   GC_ROOT_PIN(js, desc);
   
   js_set(js, desc, "value", val);
-  js_set(js, desc, "writable", js_true);
-  js_set(js, desc, "enumerable", js_true);
-  js_set(js, desc, "configurable", js_true);
+  js_set(js, desc, "writable", Ant_Value_True);
+  js_set(js, desc, "enumerable", Ant_Value_True);
+  js_set(js, desc, "configurable", Ant_Value_True);
   
   ant_value_t result = object_define_property(js, dst, key_val, desc);
   GC_ROOT_RESTORE(js, root_mark);
@@ -890,7 +890,7 @@ static ant_value_t copy_set(ant_t *js, ant_value_t dst, copy_key_t key, ant_valu
 
 static __attribute__((noinline)) ant_value_t copy_collect(ant_t *js, const copy_ctx_t *cx, ant_value_t arr, copy_key_t key, ant_value_t val) {
   if (!copy_key_is_sym(key)) js_arr_push(js, arr, object_enum_interned_item(js, cx->mode, key.interned, val));
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_value_t copy_store(ant_t *js, const copy_ctx_t *cx, ant_value_t dst, copy_key_t key, ant_value_t val) {
@@ -907,7 +907,7 @@ static ant_value_t copy_host_pairs(ant_t *js, ant_value_t dst, ant_proxy_state_t
   
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, pairs);
-  ant_value_t result = js_mkundef();
+  ant_value_t result = Ant_Value_Undefined;
   
   ant_offset_t len = get_array_length(js, pairs);
   for (ant_offset_t i = 0; i + 1 < len && !is_err(result); i += 2) {
@@ -917,7 +917,7 @@ static ant_value_t copy_host_pairs(ant_t *js, ant_value_t dst, ant_proxy_state_t
   }
   
   GC_ROOT_RESTORE(js, root_mark);
-  return is_err(result) ? result : js_mkundef();
+  return is_err(result) ? result : Ant_Value_Undefined;
 }
 
 static ant_value_t copy_proxy_data_props(
@@ -931,7 +931,7 @@ static ant_value_t copy_proxy_data_props(
   
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, keys);
-  ant_value_t result = js_mkundef();
+  ant_value_t result = Ant_Value_Undefined;
 
   ant_offset_t key_count = js_arr_len(js, keys);
   for (ant_offset_t k = 0; k < key_count && !is_err(result); k++) {
@@ -956,14 +956,14 @@ static ant_value_t copy_proxy_data_props(
   }
 
   GC_ROOT_RESTORE(js, root_mark);
-  return is_err(result) ? result : js_mkundef();
+  return is_err(result) ? result : Ant_Value_Undefined;
 }
 
 static ant_value_t copy_string_props(ant_t *js, ant_value_t dst, ant_value_t str, const copy_ctx_t *cx) {
   ant_offset_t len = str_utf16_len(js, str);
   
   for (ant_offset_t i = 0; i < len; i++) {
-    copy_key_t ck = { .sym = js_mkundef(), .interned = index_key_get_or_intern(js, (uint32_t)i) };
+    copy_key_t ck = { .sym = Ant_Value_Undefined, .interned = index_key_get_or_intern(js, (uint32_t)i) };
     if (!ck.interned) return Ant_Error_CreateOutOfMemory(js);
     if (copy_key_excluded(cx, ck)) continue;
     
@@ -975,7 +975,7 @@ static ant_value_t copy_string_props(ant_t *js, ant_value_t dst, ant_value_t str
     if (is_err(result)) return result;
   }
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t copy_dense_props_assign(ant_t *js, ant_value_t dst, ant_value_t arr, const copy_ctx_t *cx) {
@@ -989,14 +989,14 @@ static ant_value_t copy_dense_props_assign(ant_t *js, ant_value_t dst, ant_value
   uint32_t count = 0;
   for (ant_offset_t i = 0; i < len; i++) if (!is_empty_slot(dense_get(doff, i))) present[count++] = (uint32_t)i;
 
-  ant_value_t result = js_mkundef();
+  ant_value_t result = Ant_Value_Undefined;
   for (uint32_t k = 0; k < count && !is_err(result); k++) {
     uint32_t i = present[k];
-    copy_key_t ck = { .sym = js_mkundef(), .interned = index_key_get_or_intern(js, i) };
+    copy_key_t ck = { .sym = Ant_Value_Undefined, .interned = index_key_get_or_intern(js, i) };
     if (!ck.interned) { result = Ant_Error_CreateOutOfMemory(js); break; }
     if (copy_key_excluded(cx, ck)) continue;
 
-    ant_value_t val = js_mkundef();
+    ant_value_t val = Ant_Value_Undefined;
     doff = get_dense_buf(arr);
     bool dense_hit = doff && i < dense_iterable_length(js, arr) && !is_empty_slot(val = dense_get(doff, i));
 
@@ -1015,7 +1015,7 @@ static ant_value_t copy_dense_props_assign(ant_t *js, ant_value_t dst, ant_value
   }
 
   if (present != stack_present) free(present);
-  return is_err(result) ? result : js_mkundef();
+  return is_err(result) ? result : Ant_Value_Undefined;
 }
 
 static bool copy_dense_index_layout(ant_t *js, ant_value_t dst, const copy_ctx_t *cx, ant_offset_t doff, ant_offset_t len) {
@@ -1051,13 +1051,13 @@ static ant_value_t copy_dense_props(ant_t *js, ant_value_t dst, ant_value_t arr,
   ant_offset_t doff = get_dense_buf(arr);
   ant_offset_t len = doff ? dense_iterable_length(js, arr) : 0;
   
-  if (doff && copy_dense_index_layout(js, dst, cx, doff, len)) return js_mkundef();
+  if (doff && copy_dense_index_layout(js, dst, cx, doff, len)) return Ant_Value_Undefined;
   
   for (ant_offset_t i = 0; i < len; i++) {
     ant_value_t val = dense_get(doff, i);
     if (is_empty_slot(val)) continue;
     
-    copy_key_t ck = { .sym = js_mkundef(), .interned = index_key_get_or_intern(js, (uint32_t)i) };
+    copy_key_t ck = { .sym = Ant_Value_Undefined, .interned = index_key_get_or_intern(js, (uint32_t)i) };
     if (!ck.interned) return Ant_Error_CreateOutOfMemory(js);
     if (copy_key_excluded(cx, ck)) continue;
     
@@ -1065,13 +1065,13 @@ static ant_value_t copy_dense_props(ant_t *js, ant_value_t dst, ant_value_t arr,
     if (is_err(result)) return result;
   }
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static copy_key_t copy_key_at(const ant_shape_prop_t *prop) {
   return prop->type == ANT_SHAPE_KEY_SYMBOL
     ? (copy_key_t){ .sym = mkval(kTypeSymbol, prop->key.sym_off) }
-    : (copy_key_t){ .sym = js_mkundef(), .interned = prop->key.interned };
+    : (copy_key_t){ .sym = Ant_Value_Undefined, .interned = prop->key.interned };
 }
 
 static uint32_t copy_shape_keys_in_slot_order(ant_object_t *ptr, copy_key_t *keys, uint32_t *slots) {
@@ -1174,7 +1174,7 @@ static ant_value_t copy_key_snapshot_props(
   ant_t *js, ant_value_t dst, ant_value_t src, ant_object_t *ptr,
   const copy_ctx_t *cx, const copy_key_snapshot_t *snap
 ) {
-  ant_value_t result = js_mkundef();
+  ant_value_t result = Ant_Value_Undefined;
   for (uint32_t k = 0; k < snap->count && !is_err(result); k++) {
     copy_key_t ck = snap->keys[k];
     if (copy_key_excluded(cx, ck)) continue;
@@ -1185,7 +1185,7 @@ static ant_value_t copy_key_snapshot_props(
     
     const ant_shape_prop_t *prop = ant_shape_prop_at(ptr->shape, (uint32_t)slot);
     ant_value_t val = !(prop->has_getter || prop->has_setter) ? ant_object_prop_get_unchecked(ptr, (uint32_t)slot)
-      : prop->has_getter ? js_call_getter(js, src, prop->getter) : js_mkundef();
+      : prop->has_getter ? js_call_getter(js, src, prop->getter) : Ant_Value_Undefined;
     
     result = is_err(val) ? val : copy_emit(js, cx, dst, ck, val);
   }
@@ -1270,7 +1270,7 @@ static bool copy_ordinary_data_props(
   uint32_t count = ant_shape_count(shape);
   
   if (count == 0 && !is_arr && vtype(wrapped) != kTypeString) {
-    *result = js_mkundef();
+    *result = Ant_Value_Undefined;
     return true;
   }
   
@@ -1291,7 +1291,7 @@ static bool copy_ordinary_data_props(
     !has_accessor && !indexed && !cx->count && !cx->collect && !index_keys && 
     (copy_adopt_shape(js, dst, ptr, cx->assign) || copy_same_shape(js, dst, ptr))
   ) {
-    *result = js_mkundef();
+    *result = Ant_Value_Undefined;
     return true;
   }
   
@@ -1305,7 +1305,7 @@ static bool copy_ordinary_data_props(
   
   *result = is_arr ? copy_dense_props(js, dst, src, cx)
     : vtype(wrapped) == kTypeString ? copy_string_props(js, dst, wrapped, cx)
-    : js_mkundef();
+    : Ant_Value_Undefined;
   
   if (snapshot) {
     if (!is_err(*result)) *result = copy_key_snapshot_props(js, dst, src, ptr, cx, &snap);
@@ -1341,7 +1341,7 @@ static ant_value_t copy_object_data_props(ant_t *js, ant_value_t dst, ant_value_
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, keys);
   ant_value_t view = js_object_view(src);
-  ant_value_t result = js_mkundef();
+  ant_value_t result = Ant_Value_Undefined;
   
   ant_offset_t key_count = js_arr_len(js, keys);
   for (ant_offset_t k = 0; k < key_count && !is_err(result); k++) {
@@ -1366,12 +1366,12 @@ static ant_value_t copy_object_data_props(ant_t *js, ant_value_t dst, ant_value_
   }
   
   GC_ROOT_RESTORE(js, root_mark);
-  return is_err(result) ? result : js_mkundef();
+  return is_err(result) ? result : Ant_Value_Undefined;
 }
 
 ant_value_t copy_data_props(ant_t *js, ant_value_t dst, ant_value_t src, const copy_ctx_t *cx) {
   if (vtype(src) == kTypeString) return copy_string_props(js, dst, src, cx);
-  if (!is_object_type(src)) return js_mkundef();
+  if (!is_object_type(src)) return Ant_Value_Undefined;
   
   ant_value_t source = js_as_obj(src);
   if (is_proxy(source)) return copy_proxy_data_props(js, dst, source, cx);
@@ -1417,13 +1417,13 @@ static ant_value_t object_enum_visit(
     if (!object_enum_enumerable(js, obj, ptr, prop)) continue;
     
     ant_value_t val = !(prop->has_getter || prop->has_setter) ? ant_object_prop_get_unchecked(ptr, (uint32_t)slot)
-      : prop->has_getter ? js_call_getter(js, obj, prop->getter) : js_mkundef();
+      : prop->has_getter ? js_call_getter(js, obj, prop->getter) : Ant_Value_Undefined;
     
     if (is_err(val)) return val;
     object_enum_emit(js, sink, object_enum_interned_item(js, mode, ck.interned, val));
   }
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t object_enum_props_from(ant_t *js, ant_value_t obj, ant_object_t *ptr, enum obj_enum_mode mode, object_enum_sink_t *sink, uint32_t start) {
@@ -1499,7 +1499,7 @@ static ant_value_t object_enum_props_ordered(ant_t *js, ant_value_t obj, ant_obj
     object_enum_emit(js, sink, object_enum_interned_item(js, mode, key, ant_object_prop_get_unchecked(ptr, i)));
   }
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t object_enum_props(ant_t *js, ant_value_t obj, ant_object_t *ptr, enum obj_enum_mode mode, object_enum_sink_t *sink) {
@@ -1528,14 +1528,14 @@ static ant_value_t object_enum_props(ant_t *js, ant_value_t obj, ant_object_t *p
   }
   
   sink->count = n;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t js_copy_data_props(
   ant_t *js, ant_value_t dst, ant_value_t src, 
   const ant_value_t *excluded, int excluded_count
 ) {
-  if (!is_object_type(dst)) return js_mkundef();
+  if (!is_object_type(dst)) return Ant_Value_Undefined;
   
   copy_key_t stack_keys[16];
   copy_key_t *keys = excluded_count <= 16 ? stack_keys : malloc((size_t)excluded_count * sizeof(*keys));
@@ -1555,7 +1555,7 @@ ant_value_t js_copy_data_props(
   GC_ROOT_RESTORE(js, root_mark);
   if (keys != stack_keys) free(keys);
   
-  return is_err(result) ? result : js_mkundef();
+  return is_err(result) ? result : Ant_Value_Undefined;
 }
 
 ant_iter_t js_prop_iter_begin(ant_t *js, ant_value_t obj) {

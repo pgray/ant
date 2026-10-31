@@ -23,7 +23,7 @@ static ant_value_t web_worker_dispatch(ant_t *js, ant_worker_t *w, ant_value_t e
 }
 
 static ant_value_t web_worker_event(ant_t *js, ant_worker_t *w, ant_value_t proto, ant_event_kind_t kind, const char *type) {
-  if (!is_object_type(w->obj)) return js_mkundef();
+  if (!is_object_type(w->obj)) return Ant_Value_Undefined;
   return Ant_EventTarget_CreateEvent(js, w->obj, proto, kind, type);
 }
 
@@ -36,7 +36,7 @@ static void web_worker_on_message(ant_t *js, ant_value_t target, ant_value_t val
   worker_flush_online(js, w);
 
   bool failed = vtype(ports) == kTypeNull;
-  ant_value_t event = ant_message_event_create(js, failed ? "messageerror" : "message", value, failed ? js_mkundef() : ports);
+  ant_value_t event = ant_message_event_create(js, failed ? "messageerror" : "message", value, failed ? Ant_Value_Undefined : ports);
   if (!is_err(event)) web_worker_dispatch(js, w, event);
 
   GC_ROOT_RESTORE(js, mark);
@@ -74,7 +74,7 @@ static void web_worker_error(ant_t *js, ant_worker_t *w, ant_value_t error) {
   Ant_Event_SetField(js, event, ANT_EVENT_FIELD_ERROR_error, error);
 
   web_worker_dispatch(js, w, event);
-  if (!Ant_Event_Canceled(event)) print_error_value(js, error, js_mkundef(), "Uncaught (in worker) ");
+  if (!Ant_Event_Canceled(event)) print_error_value(js, error, Ant_Value_Undefined, "Uncaught (in worker) ");
   GC_ROOT_RESTORE(js, mark);
 }
 
@@ -91,13 +91,13 @@ static void web_worker_exit(ant_t *js, ant_worker_t *w, int code) {
 
 static ant_value_t web_scope_post_message(ant_params_t) {
   ant_value_t port = worker_parent_port(js);
-  if (!is_object_type(port)) return js_mkundef();
-  return ant_message_port_post(js, port, nargs > 0 ? args[0] : js_mkundef(), worker_transfer_arg(js, args, nargs));
+  if (!is_object_type(port)) return Ant_Value_Undefined;
+  return ant_message_port_post(js, port, nargs > 0 ? args[0] : Ant_Value_Undefined, worker_transfer_arg(js, args, nargs));
 }
 
 static ant_value_t web_scope_close(ant_params_t) {
   if (js->worker) worker_request_stop(js->worker, 0);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 #define WEB_SCOPE_HANDLER(type)                                                 \
@@ -106,8 +106,8 @@ static ant_value_t web_scope_close(ant_params_t) {
   }                                                                             \
   static ant_value_t web_scope_set_on##type(ant_params_t) {                     \
     Ant_GlobalEvents_SetHandler(js, #type, sizeof(#type) - 1,                   \
-      nargs > 0 ? args[0] : js_mknull());                                       \
-    return js_mkundef();                                                        \
+      nargs > 0 ? args[0] : Ant_Value_Null);                                    \
+    return Ant_Value_Undefined;                                                 \
   }
 
 WEB_SCOPE_HANDLER(message)
@@ -157,11 +157,11 @@ static ant_value_t js_web_worker_ctor(ant_params_t) {
   if (is_object_type(proto)) js_set_proto_init(call_this, proto);
   js_set_slot(call_this, SLOT_BRAND, Ant_Value_FromNumber(BRAND_EVENTTARGET));
 
-  ant_value_t options = nargs > 1 && is_object_type(args[1]) ? args[1] : js_mkundef();
+  ant_value_t options = nargs > 1 && is_object_type(args[1]) ? args[1] : Ant_Value_Undefined;
   ant_worker_t *w = worker_new(js, call_this, &web_worker_ops);
   if (!w) return Ant_Error_CreateOutOfMemory(js);
 
-  ant_value_t error = js_mkundef();
+  ant_value_t error = Ant_Value_Undefined;
   w->entry = worker_resolve_entry(js, args[0], WORKER_ENTRY_WEB, &error);
   if (!w->entry) {
     worker_release(w);
@@ -175,8 +175,8 @@ static ant_value_t js_web_worker_ctor(ant_params_t) {
     return r;
   }
 
-  ant_value_t ref = is_object_type(options) ? js_get(js, options, "ref") : js_mkundef();
-  if (ref == js_false) worker_set_ref(w, false);
+  ant_value_t ref = is_object_type(options) ? js_get(js, options, "ref") : Ant_Value_Undefined;
+  if (ref == Ant_Value_False) worker_set_ref(w, false);
 
   return call_this;
 }
@@ -188,27 +188,27 @@ static ant_worker_t *web_worker_this(ant_t *js, ant_value_t call_this) {
 static ant_value_t js_web_worker_post_message(ant_params_t) {
   ant_worker_t *w = web_worker_this(js, call_this);
   if (!w) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
-  if (w->exited || !w->binding) return js_mkundef();
-  return ant_port_binding_post(js, w->binding, nargs > 0 ? args[0] : js_mkundef(), worker_transfer_arg(js, args, nargs));
+  if (w->exited || !w->binding) return Ant_Value_Undefined;
+  return ant_port_binding_post(js, w->binding, nargs > 0 ? args[0] : Ant_Value_Undefined, worker_transfer_arg(js, args, nargs));
 }
 
 static ant_value_t js_web_worker_terminate(ant_params_t) {
   ant_worker_t *w = web_worker_this(js, call_this);
   if (!w) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
   if (!w->exited) worker_request_stop(w, 0);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_web_worker_ref(ant_params_t) {
   ant_worker_t *w = web_worker_this(js, call_this);
   if (w) worker_set_ref(w, true);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_web_worker_unref(ant_params_t) {
   ant_worker_t *w = web_worker_this(js, call_this);
   if (w) worker_set_ref(w, false);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_web_worker_thread_id(ant_params_t) {

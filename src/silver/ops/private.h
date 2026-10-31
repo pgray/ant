@@ -103,7 +103,7 @@ static inline ant_private_entry_t *sv_private_find_entry(ant_value_t obj, ant_va
 }
 
 static inline ant_value_t sv_private_entry_get(ant_private_entry_t *entry, ant_offset_t idx) {
-  if (!entry) return js_mkundef();
+  if (!entry) return Ant_Value_Undefined;
   
   switch (idx) {
     case 0: return entry->token;
@@ -111,26 +111,26 @@ static inline ant_value_t sv_private_entry_get(ant_private_entry_t *entry, ant_o
     case 2: return entry->value;
     case 3: return entry->getter;
     case 4: return entry->setter;
-    default: return js_mkundef();
+    default: return Ant_Value_Undefined;
   }
 }
 
 static inline ant_value_t sv_private_entry_set(
   ant_t *js, ant_value_t obj, ant_private_entry_t *entry, ant_offset_t idx, ant_value_t value
 ) {
-  if (!entry) return js_mkundef();
+  if (!entry) return Ant_Value_Undefined;
   
   switch (idx) {
     case 2: entry->value = value; break;
     case 3: entry->getter = value; break;
     case 4: entry->setter = value; break;
-    default: return js_mkundef();
+    default: return Ant_Value_Undefined;
   }
 
   ant_object_t *ptr = is_object_type(obj) ? js_obj_ptr(js_as_obj(obj)) : NULL;
   if (ptr) gc_write_barrier(js, ptr, value);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_private_entry_t *sv_private_make_entry(
@@ -182,7 +182,7 @@ static inline ant_value_t sv_private_get_value(
   ant_value_t token, bool optional
 ) {
   if (!is_object_type(obj)) {
-    if (optional && (vtype(obj) == kTypeUndefined || vtype(obj) == kTypeNull)) return js_mkundef();
+    if (optional && (vtype(obj) == kTypeUndefined || vtype(obj) == kTypeNull)) return Ant_Value_Undefined;
     return sv_private_missing(js);
   }
 
@@ -212,7 +212,7 @@ static inline ant_value_t sv_op_get_private_impl(sv_vm_t *vm, ant_t *js, bool op
   if (is_err(result)) return result;
   vm->stack[vm->sp++] = result;
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_op_get_private(sv_vm_t *vm, ant_t *js) {
@@ -270,7 +270,7 @@ static inline ant_value_t sv_op_put_private(sv_vm_t *vm, ant_t *js) {
   if (is_err(result)) return result;
   vm->stack[vm->sp++] = result;
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_private_define(
@@ -284,10 +284,10 @@ static inline ant_value_t sv_private_define(
     if (!entry) {
       entry = sv_private_make_entry(
         js, obj, token, SV_PRIVATE_ACCESSOR,
-        js_mkundef(),
-        def_kind == SV_PRIVATE_GETTER ? val : js_mkundef(),
-        def_kind == SV_PRIVATE_SETTER ? val : js_mkundef());
-      return entry ? js_mkundef() : js_mkerr(js, "oom");
+        Ant_Value_Undefined,
+        def_kind == SV_PRIVATE_GETTER ? val : Ant_Value_Undefined,
+        def_kind == SV_PRIVATE_SETTER ? val : Ant_Value_Undefined);
+      return entry ? Ant_Value_Undefined : js_mkerr(js, "oom");
     }
     
     ant_value_t kind_val = sv_private_entry_get(entry, 1);
@@ -307,9 +307,9 @@ static inline ant_value_t sv_private_define(
   ant_private_entry_t *entry = sv_private_make_entry(
     js, obj, token,
     def_kind == SV_PRIVATE_METHOD ? SV_PRIVATE_METHOD : SV_PRIVATE_FIELD,
-    val, js_mkundef(), js_mkundef());
+    val, Ant_Value_Undefined, Ant_Value_Undefined);
     
-  return entry ? js_mkundef() : js_mkerr(js, "oom");
+  return entry ? Ant_Value_Undefined : js_mkerr(js, "oom");
 }
 
 static inline ant_value_t sv_op_def_private(sv_vm_t *vm, ant_t *js, uint8_t *ip) {
@@ -326,7 +326,7 @@ static inline ant_value_t sv_op_has_private(sv_vm_t *vm, ant_t *js) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Right operand of private brand check must be an object");
   vm->stack[vm->sp++] = js_bool(sv_private_find_entry(obj, token) != NULL);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 #endif

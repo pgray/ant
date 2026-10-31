@@ -358,12 +358,12 @@ static ant_value_t builtin_parseFloat(ant_params_t) {
 }
 
 double js_parse_int_value(ant_t *js, ant_value_t arg) {
-  ant_value_t result = builtin_parseInt(js, &arg, 1, js_mkundef(), js_mkundef(), js_mkundef());
+  ant_value_t result = builtin_parseInt(js, &arg, 1, Ant_Value_Undefined, Ant_Value_Undefined, Ant_Value_Undefined);
   return vtype(result) == kTypeNumber ? Ant_Value_AsNumberUnchecked(result) : ANT_NAN;
 }
 
 double js_parse_float_value(ant_t *js, ant_value_t arg) {
-  ant_value_t result = builtin_parseFloat(js, &arg, 1, js_mkundef(), js_mkundef(), js_mkundef());
+  ant_value_t result = builtin_parseFloat(js, &arg, 1, Ant_Value_Undefined, Ant_Value_Undefined, Ant_Value_Undefined);
   return vtype(result) == kTypeNumber ? Ant_Value_AsNumberUnchecked(result) : ANT_NAN;
 }
 

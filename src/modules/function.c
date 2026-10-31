@@ -103,7 +103,7 @@ ant_value_t build_dynamic_function(ant_native_params_t, ant_value_t new_target, 
   }
   
   closure->func = compiled;
-  closure->bound_this = js_mkundef();
+  closure->bound_this = Ant_Value_Undefined;
   closure->call_flags = 0;
   closure->func_obj = func_obj;
   sv_code_unit_unpin(compiled->unit);
@@ -123,13 +123,13 @@ ant_value_t build_dynamic_function(ant_native_params_t, ant_value_t new_target, 
   if (is_err(name_result)) return name_result;
   
   if (is_async && is_generator) {
-    set_slot(func_obj, SLOT_ASYNC, js_true);
+    set_slot(func_obj, SLOT_ASYNC, Ant_Value_True);
     ant_value_t async_generator_proto = get_slot(js_glob(js), SLOT_ASYNC_GENERATOR_PROTO);
     if (is_object_type(async_generator_proto)) js_set_proto_init(func_obj, async_generator_proto);
   }
   
   else if (is_async) {
-    set_slot(func_obj, SLOT_ASYNC, js_true);
+    set_slot(func_obj, SLOT_ASYNC, Ant_Value_True);
     ant_value_t async_proto = get_slot(js_glob(js), SLOT_ASYNC_PROTO);
     if (is_object_type(async_proto)) js_set_proto_init(func_obj, async_proto);
   }
@@ -183,7 +183,7 @@ static ant_value_t builtin_GeneratorFunction(ant_params_t) {
 }
 
 static ant_value_t builtin_function_empty(ant_params_t) {
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t builtin_function_call(ant_params_t) {
@@ -191,7 +191,7 @@ ant_value_t builtin_function_call(ant_params_t) {
     return js_mkerr(js, "call requires a function");
   }
   
-  ant_value_t this_arg = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t this_arg = (nargs > 0) ? args[0] : Ant_Value_Undefined;
   ant_value_t *call_args = NULL;
   
   int call_nargs = (nargs > 1) ? nargs - 1 : 0;
@@ -262,7 +262,7 @@ static ant_value_t builtin_function_toString(ant_params_t) {
       ant_value_t async_slot = get_slot(func_obj, SLOT_ASYNC);
       sv_closure_t *closure = js_func_closure(call_this);
       
-      bool is_async = (async_slot == js_true);
+      bool is_async = (async_slot == Ant_Value_True);
       bool is_arrow = closure && (closure->call_flags & SV_CALL_IS_ARROW) != 0;
       
       if (is_arrow) {
@@ -316,8 +316,8 @@ ant_value_t builtin_function_apply(ant_params_t) {
   if (vtype(call_this) != kTypeFunction && vtype(call_this) != kTypeBuiltin)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Function.prototype.apply requires that 'this' be a Function");
   
-  ant_value_t this_arg = (nargs > 0) ? args[0] : js_mkundef();
-  ant_value_t arg_array = (nargs > 1) ? args[1] : js_mkundef();
+  ant_value_t this_arg = (nargs > 0) ? args[0] : Ant_Value_Undefined;
+  ant_value_t arg_array = (nargs > 1) ? args[1] : Ant_Value_Undefined;
   
   if (vtype(arg_array) == kTypeUndefined || vtype(arg_array) == kTypeNull)
     return sv_vm_call_explicit_this(js->vm, js, call_this, this_arg, NULL, 0);
@@ -356,7 +356,7 @@ static ant_value_t builtin_bound_proxy_call(ant_params_t) {
     return js_proxy_construct(js, target, args, nargs, call_new_target);
   }
 
-  return sv_vm_call(js->vm, js, target, call_this, args, nargs, NULL, js_mkundef());
+  return sv_vm_call(js->vm, js, target, call_this, args, nargs, NULL, Ant_Value_Undefined);
 }
 
 static __attribute__((noinline, cold))
@@ -455,7 +455,7 @@ static ant_value_t builtin_function_bind(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "bind requires a function");
   }
 
-  ant_value_t this_arg = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t this_arg = (nargs > 0) ? args[0] : Ant_Value_Undefined;
   int bound_argc = (nargs > 1) ? nargs - 1 : 0;
   ant_value_t *bound_args = (bound_argc > 0) ? &args[1] : NULL;
   
@@ -480,7 +480,7 @@ static ant_value_t builtin_function_bind(ant_params_t) {
 
   const char *target_name = "";
   size_t target_name_len = 0;
-  ant_value_t target_name_val = js_mkundef();
+  ant_value_t target_name_val = Ant_Value_Undefined;
   if (func_is_proxy) {
     target_name_val = proxy_get(js, call_this, "name", 4);
     if (is_err(target_name_val)) return target_name_val;
@@ -598,7 +598,7 @@ static ant_value_t builtin_function_bind(ant_params_t) {
   
   if (bound_closure->call_flags & SV_CALL_HAS_BOUND_ARGS) {
     bound_closure->u.bound.argv = NULL;
-    bound_closure->u.bound.args_arr = js_mkundef();
+    bound_closure->u.bound.args_arr = Ant_Value_Undefined;
   } else {
     bound_closure->u.pending.name = NULL;
     bound_closure->u.pending.len = 0;
@@ -617,12 +617,12 @@ static ant_value_t builtin_function_bind(ant_params_t) {
   if (bound_argc > 0 || orig_bound_argc > 0) {
     bound_closure->call_flags |= SV_CALL_HAS_BOUND_ARGS;
     bound_closure->u.bound.argv = NULL;
-    bound_closure->u.bound.args_arr = js_mkundef();
+    bound_closure->u.bound.args_arr = Ant_Value_Undefined;
   }
 
   ant_value_t async_slot = get_slot(func_obj, SLOT_ASYNC);
   if (vtype(async_slot) == kTypeBool && vdata(async_slot) == 1) {
-    set_slot(bound_func, SLOT_ASYNC, js_true);
+    set_slot(bound_func, SLOT_ASYNC, Ant_Value_True);
   }
 
   ant_value_t target_proto = get_proto(js, call_this);
@@ -683,7 +683,7 @@ static ant_value_t builtin_function_bind(ant_params_t) {
 }
 
 static ant_value_t builtin_function_has_instance(ant_params_t) {
-  return ordinary_has_instance(js, nargs > 0 ? args[0] : js_mkundef(), call_this);
+  return ordinary_has_instance(js, nargs > 0 ? args[0] : Ant_Value_Undefined, call_this);
 }
 
 void js_init_function_has_instance(ant_t *js) {
@@ -698,7 +698,7 @@ static void init_function_kind(
   ant_value_t kind_proto = Ant_Object_CreateBare(js);
   set_proto(js, kind_proto, function_proto);
   
-  if (is_async) set_slot(kind_proto, SLOT_ASYNC, js_true);
+  if (is_async) set_slot(kind_proto, SLOT_ASYNC, Ant_Value_True);
   set_slot(js_glob(js), slot, kind_proto);
   
   ant_value_t ctor_obj = mkobj(js, 0);
@@ -738,7 +738,7 @@ void js_function_init_kinds(ant_t *js, ant_value_t function_proto, ant_value_t f
   
   init_function_kind(
     js, function_proto, func_ctor_func, SLOT_ASYNC_PROTO, 
-    Ant_Function_Create(builtin_AsyncFunction), Ant_String_FromLiteral(js, "AsyncFunction"), js_mkundef(), true
+    Ant_Function_Create(builtin_AsyncFunction), Ant_String_FromLiteral(js, "AsyncFunction"), Ant_Value_Undefined, true
   );
   
   init_function_kind(

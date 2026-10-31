@@ -29,7 +29,7 @@ static ant_value_t temporal_proto(ant_t *js, temporal_kind_t kind) {
     case TEMPORAL_PLAIN_YEARMONTH: return js->builtins.temporal_plain_yearmonth_proto;
     case TEMPORAL_ZONED_DATETIME: return js->builtins.temporal_zoned_datetime_proto;
   }
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void temporal_destroy_value(temporal_kind_t kind, void *ptr) {
@@ -82,8 +82,8 @@ ant_value_t temporal_error(ant_t *js, TemporalError err) {
     case ErrorKind_Generic: break;
   }
   if (err.msg.is_ok)
-    return js_create_error(js, type, js_mkundef(), "%.*s", (int)err.msg.ok.len, err.msg.ok.data);
-  return js_create_error(js, type, js_mkundef(), "Temporal operation failed");
+    return js_create_error(js, type, Ant_Value_Undefined, "%.*s", (int)err.msg.ok.len, err.msg.ok.data);
+  return js_create_error(js, type, Ant_Value_Undefined, "Temporal operation failed");
 }
 
 static bool temporal_normalize_duration(Duration **duration, TemporalError *err) {
@@ -496,8 +496,8 @@ bool temporal_partial_date_impl(
     return false;
   }
   memset(out, 0, sizeof(*out));
-  out->month_code_root = js_mkundef();
-  out->era_root = js_mkundef();
+  out->month_code_root = Ant_Value_Undefined;
+  out->era_root = Ant_Value_Undefined;
   out->partial.calendar = default_calendar;
   if (read_calendar) {
     ant_value_t calendar = js_get(js, value, "calendar");
@@ -637,7 +637,7 @@ bool temporal_validate_partial_object(
 bool temporal_options_object(
   ant_t *js, ant_value_t value, bool string_allowed, ant_value_t *out, ant_value_t *err
 ) {
-  if (vtype(value) == kTypeUndefined) { *out = js_mkundef(); return true; }
+  if (vtype(value) == kTypeUndefined) { *out = Ant_Value_Undefined; return true; }
   if (string_allowed && vtype(value) == kTypeString) { *out = value; return true; }
   if (!is_object_type(value)) {
     *err = js_mkerr_typed(js, JS_ERR_TYPE, "options must be an object");

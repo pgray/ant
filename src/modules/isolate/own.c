@@ -196,7 +196,7 @@ ant_value_t guest_own_host_call(ant_t *js, ant_guest_t *g, guest_host_call_t *ca
   uv_cond_broadcast(&g->cond);
   uv_mutex_unlock(&g->lock);
   if (abandoned) guest_host_call_free(call);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t guest_own_start(ant_t *js, ant_guest_t *g) {
@@ -221,7 +221,7 @@ ant_value_t guest_own_start(ant_t *js, ant_guest_t *g) {
   bool failed = g->failed;
   uv_mutex_unlock(&g->lock);
 
-  return failed ? js_mkerr_code(js, JS_ERR_GENERIC, "ERR_ISOLATE_INIT_FAILED", "Isolate initialization failed") : js_mkundef();
+  return failed ? js_mkerr_code(js, JS_ERR_GENERIC, "ERR_ISOLATE_INIT_FAILED", "Isolate initialization failed") : Ant_Value_Undefined;
 }
 
 static bool own_enqueue(ant_guest_t *g, guest_call_t *call) {

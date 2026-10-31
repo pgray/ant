@@ -108,7 +108,7 @@ static inline ant_value_t sv_for_of_open(sv_vm_t *vm, ant_t *js, ant_value_t ite
     return js_mkerr_typed(js, JS_ERR_TYPE, "not iterable");
   }
 
-  ant_value_t iterator = sv_vm_call(vm, js, iter_fn, iterable, NULL, 0, NULL, js_mkundef());
+  ant_value_t iterator = sv_vm_call(vm, js, iter_fn, iterable, NULL, 0, NULL, Ant_Value_Undefined);
   if (is_err(iterator)) {
     GC_ROOT_RESTORE(js, root_mark);
     return iterator;
@@ -209,7 +209,7 @@ static inline ant_value_t sv_op_for_await_of(sv_vm_t *vm, ant_t *js) {
     }
   }
 
-  ant_value_t iterator = sv_vm_call(vm, js, iter_fn, iterable, NULL, 0, NULL, js_mkundef());
+  ant_value_t iterator = sv_vm_call(vm, js, iter_fn, iterable, NULL, 0, NULL, Ant_Value_Undefined);
   if (is_err(iterator)) {
     GC_ROOT_RESTORE(js, root_mark);
     return iterator;
@@ -236,7 +236,7 @@ static inline ant_value_t sv_iter_result_get_named(
     ? js_obj_ptr(js_as_obj(result)) 
     : NULL;
     
-  ant_value_t out = js_mkundef();
+  ant_value_t out = Ant_Value_Undefined;
   bool should_fallback = false;
 
   if (interned && sv_try_get_shape_data_prop(js, ptr, interned, &out, &should_fallback)) return out;
@@ -276,17 +276,17 @@ static inline ant_value_t sv_iter_step_generic(
     return js_mkerr_typed(js, JS_ERR_TYPE, "iterator.next is not a function");
   
   if (js_generator_can_resume_sync(iterator, next_method, SV_RESUME_NEXT)) {
-    *out_value = js_generator_resume_sync(js, iterator, js_mkundef(), SV_RESUME_NEXT, out_done);
+    *out_value = js_generator_resume_sync(js, iterator, Ant_Value_Undefined, SV_RESUME_NEXT, out_done);
     return is_err(*out_value) ? *out_value : Ant_Value_FromNumber(0);
   }
   
-  ant_value_t result = sv_vm_call(vm, js, next_method, iterator, NULL, 0, NULL, js_mkundef());
+  ant_value_t result = sv_vm_call(vm, js, next_method, iterator, NULL, 0, NULL, Ant_Value_Undefined);
   if (is_err(result)) return result;
   
   if (!is_object_type(result))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Iterator result is not an object");
 
-  ant_value_t done = js_mkundef();
+  ant_value_t done = Ant_Value_Undefined;
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, result);
   
@@ -309,7 +309,7 @@ static inline ant_value_t sv_iter_advance_values(
   ant_value_t tag_val = state[2];
   int tag = vtype(tag_val) == kTypeNumber ? (int)Ant_Value_AsNumberUnchecked(tag_val) : SV_ITER_DONE;
 
-  *out_value = js_mkundef();
+  *out_value = Ant_Value_Undefined;
   *out_done = true;
 
   switch (tag) {
@@ -399,15 +399,15 @@ static inline ant_value_t sv_op_iter_next(sv_vm_t *vm, ant_t *js) {
   ant_value_t status = sv_iter_advance(vm, js, &value, &done);
   if (is_err(status)) return status;
   vm->stack[vm->sp++] = value;
-  vm->stack[vm->sp++] = done ? js_true : js_false;
+  vm->stack[vm->sp++] = done ? Ant_Value_True : Ant_Value_False;
 
   return Ant_Value_FromNumber(0);
 }
 
 static inline void sv_op_iter_get_value(sv_vm_t *vm, ant_t *js) {
   ant_value_t obj = vm->stack[vm->sp - 1];
-  ant_value_t done = js_mkundef();
-  ant_value_t value = js_mkundef();
+  ant_value_t done = Ant_Value_Undefined;
+  ant_value_t value = Ant_Value_Undefined;
   sv_iter_result_unpack(js, obj, &done, &value);
   vm->stack[vm->sp - 1] = value;
   vm->stack[vm->sp++] = mkval(kTypeBool, js_truthy(js, done));
@@ -428,17 +428,17 @@ static inline ant_value_t sv_iter_close(
     goto done;
   }
 
-  result = sv_vm_call(vm, js, result, iterator, NULL, 0, NULL, js_mkundef());
+  result = sv_vm_call(vm, js, result, iterator, NULL, 0, NULL, Ant_Value_Undefined);
   if (!is_err(result) && !is_object_type(result))
     result = js_mkerr_typed(js, JS_ERR_TYPE, "iterator.return must return an object");
 
 done:
   if (suppress_error && is_err(result)) {
     js_take_thrown(js, result);
-    result = js_mkundef();
+    result = Ant_Value_Undefined;
   }
   GC_ROOT_RESTORE(js, root_mark);
-  return is_err(result) ? result : js_mkundef();
+  return is_err(result) ? result : Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_iter_record_iterator(ant_t *js, const ant_value_t *state) {
@@ -453,24 +453,24 @@ static inline ant_value_t sv_iter_record_iterator(ant_t *js, const ant_value_t *
     case SV_ITER_STRING:
       return js_string_iterator_at(js, state[0], (uint32_t)Ant_Value_AsNumberUnchecked(state[1]));
     default:
-      return js_mkundef();
+      return Ant_Value_Undefined;
   }
 }
 
 static inline ant_value_t sv_iter_close_record(
   sv_vm_t *vm, ant_t *js, const ant_value_t *state, bool suppress_error
 ) {
-  if (vtype(state[2]) != kTypeNumber) return js_mkundef();
+  if (vtype(state[2]) != kTypeNumber) return Ant_Value_Undefined;
   int tag = (int)Ant_Value_AsNumberUnchecked(state[2]);
 
   if (tag == SV_ITER_GENERIC) return sv_iter_close(vm, js, state[0], suppress_error);
-  if (tag == SV_ITER_DONE || ant_protector_intact(js, ANT_PROTECTOR_ITERATOR_RETURN)) return js_mkundef();
+  if (tag == SV_ITER_DONE || ant_protector_intact(js, ANT_PROTECTOR_ITERATOR_RETURN)) return Ant_Value_Undefined;
 
   ant_value_t iterator = sv_iter_record_iterator(js, state);
   if (is_err(iterator)) {
     if (!suppress_error) return iterator;
     js_take_thrown(js, iterator);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   return sv_iter_close(vm, js, iterator, suppress_error);
@@ -506,7 +506,7 @@ static inline ant_value_t sv_op_iter_close_async(sv_vm_t *vm, ant_t *js) {
         vm->sp -= 3;
         return js_mkerr_typed(js, JS_ERR_TYPE, "iterator.return is not a function");
       }
-      result = sv_vm_call(vm, js, return_fn, iterator, NULL, 0, NULL, js_mkundef());
+      result = sv_vm_call(vm, js, return_fn, iterator, NULL, 0, NULL, Ant_Value_Undefined);
       if (is_err(result)) {
         vm->sp -= 3;
         return result;
@@ -539,7 +539,7 @@ static inline ant_value_t sv_op_destructure_next(sv_vm_t *vm, ant_t *js) {
   
   ant_value_t status = sv_iter_advance(vm, js, &value, &done);
   if (is_err(status)) return status;
-  vm->stack[vm->sp++] = done ? js_mkundef() : value;
+  vm->stack[vm->sp++] = done ? Ant_Value_Undefined : value;
   
   return Ant_Value_FromNumber(0);
 }
@@ -574,7 +574,7 @@ static inline ant_value_t sv_op_iter_call(sv_vm_t *vm, ant_t *js, uint8_t *ip) {
   ant_value_t iterator = vm->stack[vm->sp - 4];
   if (!is_callable(method))
     return js_mkerr(js, "iterator method is not callable");
-  ant_value_t result = sv_vm_call(vm, js, method, iterator, NULL, 0, NULL, js_mkundef());
+  ant_value_t result = sv_vm_call(vm, js, method, iterator, NULL, 0, NULL, Ant_Value_Undefined);
   if (is_err(result)) return result;
   vm->stack[vm->sp++] = result;
   return Ant_Value_FromNumber(0);
@@ -583,7 +583,7 @@ static inline ant_value_t sv_op_iter_call(sv_vm_t *vm, ant_t *js, uint8_t *ip) {
 static inline sv_await_result_t sv_op_await_iter_next(sv_vm_t *vm, ant_t *js) {
   sv_await_result_t out = {
     .state = SV_AWAIT_READY,
-    .value = js_mkundef(),
+    .value = Ant_Value_Undefined,
   };
 
   if (vm->sp >= 4 && vm->stack[vm->sp - 2] == SV_AITER_AWAIT_MARK) {
@@ -600,7 +600,7 @@ static inline sv_await_result_t sv_op_await_iter_next(sv_vm_t *vm, ant_t *js) {
     ant_offset_t len = js_arr_len(js, arr);
 
     if (idx >= (int)len) {
-      vm->stack[vm->sp++] = js_mkundef();
+      vm->stack[vm->sp++] = Ant_Value_Undefined;
       vm->stack[vm->sp++] = mkval(kTypeBool, 1);
       return out;
     }
@@ -644,7 +644,7 @@ static inline sv_await_result_t sv_op_await_iter_next(sv_vm_t *vm, ant_t *js) {
     return out;
   }
 
-  ant_value_t result = js_mkundef();
+  ant_value_t result = Ant_Value_Undefined;
   bool has_resumed_result = vm->sp >= 4 &&
     vm->stack[vm->sp - 2] == SV_AITER_STEP_MARK;
 
@@ -661,7 +661,7 @@ static inline sv_await_result_t sv_op_await_iter_next(sv_vm_t *vm, ant_t *js) {
     result = sv_vm_call(
       vm, js,
       next_method, iterator,
-      NULL, 0, NULL, js_mkundef()
+      NULL, 0, NULL, Ant_Value_Undefined
     );
     
     if (is_err(result)) return (sv_await_result_t){ 
@@ -682,8 +682,8 @@ static inline sv_await_result_t sv_op_await_iter_next(sv_vm_t *vm, ant_t *js) {
     result = awaited.value;
   }
   
-  ant_value_t done = js_mkundef();
-  ant_value_t value = js_mkundef();
+  ant_value_t done = Ant_Value_Undefined;
+  ant_value_t value = Ant_Value_Undefined;
   
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, result);

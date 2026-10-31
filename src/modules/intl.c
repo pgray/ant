@@ -96,7 +96,7 @@ static ant_value_t intl_canonical_locale_list_fill(ant_t *js, ant_value_t out, a
   for (double k = 0; k < len; k++) {
     ant_value_t present = do_in(js, Ant_Value_FromNumber(k), locales);
     if (is_err(present)) return present;
-    if (present != js_true) continue;
+    if (present != Ant_Value_True) continue;
 
     char idx[32];
     snprintf(idx, sizeof(idx), "%.0f", k);
@@ -127,7 +127,7 @@ static ant_value_t intl_canonical_locale_list(ant_t *js, ant_value_t locales) {
 }
 
 static ant_value_t intl_get_canonical_locales(ant_params_t) {
-  return intl_canonical_locale_list(js, nargs > 0 ? args[0] : js_mkundef());
+  return intl_canonical_locale_list(js, nargs > 0 ? args[0] : Ant_Value_Undefined);
 }
 
 static ant_value_t intl_resolve_locale(ant_t *js, ant_value_t input) {
@@ -231,7 +231,7 @@ static ant_value_t intl_collator_resolved_options(ant_params_t) {
   
   ant_value_t locale = is_object_type(call_this) 
     ? js_get(js, call_this, "locale") 
-    : js_mkundef();
+    : Ant_Value_Undefined;
   
   if (vtype(locale) != kTypeString) locale = js_mkstr(js, "en-US", 5);
   js_set(js, obj, "locale", locale);
@@ -279,7 +279,7 @@ static ant_value_t intl_numberformat_format(ant_params_t) {
 }
 
 static ant_value_t intl_numberformat_resolved_options(ant_params_t) {
-  return intl_collator_resolved_options(js, args, nargs, js_mkundef(), call_this, call_func);
+  return intl_collator_resolved_options(js, args, nargs, Ant_Value_Undefined, call_this, call_func);
 }
 
 static void intl_dtf_extract_fields(ant_native_params_t, intl_dtf_fields_t *out) {
@@ -316,8 +316,8 @@ static ant_value_t intl_dtf_format(ant_params_t) {
 static ant_value_t intl_dtf_resolved_options(ant_params_t) {
   ant_value_t obj = Ant_Object_Create(js);
   
-  ant_value_t locale = is_object_type(call_this) ? js_get(js, call_this, "locale") : js_mkundef();
-  ant_value_t time_zone = is_object_type(call_this) ? js_get(js, call_this, "timeZone") : js_mkundef();
+  ant_value_t locale = is_object_type(call_this) ? js_get(js, call_this, "locale") : Ant_Value_Undefined;
+  ant_value_t time_zone = is_object_type(call_this) ? js_get(js, call_this, "timeZone") : Ant_Value_Undefined;
 
   if (vtype(locale) != kTypeString) locale = js_mkstr(js, "en-US", 5);
   if (vtype(time_zone) != kTypeString) time_zone = js_mkstr(js, "UTC", 3);
@@ -432,7 +432,7 @@ static ant_value_t intl_segmenter_resolved_options(ant_params_t) {
   size_t granularity_len = 0;
   const char *granularity = intl_segmenter_granularity(js, call_this, &granularity_len);
 
-  ant_value_t locale = is_object_type(call_this) ? js_get(js, call_this, "locale") : js_mkundef();
+  ant_value_t locale = is_object_type(call_this) ? js_get(js, call_this, "locale") : Ant_Value_Undefined;
   if (vtype(locale) != kTypeString) locale = js_mkstr(js, "en-US", 5);
 
   js_set(js, obj, "locale", locale);
@@ -442,7 +442,7 @@ static ant_value_t intl_segmenter_resolved_options(ant_params_t) {
 }
 
 static ant_value_t intl_collator_constructor(ant_params_t) {
-  ant_value_t locale = intl_resolve_locale(js, nargs > 0 ? args[0] : js_mkundef());
+  ant_value_t locale = intl_resolve_locale(js, nargs > 0 ? args[0] : Ant_Value_Undefined);
   if (is_err(locale)) return locale;
 
   ant_value_t obj = intl_create_instance(js, js->builtins.intl_collator_proto, call_new_target);
@@ -450,14 +450,14 @@ static ant_value_t intl_collator_constructor(ant_params_t) {
 
   if (nargs > 1 && vtype(args[1]) == kTypeObject && js_truthy(js, js_get(js, args[1], "numeric"))) {
     defhidden(js, obj, "compare", 7, Ant_Function_Create(intl_collator_compare_numeric));
-    defhidden(js, obj, "numeric", 7, js_true);
+    defhidden(js, obj, "numeric", 7, Ant_Value_True);
   }
   
   return obj;
 }
 
 static ant_value_t intl_numberformat_constructor(ant_params_t) {
-  ant_value_t locale = intl_resolve_locale(js, nargs > 0 ? args[0] : js_mkundef());
+  ant_value_t locale = intl_resolve_locale(js, nargs > 0 ? args[0] : Ant_Value_Undefined);
   if (is_err(locale)) return locale;
 
   ant_value_t obj = intl_create_instance(js, js->builtins.intl_numberformat_proto, call_new_target);
@@ -467,11 +467,11 @@ static ant_value_t intl_numberformat_constructor(ant_params_t) {
 }
 
 static ant_value_t intl_dtf_constructor(ant_params_t) {
-  ant_value_t locale = intl_resolve_locale(js, nargs > 0 ? args[0] : js_mkundef());
+  ant_value_t locale = intl_resolve_locale(js, nargs > 0 ? args[0] : Ant_Value_Undefined);
   if (is_err(locale)) return locale;
 
   ant_value_t time_zone = intl_get_option_string(
-    js, nargs > 1 ? args[1] : js_mkundef(),
+    js, nargs > 1 ? args[1] : Ant_Value_Undefined,
     "timeZone", "UTC"
   );
   if (is_err(time_zone)) return time_zone;
@@ -484,11 +484,11 @@ static ant_value_t intl_dtf_constructor(ant_params_t) {
 }
 
 static ant_value_t intl_segmenter_constructor(ant_params_t) {
-  ant_value_t locale = intl_resolve_locale(js, nargs > 0 ? args[0] : js_mkundef());
+  ant_value_t locale = intl_resolve_locale(js, nargs > 0 ? args[0] : Ant_Value_Undefined);
   if (is_err(locale)) return locale;
 
   ant_value_t granularity = intl_get_option_string(
-    js, nargs > 1 ? args[1] : js_mkundef(),
+    js, nargs > 1 ? args[1] : Ant_Value_Undefined,
     "granularity", "grapheme"
   );
   if (is_err(granularity)) return granularity;

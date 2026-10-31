@@ -14,19 +14,19 @@ static ant_value_t js_count_size(ant_params_t) {
 static ant_value_t js_bytelength_size(ant_params_t) {
   if (nargs < 1 || vtype(args[0]) == kTypeUndefined || is_null(args[0]))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot get property 'byteLength' of undefined or null");
-  if (!is_object_type(args[0])) return js_mkundef();
+  if (!is_object_type(args[0])) return Ant_Value_Undefined;
   
   ant_value_t bl = js_get(js, args[0], "byteLength");
   if (is_err(bl)) return bl;
   if (vtype(bl) == kTypeNumber) return bl;
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_qs_get_highwatermark(ant_params_t) {
   ant_value_t s = js_get_slot(call_this, SLOT_DATA);
   if (vtype(s) == kTypeNumber) return s;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_qs_get_size(ant_params_t) {

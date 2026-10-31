@@ -101,7 +101,7 @@ void mir_emit_self_binding_guard(
     int bc_off, int pre_op_sp,
     const jit_bailout_emit_t *bail) {
   MIR_label_t match = MIR_new_label(ctx);
-  uint64_t func_tag = NANBOX_PREFIX | ((ant_value_t)(kTypeFunction & NANBOX_TYPE_MASK) << NANBOX_TYPE_SHIFT);
+  uint64_t func_tag = NANBOX_TAG(kTypeFunction);
 
   MIR_append_insn(ctx, fn,
                   MIR_new_insn(ctx, MIR_MOV,
@@ -131,7 +131,7 @@ void mir_emit_self_binding_guard_value_kept(
     const jit_bailout_emit_t *bail) {
   MIR_label_t match = MIR_new_label(ctx);
   MIR_label_t not_undef = MIR_new_label(ctx);
-  uint64_t func_tag = NANBOX_PREFIX | ((ant_value_t)(kTypeFunction & NANBOX_TYPE_MASK) << NANBOX_TYPE_SHIFT);
+  uint64_t func_tag = NANBOX_TAG(kTypeFunction);
 
   MIR_append_insn(ctx, fn,
                   MIR_new_insn(ctx, MIR_MOV,

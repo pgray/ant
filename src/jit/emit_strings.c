@@ -187,7 +187,7 @@ void jit_emit_strings(jit_compile_t *c) {
           mir_emit_string_concat_fastpath(c->ctx, c->jit_func, c->r_js, lhs, rhs, c->r_tmp, flat_append_slow, -1, c->bc_off, true);
           MIR_append_insn(c->ctx, c->jit_func, MIR_new_insn(c->ctx, MIR_MOV, MIR_new_reg_op(c->ctx, c->local_regs[local_idx]), MIR_new_reg_op(c->ctx, c->r_tmp)));
           MIR_append_insn(c->ctx, c->jit_func, MIR_new_insn(c->ctx, MIR_MOV, MIR_new_mem_op(c->ctx, MIR_JSVAL, (MIR_disp_t)((size_t)local_idx * sizeof(ant_value_t)), c->r_lbuf, 0, 1), MIR_new_reg_op(c->ctx, c->r_tmp)));
-          mir_load_imm(c->ctx, c->jit_func, c->r_err_tmp, js_mkundef());
+          mir_load_imm(c->ctx, c->jit_func, c->r_err_tmp, Ant_Value_Undefined);
           MIR_append_insn(c->ctx, c->jit_func,
                           MIR_new_insn(c->ctx, MIR_JMP, MIR_new_label_op(c->ctx, flat_append_done)));
           MIR_append_insn(c->ctx, c->jit_func, flat_append_slow);

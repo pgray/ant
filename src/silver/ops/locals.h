@@ -16,7 +16,7 @@ static inline ant_value_t sv_op_get_local(
     if (is_err(value)) return value;
   }
   vm->stack[vm->sp++] = value;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline void sv_op_put_local(
@@ -48,7 +48,7 @@ static inline ant_value_t sv_op_get_local8(
     if (is_err(value)) return value;
   }
   vm->stack[vm->sp++] = value;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline void sv_op_put_local8(
@@ -113,7 +113,7 @@ static inline ant_value_t sv_op_get_slot_raw(
     "Cannot access variable before initialization"
   );
   vm->stack[vm->sp++] = *slot;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_op_put_local_chk(
@@ -149,7 +149,7 @@ static inline ant_value_t sv_op_get_arg(sv_vm_t *vm, ant_t *js, sv_frame_t *fram
     if (is_err(value)) return value;
   }
   vm->stack[vm->sp++] = value;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline void sv_op_put_arg(sv_vm_t *vm, ant_t *js, sv_frame_t *frame, uint8_t *ip) {
@@ -205,7 +205,7 @@ static inline ant_value_t sv_op_str_flush_local(
   uint16_t idx = sv_get_u16(ip + 1);
   ant_value_t flush = sv_string_builder_flush_slot(vm, js, frame, idx);
   if (is_err(flush)) return flush;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 #endif

@@ -48,7 +48,7 @@ static sc_entry_t *sc_find(sc_entry_t **table, ant_value_t key) {
 
 static ant_value_t sc_lookup(sc_entry_t **table, ant_value_t key) {
   sc_entry_t *e = sc_find(table, key);
-  return e ? e->value : js_mkundef();
+  return e ? e->value : Ant_Value_Undefined;
 }
 
 static ant_value_t sc_transfer_target(ant_t *js, sc_entry_t *entry) {
@@ -252,7 +252,7 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
     return clone;
   }
 
-  if (js_get_slot(val, SLOT_ERROR_BRAND) == js_true) {
+  if (js_get_slot(val, SLOT_ERROR_BRAND) == Ant_Value_True) {
     const char *name = get_str_prop(js, val, "name", 4, NULL);
     js_err_type_t type = sc_error_type(name);
     
@@ -265,10 +265,10 @@ static ant_value_t sc_clone_rec(ant_t *js, ant_value_t val, sc_entry_t **seen, s
 
     if (stack) defhidden(js, clone, "stack", 5, js_mkstr(js, stack, strlen(stack)));
     if (msg)   defhidden(js, clone, "message", 7, js_mkstr(js, msg, strlen(msg)));
-    js_set_slot(clone, SLOT_ERROR_BRAND, js_true);
+    js_set_slot(clone, SLOT_ERROR_BRAND, Ant_Value_True);
     js_set_slot(clone, SLOT_ERR_TYPE, Ant_Value_FromNumber((double)type));
 
-    ant_value_t cause = js_mkundef();
+    ant_value_t cause = Ant_Value_Undefined;
     if (js_try_get_own_data_prop(js, val, "cause", 5, &cause)) {
       ant_value_t cause_clone = sc_clone_rec(js, cause, seen, transfer);
       if (is_err(cause_clone)) return cause_clone;
@@ -365,11 +365,11 @@ static ant_value_t sc_transfer_item_error(ant_t *js, sc_entry_t **transfer, ant_
   if (sc_find(transfer, item)) return sc_clone_error(js, "Transfer list contains duplicate ArrayBuffer");
   if (!buffer_can_transfer(data) || data->untransferable || ant_wire_is_untransferable(js, item))
     return sc_clone_error(js, "Cannot transfer object of unsupported type.");
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t sc_collect_transfer(ant_t *js, ant_value_t options, sc_entry_t **transfer) {
-  if (vtype(options) == kTypeUndefined || vtype(options) == kTypeNull) return js_mkundef();
+  if (vtype(options) == kTypeUndefined || vtype(options) == kTypeNull) return Ant_Value_Undefined;
   if (!is_object_type(options)) return js_mkerr_typed(
     js, JS_ERR_TYPE, "Failed to execute 'structuredClone': Options cannot be converted to a dictionary"
   );
@@ -389,10 +389,10 @@ static ant_value_t sc_collect_transfer(ant_t *js, ant_value_t options, sc_entry_
       js_iter_close(js, &it);
       return error;
     }
-    sc_add(transfer, item, js_mkundef());
+    sc_add(transfer, item, Ant_Value_Undefined);
   }
   
-  return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : js_mkundef();
+  return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : Ant_Value_Undefined;
 }
 
 static void sc_commit_transfer(ant_t *js, sc_entry_t **transfer) {
@@ -407,12 +407,12 @@ static void sc_commit_transfer(ant_t *js, sc_entry_t **transfer) {
 }
 
 ant_value_t js_structured_clone(ant_params_t) {
-  if (nargs < 1) return js_mkundef();
+  if (nargs < 1) return Ant_Value_Undefined;
 
   sc_entry_t *transfer = NULL;
   sc_entry_t *seen = NULL;
   
-  ant_value_t result = sc_collect_transfer(js, nargs > 1 ? args[1] : js_mkundef(), &transfer);
+  ant_value_t result = sc_collect_transfer(js, nargs > 1 ? args[1] : Ant_Value_Undefined, &transfer);
   if (!is_err(result)) result = sc_clone_rec(js, args[0], &seen, &transfer);
   if (!is_err(result)) sc_commit_transfer(js, &transfer);
   

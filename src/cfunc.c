@@ -72,12 +72,12 @@ ant_value_t js_mkfun_dyn(ant_cfunc_t fn) {
 }
 
 ant_value_t js_cfunc_noop(ant_params_t) {
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t js_cfunc_name_value(ant_t *js, ant_value_t cfunc) {
   const ant_cfunc_meta_t *meta = js_as_cfunc_meta(cfunc);
-  if (!meta || !meta->name) return js_mkundef();
+  if (!meta || !meta->name) return Ant_Value_Undefined;
   return js_mkstr(js, meta->name, strlen(meta->name));
 }
 
@@ -102,7 +102,7 @@ static ant_value_t js_define_function_name_value(ant_t *js, ant_value_t fn, ant_
   ant_value_t fn_obj = js_as_obj(fn);
   ant_object_t *ptr = js_obj_ptr(fn_obj);
   
-  if (!ptr) return js_mkundef();
+  if (!ptr) return Ant_Value_Undefined;
   if (vtype(name_val) != kTypeString) return js_mkerr(js, "function name must be a string");
   js_note_function_display_name(js, fn, name_val);
 
@@ -244,7 +244,7 @@ ant_value_t js_maybe_set_function_name_from_key(
   ant_value_t key,
   const char *prefix, size_t prefix_len
 ) {
-  if (!js_function_name_is_inferable(js, fn)) return js_mkundef();
+  if (!js_function_name_is_inferable(js, fn)) return Ant_Value_Undefined;
   return js_set_function_name_from_key(js, fn, key, prefix, prefix_len);
 }
 
@@ -283,7 +283,7 @@ ant_value_t setup_func_prototype_property(ant_t *js, ant_value_t func, bool mark
   }
   
   if (mark_constructor) js_mark_constructor(func_obj, true);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t cfunc_expose_named(ant_t *js, ant_value_t cfunc, const char *name, size_t name_len, uint32_t length) {

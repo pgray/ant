@@ -348,13 +348,13 @@ static void lock_settle_handler(ant_t *js, ant_value_t call_func, ant_value_t va
 }
 
 static ant_value_t lock_then_handler(ant_params_t) {
-  lock_settle_handler(js, call_func, nargs > 0 ? args[0] : js_mkundef(), true);
-  return js_mkundef();
+  lock_settle_handler(js, call_func, nargs > 0 ? args[0] : Ant_Value_Undefined, true);
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t lock_catch_handler(ant_params_t) {
-  lock_settle_handler(js, call_func, nargs > 0 ? args[0] : js_mkundef(), false);
-  return js_mkundef();
+  lock_settle_handler(js, call_func, nargs > 0 ? args[0] : Ant_Value_Undefined, false);
+  return Ant_Value_Undefined;
 }
 
 static void lock_reject_callback(ant_t *js, lock_request_t *req, ant_value_t promise, ant_value_t result) {
@@ -376,7 +376,7 @@ static void lock_await_callback(ant_t *js, lock_request_t *req, ant_value_t resu
 
   ant_value_t data = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, data);
-  js_set(js, data, "lockId", req ? Ant_Value_FromNumber((double)req->id) : js_mkundef());
+  js_set(js, data, "lockId", req ? Ant_Value_FromNumber((double)req->id) : Ant_Value_Undefined);
   js_set(js, data, "outerPromise", outer_promise);
 
   ant_value_t on_resolve = js_heavy_mkfun(js, lock_then_handler, data);
@@ -390,7 +390,7 @@ static void lock_await_callback(ant_t *js, lock_request_t *req, ant_value_t resu
 }
 
 static void lock_run_callback(ant_t *js, lock_request_t *req, ant_value_t callback, ant_value_t arg, ant_value_t outer_promise) {
-  ant_value_t result = sv_vm_call(js->vm, js, callback, js_mkundef(), &arg, 1, NULL, js_mkundef());
+  ant_value_t result = sv_vm_call(js->vm, js, callback, Ant_Value_Undefined, &arg, 1, NULL, Ant_Value_Undefined);
 
   if (is_err(result)) lock_reject_callback(js, req, outer_promise, result);
   else if (vtype(result) == kTypePromise) lock_await_callback(js, req, result, outer_promise);
@@ -406,8 +406,8 @@ static void lock_dispatch(ant_t *js, lock_request_t *req) {
   if (is_object_type(req->signal) && is_callable(req->abort_fn))
     abort_signal_remove_listener(js, req->signal, req->abort_fn);
 
-  req->signal = js_mkundef();
-  req->abort_fn = js_mkundef();
+  req->signal = Ant_Value_Undefined;
+  req->abort_fn = Ant_Value_Undefined;
 
   GC_ROOT_SAVE(root_mark, js);
   ant_value_t callback = req->callback;
@@ -461,14 +461,14 @@ static void locks_drain(ant_t *js, navigator_locks_t *client) {
 static ant_value_t lock_abort_handler(ant_params_t) {
   navigator_locks_t *client = js->navigator_locks;
   lock_request_t *req = lock_find(client, js_func_data(call_func));
-  if (!req) return js_mkundef();
+  if (!req) return Ant_Value_Undefined;
 
   ant_mutex_lock(&lock_registry);
   bool pending = lock_state(req) == LOCK_PENDING;
   if (pending) lock_detach(req, LOCK_RELEASED);
   ant_mutex_unlock(&lock_registry);
 
-  if (!pending) return js_mkundef();
+  if (!pending) return Ant_Value_Undefined;
   GC_ROOT_SAVE(root_mark, js);
 
   ant_value_t promise = req->promise;
@@ -483,7 +483,7 @@ static ant_value_t lock_abort_handler(ant_params_t) {
   GC_ROOT_RESTORE(js, root_mark);
   locks_drain(js, client);
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t locks_rejected(ant_t *js, ant_value_t reason) {
@@ -497,8 +497,8 @@ static ant_value_t locks_not_supported(ant_t *js, const char *message) {
 }
 
 static ant_value_t lock_read_options(ant_t *js, ant_value_t options, lock_options_t *out) {
-  *out = (lock_options_t){ .mode = LOCK_MODE_EXCLUSIVE, .signal = js_mkundef() };
-  if (!is_special_object(options)) return js_mkundef();
+  *out = (lock_options_t){ .mode = LOCK_MODE_EXCLUSIVE, .signal = Ant_Value_Undefined };
+  if (!is_special_object(options)) return Ant_Value_Undefined;
 
   ant_value_t mode = js_get(js, options, "mode");
   if (is_err(mode)) return mode;
@@ -511,7 +511,7 @@ static ant_value_t lock_read_options(ant_t *js, ant_value_t options, lock_option
 
   ant_value_t if_available = js_get(js, options, "ifAvailable");
   if (is_err(if_available)) return if_available;
-  out->if_available = if_available == js_true;
+  out->if_available = if_available == Ant_Value_True;
 
   ant_value_t steal = js_get(js, options, "steal");
   if (is_err(steal)) return steal;
@@ -522,7 +522,7 @@ static ant_value_t lock_read_options(ant_t *js, ant_value_t options, lock_option
   if (vtype(out->signal) != kTypeUndefined && !abort_signal_is_signal(out->signal))
     return js_mkerr_typed(js, JS_ERR_TYPE, "signal must be an AbortSignal");
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t locks_request(ant_params_t) {
@@ -537,7 +537,7 @@ static ant_value_t locks_request(ant_params_t) {
 
   lock_options_t opts;
   ant_value_t callback = nargs == 2 ? args[1] : args[2];
-  ant_value_t parsed = lock_read_options(js, nargs == 2 ? js_mkundef() : args[1], &opts);
+  ant_value_t parsed = lock_read_options(js, nargs == 2 ? Ant_Value_Undefined : args[1], &opts);
 
   if (is_err(parsed)) return parsed;
   if (vtype(callback) != kTypeFunction)
@@ -576,8 +576,8 @@ static ant_value_t locks_request(ant_params_t) {
   req->mode = opts.mode;
   req->callback = callback;
   req->promise = promise;
-  req->signal = js_mkundef();
-  req->abort_fn = js_mkundef();
+  req->signal = Ant_Value_Undefined;
+  req->abort_fn = Ant_Value_Undefined;
   atomic_init(&req->state, LOCK_PENDING);
 
   lock_register_t registered = lock_register(req, &opts);
@@ -591,7 +591,7 @@ static ant_value_t locks_request(ant_params_t) {
       GC_ROOT_RESTORE(js, root_mark);
       return Ant_Error_CreateOutOfMemory(js);
     }
-    lock_run_callback(js, NULL, callback, js_mknull(), promise);
+    lock_run_callback(js, NULL, callback, Ant_Value_Null, promise);
     GC_ROOT_RESTORE(js, root_mark);
     return promise;
   }

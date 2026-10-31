@@ -359,8 +359,8 @@ static void repl_eval_chunk(
   ant_t *js, const char *code, size_t len,
   repl_print_mode_t print_mode
 ) {
-  js_take_thrown(js, js_mkundef());
-  ant_value_t result = js_mkundef();
+  js_take_thrown(js, Ant_Value_Undefined);
+  ant_value_t result = Ant_Value_Undefined;
   if (repl_evaluate(js, code, len, &result) == REPL_EVAL_INTERRUPTED) {
     fputs("^C\n", stdout);
     return;
@@ -451,7 +451,7 @@ static cmd_result_t cmd_save(ant_t *js, ant_history_t *history, const char *arg)
 
 static cmd_result_t cmd_stats(ant_t *js, ant_history_t *history, const char *arg) {
   ant_value_t stats_fn = js_get(js, js->Ant, "stats");
-  ant_value_t result = sv_vm_call(js->vm, js, stats_fn, js_mkundef(), NULL, 0, NULL, js_mkundef());
+  ant_value_t result = sv_vm_call(js->vm, js, stats_fn, Ant_Value_Undefined, NULL, 0, NULL, Ant_Value_Undefined);
   console_emit(js, false, NULL, &result, 1);
   return CMD_OK;
 }
@@ -506,8 +506,8 @@ static cmd_result_t cmd_copy(ant_t *js, ant_history_t *history, const char *arg)
     return CMD_OK;
   }
 
-  js_take_thrown(js, js_mkundef());
-  ant_value_t result = js_mkundef();
+  js_take_thrown(js, Ant_Value_Undefined);
+  ant_value_t result = Ant_Value_Undefined;
 
   if (repl_evaluate(js, arg, strlen(arg), &result) == REPL_EVAL_INTERRUPTED) {
     fputs("^C\n", stdout);
@@ -685,8 +685,8 @@ void ant_repl_run(ant_t *js, const char *startup_code) {
     js_set_global_builtin(js, "require", esm_create_require_from_path(js, repl_path));
   }
 
-  js_set(js, js_glob(js), "_", js_mkundef());
-  js_set(js, js_glob(js), "_error", js_mkundef());
+  js_set(js, js_glob(js), "_", Ant_Value_Undefined);
+  js_set(js, js_glob(js), "_error", Ant_Value_Undefined);
 
   js_set_descriptor(js, js_as_obj(js_glob(js)), "_", 1, JS_DESC_W | JS_DESC_C);
   js_set_descriptor(js, js_as_obj(js_glob(js)), "_error", 6, JS_DESC_W | JS_DESC_C);

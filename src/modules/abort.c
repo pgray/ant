@@ -48,7 +48,7 @@ static inline abort_signal_data_t *get_signal_data(ant_value_t obj) {
 }
 
 static inline bool signal_aborted(const abort_signal_data_t *data) {
-  return data->aborted == js_true;
+  return data->aborted == Ant_Value_True;
 }
 
 static void abort_signal_finalize(ant_t *js, ant_object_t *obj) {
@@ -71,7 +71,7 @@ static ant_value_t make_timeout_error(ant_t *js) {
 static ant_value_t make_new_signal(ant_t *js) {
   abort_signal_data_t *data = malloc(sizeof(*data));
   if (!data) return js_mkerr(js, "AbortSignal: out of memory");
-  *data = (abort_signal_data_t){ .aborted = js_false, .reason = js_mkundef() };
+  *data = (abort_signal_data_t){ .aborted = Ant_Value_False, .reason = Ant_Value_Undefined };
 
   ant_value_t obj = Ant_Object_CreateBare(js);
   js_set_native(obj, data, ABORT_SIGNAL_NATIVE_TAG);
@@ -81,7 +81,7 @@ static ant_value_t make_new_signal(ant_t *js) {
 }
 
 static void signal_mark_aborted(ant_t *js, ant_value_t signal, abort_signal_data_t *data, ant_value_t reason) {
-  data->aborted = js_true;
+  data->aborted = Ant_Value_True;
   data->reason = reason;
   gc_write_barrier(js, js_obj_ptr(signal), reason);
 }
@@ -160,7 +160,7 @@ static ant_value_t abort_signal_inspect(ant_params_t) {
 static ant_value_t abort_signal_throw_if_aborted(ant_params_t) {
   abort_signal_data_t *data = get_signal_data(call_this);
   if (!data) return abort_this_error(js, "AbortSignal");
-  return signal_aborted(data) ? js_throw(js, data->reason) : js_mkundef();
+  return signal_aborted(data) ? js_throw(js, data->reason) : Ant_Value_Undefined;
 }
 
 // AbortSignal.abort(reason?)
@@ -274,7 +274,7 @@ static ant_value_t abort_controller_ctor(ant_params_t) {
 
   js_set_native(call_this, get_signal_data(signal), ABORT_CONTROLLER_NATIVE_TAG);
   js_set_slot_wb(js, call_this, SLOT_DATA, signal);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t abort_controller_get_signal(ant_params_t) {
@@ -288,14 +288,14 @@ static ant_value_t abort_controller_abort(ant_params_t) {
   abort_signal_data_t *data = js_get_native(call_this, ABORT_CONTROLLER_NATIVE_TAG);
   
   if (!data) return abort_this_error(js, "AbortController");
-  if (signal_aborted(data)) return js_mkundef();
+  if (signal_aborted(data)) return Ant_Value_Undefined;
 
   ant_value_t reason = (nargs >= 1 && vtype(args[0]) != kTypeUndefined)
     ? args[0]
     : make_abort_error(js);
 
   signal_do_abort(js, js_get_slot(call_this, SLOT_DATA), reason);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t abort_controller_inspect(ant_params_t) {
@@ -385,7 +385,7 @@ bool abort_signal_is_signal(ant_value_t signal) {
 
 ant_value_t abort_signal_get_reason(ant_value_t signal) {
   abort_signal_data_t *data = get_signal_data(signal);
-  return data ? data->reason : js_mkundef();
+  return data ? data->reason : Ant_Value_Undefined;
 }
 
 ant_value_t abort_signal_make_error(ant_t *js, ant_value_t signal) {
@@ -413,7 +413,7 @@ void abort_signal_add_listener(ant_t *js, ant_value_t signal, ant_value_t callba
   if (is_err(event)) return;
   
   Ant_Event_BeginDispatch(js, event, signal);
-  sv_vm_call(js->vm, js, callback, signal, &event, 1, NULL, js_mkundef());
+  sv_vm_call(js->vm, js, callback, signal, &event, 1, NULL, Ant_Value_Undefined);
   Ant_Event_EndDispatch(js, event);
 }
 

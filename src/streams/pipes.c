@@ -101,8 +101,8 @@ static void pipes_release_reader(ant_t *js, ant_value_t reader_obj) {
   js_reject_promise(js, new_closed, release_err);
   promise_mark_handled(new_closed);
   js_set_slot_wb(js, reader_obj, SLOT_RS_CLOSED, new_closed);
-  js_set_slot(stream_obj, SLOT_CTOR, js_mkundef());
-  js_set_slot(reader_obj, SLOT_ENTRIES, js_mkundef());
+  js_set_slot(stream_obj, SLOT_CTOR, Ant_Value_Undefined);
+  js_set_slot(reader_obj, SLOT_ENTRIES, Ant_Value_Undefined);
 }
 
 static void pipes_release_writer(ant_t *js, ant_value_t writer_obj) {
@@ -120,21 +120,21 @@ static void pipes_release_writer(ant_t *js, ant_value_t writer_obj) {
   js_reject_promise(js, closed, rel_err);
   promise_mark_handled(closed);
   js_set_slot_wb(js, writer_obj, SLOT_RS_CLOSED, closed);
-  js_set_slot(ws_obj, SLOT_CTOR, js_mkundef());
-  js_set_slot(writer_obj, SLOT_ENTRIES, js_mkundef());
+  js_set_slot(ws_obj, SLOT_CTOR, Ant_Value_Undefined);
+  js_set_slot(writer_obj, SLOT_ENTRIES, Ant_Value_Undefined);
 }
 
 static void pipes_release_locks(ant_t *js, ant_value_t state) {
   ant_value_t reader = pipe_state_reader(state);
   if (rs_is_reader(reader)) {
     pipes_release_reader(js, reader);
-    js_set_slot(state, SLOT_AUX, js_mkundef());
+    js_set_slot(state, SLOT_AUX, Ant_Value_Undefined);
   }
 
   ant_value_t writer = pipe_state_writer(state);
   if (ws_is_writer(writer)) {
     pipes_release_writer(js, writer);
-    js_set_slot(state, SLOT_DEFAULT, js_mkundef());
+    js_set_slot(state, SLOT_DEFAULT, Ant_Value_Undefined);
   }
 }
 
@@ -206,36 +206,36 @@ static void pipes_pump(ant_t *js, ant_value_t state);
 static ant_value_t pipe_write_resolve(ant_params_t) {
   ant_value_t state = js_get_slot(call_func, SLOT_DATA);
   pipe_state_t *pst = pipe_get_state(state);
-  if (!pst) return js_mkundef();
+  if (!pst) return Ant_Value_Undefined;
   pst->in_flight = false;
   if (pst->settled || pst->shutting_down)
-    return js_mkundef();
+    return Ant_Value_Undefined;
   pipes_pump(js, state);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t pipe_dest_error(ant_params_t) {
   ant_value_t state = js_get_slot(call_func, SLOT_DATA);
-  ant_value_t error = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t error = (nargs > 0) ? args[0] : Ant_Value_Undefined;
   pipes_shutdown_from_dest_error(js, state, error);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t pipe_close_dest_resolve(ant_params_t) {
   ant_value_t state = js_get_slot(call_func, SLOT_DATA);
-  pipes_settle(js, state, true, js_mkundef());
-  return js_mkundef();
+  pipes_settle(js, state, true, Ant_Value_Undefined);
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t pipe_close_dest_reject(ant_params_t) {
   ant_value_t state = js_get_slot(call_func, SLOT_DATA);
-  ant_value_t error = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t error = (nargs > 0) ? args[0] : Ant_Value_Undefined;
   pipes_settle(js, state, false, error);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t pipe_ignore(ant_params_t) {
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t pipe_read_resolve(ant_params_t) {
@@ -243,24 +243,24 @@ static ant_value_t pipe_read_resolve(ant_params_t) {
   pipe_state_t *pst = pipe_get_state(state);
   if (!pst || pst->settled || pst->shutting_down) {
     if (pst) pst->in_flight = false;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
-  ant_value_t result = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t result = (nargs > 0) ? args[0] : Ant_Value_Undefined;
   bool done = js_truthy(js, js_get(js, result, "done"));
 
   if (done) {
     pst->in_flight = false;
     if (pst->prevent_close) {
-      pipes_settle(js, state, true, js_mkundef());
-      return js_mkundef();
+      pipes_settle(js, state, true, Ant_Value_Undefined);
+      return Ant_Value_Undefined;
     }
 
     ant_value_t close_promise = writable_stream_close(js, pipe_state_dest(state));
     ant_value_t on_resolve = js_heavy_mkfun(js, pipe_close_dest_resolve, state);
     ant_value_t on_reject = js_heavy_mkfun(js, pipe_close_dest_reject, state);
     pipes_chain_promise(js, close_promise, on_resolve, on_reject);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   ant_value_t value = js_get(js, result, "value");
@@ -268,14 +268,14 @@ static ant_value_t pipe_read_resolve(ant_params_t) {
   ant_value_t on_resolve = js_heavy_mkfun(js, pipe_write_resolve, state);
   ant_value_t on_reject = js_heavy_mkfun(js, pipe_dest_error, state);
   pipes_chain_promise(js, write_promise, on_resolve, on_reject);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t pipe_source_error(ant_params_t) {
   ant_value_t state = js_get_slot(call_func, SLOT_DATA);
-  ant_value_t error = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t error = (nargs > 0) ? args[0] : Ant_Value_Undefined;
   pipes_shutdown_from_source_error(js, state, error);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t pipe_ready_resolve(ant_params_t) {
@@ -283,25 +283,25 @@ static ant_value_t pipe_ready_resolve(ant_params_t) {
   pipe_state_t *pst = pipe_get_state(state);
   if (!pst || pst->settled || pst->shutting_down) {
     if (pst) pst->in_flight = false;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   ant_value_t read_promise = rs_default_reader_read(js, pipe_state_reader(state));
   ant_value_t on_resolve = js_heavy_mkfun(js, pipe_read_resolve, state);
   ant_value_t on_reject = js_heavy_mkfun(js, pipe_source_error, state);
   pipes_chain_promise(js, read_promise, on_resolve, on_reject);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t pipe_abort_listener(ant_params_t) {
   ant_value_t state = js_get_slot(call_func, SLOT_DATA);
   pipe_state_t *pst = pipe_get_state(state);
   if (!pst || pst->settled || pst->shutting_down)
-    return js_mkundef();
+    return Ant_Value_Undefined;
 
   ant_value_t signal = js_get_slot(state, SLOT_RS_CANCEL);
   pipes_shutdown_from_abort(js, state, abort_signal_get_reason(signal));
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void pipes_pump(ant_t *js, ant_value_t state) {
@@ -334,7 +334,7 @@ static void pipes_parse_options(
   *prevent_close = false;
   *prevent_abort = false;
   *prevent_cancel = false;
-  *signal = js_mkundef();
+  *signal = Ant_Value_Undefined;
 
   if (!is_object_type(options)) return;
 
@@ -363,11 +363,11 @@ ant_value_t readable_stream_pipe_to(
   if (!is_undefined(signal) && !abort_signal_is_signal(signal))
     return pipe_create_rejected(js, Ant_Error_Create(js, JS_ERR_TYPE, "pipeTo option 'signal' must be an AbortSignal"));
 
-  ant_value_t reader = rs_reader_create(js, source, js_mkundef());
+  ant_value_t reader = rs_reader_create(js, source, Ant_Value_Undefined);
   if (is_err(reader)) return pipe_create_rejected(js, js_take_thrown(js, reader));
   rs->disturbed = true;
 
-  ant_value_t writer = ws_writer_create(js, dest, js_mkundef());
+  ant_value_t writer = ws_writer_create(js, dest, Ant_Value_Undefined);
   if (is_err(writer)) {
     GC_ROOT_SAVE(root_mark, js);
     ant_value_t error = js_take_thrown(js, writer);
@@ -428,13 +428,13 @@ static ant_value_t js_rs_pipe_to(ant_params_t) {
   if (!rs_is_stream(call_this))
     return pipe_create_rejected(js, Ant_Error_Create(js, JS_ERR_TYPE, "Invalid ReadableStream"));
 
-  ant_value_t dest = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t dest = (nargs > 0) ? args[0] : Ant_Value_Undefined;
   bool prevent_close, prevent_abort, prevent_cancel;
   ant_value_t signal;
 
-  pipes_parse_options(js, nargs > 1 ? args[1] : js_mkundef(),
+  pipes_parse_options(js, nargs > 1 ? args[1] : Ant_Value_Undefined,
     &prevent_close, &prevent_abort, &prevent_cancel, &signal);
-  if (Ant_Exception_Pending(js)) return pipe_create_rejected(js, js_take_thrown(js, js_mkundef()));
+  if (Ant_Exception_Pending(js)) return pipe_create_rejected(js, js_take_thrown(js, Ant_Value_Undefined));
 
   return readable_stream_pipe_to(js, call_this, dest,
     prevent_close, prevent_abort, prevent_cancel, signal);
@@ -462,7 +462,7 @@ static ant_value_t js_rs_pipe_through(ant_params_t) {
   ant_value_t signal;
   
   pipes_parse_options(
-    js, nargs > 1 ? args[1] : js_mkundef(),
+    js, nargs > 1 ? args[1] : Ant_Value_Undefined,
     &prevent_close, &prevent_abort, &prevent_cancel, &signal
   );
 
@@ -500,19 +500,19 @@ static void tee_release_reader(ant_t *js, ant_value_t state) {
   ant_value_t reader = tee_state_reader(state);
   if (!rs_is_reader(reader)) return;
   pipes_release_reader(js, reader);
-  js_set_slot(state, SLOT_AUX, js_mkundef());
+  js_set_slot(state, SLOT_AUX, Ant_Value_Undefined);
 }
 
 static void tee_resolve_cancel_promises(ant_t *js, ant_value_t state) {
   ant_value_t p1 = js_get_slot(state, SLOT_RS_CLOSED);
   ant_value_t p2 = js_get_slot(state, SLOT_RS_SIZE);
   if (vtype(p1) == kTypePromise) {
-    js_resolve_promise(js, p1, js_mkundef());
-    js_set_slot(state, SLOT_RS_CLOSED, js_mkundef());
+    js_resolve_promise(js, p1, Ant_Value_Undefined);
+    js_set_slot(state, SLOT_RS_CLOSED, Ant_Value_Undefined);
   }
   if (vtype(p2) == kTypePromise) {
-    js_resolve_promise(js, p2, js_mkundef());
-    js_set_slot(state, SLOT_RS_SIZE, js_mkundef());
+    js_resolve_promise(js, p2, Ant_Value_Undefined);
+    js_set_slot(state, SLOT_RS_SIZE, Ant_Value_Undefined);
   }
 }
 
@@ -521,11 +521,11 @@ static void tee_reject_cancel_promises(ant_t *js, ant_value_t state, ant_value_t
   ant_value_t p2 = js_get_slot(state, SLOT_RS_SIZE);
   if (vtype(p1) == kTypePromise) {
     js_reject_promise(js, p1, error);
-    js_set_slot(state, SLOT_RS_CLOSED, js_mkundef());
+    js_set_slot(state, SLOT_RS_CLOSED, Ant_Value_Undefined);
   }
   if (vtype(p2) == kTypePromise) {
     js_reject_promise(js, p2, error);
-    js_set_slot(state, SLOT_RS_SIZE, js_mkundef());
+    js_set_slot(state, SLOT_RS_SIZE, Ant_Value_Undefined);
   }
 }
 
@@ -564,7 +564,7 @@ static void tee_enqueue_branch(ant_t *js, ant_value_t branch_stream, ant_value_t
   ant_value_t size_fn = rs_ctrl_size(ctrl);
   if (is_callable(size_fn)) {
     ant_value_t sa[1] = { value };
-    ant_value_t sr = sv_vm_call(js->vm, js, size_fn, js_mkundef(), sa, 1, NULL, js_mkundef());
+    ant_value_t sr = sv_vm_call(js->vm, js, size_fn, Ant_Value_Undefined, sa, 1, NULL, Ant_Value_Undefined);
     if (!is_err(sr))
       chunk_size = vtype(sr) == kTypeNumber ? Ant_Value_AsNumberUnchecked(sr) : js_to_number(js, sr);
   }
@@ -592,25 +592,25 @@ static ant_value_t tee_cancel_both_resolve(ant_params_t) {
   ant_value_t state = js_get_slot(call_func, SLOT_DATA);
   tee_resolve_cancel_promises(js, state);
   tee_finalize(js, state);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t tee_cancel_both_reject(ant_params_t) {
   ant_value_t state = js_get_slot(call_func, SLOT_DATA);
-  ant_value_t error = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t error = (nargs > 0) ? args[0] : Ant_Value_Undefined;
   tee_reject_cancel_promises(js, state, error);
   tee_finalize(js, state);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t tee_read_resolve(ant_params_t) {
   ant_value_t state = js_get_slot(call_func, SLOT_DATA);
   tee_state_t *st = tee_get_state(state);
-  if (!st) return js_mkundef();
+  if (!st) return Ant_Value_Undefined;
   st->pulling = false;
-  if (st->done) return js_mkundef();
+  if (st->done) return Ant_Value_Undefined;
 
-  ant_value_t result = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t result = (nargs > 0) ? args[0] : Ant_Value_Undefined;
   bool done = js_truthy(js, js_get(js, result, "done"));
   ant_value_t branch1 = js_get_slot(state, SLOT_CTOR);
   ant_value_t branch2 = js_get_slot(state, SLOT_DEFAULT);
@@ -620,23 +620,23 @@ static ant_value_t tee_read_resolve(ant_params_t) {
     if (!st->canceled2) tee_close_branch(js, branch2);
     tee_resolve_cancel_promises(js, state);
     tee_finalize(js, state);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   ant_value_t value = js_get(js, result, "value");
   if (!st->canceled1) tee_enqueue_branch(js, branch1, value);
   if (!st->canceled2) tee_enqueue_branch(js, branch2, value);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t tee_read_reject(ant_params_t) {
   ant_value_t state = js_get_slot(call_func, SLOT_DATA);
   tee_state_t *st = tee_get_state(state);
-  if (!st) return js_mkundef();
-  ant_value_t error = (nargs > 0) ? args[0] : js_mkundef();
+  if (!st) return Ant_Value_Undefined;
+  ant_value_t error = (nargs > 0) ? args[0] : Ant_Value_Undefined;
   st->pulling = false;
-  if (st->done) return js_mkundef();
+  if (st->done) return Ant_Value_Undefined;
 
   ant_value_t branch1 = js_get_slot(state, SLOT_CTOR);
   ant_value_t branch2 = js_get_slot(state, SLOT_DEFAULT);
@@ -646,7 +646,7 @@ static ant_value_t tee_read_reject(ant_params_t) {
   tee_resolve_cancel_promises(js, state);
   tee_finalize(js, state);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void tee_pull(ant_t *js, ant_value_t state) {
@@ -666,7 +666,7 @@ static ant_value_t tee_branch_pull(ant_params_t) {
   tee_pull(js, state);
   
   ant_value_t promise = js_mkpromise(js);
-  js_resolve_promise(js, promise, js_mkundef());
+  js_resolve_promise(js, promise, Ant_Value_Undefined);
   
   return promise;
 }
@@ -676,9 +676,9 @@ static ant_value_t tee_branch_cancel(ant_params_t) {
   ant_value_t state = js_get_slot(wrapper, SLOT_DATA);
   
   int branch = (int)Ant_Value_AsNumberUnchecked(js_get_slot(wrapper, SLOT_ENTRIES));
-  ant_value_t reason = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t reason = (nargs > 0) ? args[0] : Ant_Value_Undefined;
   tee_state_t *st = tee_get_state(state);
-  if (!st) return js_mkundef();
+  if (!st) return Ant_Value_Undefined;
 
   bool is_b1 = (branch == 1);
   internal_slot_t reason_slot = is_b1 ? SLOT_RS_PULL : SLOT_RS_CANCEL;
@@ -689,7 +689,7 @@ static ant_value_t tee_branch_cancel(ant_params_t) {
     ant_value_t existing = js_get_slot(state, promise_slot);
     if (vtype(existing) == kTypePromise) return existing;
     ant_value_t resolved = js_mkpromise(js);
-    js_resolve_promise(js, resolved, js_mkundef());
+    js_resolve_promise(js, resolved, Ant_Value_Undefined);
     return resolved;
   }
 
@@ -701,8 +701,8 @@ static ant_value_t tee_branch_cancel(ant_params_t) {
   js_set_slot_wb(js, state, promise_slot, promise);
 
   if (st->done) {
-    js_resolve_promise(js, promise, js_mkundef());
-    js_set_slot(state, promise_slot, js_mkundef());
+    js_resolve_promise(js, promise, Ant_Value_Undefined);
+    js_set_slot(state, promise_slot, Ant_Value_Undefined);
     return promise;
   }
 
@@ -726,7 +726,7 @@ static ant_value_t js_rs_tee(ant_params_t) {
   if (rs_is_reader(rs_stream_reader(call_this)))
     return js_mkerr_typed(js, JS_ERR_TYPE, "ReadableStream is already locked");
 
-  ant_value_t reader = rs_reader_create(js, call_this, js_mkundef());
+  ant_value_t reader = rs_reader_create(js, call_this, Ant_Value_Undefined);
   if (is_err(reader)) return reader;
 
   tee_state_t *st = calloc(1, sizeof(tee_state_t));
@@ -736,10 +736,10 @@ static ant_value_t js_rs_tee(ant_params_t) {
   js_set_native(state, st, TEE_STATE_NATIVE_TAG);
   js_set_slot(state, SLOT_ENTRIES, call_this);
   js_set_slot(state, SLOT_AUX, reader);
-  js_set_slot(state, SLOT_RS_PULL, js_mkundef());
-  js_set_slot(state, SLOT_RS_CANCEL, js_mkundef());
-  js_set_slot(state, SLOT_RS_CLOSED, js_mkundef());
-  js_set_slot(state, SLOT_RS_SIZE, js_mkundef());
+  js_set_slot(state, SLOT_RS_PULL, Ant_Value_Undefined);
+  js_set_slot(state, SLOT_RS_CANCEL, Ant_Value_Undefined);
+  js_set_slot(state, SLOT_RS_CLOSED, Ant_Value_Undefined);
+  js_set_slot(state, SLOT_RS_SIZE, Ant_Value_Undefined);
   js_set_finalizer(state, tee_state_finalize);
 
   ant_value_t pull1 = js_heavy_mkfun(js, tee_branch_pull, state);

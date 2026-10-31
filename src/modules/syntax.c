@@ -44,7 +44,7 @@ static ant_value_t syntax_read_options(
     .ts_mode = ANT_TS_SOURCE_AUTO,
   };
 
-  if (vtype(options) == kTypeUndefined) return js_mkundef();
+  if (vtype(options) == kTypeUndefined) return Ant_Value_Undefined;
   if (!is_object_type(options))
     return syntax_type_error(js, function, "options must be an object");
 
@@ -96,11 +96,11 @@ static ant_value_t syntax_read_options(
     if (vtype(locations) != kTypeUndefined) {
       if (vtype(locations) != kTypeBool)
         return syntax_type_error(js, function, "options.locations must be a boolean");
-      out->locations = locations == js_true;
+      out->locations = locations == Ant_Value_True;
     }
   }
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_syntax_strip_types(ant_params_t) {
@@ -110,7 +110,7 @@ static ant_value_t js_syntax_strip_types(ant_params_t) {
   syntax_options_t options;
   ant_value_t options_result = syntax_read_options(
     js,
-    nargs > 1 ? args[1] : js_mkundef(),
+    nargs > 1 ? args[1] : Ant_Value_Undefined,
     "stripTypes",
     false,
     &options
@@ -165,7 +165,7 @@ static ant_value_t js_syntax_parse_javascript(ant_params_t) {
   syntax_options_t options;
   ant_value_t options_result = syntax_read_options(
     js,
-    nargs > 1 ? args[1] : js_mkundef(),
+    nargs > 1 ? args[1] : Ant_Value_Undefined,
     "parseJavaScript",
     true,
     &options

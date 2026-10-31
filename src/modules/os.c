@@ -358,9 +358,9 @@ static ant_value_t os_new_cpu_record(ant_t *js) {
     if (is_err(seed)) return seed;
     GC_ROOT_SAVE(mark, js);
     GC_ROOT_PIN(js, seed);
-    js_mkprop_fast(js, seed, "model", 5, js_mkundef());
-    js_mkprop_fast(js, seed, "speed", 5, js_mkundef());
-    js_mkprop_fast(js, seed, "times", 5, js_mkundef());
+    js_mkprop_fast(js, seed, "model", 5, Ant_Value_Undefined);
+    js_mkprop_fast(js, seed, "speed", 5, Ant_Value_Undefined);
+    js_mkprop_fast(js, seed, "times", 5, Ant_Value_Undefined);
     GC_ROOT_RESTORE(js, mark);
     if (Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
     js->mutable_roots.os_cpu_template = seed;
@@ -375,11 +375,11 @@ static ant_value_t os_new_cpu_times(ant_t *js) {
     if (is_err(seed)) return seed;
     GC_ROOT_SAVE(mark, js);
     GC_ROOT_PIN(js, seed);
-    js_mkprop_fast(js, seed, "user", 4, js_mkundef());
-    js_mkprop_fast(js, seed, "nice", 4, js_mkundef());
-    js_mkprop_fast(js, seed, "sys", 3, js_mkundef());
-    js_mkprop_fast(js, seed, "idle", 4, js_mkundef());
-    js_mkprop_fast(js, seed, "irq", 3, js_mkundef());
+    js_mkprop_fast(js, seed, "user", 4, Ant_Value_Undefined);
+    js_mkprop_fast(js, seed, "nice", 4, Ant_Value_Undefined);
+    js_mkprop_fast(js, seed, "sys", 3, Ant_Value_Undefined);
+    js_mkprop_fast(js, seed, "idle", 4, Ant_Value_Undefined);
+    js_mkprop_fast(js, seed, "irq", 3, Ant_Value_Undefined);
     GC_ROOT_RESTORE(js, mark);
     if (Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
     js->mutable_roots.os_cpu_times_template = seed;
@@ -419,7 +419,7 @@ static ant_value_t push_cpu_entry(ant_t *js, ant_value_t arr, const char *model,
   js_arr_push(js, arr, cpu);
   GC_ROOT_RESTORE(js, mark);
   
-  return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : js_mkundef();
+  return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : Ant_Value_Undefined;
 }
 
 #ifdef __APPLE__
@@ -667,7 +667,7 @@ static ant_value_t os_userInfo(ant_params_t) {
     js_set(js, info, "homedir", js_mkstr(js, "", 0));
   }
   
-  js_set(js, info, "shell", js_mknull());
+  js_set(js, info, "shell", Ant_Value_Null);
   
   return info;
 }
@@ -679,7 +679,7 @@ static ant_value_t os_getPriority(ant_params_t) {
 
 static ant_value_t os_setPriority(ant_params_t) {
   (void)args; (void)nargs;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 #else
@@ -841,11 +841,11 @@ static ant_value_t os_userInfo(ant_params_t) {
     else js_set(js, info, "homedir", js_mkstr(js, "", 0));
     
     if (pw->pw_shell) js_set(js, info, "shell", js_mkstr(js, pw->pw_shell, strlen(pw->pw_shell)));
-    else js_set(js, info, "shell", js_mknull());
+    else js_set(js, info, "shell", Ant_Value_Null);
   } else {
     js_set(js, info, "username", js_mkstr(js, "", 0));
     js_set(js, info, "homedir", js_mkstr(js, "", 0));
-    js_set(js, info, "shell", js_mknull());
+    js_set(js, info, "shell", Ant_Value_Null);
   }
   
   return info;
@@ -887,7 +887,7 @@ static ant_value_t os_setPriority(ant_params_t) {
   if (setpriority(PRIO_PROCESS, pid, priority) != 0) {
     return js_mkerr(js, "Failed to set priority: %s", strerror(errno));
   }
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 #endif

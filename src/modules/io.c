@@ -680,12 +680,12 @@ static bool console_output_put_indent(ant_output_stream_t *out, int total) {
 }
 
 static int console_get_group_indentation(ant_t *js, ant_value_t this_obj) {
-  ant_value_t value = is_special_object(this_obj) ? js_get_slot(this_obj, SLOT_CONSOLE_GROUP_INDENT) : js_mkundef();
+  ant_value_t value = is_special_object(this_obj) ? js_get_slot(this_obj, SLOT_CONSOLE_GROUP_INDENT) : Ant_Value_Undefined;
   return vtype(value) == kTypeNumber ? (int)Ant_Value_AsNumberUnchecked(value) : 2;
 }
 
 static int console_get_group_level(ant_t *js, ant_value_t this_obj) {
-  ant_value_t value = is_special_object(this_obj) ? js_get_slot(this_obj, SLOT_CONSOLE_GROUP_LEVEL) : js_mkundef();
+  ant_value_t value = is_special_object(this_obj) ? js_get_slot(this_obj, SLOT_CONSOLE_GROUP_LEVEL) : Ant_Value_Undefined;
   return vtype(value) == kTypeNumber ? (int)Ant_Value_AsNumberUnchecked(value) : 0;
 }
 
@@ -698,10 +698,10 @@ static void console_set_group_level(ant_t *js, ant_value_t this_obj, int level) 
 static ant_value_t console_get_state_map(ant_t *js, ant_value_t this_obj, const char *name) {
   internal_slot_t slot = SLOT_NONE;
 
-  if (!is_special_object(this_obj)) return js_mkundef();
+  if (!is_special_object(this_obj)) return Ant_Value_Undefined;
   if (strcmp(name, "counts") == 0) slot = SLOT_CONSOLE_COUNTS;
   else if (strcmp(name, "timers") == 0) slot = SLOT_CONSOLE_TIMERS;
-  else return js_mkundef();
+  else return Ant_Value_Undefined;
 
   ant_value_t map = js_get_slot(this_obj, slot);
   if (is_special_object(map)) return map;
@@ -772,7 +772,7 @@ bool io_print_error_header(ant_t *js, ant_output_stream_t *out, ant_value_t err,
   
   ant_value_t name, message;
   if (is_err(js_error_header_parts(js, err, &name, &message))) {
-    js_take_thrown(js, js_mkundef());
+    js_take_thrown(js, Ant_Value_Undefined);
     name = js_mkstr(js, "Error", 5);
     message = js_mkstr(js, "", 0);
   }
@@ -881,7 +881,7 @@ static bool console_write_args_to_stream(
 
     ant_value_t stack = vtype(args[i]) == kTypeObject
       ? js_getprop_fallback_len(js, args[i], "stack", 5)
-      : js_mkundef();
+      : Ant_Value_Undefined;
 
     if (vtype(stack) == kTypeString) {
       if (!io_print_error_stack(js, out, args[i], stack, io_no_color || !color_values)) return false;
@@ -911,7 +911,7 @@ static ant_value_t console_emit_to_output(
   if (!console_write_args_to_stream(js, out, args, nargs, color_values)) goto oom;
   if (!ant_output_stream_putc(out, '\n')) goto oom;
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
   oom: return Ant_Error_CreateOutOfMemory(js);
 }
 
@@ -938,7 +938,7 @@ static inline ant_value_t console_emit_with_this(
 }
 
 ant_value_t console_emit(ant_t *js, bool use_stderr, const char *prefix, ant_args_t) {
-  return console_emit_with_this(js, js_mkundef(), use_stderr, prefix, args, nargs);
+  return console_emit_with_this(js, Ant_Value_Undefined, use_stderr, prefix, args, nargs);
 }
 
 ant_value_t console_emit_current(ant_t *js, ant_value_t call_this, bool use_stderr, const char *prefix, ant_args_t) {
@@ -981,9 +981,9 @@ static ant_value_t js_console_debug(ant_params_t) {
 }
 
 static ant_value_t js_console_assert(ant_params_t) {
-  if (nargs < 1) return js_mkundef();
+  if (nargs < 1) return Ant_Value_Undefined;
   bool is_truthy = js_truthy(js, args[0]);
-  if (is_truthy) return js_mkundef();
+  if (is_truthy) return Ant_Value_Undefined;
 #ifndef ANT_WASM_EMBED
   ant_inspector_console_api_called(js, "assert", args + 1, nargs - 1);
 #endif
@@ -1002,12 +1002,12 @@ static ant_value_t js_console_trace(ant_params_t) {
     const char *stack_str = js_getstr(js, stack, &stack_len);
     console_write_string(js, this_obj, true, stack_str, stack_len);
   } else js_print_stack_trace_vm(js, stderr);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_console_clear(ant_params_t) {
   if (!io_no_color) console_write_string(js, call_this, false, "\033[2J\033[H", 7);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static double console_now_ms(void) {
@@ -1029,7 +1029,7 @@ static ant_value_t js_console_time(ant_params_t) {
   }
   
   js_set(js, timers, label, Ant_Value_FromNumber(console_now_ms()));
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_console_timeEnd(ant_params_t) {
@@ -1037,7 +1037,7 @@ static ant_value_t js_console_timeEnd(ant_params_t) {
   
   if (nargs > 0 && vtype(args[0]) == kTypeString) label = js_getstr(js, args[0], NULL);
   ant_value_t timers = console_get_state_map(js, call_this, "timers");
-  ant_value_t start = is_special_object(timers) ? js_get(js, timers, label) : js_mkundef();
+  ant_value_t start = is_special_object(timers) ? js_get(js, timers, label) : Ant_Value_Undefined;
   
   if (vtype(start) != kTypeNumber) {
     ant_value_t warn_args[1] = { js_mkstr(js, "Timer does not exist", 19) };
@@ -1064,7 +1064,7 @@ static ant_value_t js_console_timeLog(ant_params_t) {
   }
   
   ant_value_t timers = console_get_state_map(js, call_this, "timers");
-  ant_value_t start = is_special_object(timers) ? js_get(js, timers, label) : js_mkundef();
+  ant_value_t start = is_special_object(timers) ? js_get(js, timers, label) : Ant_Value_Undefined;
   
   if (vtype(start) != kTypeNumber) {
     ant_value_t warn_args[1] = { js_mkstr(js, "Timer does not exist", 19) };
@@ -1096,7 +1096,7 @@ static ant_value_t js_console_count(ant_params_t) {
   
   if (nargs > 0 && vtype(args[0]) == kTypeString) label = js_getstr(js, args[0], NULL);
   ant_value_t counts = console_get_state_map(js, call_this, "counts");
-  ant_value_t current = is_special_object(counts) ? js_get(js, counts, label) : js_mkundef();
+  ant_value_t current = is_special_object(counts) ? js_get(js, counts, label) : Ant_Value_Undefined;
   
   double next = vtype(current) == kTypeNumber ? Ant_Value_AsNumberUnchecked(current) + 1 : 1;
   js_set(js, counts, label, Ant_Value_FromNumber(next));
@@ -1113,22 +1113,22 @@ static ant_value_t js_console_countReset(ant_params_t) {
   if (nargs > 0 && vtype(args[0]) == kTypeString) label = js_getstr(js, args[0], NULL);
   ant_value_t counts = console_get_state_map(js, call_this, "counts");
   js_delete_prop(js, counts, label, strlen(label));
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_console_group(ant_params_t) {
   if (nargs > 0) console_emit_current(js, call_this, false, NULL, args, nargs);
   console_set_group_level(js, call_this, console_get_group_level(js, call_this) + 1);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_console_group_end(ant_params_t) {
   console_set_group_level(js, call_this, console_get_group_level(js, call_this) - 1);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_console_group_collapsed(ant_params_t) {
-  return js_console_group(js, args, nargs, js_mkundef(), call_this, call_func);
+  return js_console_group(js, args, nargs, Ant_Value_Undefined, call_this, call_func);
 }
 
 static const char *get_slot_name(internal_slot_t slot) {
@@ -1359,7 +1359,7 @@ void inspect_value(ant_t *js, ant_value_t val, FILE *stream, int depth, inspect_
   
   if (t == kTypeUndefined) { fprintf(stream, "undefined"); return; }
   if (t == kTypeNull)  { fprintf(stream, "null"); return; }
-  if (t == kTypeBool)  { fprintf(stream, val == js_true ? "true" : "false"); return; }
+  if (t == kTypeBool)  { fprintf(stream, val == Ant_Value_True ? "true" : "false"); return; }
   if (t == kTypeNumber)   { fprintf(stream, "%g", Ant_Value_AsNumberUnchecked(val)); return; }
   if (t == kTypeError)   { fprintf(stream, "[Error]"); return; }
   
@@ -1510,22 +1510,22 @@ static ant_value_t js_console_inspect(ant_params_t) {
   fprintf(stream, "\n");
   if (visited.visited) free(visited.visited);
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 // TODO: replace stub with real
 static ant_value_t js_console_dir(ant_params_t) {
-  return js_console_log(js, args, nargs, js_mkundef(), call_this, call_func);
+  return js_console_log(js, args, nargs, Ant_Value_Undefined, call_this, call_func);
 }
 
 // TODO: replace stub with real
 static ant_value_t js_console_dirxml(ant_params_t) {
-  return js_console_log(js, args, nargs, js_mkundef(), call_this, call_func);
+  return js_console_log(js, args, nargs, Ant_Value_Undefined, call_this, call_func);
 }
 
 // TODO: replace stub with real
 static ant_value_t js_console_table(ant_params_t) {
-  return js_console_log(js, args, nargs, js_mkundef(), call_this, call_func);
+  return js_console_log(js, args, nargs, Ant_Value_Undefined, call_this, call_func);
 }
 
 static void console_apply_methods(ant_t *js, ant_value_t console_obj) {
@@ -1556,8 +1556,8 @@ static ant_value_t js_console_constructor(ant_params_t) {
   ant_value_t console_obj = Ant_Object_CreateBare(js);
   js_set_proto_init(console_obj, is_special_object(proto) ? proto : js->builtins.console_proto);
 
-  ant_value_t stdout_obj = js_mkundef();
-  ant_value_t stderr_obj = js_mkundef();
+  ant_value_t stdout_obj = Ant_Value_Undefined;
+  ant_value_t stderr_obj = Ant_Value_Undefined;
   int group_indentation = 2;
 
   if (nargs >= 1 && is_special_object(args[0]) && nargs == 1) {

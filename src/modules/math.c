@@ -179,10 +179,10 @@ static ant_value_t builtin_Math_hypot(ant_params_t) {
 }
 
 static ant_value_t builtin_Math_imul(ant_params_t) {
-  double a = math_to_number(js, nargs > 0 ? args[0] : js_mkundef());
+  double a = math_to_number(js, nargs > 0 ? args[0] : Ant_Value_Undefined);
   if (Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
   
-  double b = math_to_number(js, nargs > 1 ? args[1] : js_mkundef());
+  double b = math_to_number(js, nargs > 1 ? args[1] : Ant_Value_Undefined);
   if (Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
   
   return Ant_Value_FromNumber(ant_math_imul(a, b));

@@ -42,7 +42,7 @@ static ant_value_t wasi_handle_proc_exit(wasm_module_inst_t inst) {
   uint32_t exit_code = wasm_runtime_get_wasi_exit_code(inst);
   wasm_runtime_clear_exception(inst);
   if (exit_code != 0) exit((int)exit_code);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t wasi_exported_func_call(ant_params_t) {
@@ -66,7 +66,7 @@ static ant_value_t wasi_exported_func_call(ant_params_t) {
     return js_mkerr(js, "%s", exception ? exception : "WASI function call failed");
   }
 
-  if (result_count == 0) return js_mkundef();
+  if (result_count == 0) return Ant_Value_Undefined;
   return Ant_Value_FromNumber((double)(int32_t)wasm_argv[0]);
 }
 
@@ -208,11 +208,11 @@ ant_value_t wasi_instantiate(
 
   ant_value_t args_val = is_object_type(wasi_opts)
     ? js_get(js, wasi_opts, "args")
-    : js_mkundef();
+    : Ant_Value_Undefined;
   
   ant_value_t preopens_val = is_object_type(wasi_opts)
     ? js_get(js, wasi_opts, "preopens")
-    : js_mkundef();
+    : Ant_Value_Undefined;
 
   if (vtype(preopens_val) == kTypeArray && js_arr_len(js, preopens_val) > 0) {
     dir_count = (int)js_arr_len(js, preopens_val);

@@ -135,13 +135,13 @@ static ant_value_t process_blob_part(ant_t *js, byte_buf_t *buf, ant_value_t par
   if (blob_part_buffer_source(part, &bytes, &size, &live)) {
     if (!live) return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot use a detached ArrayBuffer in a Blob");
     if (!byte_buf_append(buf, bytes, size)) return Ant_Error_CreateOutOfMemory(js);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   blob_data_t *bd = t == kTypeObject ? blob_get_data(part) : NULL;
   if (bd) {
     if (!byte_buf_append(buf, bd->data, bd->size)) return Ant_Error_CreateOutOfMemory(js);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   ant_value_t str = (t == kTypeString) ? part : js_tostring_val(js, part);
@@ -153,12 +153,12 @@ static ant_value_t process_blob_part(ant_t *js, byte_buf_t *buf, ant_value_t par
     if (!byte_buf_append(buf, (const uint8_t *)s, len))
       return Ant_Error_CreateOutOfMemory(js);
   }
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t process_blob_parts(ant_t *js, byte_buf_t *buf, ant_value_t parts) {
   uint8_t t = vtype(parts);
-  if (t == kTypeUndefined || t == kTypeNull) return js_mkundef();
+  if (t == kTypeUndefined || t == kTypeNull) return Ant_Value_Undefined;
 
   if (t != kTypeObject && t != kTypeArray && t != kTypeFunction)
     return js_mkerr_typed(js, JS_ERR_TYPE,
@@ -176,7 +176,7 @@ static ant_value_t process_blob_parts(ant_t *js, byte_buf_t *buf, ant_value_t pa
     if (is_err(r)) { js_iter_close(js, &it); return r; }
   }
   
-  return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : js_mkundef();
+  return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : Ant_Value_Undefined;
 }
 
 static void blob_finalize(ant_t *js, ant_object_t *obj) {
@@ -321,7 +321,7 @@ static ant_value_t js_blob_slice(ant_params_t) {
 static ant_value_t blob_stream_pull(ant_params_t) {
   ant_value_t blob_obj = js_get_slot(call_func, SLOT_DATA);
   blob_data_t *bd = blob_get_data(blob_obj);
-  ant_value_t ctrl = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t ctrl = (nargs > 0) ? args[0] : Ant_Value_Undefined;
 
   if (bd && bd->size > 0 && bd->data) {
   ArrayBufferData *ab = create_array_buffer_data(js, bd->size);
@@ -331,12 +331,12 @@ static ant_value_t blob_stream_pull(ant_params_t) {
   }}
 
   rs_controller_close(js, ctrl);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_blob_stream(ant_params_t) {
   ant_value_t pull_fn = js_heavy_mkfun(js, blob_stream_pull, call_this);
-  return rs_create_stream(js, pull_fn, js_mkundef(), 1);
+  return rs_create_stream(js, pull_fn, Ant_Value_Undefined, 1);
 }
 
 static ant_value_t js_blob_ctor(ant_params_t) {

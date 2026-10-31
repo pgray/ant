@@ -32,7 +32,7 @@ static inline ant_value_t js_arguments_mapped_value(ant_t *js, ant_arguments_sta
     return js_arguments_frame(js, state)->bp[idx];
   
   *mapped = false;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline void js_arguments_write_mapped(ant_t *js, ant_arguments_state_t *state, unsigned long idx, ant_value_t value) {
@@ -90,8 +90,8 @@ ant_value_t js_arguments_getter(ant_t *js, ant_value_t obj, const char *key, siz
   ant_offset_t arr_len = get_array_length(js, obj);
   unsigned long idx = 0;
   
-  if (!parse_array_index(key, key_len, arr_len, &idx)) return js_mkundef();
-  if ((ant_offset_t)idx >= arr_len) return js_mkundef();
+  if (!parse_array_index(key, key_len, arr_len, &idx)) return Ant_Value_Undefined;
+  if ((ant_offset_t)idx >= arr_len) return Ant_Value_Undefined;
 
   bool mapped = false;
   ant_value_t value = js_arguments_mapped_value(js, js_arguments_state(obj), idx, &mapped);
@@ -206,12 +206,12 @@ static ant_value_t arguments_template(ant_t *js, bool is_strict, bool has_iterat
     ant_value_t thrower = js_mkfun_meta(&thrower_meta);
     js_set_accessor_desc(js, seed, "callee", 6, thrower, thrower, 0);
   } else {
-    setprop_cstr(js, seed, "callee", 6, js_mkundef());
+    setprop_cstr(js, seed, "callee", 6, Ant_Value_Undefined);
     js_set_descriptor(js, seed, "callee", 6, JS_DESC_W | JS_DESC_C);
   }
   
   if (has_iterator) {
-    js_set_sym(js, seed, js->sym.iterator_sym, js_mkundef());
+    js_set_sym(js, seed, js->sym.iterator_sym, Ant_Value_Undefined);
     js_set_sym_descriptor(js, seed, js->sym.iterator_sym, JS_DESC_W | JS_DESC_C);
   }
   

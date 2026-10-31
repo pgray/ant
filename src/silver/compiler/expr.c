@@ -297,7 +297,7 @@ void compile_expr(sv_compiler_t *c, sv_ast_t *node) {
         if (is_template_segment(tpl->args.items[i])) n_strings++;
         else n_exprs++;
       }
-      int cache_idx = add_constant(c, js_mkundef());
+      int cache_idx = add_constant(c, Ant_Value_Undefined);
       emit_op(c, OP_CONST);
       emit_u32(c, (uint32_t)cache_idx);
       int skip_jump = emit_jump(c, OP_JMP_TRUE_PEEK);

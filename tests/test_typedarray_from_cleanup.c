@@ -30,7 +30,7 @@ static ant_value_t iterator, original_reason, close_reason;
 static unsigned next_calls, close_calls, item_limit;
 static bool fail_next, fail_close;
 
-static ant_value_t IteratorSelf(ant_params_t) { return js->this_val; }
+static ant_value_t IteratorSelf(ant_params_t) { return call_this; }
 
 static ant_value_t IteratorNext(ant_params_t) {
   if (fail_next) return js_throw(js, original_reason);
@@ -40,7 +40,7 @@ static ant_value_t IteratorNext(ant_params_t) {
 
 static ant_value_t IteratorReturn(ant_params_t) {
   close_calls++;
-  assert(js->this_val == iterator);
+  assert(call_this == iterator);
   assert(!Ant_Exception_Pending(js));
   gc_run_minor(js);
   gc_run(js);
@@ -105,7 +105,7 @@ int main(void) {
   GC_ROOT_PIN(js, iterator);
   original_reason = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, original_reason);
-  close_reason = js_mknull();
+  close_reason = Ant_Value_Null;
   js_set_sym(js, iterator, js->sym.iterator_sym, Ant_Function_Create(IteratorSelf));
   js_set(js, iterator, "next", Ant_Function_Create(IteratorNext));
   js_setstackbase(js, NULL);

@@ -116,7 +116,7 @@ static ser_status_t ser_val(ant_t *js, enc_t *e, ant_value_t val, ant_value_t *b
 
   if (t == kTypeUndefined) return enc_u8(e, 'U') ? SER_OK : SER_OOM;
   if (t == kTypeNull) return enc_u8(e, 'N') ? SER_OK : SER_OOM;
-  if (t == kTypeBool) return enc_u8(e, (val == js_true) ? 'T' : 'F') ? SER_OK : SER_OOM;
+  if (t == kTypeBool) return enc_u8(e, (val == Ant_Value_True) ? 'T' : 'F') ? SER_OK : SER_OOM;
 
   if (t == kTypeNumber) {
     double d = Ant_Value_AsNumberUnchecked(val);
@@ -184,7 +184,7 @@ static ant_value_t v8_serialize(ant_params_t) {
   if (nargs < 1) return js_mkerr(js, "serialize: value required");
 
   enc_t e = {0};
-  ant_value_t bad = js_mkundef();
+  ant_value_t bad = Ant_Value_Undefined;
   ser_status_t st = SER_OOM;
   
   if (!enc_u8(&e, SER_MAGIC_0) || !enc_u8(&e, SER_MAGIC_1)) goto fail;
@@ -232,16 +232,16 @@ static ant_value_t des_val(ant_t *js, dec_t *d) {
   if (sv_check_c_stack_overflow(js)) return Ant_Error_CreateStackOverflow(js);
   
   uint8_t tag;
-  if (!dec_u8(d, &tag)) return js_mkundef();
+  if (!dec_u8(d, &tag)) return Ant_Value_Undefined;
 
   switch (tag) {
-    case 'U': return js_mkundef();
-    case 'N': return js_mknull();
-    case 'T': return js_true;
-    case 'F': return js_false;
+    case 'U': return Ant_Value_Undefined;
+    case 'N': return Ant_Value_Null;
+    case 'T': return Ant_Value_True;
+    case 'F': return Ant_Value_False;
     case 'Z': return Ant_Value_FromNumber((double)NAN);
     case 'D': {
-      if (d->pos + 8 > d->len) return js_mkundef();
+      if (d->pos + 8 > d->len) return Ant_Value_Undefined;
       double v;
       memcpy(&v, d->data + d->pos, 8);
       d->pos += 8;
@@ -249,14 +249,14 @@ static ant_value_t des_val(ant_t *js, dec_t *d) {
     }
     case 'S': {
       uint32_t n;
-      if (!dec_u32(d, &n) || d->pos + n > d->len) return js_mkundef();
+      if (!dec_u32(d, &n) || d->pos + n > d->len) return Ant_Value_Undefined;
       ant_value_t s = js_mkstr(js, (const char *)(d->data + d->pos), n);
       d->pos += n;
       return s;
     }
     case 'A': {
       uint32_t n;
-      if (!dec_u32(d, &n)) return js_mkundef();
+      if (!dec_u32(d, &n)) return Ant_Value_Undefined;
       ant_value_t arr = js_mkarr(js);
       for (uint32_t i = 0; i < n; i++) {
         ant_value_t elem = des_val(js, d);
@@ -267,7 +267,7 @@ static ant_value_t des_val(ant_t *js, dec_t *d) {
     }
     case 'O': {
       uint32_t n;
-      if (!dec_u32(d, &n)) return js_mkundef();
+      if (!dec_u32(d, &n)) return Ant_Value_Undefined;
       ant_value_t obj = Ant_Object_Create(js);
       char kbuf[4096];
       for (uint32_t i = 0; i < n; i++) {
@@ -282,7 +282,7 @@ static ant_value_t des_val(ant_t *js, dec_t *d) {
       }
       return obj;
     }
-    default: return js_mkundef();
+    default: return Ant_Value_Undefined;
   }
 }
 
@@ -372,7 +372,7 @@ static ant_value_t v8_get_heap_space_statistics(ant_params_t) {
 }
 
 static ant_value_t v8_noop_false(ant_params_t) {
-  return js_false;
+  return Ant_Value_False;
 }
 
 static ant_value_t v8_write_heap_snapshot(ant_params_t) {
@@ -380,7 +380,7 @@ static ant_value_t v8_write_heap_snapshot(ant_params_t) {
 }
 
 static ant_value_t v8_get_heap_snapshot(ant_params_t) {
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t v8_get_heap_code_statistics(ant_params_t) {

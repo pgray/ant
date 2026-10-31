@@ -99,7 +99,7 @@ static void node_worker_define_props(ant_t *js, ant_worker_t *w) {
 
   js_set(js, obj, "threadId", Ant_Value_FromNumber((double)w->thread_id));
   js_set(js, obj, "resourceLimits", worker_limits_object(js, w->requested_limits, -1));
-  js_set(js, obj, "stdin", w->stdin_enabled ? w->stdin_obj : js_mknull());
+  js_set(js, obj, "stdin", w->stdin_enabled ? w->stdin_obj : Ant_Value_Null);
   js_set(js, obj, "stdout", w->stdout_obj);
   js_set(js, obj, "stderr", w->stderr_obj);
 
@@ -116,7 +116,7 @@ static ant_value_t js_worker_ctor(ant_params_t) {
   ant_value_t proto = js_instance_proto_from_new_target(js, js->builtins.worker_proto, call_new_target);
   if (is_object_type(proto)) js_set_proto_init(call_this, proto);
 
-  ant_value_t options = nargs > 1 && is_object_type(args[1]) ? args[1] : js_mkundef();
+  ant_value_t options = nargs > 1 && is_object_type(args[1]) ? args[1] : Ant_Value_Undefined;
   ant_worker_t *w = worker_new(js, call_this, &node_worker_ops);
   if (!w) return Ant_Error_CreateOutOfMemory(js);
 
@@ -125,7 +125,7 @@ static ant_value_t js_worker_ctor(ant_params_t) {
   w->pipe_stdout = !node_worker_flag(js, options, "stdout");
   w->pipe_stderr = !node_worker_flag(js, options, "stderr");
 
-  ant_value_t error = js_mkundef();
+  ant_value_t error = Ant_Value_Undefined;
   w->entry = node_worker_entry(js, w, args[0], &error);
   if (!w->entry) {
     worker_release(w);
@@ -150,8 +150,8 @@ static ant_worker_t *worker_this(ant_t *js, ant_value_t call_this) {
 static ant_value_t js_worker_post_message(ant_params_t) {
   ant_worker_t *w = worker_this(js, call_this);
   if (!w) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
-  if (w->exited || !w->binding) return js_mkundef();
-  return ant_port_binding_post(js, w->binding, nargs > 0 ? args[0] : js_mkundef(), worker_transfer_arg(js, args, nargs));
+  if (w->exited || !w->binding) return Ant_Value_Undefined;
+  return ant_port_binding_post(js, w->binding, nargs > 0 ? args[0] : Ant_Value_Undefined, worker_transfer_arg(js, args, nargs));
 }
 
 static ant_value_t js_worker_terminate(ant_params_t) {
@@ -160,7 +160,7 @@ static ant_value_t js_worker_terminate(ant_params_t) {
 
   ant_value_t promise = js_mkpromise(js);
   if (w->exited) {
-    js_resolve_promise(js, promise, js_mkundef());
+    js_resolve_promise(js, promise, Ant_Value_Undefined);
     return promise;
   }
 
@@ -174,13 +174,13 @@ static ant_value_t js_worker_terminate(ant_params_t) {
 static ant_value_t js_worker_ref(ant_params_t) {
   ant_worker_t *w = worker_this(js, call_this);
   if (w) worker_set_ref(w, true);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_worker_unref(ant_params_t) {
   ant_worker_t *w = worker_this(js, call_this);
   if (w) worker_set_ref(w, false);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_worker_has_ref(ant_params_t) {
@@ -195,12 +195,12 @@ static ant_value_t js_worker_get_heap_snapshot(ant_params_t) {
 }
 
 static ant_value_t js_mark_as_untransferable(ant_params_t) {
-  if (nargs < 1) return js_mkundef();
+  if (nargs < 1) return Ant_Value_Undefined;
   return ant_wire_mark_untransferable(js, args[0]);
 }
 
 static ant_value_t js_mark_as_uncloneable(ant_params_t) {
-  if (nargs < 1) return js_mkundef();
+  if (nargs < 1) return Ant_Value_Undefined;
   return ant_wire_mark_uncloneable(js, args[0]);
 }
 
@@ -221,20 +221,20 @@ static ant_value_t js_move_message_port_to_context(ant_params_t) {
 }
 
 static ant_value_t js_set_environment_data(ant_params_t) {
-  if (nargs < 1) return js_mkundef();
+  if (nargs < 1) return Ant_Value_Undefined;
   ant_value_t map = worker_environment_map(js);
   if (is_err(map)) return map;
   bool remove = nargs < 2 || vtype(args[1]) == kTypeUndefined;
   ant_value_t method = js_get(js, map, remove ? "delete" : "set");
-  return sv_vm_call(js->vm, js, method, map, args, remove ? 1 : 2, NULL, js_mkundef());
+  return sv_vm_call(js->vm, js, method, map, args, remove ? 1 : 2, NULL, Ant_Value_Undefined);
 }
 
 static ant_value_t js_get_environment_data(ant_params_t) {
-  if (nargs < 1) return js_mkundef();
+  if (nargs < 1) return Ant_Value_Undefined;
   ant_value_t map = worker_environment_map(js);
   if (is_err(map)) return map;
   ant_value_t method = js_get(js, map, "get");
-  return sv_vm_call(js->vm, js, method, map, args, 1, NULL, js_mkundef());
+  return sv_vm_call(js->vm, js, method, map, args, 1, NULL, Ant_Value_Undefined);
 }
 
 static ant_value_t js_post_message_to_thread(ant_params_t) {
@@ -244,7 +244,7 @@ static ant_value_t js_post_message_to_thread(ant_params_t) {
 static void worker_setup_child_state(ant_t *js, ant_value_t lib) {
   ant_worker_t *w = js->worker;
 
-  ant_value_t data = w->worker_data ? ant_wire_deserialize(js, w->worker_data, NULL) : js_mkundef();
+  ant_value_t data = w->worker_data ? ant_wire_deserialize(js, w->worker_data, NULL) : Ant_Value_Undefined;
   if (is_err(data)) data = js_take_thrown(js, data);
   js_set(js, lib, "workerData", data);
 
@@ -261,8 +261,8 @@ static void worker_setup_child_state(ant_t *js, ant_value_t lib) {
 }
 
 static void worker_setup_main_state(ant_t *js, ant_value_t lib) {
-  js_set(js, lib, "parentPort", js_mknull());
-  js_set(js, lib, "workerData", js_mknull());
+  js_set(js, lib, "parentPort", Ant_Value_Null);
+  js_set(js, lib, "workerData", Ant_Value_Null);
   js_set(js, lib, "threadId", Ant_Value_FromNumber(0));
   js_set(js, lib, "threadName", js_mkstr(js, "", 0));
   js_set(js, lib, "resourceLimits", Ant_Object_Create(js));
@@ -300,7 +300,7 @@ ant_value_t worker_threads_library(ant_t *js) {
   js_set(js, lib, "markAsUntransferable", Ant_Function_CreateWithArity(js_mark_as_untransferable, 1));
   js_set(js, lib, "isMarkedAsUntransferable", Ant_Function_CreateWithArity(js_is_marked_as_untransferable, 1));
   js_set(js, lib, "markAsUncloneable", Ant_Function_CreateWithArity(js_mark_as_uncloneable, 1));
-  js_set(js, lib, "isInternalThread", js_false);
+  js_set(js, lib, "isInternalThread", Ant_Value_False);
   js_set(js, lib, "receiveMessageOnPort", Ant_Function_CreateWithArity(js_receive_message_on_port, 1));
   js_set(js, lib, "moveMessagePortToContext", Ant_Function_CreateWithArity(js_move_message_port_to_context, 2));
   js_set(js, lib, "setEnvironmentData", Ant_Function_CreateWithArity(js_set_environment_data, 2));

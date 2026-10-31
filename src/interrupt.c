@@ -5,13 +5,13 @@ ant_value_t js_interrupt_raise(ant_t *js) {
   js->terminating = true;
   
   ant_value_t error = js_take_thrown(js, js_mkerr(js, "Script execution interrupted"));
-  if (is_object_type(error)) js_set_slot(error, SLOT_VM_TERMINATION, js_true);
+  if (is_object_type(error)) js_set_slot(error, SLOT_VM_TERMINATION, Ant_Value_True);
   
   return js_throw(js, error);
 }
 
 bool js_is_termination(ant_value_t value) {
-  return is_object_type(value) && js_get_slot(value, SLOT_VM_TERMINATION) == js_true;
+  return is_object_type(value) && js_get_slot(value, SLOT_VM_TERMINATION) == Ant_Value_True;
 }
 
 bool js_termination_pending(ant_t *js) {

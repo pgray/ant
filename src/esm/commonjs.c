@@ -39,7 +39,7 @@ ant_value_t esm_require_cache(ant_t *js) {
   
   if (!is_object_type(js->modules.cjs.cache)) {
     js->modules.cjs.cache = Ant_Object_CreateBare(js);
-    js_set_proto_init(js->modules.cjs.cache, js_mknull());
+    js_set_proto_init(js->modules.cjs.cache, Ant_Value_Null);
   }
   
   return js->modules.cjs.cache;
@@ -62,7 +62,7 @@ static bool esm_require_cache_get_plain(ant_t *js, ant_value_t cache, const char
   }
 
   if (vtype(js_get_proto(js, cache)) != kTypeNull) return false;
-  *out = js_mkundef();
+  *out = Ant_Value_Undefined;
   
   return true;
 }
@@ -144,12 +144,12 @@ ant_value_t esm_init_cjs_module(ant_t *js, ant_value_t obj, const char *id, ant_
   js_set(js, obj, "path", js_mkstr(js, directory, strlen(directory)));
   free(directory);
   
-  js_set(js, obj, "filename", js_mknull());
+  js_set(js, obj, "filename", Ant_Value_Null);
   ant_value_t exports = Ant_Object_CreateBare(js);
   
   js_set_proto_init(exports, js->sym.object_proto);
   js_set(js, obj, "exports", exports);
-  js_set(js, obj, "loaded", js_false);
+  js_set(js, obj, "loaded", Ant_Value_False);
   js_set(js, obj, "children", js_mkarr(js));
   js_set(js, obj, "parent", parent);
   
@@ -319,7 +319,7 @@ static ant_value_t esm_cjs_require_paths(ant_params_t) {
   
   size_t len;
   const char *spec = js_getstr(js, args[0], &len);
-  if (esm_find_builtin(spec, len).kind != ANT_BUILTIN_NAME_NONE) return js_mknull();
+  if (esm_find_builtin(spec, len).kind != ANT_BUILTIN_NAME_NONE) return Ant_Value_Null;
   
   ant_value_t module = js_func_data(call_func);
   ant_value_t directory = js_get(js, module, "path");
@@ -347,8 +347,8 @@ static ant_value_t esm_cjs_require_resolve(ant_params_t) {
   ant_value_t filename = js_get(js, module, "filename");
   
   const char *base = js_getstr(js, filename, NULL);
-  ant_value_t paths = nargs > 1 && is_object_type(args[1]) ? js_get(js, args[1], "paths") : js_mkundef();
-  ant_value_t resolved = js_mkundef();
+  ant_value_t paths = nargs > 1 && is_object_type(args[1]) ? js_get(js, args[1], "paths") : Ant_Value_Undefined;
+  ant_value_t resolved = Ant_Value_Undefined;
   
   if (vtype(paths) != kTypeArray) resolved = js_esm_resolve_specifier_require(js, args[0], base);
   else {
@@ -395,7 +395,7 @@ ant_value_t esm_create_require(ant_t *js, ant_value_t module) {
 
 ant_value_t esm_create_require_from_path(ant_t *js, const char *filename) {
   char *path = esm_file_url_to_path(js, filename);
-  ant_value_t module = esm_create_cjs_module(js, path ? path : filename, js_mkundef());
+  ant_value_t module = esm_create_cjs_module(js, path ? path : filename, Ant_Value_Undefined);
   free(path);
   return esm_create_require(js, module);
 }
@@ -404,7 +404,7 @@ static bool copy_own_prop(
   ant_t *js, ant_value_t dst, ant_value_t src,
   const char *key, size_t key_len, ant_value_t *err
 ) {
-  ant_value_t value = js_mkundef();
+  ant_value_t value = Ant_Value_Undefined;
 
   if (js_try_get_own_data_prop(js, src, key, key_len, &value)) {
     ant_value_t res = setprop_cstr(js, dst, key, key_len, value);
@@ -436,7 +436,7 @@ static ant_value_t esm_populate_cjs_namespace(ant_t *js, ant_value_t ns, ant_val
   if (is_err(set_default)) return set_default;
   
   js_set_slot_wb(js, ns, SLOT_DEFAULT, exports_val);
-  if (!is_object_type(exports_val)) return js_mkundef();
+  if (!is_object_type(exports_val)) return Ant_Value_Undefined;
 
   ant_iter_t iter = js_prop_iter_begin(js, exports_val);
   const char *key = NULL;
@@ -445,13 +445,13 @@ static ant_value_t esm_populate_cjs_namespace(ant_t *js, ant_value_t ns, ant_val
   while (js_prop_iter_next(&iter, &key, &key_len, NULL)) {
   if (key_len == 7 && memcmp(key, "default", 7) == 0) continue;
   
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   if (!copy_own_prop(js, ns, exports_val, key, key_len, &err)) {
     if (is_err(err)) { js_prop_iter_end(&iter); return err; }
   }}
 
   js_prop_iter_end(&iter);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t esm_eval_commonjs_function(
@@ -493,7 +493,7 @@ ant_value_t esm_load_commonjs_module(
 ) {
   bool builtin = strncmp(module_path, "node:", 5) == 0 || strncmp(module_path, "ant:", 4) == 0;
   bool pending = is_object_type(module_obj);
-  ant_value_t cached = builtin || pending ? js_mkundef() : esm_require_cache_lookup(js, module_path);
+  ant_value_t cached = builtin || pending ? Ant_Value_Undefined : esm_require_cache_lookup(js, module_path);
   if (vtype(cached) != kTypeUndefined && !pending) {
     ant_value_t exports = esm_require_cached_exports(js, cached);
     ant_value_t result = is_err(exports) ? exports : esm_populate_cjs_namespace(js, ns, exports);
@@ -501,7 +501,7 @@ ant_value_t esm_load_commonjs_module(
   }
 
   GC_ROOT_SAVE(mark, js);
-  if (!pending) module_obj = esm_create_cjs_module(js, module_path, builtin ? js_mkundef() : js->modules.cjs.parent);
+  if (!pending) module_obj = esm_create_cjs_module(js, module_path, builtin ? Ant_Value_Undefined : js->modules.cjs.parent);
   
   GC_ROOT_PIN(js, module_obj);
   if (is_err(module_obj)) {
@@ -525,7 +525,7 @@ ant_value_t esm_load_commonjs_module(
   ant_value_t require_fn = esm_create_require(js, module_obj);
   GC_ROOT_PIN(js, require_fn);
   
-  ant_value_t registration = builtin || pending ? js_mkundef() : esm_require_cache_store(js, module_path, module_obj);
+  ant_value_t registration = builtin || pending ? Ant_Value_Undefined : esm_require_cache_store(js, module_path, module_obj);
   if (is_err(registration)) {
     esm_cjs_update_children(js, js_get(js, module_obj, "parent"), module_obj, true);
     GC_ROOT_RESTORE(js, mark);
@@ -545,7 +545,7 @@ ant_value_t esm_load_commonjs_module(
   );
   
   if (vtype(result) == kTypePromise) js_run_event_loop(js);
-  if (!is_err(result) && !Ant_Exception_Pending(js)) js_set(js, module_obj, "loaded", js_true);
+  if (!is_err(result) && !Ant_Exception_Pending(js)) js_set(js, module_obj, "loaded", Ant_Value_True);
 
   ant_value_t exports_val = js_get(js, module_obj, "exports");
   

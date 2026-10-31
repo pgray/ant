@@ -138,7 +138,7 @@ static void example_objects_arrays(void) {
   ant_value_t global = js_glob(js);
 
   ant_value_t config = Ant_Object_CreateBare(js);
-  js_set(js, config, "debug", js_true);
+  js_set(js, config, "debug", Ant_Value_True);
   js_set(js, config, "version", Ant_Value_FromNumber(1.0));
   js_set(js, config, "name", js_mkstr(js, "MyApp", 5));
   js_set(js, global, "config", config);
@@ -227,7 +227,7 @@ static void example_call_js_from_c(void) {
   ant_value_t format_fn = js_get(js, ns, "formatName");
 
   ant_value_t args1[] = { Ant_Value_FromNumber(6), Ant_Value_FromNumber(7) };
-  ant_value_t result1 = sv_vm_call(js->vm, js, multiply_fn, js_mkundef(), args1, 2, NULL, js_mkundef());
+  ant_value_t result1 = sv_vm_call(js->vm, js, multiply_fn, Ant_Value_Undefined, args1, 2, NULL, Ant_Value_Undefined);
   printf("  multiply(6, 7) = %g\n", Ant_Value_AsNumberUnchecked(result1));
 
   ant_value_t args2[] = {
@@ -235,7 +235,7 @@ static void example_call_js_from_c(void) {
     js_mkstr(js, "Doe", 3)
   };
 
-  ant_value_t result2 = sv_vm_call(js->vm, js, format_fn, js_mkundef(), args2, 2, NULL, js_mkundef());
+  ant_value_t result2 = sv_vm_call(js->vm, js, format_fn, Ant_Value_Undefined, args2, 2, NULL, Ant_Value_Undefined);
   printf("  formatName('John', 'Doe') = %s\n", js_str(js, result2));
 
   Ant_Destroy(js);
@@ -332,7 +332,7 @@ static void example_stateful_session(void) {
 
   ant_value_t increment = js_get(js, ns, "increment");
   for (int i = 0; i < 3; i++) {
-    ant_value_t call_result = sv_vm_call(js->vm, js, increment, js_mkundef(), NULL, 0, NULL, js_mkundef());
+    ant_value_t call_result = sv_vm_call(js->vm, js, increment, Ant_Value_Undefined, NULL, 0, NULL, Ant_Value_Undefined);
     if (vtype(call_result) == kTypeError) {
       printf("  Error in increment %d: %s\n", i + 1, js_str(js, call_result));
       Ant_Destroy(js);
@@ -341,7 +341,7 @@ static void example_stateful_session(void) {
   }
 
   ant_value_t get_count = js_get(js, ns, "getCount");
-  ant_value_t result = sv_vm_call(js->vm, js, get_count, js_mkundef(), NULL, 0, NULL, js_mkundef());
+  ant_value_t result = sv_vm_call(js->vm, js, get_count, Ant_Value_Undefined, NULL, 0, NULL, Ant_Value_Undefined);
   printf("  Final count: %g\n", Ant_Value_AsNumberUnchecked(result));
 
   Ant_Destroy(js);
@@ -443,7 +443,7 @@ static void example_global_this(void) {
   ant_value_t global = js_glob(js);
   js_set(js, global, "myNumber", Ant_Value_FromNumber(42));
   js_set(js, global, "myString", js_mkstr(js, "hello from C", 12));
-  js_set(js, global, "myBool", js_true);
+  js_set(js, global, "myBool", Ant_Value_True);
 
   ant_value_t myObj = Ant_Object_CreateBare(js);
   js_set(js, myObj, "a", Ant_Value_FromNumber(1));

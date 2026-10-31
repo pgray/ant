@@ -183,7 +183,7 @@ static __attribute__((always_inline)) inline ant_value_t regexp_replace_fast_str
 
   regexp_out_t out = {0};
   PCRE2_SIZE next_src_pos = 0;
-  ant_value_t error = js_mkundef();
+  ant_value_t error = Ant_Value_Undefined;
 
   for (;;) {
     PCRE2_SIZE *ovector;
@@ -242,7 +242,7 @@ ant_value_t regexp_replace_fast_function(
   utf16_pos_init(&pos, scan.str_ptr, scan.str_len);
   regexp_ovector_list_t matches = {0};
   uint32_t stride = 0;
-  ant_value_t error = js_mkundef();
+  ant_value_t error = Ant_Value_Undefined;
   for (;;) {
     PCRE2_SIZE *ovector;
     uint32_t ovcount;
@@ -279,7 +279,7 @@ ant_value_t regexp_replace_fast_function(
 
   regexp_out_t out = {0};
   PCRE2_SIZE next_src_pos = 0;
-  ant_value_t result = js_mkundef();
+  ant_value_t result = Ant_Value_Undefined;
 
   for (size_t m = 0; m < scan.count; m++) {
     const PCRE2_SIZE *ovector = matches.items + m * stride;
@@ -288,7 +288,7 @@ ant_value_t regexp_replace_fast_function(
     int ca = 0;
     for (uint32_t i = 0; i < ovcount; i++) {
       PCRE2_SIZE start = ovector[2 * i];
-      ant_value_t capture = js_mkundef();
+      ant_value_t capture = Ant_Value_Undefined;
       if (start != PCRE2_UNSET) {
         capture = js_mkstr_byte_range(js, str_ptr, start, ovector[2 * i + 1] - start);
         if (is_err(capture)) { result = capture; goto done; }
@@ -303,7 +303,7 @@ ant_value_t regexp_replace_fast_function(
       call_args[ca++] = groups;
     }
 
-    ant_value_t replacement = sv_vm_call(js->vm, js, replace_fn, js_mkundef(), call_args, ca, NULL, js_mkundef());
+    ant_value_t replacement = sv_vm_call(js->vm, js, replace_fn, Ant_Value_Undefined, call_args, ca, NULL, Ant_Value_Undefined);
     if (is_err(replacement)) { result = replacement; goto done; }
     ant_value_t rep_str = js_tostring_val(js, replacement);
     if (is_err(rep_str)) { result = rep_str; goto done; }
@@ -363,7 +363,7 @@ ant_value_t regexp_symbol_replace_impl(
   ant_t *js, ant_value_t rx, ant_value_t str, ant_value_t replace_value, const regexp_fast_t *known
 ) {
   bool func_replace = (vtype(replace_value) == kTypeFunction || vtype(replace_value) == kTypeBuiltin);
-  ant_value_t replace_str = js_mkundef();
+  ant_value_t replace_str = Ant_Value_Undefined;
   if (!func_replace) {
     if (vtype(replace_value) != kTypeString) known = NULL;
     replace_str = js_tostring_val(js, replace_value);
@@ -490,7 +490,7 @@ ant_value_t regexp_symbol_replace_impl(
       call_args[ca++] = Ant_Value_FromNumber(position_units);
       call_args[ca++] = str;
       if (has_named) call_args[ca++] = named_captures;
-      replacement = sv_vm_call(js->vm, js, replace_value, js_mkundef(), call_args, ca, NULL, js_mkundef());
+      replacement = sv_vm_call(js->vm, js, replace_value, Ant_Value_Undefined, call_args, ca, NULL, Ant_Value_Undefined);
       if (call_args != call_args_inline) free(call_args);
     } else {
       replacement = replace_str;
@@ -526,7 +526,7 @@ ant_value_t regexp_symbol_replace_impl(
           free(buf);
           return js_mkerr_typed(js, JS_ERR_TYPE, "RegExp result groups is not an object");
         }
-        regexp_named_object_ctx_t named_ctx = { js, named_captures, js_mkundef() };
+        regexp_named_object_ctx_t named_ctx = { js, named_captures, Ant_Value_Undefined };
         repl_named_t named = { regexp_named_object_capture, &named_ctx };
         bool ok = repl_template(
           (const char *)(uintptr_t)(rep_off), rep_len,
@@ -571,5 +571,5 @@ ant_value_t builtin_regexp_symbol_replace(ant_params_t) {
 
   ant_value_t str = nargs > 0 ? js_tostring_val(js, args[0]) : js_mkstr(js, "undefined", 9);
   if (is_err(str)) return str;
-  return regexp_symbol_replace_impl(js, call_this, str, nargs > 1 ? args[1] : js_mkundef(), NULL);
+  return regexp_symbol_replace_impl(js, call_this, str, nargs > 1 ? args[1] : Ant_Value_Undefined, NULL);
 }

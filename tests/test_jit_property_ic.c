@@ -99,7 +99,7 @@ static void check_failed_fills(ant_t *js, ant_value_t object, ant_shape_t *old_s
     sv_ic_entry_t ic = {.cached_shape = old_shape, .cached_index = 123, .get_kind = SV_GF_IC_PROTOTYPE};
     sv_func_t callee = {.ic_slots = &ic, .ic_count = 1};
     uint8_t code[] = {OP_GET_FIELD, 0, 0, 0, 0, 0, 0};
-    ant_value_t out = js_mkundef();
+    ant_value_t out = Ant_Value_Undefined;
     int attempts = registration_attempts;
     assert(sv_try_prop_get_field_ic_no_effect(js, object, &atom, &callee, code, &out));
     assert(registration_attempts == attempts + 1);
@@ -191,7 +191,7 @@ int main(void) {
   GC_ROOT_PIN(js, old);
   ant_value_t object = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, object);
-  js_set_proto(js, object, js_mknull());
+  js_set_proto(js, object, Ant_Value_Null);
   js_set(js, old, "other", Ant_Value_FromNumber(1));
   js_set(js, object, "padding", Ant_Value_FromNumber(0));
   js_set(js, object, "target", Ant_Value_FromNumber(41));
@@ -201,12 +201,12 @@ int main(void) {
 
   for (int hot = 0; hot <= 1; hot++) {
     check_field_codegen(shape, old, SV_GF_IC_MISSING, true, hot);
-    check_field_codegen(shape, js_mknull(), SV_GF_IC_MISSING, true, hot);
+    check_field_codegen(shape, Ant_Value_Null, SV_GF_IC_MISSING, true, hot);
     check_field_codegen(shape, mkval(kTypeFunction, 1), SV_GF_IC_MISSING, true, hot);
     check_field_codegen(shape, Ant_Value_FromNumber(1), SV_GF_IC_MISSING, false, hot);
-    check_field_codegen(shape, js_mkundef(), SV_GF_IC_MISSING, false, hot);
-    check_field_codegen(NULL, js_mknull(), SV_GF_IC_MISSING, false, hot);
-    check_field_codegen(NULL, js_mknull(), SV_GF_IC_OWN, false, hot);
+    check_field_codegen(shape, Ant_Value_Undefined, SV_GF_IC_MISSING, false, hot);
+    check_field_codegen(NULL, Ant_Value_Null, SV_GF_IC_MISSING, false, hot);
+    check_field_codegen(NULL, Ant_Value_Null, SV_GF_IC_OWN, false, hot);
     check_field_codegen(shape, old, SV_GF_IC_PROTOTYPE, false, hot);
   }
   puts("PASS missing handler requires an object/null prototype and guards the C enum value");

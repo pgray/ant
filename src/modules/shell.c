@@ -125,8 +125,8 @@ static ant_value_t sh_result(
   js_set(js, result, "stdout", stdout_value);
   js_set(js, result, "stderr", stderr_value);
   js_set(js, result, "exitCode", Ant_Value_FromNumber((double)exit_code));
-  js_set(js, result, "signalCode", js_mknull());
-  js_set(js, result, "exited", js_false);
+  js_set(js, result, "signalCode", Ant_Value_Null);
+  js_set(js, result, "exited", Ant_Value_False);
   GC_ROOT_RESTORE(js, root_mark);
 
   return result;
@@ -163,7 +163,7 @@ static ant_value_t sh_run_builtin_result(
   ant_value_t name_value = js_arr_get(js, argv, 0);
   size_t name_len = 0;
   char *name = js_getstr(js, name_value, &name_len);
-  if (!name) return js_mkundef();
+  if (!name) return Ant_Value_Undefined;
 
   if (name_len == 4 && memcmp(name, "true", 4) == 0)
     return sh_result(js, "", 0, "", 0, 0);
@@ -190,7 +190,7 @@ static ant_value_t sh_run_builtin_result(
       }
     }
     ant_value_t result = sh_result(js, "", 0, "", 0, status);
-    js_set(js, result, "exited", js_true);
+    js_set(js, result, "exited", Ant_Value_True);
     return result;
   }
 
@@ -311,7 +311,7 @@ echo_oom:
     return sh_result(js, "", 0, "", 0, 0);
   }
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void sh_process_builder_clear_argv(sh_process_builder_t *builder) {
@@ -460,7 +460,7 @@ static ant_value_t sh_runtime_arg(ant_params_t) {
   );
   if (!text || !sh_process_builder_append(builder, text, len))
     return Ant_Error_CreateOutOfMemory(js);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static bool sh_is_builtin_name(const char *name) {
@@ -537,7 +537,7 @@ static ant_value_t sh_process_builder_add_builtin(
     builder->plan.exited = true;
   sh_process_builder_clear_argv(builder);
   GC_ROOT_RESTORE(js, root_mark);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t sh_runtime_command(ant_params_t) {
@@ -564,7 +564,7 @@ static ant_value_t sh_runtime_command(ant_params_t) {
     if (!ant_process_plan_add_native_stage(
       &builder->plan, "", 0, "", 0, 0
     )) return Ant_Error_CreateOutOfMemory(js);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
   if (builder->argv[0][0] == '\0') return js_mkerr_typed(
     js, JS_ERR_TYPE, "ant:shell: executable cannot be empty"
@@ -579,7 +579,7 @@ static ant_value_t sh_runtime_command(ant_params_t) {
   builder->argv = NULL;
   builder->argc = 0;
   builder->argv_capacity = 0;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t sh_process_builder_add_redirect(
@@ -600,7 +600,7 @@ static ant_value_t sh_process_builder_add_redirect(
   if (kind == SH_REDIR_STDERR_TO_STDOUT) {
     if (!ant_process_plan_add_redirect(&builder->plan, process_kind, NULL))
       return Ant_Error_CreateOutOfMemory(js);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   char *path = sh_resolve_path_text(js, context, target, target_len);
@@ -608,7 +608,7 @@ static ant_value_t sh_process_builder_add_redirect(
   bool added = ant_process_plan_add_redirect(&builder->plan, process_kind, path);
 
   free(path);
-  return added ? js_mkundef() : Ant_Error_CreateOutOfMemory(js);
+  return added ? Ant_Value_Undefined : Ant_Error_CreateOutOfMemory(js);
 }
 
 static ant_value_t sh_runtime_redirect(ant_params_t) {
@@ -654,7 +654,7 @@ static ant_value_t sh_runtime_submit(ant_params_t) {
   GC_ROOT_PIN(js, args[0]);
   ant_value_t accumulated = js_promise_then(
     js, result, js_heavy_mkfun(js, sh_accumulate_fulfilled, args[0]),
-    js_mkundef()
+    Ant_Value_Undefined
   );
   GC_ROOT_RESTORE(js, root_mark);
   return accumulated;
@@ -662,7 +662,7 @@ static ant_value_t sh_runtime_submit(ant_params_t) {
 
 static ant_value_t sh_accumulate_fulfilled(ant_params_t) {
   ant_value_t context = js_func_data(call_func);
-  ant_value_t result = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t result = nargs > 0 ? args[0] : Ant_Value_Undefined;
 
   sh_output_accumulator_t *accumulator = js_get_native(context, SH_OUTPUT_ACCUMULATOR_TAG);
   if (!accumulator || !is_special_object(result))
@@ -697,7 +697,7 @@ static ant_value_t sh_runtime_finish(ant_params_t) {
   if (!accumulator)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid shell accumulator");
 
-  ant_value_t last = nargs > 1 ? args[1] : js_mkundef();
+  ant_value_t last = nargs > 1 ? args[1] : Ant_Value_Undefined;
   ant_value_t exit_code_value = is_special_object(last)
     ? js_get(js, last, "exitCode") : Ant_Value_FromNumber(0);
   int exit_code = vtype(exit_code_value) == kTypeNumber
@@ -778,7 +778,7 @@ ant_value_t shell_ops_library(ant_t *js) {
   js_set(js, lib, "submit", Ant_Function_Create(sh_runtime_submit));
   js_set(js, lib, "finish", Ant_Function_Create(sh_runtime_finish));
   js_set(js, lib, "context", Ant_Function_Create(sh_runtime_context));
-  js_set(js, lib, "debugEnabled", sv_debug_unlikely(SV_DEBUG_DUMP_SHELL) ? js_true : js_false);
+  js_set(js, lib, "debugEnabled", sv_debug_unlikely(SV_DEBUG_DUMP_SHELL) ? Ant_Value_True : Ant_Value_False);
   js_set_tostringtag(js, lib, js_mkstr(js, "shell ops", 9));
 
   return lib;

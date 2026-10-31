@@ -37,14 +37,14 @@ static void CheckMessageAccessors(ant_t *js) {
     js_set(js, value, "detail", js_mkstr(js, "original thrown detail", 22));
     js_set_getter_desc(js, inherited ? proto : value, "message", 7,
       Ant_Function_Create(ThrowingMessageGetter), JS_DESC_C | JS_DESC_E);
-    ant_value_t record = Ant_Exception_Raise(js, value, js_mkundef());
+    ant_value_t record = Ant_Exception_Raise(js, value, Ant_Value_Undefined);
     GC_ROOT_PIN(js, record);
     Ant_Exception_Clear(js);
 
     for (int pending = 0; pending < 2; pending++) {
       ant_value_t previous = pending
-        ? Ant_Exception_Raise(js, Ant_Value_FromNumber(73), js_mkundef())
-        : js_mkundef();
+        ? Ant_Exception_Raise(js, Ant_Value_FromNumber(73), Ant_Value_Undefined)
+        : Ant_Value_Undefined;
       message_getter_calls = 0;
       const char *detail = RuntimeErrorDetail(js, record);
       assert(message_getter_calls == 0);
@@ -65,7 +65,7 @@ int main(void) {
   GC_ROOT_SAVE(mark, js);
   ant_value_t error = Ant_Error_Create(js, JS_ERR_TYPE | JS_ERR_NO_STACK, "desktop diagnostic");
   GC_ROOT_PIN(js, error);
-  ant_value_t record = Ant_Exception_Raise(js, error, js_mkundef());
+  ant_value_t record = Ant_Exception_Raise(js, error, Ant_Value_Undefined);
   GC_ROOT_PIN(js, record);
   Ant_Exception_Clear(js);
   assert(strstr(RuntimeErrorDetail(js, record), "desktop diagnostic"));
@@ -74,13 +74,13 @@ int main(void) {
 
   ant_value_t stack = js_mkstr(js, "captured desktop stack", 22);
   record = Ant_Exception_Raise(js, error, stack);
-  ant_value_t newer = Ant_Exception_Raise(js, Ant_Value_FromNumber(73), js_mkundef());
+  ant_value_t newer = Ant_Exception_Raise(js, Ant_Value_FromNumber(73), Ant_Value_Undefined);
   assert(strstr(RuntimeErrorDetail(js, record), "captured desktop stack"));
   assert(Ant_Exception_Peek(js) == newer);
   record = newer;
   Ant_Exception_Clear(js);
   assert(strcmp(RuntimeErrorDetail(js, record), "73") == 0);
-  record = Ant_Exception_Raise(js, js_mkundef(), js_mkundef());
+  record = Ant_Exception_Raise(js, Ant_Value_Undefined, Ant_Value_Undefined);
   Ant_Exception_Clear(js);
   assert(strcmp(RuntimeErrorDetail(js, record), "undefined") == 0);
   assert(!Ant_Exception_Pending(js));

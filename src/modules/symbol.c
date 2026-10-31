@@ -23,7 +23,7 @@ static ant_value_t builtin_Symbol(ant_params_t) {
 }
 
 static ant_value_t builtin_Symbol_for(ant_params_t) {
-  ant_value_t key_str = js_template_to_string(js, nargs > 0 ? args[0] : js_mkundef());
+  ant_value_t key_str = js_template_to_string(js, nargs > 0 ? args[0] : Ant_Value_Undefined);
   if (is_err(key_str)) return key_str;
   
   char *key = js_getstr(js, key_str, NULL);
@@ -33,10 +33,10 @@ static ant_value_t builtin_Symbol_for(ant_params_t) {
 }
 
 static ant_value_t builtin_Symbol_keyFor(ant_params_t) {
-  if (nargs < 1 || vtype(args[0]) != kTypeSymbol) return js_mkundef();
+  if (nargs < 1 || vtype(args[0]) != kTypeSymbol) return Ant_Value_Undefined;
   
   const char *key = js_sym_key(args[0]);
-  if (!key) return js_mkundef();
+  if (!key) return Ant_Value_Undefined;
   
   return js_mkstr(js, key, strlen(key));
 }
@@ -90,19 +90,19 @@ ant_value_t maybe_call_symbol_method(
   ant_value_t this_arg, ant_args_t, bool *called
 ) {
   *called = false;
-  if (vtype(sym) != kTypeSymbol || !is_object_type(target)) return js_mkundef();
+  if (vtype(sym) != kTypeSymbol || !is_object_type(target)) return Ant_Value_Undefined;
 
   ant_value_t method = js_get_sym(js, target, sym);
   if (is_err(method)) return method;
 
   uint8_t mt = vtype(method);
-  if (mt == kTypeUndefined || mt == kTypeNull) return js_mkundef();
+  if (mt == kTypeUndefined || mt == kTypeNull) return Ant_Value_Undefined;
   if (!is_callable(method)) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Symbol method is not callable");
   }
 
   *called = true;
-  return sv_vm_call(js->vm, js, method, this_arg, args, nargs, NULL, js_mkundef());
+  return sv_vm_call(js->vm, js, method, this_arg, args, nargs, NULL, Ant_Value_Undefined);
 }
 
 ant_value_t js_return_this(ant_params_t) {
@@ -237,7 +237,7 @@ const inline char *js_sym_desc(ant_value_t sym) {
 
 ant_value_t js_symbol_description_value(ant_t *js, ant_value_t symbol) {
   ant_symbol_heap_t *ptr = sym_ptr(symbol);
-  if (!ptr || !(ptr->flags & SYM_FLAG_HAS_DESC)) return js_mkundef();
+  if (!ptr || !(ptr->flags & SYM_FLAG_HAS_DESC)) return Ant_Value_Undefined;
   GC_ROOT_SAVE(mark, js);
   GC_ROOT_PIN(js, symbol);
   ant_value_t result = mkstr_with_ascii(

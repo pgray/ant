@@ -17,7 +17,7 @@ ant_object_t *js_obj_ptr(ant_value_t v) {
 }
 
 ant_value_t js_obj_from_ptr(ant_object_t *obj) {
-  if (!obj) return js_mkundef();
+  if (!obj) return Ant_Value_Undefined;
   return mkref(kTypeObject, obj);
 }
 
@@ -28,7 +28,7 @@ void js_mark_constructor(ant_value_t value, bool is_constructor) {
 
 ant_value_t obj_extra_get(ant_object_t *obj, internal_slot_t slot) {
   ant_extra_slot_t *entry = ant_object_extra_slot(obj, (uint8_t)slot);
-  return entry ? entry->value : js_mkundef();
+  return entry ? entry->value : Ant_Value_Undefined;
 }
 
 bool obj_extra_reserve(ant_object_t *obj, uint8_t capacity) {
@@ -84,7 +84,7 @@ static bool obj_extra_set(ant_object_t *obj, internal_slot_t slot, ant_value_t v
 }
 
 ant_value_t js_prop_load(ant_prop_loc_t loc) {
-  if (!loc.obj || loc.slot >= loc.obj->prop_count) return js_mkundef();
+  if (!loc.obj || loc.slot >= loc.obj->prop_count) return Ant_Value_Undefined;
   return ant_object_prop_get_unchecked(loc.obj, loc.slot);
 }
 
@@ -133,7 +133,7 @@ bool js_obj_ensure_prop_capacity(ant_t *js, ant_object_t *obj, uint32_t needed) 
 
   obj->prop_count = needed;
   for (uint32_t i = old_count; i < needed; i++) {
-    ant_object_prop_set_unchecked(obj, i, js_mkundef());
+    ant_object_prop_set_unchecked(obj, i, Ant_Value_Undefined);
   }
 
   return true;
@@ -223,7 +223,7 @@ bool js_obj_ensure_unique_shape(ant_object_t *obj) {
 
 void obj_delete_prop_slot(ant_object_t *obj, uint32_t slot) {
   if (!obj || slot >= obj->prop_count) return;
-  ant_object_prop_set_unchecked(obj, slot, js_mkundef());
+  ant_object_prop_set_unchecked(obj, slot, Ant_Value_Undefined);
 
   uint32_t shape_count = ant_shape_count(obj->shape);
   if (!ant_shape_should_compact(obj->shape)) {
@@ -240,7 +240,7 @@ void obj_delete_prop_slot(ant_object_t *obj, uint32_t slot) {
   }
   
   for (uint32_t i = dst; i < obj->prop_count; i++)
-    ant_object_prop_set_unchecked(obj, i, js_mkundef());
+    ant_object_prop_set_unchecked(obj, i, Ant_Value_Undefined);
   obj->prop_count = ant_shape_compact(obj->shape);
 }
 
@@ -288,13 +288,13 @@ ant_object_t *obj_alloc_shaped(ant_t *js, uint8_t type_tag, ant_shape_t *shape) 
 
   obj->ic_identity = 0;
   obj->type_tag = type_tag;
-  obj->proto = js_mkundef();
+  obj->proto = Ant_Value_Undefined;
   
   obj->u.array.len = 0;
   obj->u.array.cap = 0;
   
   if (type_tag == kTypeArray) obj->u.array.data = NULL;
-  else obj->u.data.value = js_mkundef();
+  else obj->u.data.value = Ant_Value_Undefined;
   
   obj->shape = shape;
   obj->inobj_limit = inobj_limit;
@@ -304,7 +304,7 @@ ant_object_t *obj_alloc_shaped(ant_t *js, uint8_t type_tag, ant_shape_t *shape) 
   obj->prop_count = 0;
   
   static_assert(ANT_INOBJ_BASE_SLOTS == 4, "obj_alloc_shaped unrolls the base slots");
-  const ant_value_t undef = js_mkundef();
+  const ant_value_t undef = Ant_Value_Undefined;
   
   obj->inobj[0] = undef;
   obj->inobj[1] = undef;
@@ -373,14 +373,14 @@ ant_value_t js_obj_to_func_ex(ant_t *js, ant_value_t obj, uint8_t flags) {
   closure->func = NULL;
   closure->upvalues = NULL;
   closure->func_obj = func_obj;
-  closure->bound_this = js_mkundef();
+  closure->bound_this = Ant_Value_Undefined;
   closure->bound_argc = 0;
-  closure->super_val = js_mkundef();
+  closure->super_val = Ant_Value_Undefined;
   closure->call_flags = flags;
 
   if (flags & SV_CALL_HAS_BOUND_ARGS) {
     closure->u.bound.argv = NULL;
-    closure->u.bound.args_arr = js_mkundef();
+    closure->u.bound.args_arr = Ant_Value_Undefined;
   } else {
     closure->u.pending.name = NULL;
     closure->u.pending.len = 0;
@@ -563,10 +563,10 @@ bool js_reserve_slots(ant_value_t obj, uint8_t capacity) {
 ant_value_t get_slot(ant_value_t obj, internal_slot_t slot) {
   ant_object_t *ptr = js_obj_ptr(obj);
   
-  if (!ptr || slot < 0 || slot > SLOT_MAX) return js_mkundef();
+  if (!ptr || slot < 0 || slot > SLOT_MAX) return Ant_Value_Undefined;
   if (slot == SLOT_PROTO) return ptr->proto;
   if (slot == SLOT_DATA) return ptr->u.data.value;
-  if (slot == SLOT_ARGUMENTS_OBJECT && ptr->flags.arguments_object) return js_true;
+  if (slot == SLOT_ARGUMENTS_OBJECT && ptr->flags.arguments_object) return Ant_Value_True;
   
   return obj_extra_get(ptr, slot);
 }
@@ -581,16 +581,16 @@ ant_value_t js_get_proto(ant_t *js, ant_value_t obj) {
   uint8_t t = vtype(obj);
 
   if (__builtin_expect(t == kTypeBuiltin, 0)) return js_get_builtin_proto(js, obj);
-  if (!is_object_type(obj)) return js_mknull();
+  if (!is_object_type(obj)) return Ant_Value_Null;
   
   ant_value_t as_obj = js_as_obj(obj);
   ant_object_t *ptr = js_obj_ptr(as_obj);
-  ant_value_t proto = ptr ? ptr->proto : js_mkundef();
+  ant_value_t proto = ptr ? ptr->proto : Ant_Value_Undefined;
   
   if (is_object_type(proto) || vtype(proto) == kTypeNull) return proto;
   if (t != kTypeObject) return js_primitive_prototype(js, t);
   
-  return js_mknull();
+  return Ant_Value_Null;
 }
 
 ant_value_t get_proto(ant_t *js, ant_value_t obj) {
@@ -664,7 +664,7 @@ ant_value_t js_primitive_prototype(ant_t *js, uint8_t type) {
     case kTypeBigInt:    return js->sym.bigint_proto;
     case kTypeSymbol:    return js->sym.symbol_proto;
     case kTypeGenerator: return js->sym.generator_proto;
-    default:          return js_mknull();
+    default:          return Ant_Value_Null;
   }
 }
 
@@ -698,11 +698,11 @@ bool js_is_constructor(ant_value_t value) {
     slow = data->target;
 
     for (int i = 0; i < 2; i++) {
-      if (vtype(fast) != kTypeObject) { fast = js_mknull(); break; }
+      if (vtype(fast) != kTypeObject) { fast = Ant_Value_Null; break; }
       ant_object_t *fobj = js_obj_ptr(fast);
-      if (!fobj || !fobj->flags.is_exotic) { fast = js_mknull(); break; }
+      if (!fobj || !fobj->flags.is_exotic) { fast = Ant_Value_Null; break; }
       ant_proxy_state_t *fdata = get_proxy_data(fast);
-      if (!fdata) { fast = js_mknull(); break; }
+      if (!fdata) { fast = Ant_Value_Null; break; }
       fast = fdata->target;
     }
 

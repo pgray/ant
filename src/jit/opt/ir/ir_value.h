@@ -7,8 +7,8 @@
 #include <stddef.h>
 #include <string.h>
 
-static constexpr uint64_t IR_VALUE_UNDEFINED = NANBOX_PREFIX | ((uint64_t)kTypeUndefined << NANBOX_TYPE_SHIFT);
-static constexpr uint64_t IR_VALUE_NULL = NANBOX_PREFIX | ((uint64_t)kTypeNull << NANBOX_TYPE_SHIFT);
+static constexpr uint64_t IR_VALUE_UNDEFINED = NANBOX_TAG(kTypeUndefined);
+static constexpr uint64_t IR_VALUE_NULL = NANBOX_TAG(kTypeNull);
 static constexpr uint64_t IR_VALUE_FALSE = ANT_BOOL_TAG;
 static constexpr uint64_t IR_VALUE_TRUE = ANT_BOOL_TAG | 1;
 static constexpr uint64_t IR_VALUE_EMPTY = ANT_SENTINEL_TAG | 0xDEADu;

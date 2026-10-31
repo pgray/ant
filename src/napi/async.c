@@ -32,7 +32,7 @@ static void napi_tsfn_async_cb(uv_async_t *handle) {
     if (tsfn->call_js_cb) {
       tsfn->call_js_cb((napi_env)tsfn->env, (napi_value)cb, tsfn->context, item->data);
     } else if (is_callable(cb)) {
-      sv_vm_call(js->vm, js, cb, js_mkundef(), NULL, 0, NULL, js_mkundef());
+      sv_vm_call(js->vm, js, cb, Ant_Value_Undefined, NULL, 0, NULL, Ant_Value_Undefined);
     }
 
     free(item);
@@ -54,7 +54,7 @@ static void napi_tsfn_close_cb(uv_handle_t *handle) {
   }
 
   if (tsfn->env && tsfn->env->js) {
-    tsfn->func_val = js_mkundef();
+    tsfn->func_val = Ant_Value_Undefined;
   }
 
   uv_mutex_destroy(&tsfn->mutex);
@@ -198,7 +198,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_create_threadsafe_function(
   tsfn->context = context;
   tsfn->max_queue_size = max_queue_size;
   tsfn->thread_count = initial_thread_count > 0 ? initial_thread_count : 1;
-  tsfn->func_val = func ? (ant_value_t)func : js_mkundef();
+  tsfn->func_val = func ? (ant_value_t)func : Ant_Value_Undefined;
 
   uv_mutex_init(&tsfn->mutex);
   int rc = uv_async_init(((ant_napi_env_t *)env)->js->loop, &tsfn->async, napi_tsfn_async_cb);

@@ -7,7 +7,7 @@
 #include "gc/objects.h"
 
 ant_value_t ant_load_snapshot(ant_t *js) {
-  if (!js) return js_mkundef();
+  if (!js) return Ant_Value_Undefined;
   
   const char *src = (const char *)ant_snapshot_source;
   ant_value_t result = ant_capture_primordials(js);
@@ -16,7 +16,7 @@ ant_value_t ant_load_snapshot(ant_t *js) {
   result = js_eval_bytecode(js, src, ant_snapshot_source_len);
   
   gc_pin_existing_objects(js);
-  builtin_object_freeze(js, &js->Ant, 1, js_mkundef(), js_mkundef(), js_mkundef());
+  builtin_object_freeze(js, &js->Ant, 1, Ant_Value_Undefined, Ant_Value_Undefined, Ant_Value_Undefined);
   
-  return vtype(result) == kTypeError ? result : js_true;
+  return vtype(result) == kTypeError ? result : Ant_Value_True;
 }

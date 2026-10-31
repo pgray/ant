@@ -218,13 +218,13 @@ static bool end_take_close(ant_port_end_t *end) {
 
 ant_value_t ant_port_end_post(ant_t *js, ant_port_end_t *end, ant_value_t value, ant_value_t transfer) {
   ant_wire_t *wire = NULL;
-  ant_value_t r = ant_wire_serialize(js, value, transfer, js_mkundef(), &wire);
+  ant_value_t r = ant_wire_serialize(js, value, transfer, Ant_Value_Undefined, &wire);
   if (is_err(r)) return r;
   if (!end_push(end, wire)) {
     ant_wire_release(wire);
     return Ant_Error_CreateOutOfMemory(js);
   }
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_port_binding_t *port_binding(ant_value_t value) {
@@ -274,7 +274,7 @@ static ant_value_t message_event_fill(ant_t *js, ant_value_t event, ant_value_t 
   Ant_Event_SetField(js, event, ANT_EVENT_FIELD_MESSAGE_data, data);
   Ant_Event_SetField(js, event, ANT_EVENT_FIELD_MESSAGE_origin, empty);
   Ant_Event_SetField(js, event, ANT_EVENT_FIELD_MESSAGE_lastEventId, empty);
-  Ant_Event_SetField(js, event, ANT_EVENT_FIELD_MESSAGE_source, js_mknull());
+  Ant_Event_SetField(js, event, ANT_EVENT_FIELD_MESSAGE_source, Ant_Value_Null);
   Ant_Event_SetField(js, event, ANT_EVENT_FIELD_MESSAGE_ports, vtype(ports) == kTypeArray ? ports : js_mkarr(js));
   
   return event;
@@ -332,7 +332,7 @@ static void port_dispatch_close(ant_t *js, ant_value_t target) {
 static void binding_deliver(ant_port_binding_t *binding, ant_port_message_t *msg) {
   ant_t *js = binding->js;
   ant_value_t target = binding->target;
-  ant_value_t ports = js_mkundef();
+  ant_value_t ports = Ant_Value_Undefined;
 
   GC_ROOT_SAVE(mark, js);
   GC_ROOT_PIN(js, target);
@@ -342,7 +342,7 @@ static void binding_deliver(ant_port_binding_t *binding, ant_port_message_t *msg
 
   if (is_err(value)) {
     ant_value_t error = js_take_thrown(js, value);
-    if (binding->on_message) binding->on_message(js, target, error, js_mknull());
+    if (binding->on_message) binding->on_message(js, target, error, Ant_Value_Null);
     else binding_dispatch(binding, "messageerror", error, ports);
   } else if (binding->on_message) binding->on_message(js, target, value, ports);
   else binding_dispatch(binding, "message", value, ports);
@@ -413,7 +413,7 @@ void ant_port_binding_free(ant_port_binding_t *binding) {
 }
 
 ant_value_t ant_port_binding_post(ant_t *js, ant_port_binding_t *binding, ant_value_t value, ant_value_t transfer) {
-  if (!binding || !binding->end) return js_mkundef();
+  if (!binding || !binding->end) return Ant_Value_Undefined;
   return ant_port_end_post(js, binding->end, value, transfer);
 }
 
@@ -432,7 +432,7 @@ static void message_port_finalize(ant_t *js, ant_object_t *obj) {
   ant_port_binding_t *binding = port_binding(value);
   if (!binding) return;
   js_clear_native(value, MESSAGE_PORT_NATIVE_TAG);
-  binding->target = js_mkundef();
+  binding->target = Ant_Value_Undefined;
   binding_destroy(binding);
 }
 
@@ -513,25 +513,25 @@ ant_port_end_t *ant_message_port_take(ant_t *js, ant_value_t port) {
 ant_value_t ant_message_port_post(ant_t *js, ant_value_t port, ant_value_t value, ant_value_t transfer) {
   ant_port_binding_t *binding = port_binding(port);
   if (!binding) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
-  if (!binding->end) return js_mkundef();
+  if (!binding->end) return Ant_Value_Undefined;
 
   ant_wire_t *wire = NULL;
   ant_value_t r = ant_wire_serialize(js, value, transfer, port, &wire);
   if (is_err(r)) return r;
   if (!binding->end || !end_push(binding->end, wire)) {
     ant_wire_release(wire);
-    return binding->end ? Ant_Error_CreateOutOfMemory(js) : js_mkundef();
+    return binding->end ? Ant_Error_CreateOutOfMemory(js) : Ant_Value_Undefined;
   }
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t ant_message_port_receive(ant_t *js, ant_value_t port) {
   ant_port_binding_t *binding = port_binding(port);
   if (!binding) return js_mkerr_typed(js, JS_ERR_TYPE, "The \"port\" argument must be a MessagePort instance");
-  if (!binding->end) return js_mkundef();
+  if (!binding->end) return Ant_Value_Undefined;
 
   ant_port_message_t *msg = end_pop(binding->end);
-  if (!msg) return js_mkundef();
+  if (!msg) return Ant_Value_Undefined;
 
   ant_value_t value = ant_wire_deserialize(js, msg->wire, NULL);
   message_free(msg);
@@ -546,7 +546,7 @@ ant_value_t ant_message_port_receive(ant_t *js, ant_value_t port) {
 }
 
 static ant_value_t js_message_port_post_message(ant_params_t) {
-  ant_value_t transfer = js_mkundef();
+  ant_value_t transfer = Ant_Value_Undefined;
   if (nargs > 1) {
     ant_value_t opt = args[1];
     if (is_object_type(opt) && vtype(opt) != kTypeArray) {
@@ -555,7 +555,7 @@ static ant_value_t js_message_port_post_message(ant_params_t) {
       transfer = list;
     } else transfer = opt;
   }
-  return ant_message_port_post(js, call_this, nargs > 0 ? args[0] : js_mkundef(), transfer);
+  return ant_message_port_post(js, call_this, nargs > 0 ? args[0] : Ant_Value_Undefined, transfer);
 }
 
 static ant_value_t js_message_port_start(ant_params_t) {
@@ -565,14 +565,14 @@ static ant_value_t js_message_port_start(ant_params_t) {
     binding->started = true;
     if (binding->async_open) uv_async_send(&binding->async);
   }
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_message_port_close(ant_params_t) {
   ant_port_binding_t *binding = port_binding(call_this);
   if (!binding) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
   ant_port_binding_close(binding);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_message_port_ref(ant_params_t) {
@@ -626,14 +626,14 @@ static ant_value_t js_node_target_off(ant_params_t) {
 static ant_value_t js_node_target_remove_all(ant_params_t) {
   ant_value_t remove = js_get(js, js->builtins.eventemitter_proto, "removeAllListeners");
   if (is_callable(remove)) {
-    ant_value_t r = sv_vm_call(js->vm, js, remove, call_this, args, nargs, NULL, js_mkundef());
+    ant_value_t r = sv_vm_call(js->vm, js, remove, call_this, args, nargs, NULL, Ant_Value_Undefined);
     if (is_err(r)) return r;
   }
   return call_this;
 }
 
 static ant_value_t js_node_target_emit(ant_params_t) {
-  if (nargs < 1) return js_false;
+  if (nargs < 1) return Ant_Value_False;
   
   ant_value_t type = js_tostring_val(js, args[0]);
   if (is_err(type)) return type;
@@ -645,9 +645,9 @@ static ant_value_t js_node_target_emit(ant_params_t) {
   if (len >= sizeof(buf)) len = sizeof(buf) - 1;
   memcpy(buf, name, len);
   buf[len] = '\0';
-  port_dispatch(js, call_this, buf, nargs > 1 ? args[1] : js_mkundef(), js_mkundef());
+  port_dispatch(js, call_this, buf, nargs > 1 ? args[1] : Ant_Value_Undefined, Ant_Value_Undefined);
   
-  return js_true;
+  return Ant_Value_True;
 }
 
 static ant_value_t js_node_target_listener_count(ant_params_t) {
@@ -679,8 +679,8 @@ static ant_value_t js_message_port_onmessage_get(ant_params_t) {
 }
 
 static ant_value_t js_message_port_onmessage_set(ant_params_t) {
-  Ant_EventTarget_SetHandler(js, call_this, "message", 7, nargs > 0 ? args[0] : js_mkundef());
-  return js_mkundef();
+  Ant_EventTarget_SetHandler(js, call_this, "message", 7, nargs > 0 ? args[0] : Ant_Value_Undefined);
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_message_port_onmessageerror_get(ant_params_t) {
@@ -688,8 +688,8 @@ static ant_value_t js_message_port_onmessageerror_get(ant_params_t) {
 }
 
 static ant_value_t js_message_port_onmessageerror_set(ant_params_t) {
-  Ant_EventTarget_SetHandler(js, call_this, "messageerror", 12, nargs > 0 ? args[0] : js_mkundef());
-  return js_mkundef();
+  Ant_EventTarget_SetHandler(js, call_this, "messageerror", 12, nargs > 0 ? args[0] : Ant_Value_Undefined);
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_message_port_ctor(ant_params_t) {
@@ -796,8 +796,8 @@ static void broadcast_async_cb(uv_async_t *handle) {
     GC_ROOT_PIN(js, obj);
     ant_value_t value = ant_wire_deserialize(js, msg->wire, NULL);
     message_free(msg);
-    if (is_err(value)) port_dispatch(js, obj, "messageerror", js_take_thrown(js, value), js_mkundef());
-    else port_dispatch(js, obj, "message", value, js_mkundef());
+    if (is_err(value)) port_dispatch(js, obj, "messageerror", js_take_thrown(js, value), Ant_Value_Undefined);
+    else port_dispatch(js, obj, "message", value, Ant_Value_Undefined);
     GC_ROOT_RESTORE(js, mark);
     process_microtasks(js);
   }
@@ -808,7 +808,7 @@ static void broadcast_finalize(ant_t *js, ant_object_t *obj) {
   broadcast_member_t *m = broadcast_member(value);
   if (!m) return;
   js_clear_native(value, BROADCAST_NATIVE_TAG);
-  m->obj = js_mkundef();
+  m->obj = Ant_Value_Undefined;
   m->obj_alive = false;
   if (!m->closed) broadcast_close(m);
   else broadcast_maybe_free(m);
@@ -867,7 +867,7 @@ static ant_value_t js_broadcast_channel_post_message(ant_params_t) {
   if (m->closed) return js_throw(js, make_dom_exception(js, "BroadcastChannel is closed.", "InvalidStateError"));
 
   ant_wire_t *wire = NULL;
-  ant_value_t r = ant_wire_serialize(js, nargs > 0 ? args[0] : js_mkundef(), js_mkundef(), js_mkundef(), &wire);
+  ant_value_t r = ant_wire_serialize(js, nargs > 0 ? args[0] : Ant_Value_Undefined, Ant_Value_Undefined, Ant_Value_Undefined, &wire);
   if (is_err(r)) return r;
 
   ant_mutex_lock(&broadcast_lock);
@@ -883,14 +883,14 @@ static ant_value_t js_broadcast_channel_post_message(ant_params_t) {
   }
   ant_mutex_unlock(&broadcast_lock);
   ant_wire_release(wire);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_broadcast_channel_close(ant_params_t) {
   broadcast_member_t *m = broadcast_member(call_this);
   if (!m) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
   if (!m->closed) broadcast_close(m);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_broadcast_channel_ref(ant_params_t) {
@@ -969,14 +969,14 @@ void cleanup_message_port_module(ant_t *js) {
     ant_port_binding_t *binding = js->port_bindings;
     if (is_object_type(binding->target) && !binding->on_message)
       js_clear_native(binding->target, MESSAGE_PORT_NATIVE_TAG);
-    binding->target = js_mkundef();
+    binding->target = Ant_Value_Undefined;
     binding_destroy(binding);
   }
 
   while (js->broadcast_members) {
     broadcast_member_t *m = js->broadcast_members;
     if (is_object_type(m->obj)) js_clear_native(m->obj, BROADCAST_NATIVE_TAG);
-    m->obj = js_mkundef();
+    m->obj = Ant_Value_Undefined;
     m->obj_alive = false;
     broadcast_close(m);
   }

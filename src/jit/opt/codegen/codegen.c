@@ -1271,7 +1271,7 @@ static void opt_cg_frame_push(opt_cg_t *cg, const opt_cg_frame_regs_t *r) {
   masm_store64(m, asm_addr(r->frame, (int32_t)offsetof(sv_frame_t, this)), r->value);
   masm_move_imm64(m, r->s, ant_cage_base());
   masm_sub64(m, r->value, r->closure, r->s);
-  masm_move_imm64(m, r->s, NANBOX_PREFIX | ((uint64_t)kTypeFunction << NANBOX_TYPE_SHIFT));
+  masm_move_imm64(m, r->s, NANBOX_TAG(kTypeFunction));
   masm_or64(m, r->value, r->value, r->s);
   masm_store64(m, asm_addr(r->frame, (int32_t)offsetof(sv_frame_t, callee)), r->value);
   masm_load64(m, r->value, asm_addr(r->closure, (int32_t)offsetof(sv_closure_t, upvalues)));
@@ -1982,7 +1982,7 @@ static void opt_cg_allocate_object(opt_cg_t *cg, ir_node_id_t node) {
   }
   masm_move_imm64(m, temp, ant_cage_base());
   masm_sub64(m, out, out, temp);
-  masm_move_imm64(m, temp, NANBOX_PREFIX | ((uint64_t)kTypeObject << NANBOX_TYPE_SHIFT));
+  masm_move_imm64(m, temp, NANBOX_TAG(kTypeObject));
   masm_or64(m, out, out, temp);
   masm_bind(m, allocation.resume);
 }
@@ -2593,7 +2593,7 @@ static void opt_cg_allocate_array(opt_cg_t *cg, ir_node_id_t node) {
   }
   masm_move_imm64(m, temp, ant_cage_base());
   masm_sub64(m, out, out, temp);
-  masm_move_imm64(m, temp, NANBOX_PREFIX | ((uint64_t)kTypeArray << NANBOX_TYPE_SHIFT));
+  masm_move_imm64(m, temp, NANBOX_TAG(kTypeArray));
   masm_or64(m, out, out, temp);
   masm_bind(m, allocation.resume);
 }
@@ -2951,7 +2951,7 @@ static bool opt_cg_frame_code(opt_cg_t *cg, ir_node_id_t node_id, const ir_node_
         masm_load64(m, output, opt_cg_entry_field(cg, offsetof(opt_entry_t, closure)));
         masm_sub64_imm(m, output, output, (int64_t)ant_cage_base());
         masm_and64_imm(m, output, output, NANBOX_DATA_MASK);
-        masm_or64_imm(m, output, output, (int64_t)(NANBOX_PREFIX | (uint64_t)kTypeFunction << NANBOX_TYPE_SHIFT));
+        masm_or64_imm(m, output, output, (int64_t)NANBOX_TAG(kTypeFunction));
         break;
       }
       if (node->op.field == IR_FIELD_NEW_TARGET) {
@@ -3578,7 +3578,7 @@ static ant_value_t opt_cg_materialize_objects(sv_vm_t *vm, const opt_code_t *cod
 }
 
 static ant_value_t opt_cg_materialize_arguments(sv_vm_t *vm, ant_value_t *slots, uint32_t count, ant_value_t callee, ant_value_t *args, uint32_t argc) {
-  ant_value_t arguments = js_mkundef();
+  ant_value_t arguments = Ant_Value_Undefined;
   for (uint32_t i = 0; i < count; i++) {
     int kind = ir_value_virtual_arguments_kind(slots[i]);
     if (kind < 0) continue;
@@ -3604,7 +3604,7 @@ static uint32_t opt_cg_site_finally_count(const opt_code_t *code, const opt_site
 
 static sv_jit_finally_t *opt_cg_site_finally(const opt_code_t *code, const opt_site_t *site, const uint64_t *dump, const uint64_t *spills, const ant_value_t *objects, sv_jit_finally_t *out, uint32_t count) {
   if (!count) return NULL;
-  for (uint32_t i = 0; i < count; i++) out[i] = (sv_jit_finally_t){.kind = SV_COMPLETION_NONE, .value = js_mkundef()};
+  for (uint32_t i = 0; i < count; i++) out[i] = (sv_jit_finally_t){.kind = SV_COMPLETION_NONE, .value = Ant_Value_Undefined};
   sv_func_t *func = code->func;
   bool pending = false;
   opt_exit_cursor_t cursor = opt_exit_cursor((opt_exit_view_t){code->values, code->chunks, code->refs}, site->values);
@@ -3623,7 +3623,7 @@ static sv_jit_finally_t *opt_cg_site_finally(const opt_code_t *code, const opt_s
     else if (kind >= OPT_PENDING_JUMP && kind - OPT_PENDING_JUMP < (uint32_t)func->code_len) {
       entry->kind = SV_COMPLETION_JUMP;
       entry->target = kind - OPT_PENDING_JUMP;
-      entry->value = js_mkundef();
+      entry->value = Ant_Value_Undefined;
     } else continue;
     pending = true;
   }
@@ -3656,12 +3656,12 @@ static ant_value_t opt_cg_exit_frames(sv_vm_t *vm, const opt_site_t *site, opt_c
     uint32_t room = root || params > at->argc ? params : at->argc;
     uint32_t stack_slots = (uint32_t)(func->max_stack > 0 ? func->max_stack : 0);
     opt_exit_frame_t *frame = &frames[k];
-    *frame = (opt_exit_frame_t){.func = func, .callee = js_mkundef(), .this_val = js_mkundef(), .params = cursor, .arguments = js_mkundef(), .site = at};
+    *frame = (opt_exit_frame_t){.func = func, .callee = Ant_Value_Undefined, .this_val = Ant_Value_Undefined, .params = cursor, .arguments = Ant_Value_Undefined, .site = at};
     frame->locals = frame->params + room;
     frame->stack = frame->locals + locals;
     cursor = frame->stack + depth;
-    for (uint32_t i = 0; i < room; i++) frame->params[i] = root ? entry->params[i] : js_mkundef();
-    for (uint32_t i = 0; i < locals + depth; i++) frame->locals[i] = root && entry->frame ? entry->locals[i] : js_mkundef();
+    for (uint32_t i = 0; i < room; i++) frame->params[i] = root ? entry->params[i] : Ant_Value_Undefined;
+    for (uint32_t i = 0; i < locals + depth; i++) frame->locals[i] = root && entry->frame ? entry->locals[i] : Ant_Value_Undefined;
     for (uint32_t i = 0; i < at->value_count; i++) {
       const opt_site_value_t *value = opt_exit_next(&values);
       ant_value_t boxed = opt_cg_site_value(value, dump, spills, objects);
@@ -3750,7 +3750,7 @@ static ant_value_t opt_cg_catch_in_place(sv_vm_t *vm, uint8_t *locals, const opt
   int top = (int)(stack - vm->stack) + (int)depth + 1;
   if (vm->sp < top) vm->sp = top;
   entry->frame->completion.kind = SV_COMPLETION_NONE;
-  entry->frame->completion.value = js_mkundef();
+  entry->frame->completion.value = Ant_Value_Undefined;
   *(uint32_t *)(void *)(locals + code->index_offset) = site->handler;
   opt_rt_caught(vm, code, handler, true);
   return OPT_CAUGHT;

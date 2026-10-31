@@ -23,8 +23,8 @@ dns_request_t *dns_request_new(ant_t *js, dns_req_kind_t kind, ant_value_t callb
   req->kind = kind;
   req->callback = callback;
   req->hostname = hostname;
-  req->owner = js_mkundef();
-  req->promise = is_callable(callback) ? js_mkundef() : js_mkpromise(js);
+  req->owner = Ant_Value_Undefined;
+  req->promise = is_callable(callback) ? Ant_Value_Undefined : js_mkpromise(js);
   req->issuing = true;
 
   Ant_List_Insert(&js->dns_requests, req);
@@ -32,7 +32,7 @@ dns_request_t *dns_request_new(ant_t *js, dns_req_kind_t kind, ant_value_t callb
 }
 
 ant_value_t dns_request_result(dns_request_t *req) {
-  ant_value_t result = vtype(req->promise) == kTypePromise ? req->promise : js_mkundef();
+  ant_value_t result = vtype(req->promise) == kTypePromise ? req->promise : Ant_Value_Undefined;
   req->issuing = false;
   return result;
 }
@@ -65,14 +65,14 @@ static void dns_request_deliver(dns_request_t *req, ant_value_t error, ant_value
     return;
   }
 
-  ant_value_t argv[4] = { vtype(error) != kTypeUndefined ? error : js_mknull() };
+  ant_value_t argv[4] = { vtype(error) != kTypeUndefined ? error : Ant_Value_Null };
   int argc = 1;
   for (int i = 0; vtype(error) == kTypeUndefined && i < cb_argc && i < 3; i++) argv[argc++] = cb_args[i];
   for (int i = 0; i < argc; i++) GC_ROOT_PIN(js, argv[i]);
 
   if (deferred) queue_next_tick_with_args(js, callback, argv, argc);
   else {
-    sv_vm_call(js->vm, js, callback, js_mkundef(), argv, argc, NULL, js_mkundef());
+    sv_vm_call(js->vm, js, callback, Ant_Value_Undefined, argv, argc, NULL, Ant_Value_Undefined);
     process_report_uncaught_exception_if_pending(js);
     process_microtasks(js);
   }
@@ -81,11 +81,11 @@ static void dns_request_deliver(dns_request_t *req, ant_value_t error, ant_value
 }
 
 void dns_request_reject(dns_request_t *req, ant_value_t error) {
-  dns_request_deliver(req, error, js_mkundef(), NULL, 0);
+  dns_request_deliver(req, error, Ant_Value_Undefined, NULL, 0);
 }
 
 void dns_request_resolve(dns_request_t *req, ant_value_t value, const ant_value_t *cb_args, int cb_argc) {
-  dns_request_deliver(req, js_mkundef(), value, cb_args, cb_argc);
+  dns_request_deliver(req, Ant_Value_Undefined, value, cb_args, cb_argc);
 }
 
 ant_value_t dns_error(ant_t *js, const char *syscall, const char *code, int errno_value, bool has_errno, const char *hostname) {
@@ -93,7 +93,7 @@ ant_value_t dns_error(ant_t *js, const char *syscall, const char *code, int errn
   ant_value_t props = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, props);
 
-  js_set(js, props, "errno", has_errno ? Ant_Value_FromNumber((double)errno_value) : js_mkundef());
+  js_set(js, props, "errno", has_errno ? Ant_Value_FromNumber((double)errno_value) : Ant_Value_Undefined);
   js_set(js, props, "code", js_mkstr(js, code, strlen(code)));
   js_set(js, props, "syscall", js_mkstr(js, syscall, strlen(syscall)));
   if (hostname) js_set(js, props, "hostname", js_mkstr(js, hostname, strlen(hostname)));

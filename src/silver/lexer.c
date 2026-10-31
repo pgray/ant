@@ -22,7 +22,7 @@ void sv_lexer_init(sv_lexer_t *lx, ant_t *js, const char *code, ant_offset_t cle
   lx->st.pos = 0;
   lx->st.toff = 0;
   lx->st.tlen = 0;
-  lx->st.tval = js_mkundef();
+  lx->st.tval = Ant_Value_Undefined;
   lx->st.tok = TOK_ERR;
   lx->st.consumed = 1;
   lx->st.had_newline = false;
@@ -55,7 +55,7 @@ void sv_lexer_push_source(
   lx->st.pos = start;
   lx->st.toff = start;
   lx->st.tlen = 0;
-  lx->st.tval = js_mkundef();
+  lx->st.tval = Ant_Value_Undefined;
   lx->st.tok = TOK_ERR;
   lx->st.consumed = 1;
   lx->st.had_newline = false;

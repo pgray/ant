@@ -18,7 +18,7 @@ ant_value_t wasm_make_tag(ant_t *js, ant_value_t proto, ant_value_t kinds, bool 
   js_set_proto_init(tag, proto);
   js_set_slot(tag, SLOT_BRAND, Ant_Value_FromNumber(BRAND_WASM_TAG));
   js_set_slot_wb(js, tag, SLOT_DATA, kinds);
-  if (js_tag) js_set_slot(tag, SLOT_AUX, js_true);
+  if (js_tag) js_set_slot(tag, SLOT_AUX, Ant_Value_True);
   return tag;
 }
 
@@ -94,12 +94,12 @@ ant_value_t js_wasm_exception_ctor(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Exception constructor requires 'new'");
   if (nargs < 1 || !wasm_is_tag(args[0]))
     return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Exception(): Argument 0 must be a WebAssembly tag");
-  if (js_get_slot(args[0], SLOT_AUX) == js_true)
+  if (js_get_slot(args[0], SLOT_AUX) == Ant_Value_True)
     return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Exception(): Argument 0 cannot be WebAssembly.JSTag");
 
   GC_ROOT_SAVE(mark, js);
   ant_value_t kinds = js_get_slot(args[0], SLOT_DATA);
-  ant_value_t list = wasm_sequence_to_list(js, nargs > 1 ? args[1] : js_mkundef(), "WebAssembly.Exception(): Argument 1 must be iterable");
+  ant_value_t list = wasm_sequence_to_list(js, nargs > 1 ? args[1] : Ant_Value_Undefined, "WebAssembly.Exception(): Argument 1 must be iterable");
   GC_ROOT_PIN(js, list);
   if (is_err(list)) { GC_ROOT_RESTORE(js, mark); return list; }
 
@@ -118,15 +118,15 @@ ant_value_t js_wasm_exception_ctor(ant_params_t) {
     js_arr_push(js, payload, value);
   }
 
-  ant_value_t stack = js_mkundef();
+  ant_value_t stack = Ant_Value_Undefined;
   if (nargs > 2 && is_object_type(args[2])) {
     ant_value_t trace = js_get(js, args[2], "traceStack");
     if (is_err(trace)) { GC_ROOT_RESTORE(js, mark); return trace; }
     if (js_truthy(js, trace)) {
       ant_value_t holder = Ant_Error_Create(js, JS_ERR_GENERIC, "");
       GC_ROOT_PIN(js, holder);
-      stack = is_object_type(holder) ? js_get(js, holder, "stack") : js_mkundef();
-      if (is_err(stack)) stack = js_mkundef();
+      stack = is_object_type(holder) ? js_get(js, holder, "stack") : Ant_Value_Undefined;
+      if (is_err(stack)) stack = Ant_Value_Undefined;
     }
   }
   GC_ROOT_PIN(js, stack);

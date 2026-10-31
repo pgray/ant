@@ -96,8 +96,8 @@ static ant_value_t enqueue_buffer(ant_t *js, ant_value_t ctrl_obj, const uint8_t
 #define ZCHUNK_SIZE 16384
 
 static ant_value_t cs_transform(ant_params_t) {
-  ant_value_t ctrl_obj = (nargs > 1) ? args[1] : js_mkundef();
-  ant_value_t chunk = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t ctrl_obj = (nargs > 1) ? args[1] : Ant_Value_Undefined;
+  ant_value_t chunk = (nargs > 0) ? args[0] : Ant_Value_Undefined;
   
   const uint8_t *input = NULL;
   size_t input_len = 0;
@@ -105,7 +105,7 @@ static ant_value_t cs_transform(ant_params_t) {
   if (!is_object_type(chunk) || !buffer_source_get_bytes(js, chunk, &input, &input_len))
     return js_mkerr_typed(js, JS_ERR_TYPE, "The provided value is not of type '(ArrayBuffer or ArrayBufferView)'");
 
-  if (!input || input_len == 0) return js_mkundef();
+  if (!input || input_len == 0) return Ant_Value_Undefined;
 
   brotli_stream_state_t *brotli_st = (brotli_stream_state_t *)js_get_native(call_func, CS_BROTLI_NATIVE_TAG);
   if (brotli_st)
@@ -132,11 +132,11 @@ static ant_value_t cs_transform(ant_params_t) {
     }
   } while (st->strm.avail_out == 0);
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t cs_flush(ant_params_t) {
-  ant_value_t ctrl_obj = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t ctrl_obj = (nargs > 0) ? args[0] : Ant_Value_Undefined;
 
   brotli_stream_state_t *brotli_st = (brotli_stream_state_t *)js_get_native(call_func, CS_BROTLI_NATIVE_TAG);
   if (brotli_st)
@@ -161,7 +161,7 @@ static ant_value_t cs_flush(ant_params_t) {
     }
   } while (ret != Z_STREAM_END);
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_cs_get_readable(ant_params_t) {
@@ -223,7 +223,7 @@ static ant_value_t js_cs_ctor(ant_params_t) {
   js_set(js, transformer, "transform", transform_fn);
   js_set(js, transformer, "flush", flush_fn);
 
-  ant_value_t ts_obj = ts_create(js, transformer, js_mkundef(), js_mkundef(), js_mkundef());
+  ant_value_t ts_obj = ts_create(js, transformer, Ant_Value_Undefined, Ant_Value_Undefined, Ant_Value_Undefined);
 
   if (is_err(ts_obj)) {
     if (fmt == ZFMT_BROTLI) brotli_stream_state_destroy(brotli);
@@ -239,16 +239,16 @@ static ant_value_t js_cs_ctor(ant_params_t) {
 }
 
 static ant_value_t ds_transform(ant_params_t) {
-  ant_value_t ctrl_obj = (nargs > 1) ? args[1] : js_mkundef();
+  ant_value_t ctrl_obj = (nargs > 1) ? args[1] : Ant_Value_Undefined;
 
-  ant_value_t chunk = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t chunk = (nargs > 0) ? args[0] : Ant_Value_Undefined;
   const uint8_t *input = NULL;
   size_t input_len = 0;
 
   if (!is_object_type(chunk) || !buffer_source_get_bytes(js, chunk, &input, &input_len))
     return js_mkerr_typed(js, JS_ERR_TYPE, "The provided value is not of type '(ArrayBuffer or ArrayBufferView)'");
 
-  if (!input || input_len == 0) return js_mkundef();
+  if (!input || input_len == 0) return Ant_Value_Undefined;
   brotli_stream_state_t *brotli_st = (brotli_stream_state_t *)js_get_native(call_func, DS_BROTLI_NATIVE_TAG);
   if (brotli_st)
     return brotli_stream_transform(js, brotli_st, ctrl_obj, input, input_len);
@@ -275,15 +275,15 @@ static ant_value_t ds_transform(ant_params_t) {
     if (ret == Z_STREAM_END) break;
   } while (st->strm.avail_out == 0);
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t ds_flush(ant_params_t) {
-  ant_value_t ctrl_obj = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t ctrl_obj = (nargs > 0) ? args[0] : Ant_Value_Undefined;
   brotli_stream_state_t *st = (brotli_stream_state_t *)js_get_native(call_func, DS_BROTLI_NATIVE_TAG);
   if (st)
     return brotli_stream_flush(js, st, ctrl_obj);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_ds_get_readable(ant_params_t) {
@@ -344,7 +344,7 @@ static ant_value_t js_ds_ctor(ant_params_t) {
   js_set(js, transformer, "transform", transform_fn);
   js_set(js, transformer, "flush", flush_fn);
 
-  ant_value_t ts_obj = ts_create(js, transformer, js_mkundef(), js_mkundef(), js_mkundef());
+  ant_value_t ts_obj = ts_create(js, transformer, Ant_Value_Undefined, Ant_Value_Undefined, Ant_Value_Undefined);
 
   if (is_err(ts_obj)) {
     if (fmt == ZFMT_BROTLI) brotli_stream_state_destroy(brotli);

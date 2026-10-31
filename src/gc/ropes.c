@@ -358,8 +358,8 @@ ant_value_t rope_cached_flat(ant_value_t value) {
 static inline void rope_canonicalize_flat(ant_value_t rope, ant_value_t flat) {
   ant_rope_heap_t *ptr = assert_rope_ptr(rope);
   ptr->cached = flat;
-  ptr->left = js_mkundef();
-  ptr->right = js_mkundef();
+  ptr->left = Ant_Value_Undefined;
+  ptr->right = Ant_Value_Undefined;
   ptr->depth = 0;
   ptr->len = ant_str_flat_ptr(flat)->len;
 }

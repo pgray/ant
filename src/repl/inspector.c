@@ -177,7 +177,7 @@ bool repl_preview_snapshot_build(
   const char *key = NULL;
   
   size_t key_len = 0;
-  ant_value_t value = js_mkundef();
+  ant_value_t value = Ant_Value_Undefined;
   
   while (js_prop_iter_next(&iter, &key, &key_len, &value)) {
     if (!repl_preview_expr_is_ident(key, key_len)) continue;
@@ -272,7 +272,7 @@ static void repl_member_matches_add(repl_member_matches_t *m, const char *key, s
 static ant_value_t repl_member_holder(ant_t *js, ant_value_t value) {
   uint8_t t = vtype(value);
   if (is_object_type(value) || t == kTypeBuiltin) return value;
-  if (t == kTypeUndefined || t == kTypeNull) return js_mkundef();
+  if (t == kTypeUndefined || t == kTypeNull) return Ant_Value_Undefined;
   return js_primitive_prototype(js, t);
 }
 
@@ -313,7 +313,7 @@ static bool repl_preview_member_complete(
   if (m.prefix_len > 0 && !repl_preview_expr_is_ident(m.prefix, m.prefix_len))
     return false;
 
-  ant_value_t obj = js_mkundef();
+  ant_value_t obj = Ant_Value_Undefined;
   if (
     !inspector_eval_safe_member_expr(js, line, dot, &obj) &&
     !inspector_eval_safe_expr(js, line, dot, &obj)
@@ -377,7 +377,7 @@ bool repl_preview_compute(
     }
   }
 
-  ant_value_t value = js_mkundef();
+  ant_value_t value = Ant_Value_Undefined;
   if (inspector_eval_safe_expr(js, preview_expr, preview_expr_len, &value))
     repl_preview_format_value(js, value, preview_out, preview_len);
 

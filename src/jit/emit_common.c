@@ -35,7 +35,7 @@ void jit_emit_interrupt_exit(jit_compile_t *c) {
                                     MIR_new_reg_op(c->ctx, c->r_err_tmp),
                                     MIR_new_reg_op(c->ctx, c->r_vm),
                                     MIR_new_reg_op(c->ctx, c->r_js),
-                                    MIR_new_uint_op(c->ctx, js_mkundef())));
+                                    MIR_new_uint_op(c->ctx, Ant_Value_Undefined)));
   jit_emit_exit_ret(c, MIR_new_reg_op(c->ctx, c->r_err_tmp));
 }
 
@@ -242,7 +242,7 @@ void mir_emit_builtin_call_fast(
     MIR_new_mem_op(ctx, MIR_JSVAL, offsetof(ant_t, exception), r_js, 0, 1)));
   MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_BNE,
     MIR_new_label_op(ctx, generic), MIR_new_reg_op(ctx, r_tmp),
-    MIR_new_uint_op(ctx, js_mkundef())));
+    MIR_new_uint_op(ctx, Ant_Value_Undefined)));
 
   mir_emit_decode_ref(ctx, fn, r_fn, func);
   if (jit_compile_owner && ant_realm_multiple(js)) {
@@ -261,22 +261,22 @@ void mir_emit_builtin_call_fast(
     MIR_new_reg_op(ctx, r_this), MIR_new_reg_op(ctx, this_val)));
   MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_BEQ,
     MIR_new_label_op(ctx, this_global), MIR_new_reg_op(ctx, r_this),
-    MIR_new_uint_op(ctx, js_mkundef())));
+    MIR_new_uint_op(ctx, Ant_Value_Undefined)));
   MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_BEQ,
     MIR_new_label_op(ctx, this_global), MIR_new_reg_op(ctx, r_this),
-    MIR_new_uint_op(ctx, js_mknull())));
+    MIR_new_uint_op(ctx, Ant_Value_Null)));
   MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, this_ok)));
   MIR_append_insn(ctx, fn, this_global);
   MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_MOV,
     MIR_new_reg_op(ctx, r_this),
-    MIR_new_uint_op(ctx, js_mkundef())));
+    MIR_new_uint_op(ctx, Ant_Value_Undefined)));
   MIR_append_insn(ctx, fn, this_ok);
 
   MIR_append_insn(ctx, fn, MIR_new_call_insn(ctx, 9,
     MIR_new_ref_op(ctx, cfunc_proto), MIR_new_reg_op(ctx, r_fn),
     MIR_new_reg_op(ctx, result), MIR_new_reg_op(ctx, r_js),
     MIR_new_reg_op(ctx, args), MIR_new_int_op(ctx, (int64_t)argc),
-    MIR_new_uint_op(ctx, js_mkundef()), MIR_new_reg_op(ctx, r_this),
+    MIR_new_uint_op(ctx, Ant_Value_Undefined), MIR_new_reg_op(ctx, r_this),
     MIR_new_reg_op(ctx, func)));
 
   MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_URSH,
@@ -290,7 +290,7 @@ void mir_emit_builtin_call_fast(
     MIR_new_mem_op(ctx, MIR_JSVAL, offsetof(ant_t, exception), r_js, 0, 1)));
   MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_BEQ,
     MIR_new_label_op(ctx, done), MIR_new_reg_op(ctx, r_tmp),
-    MIR_new_uint_op(ctx, js_mkundef())));
+    MIR_new_uint_op(ctx, Ant_Value_Undefined)));
 
   MIR_append_insn(ctx, fn, finish);
   MIR_append_insn(ctx, fn, MIR_new_call_insn(ctx, 5,

@@ -117,8 +117,8 @@ js_reactor_await_status_t js_reactor_blocking_await_promise(
   ant_t *js, ant_value_t promise, ant_value_t *value_out,
   js_reactor_interrupt_fn interrupted, void *interrupt_ctx
 ) {
-  if (value_out) *value_out = js_mkundef();
-  ant_value_t settled = js_mkundef();
+  if (value_out) *value_out = Ant_Value_Undefined;
+  ant_value_t settled = Ant_Value_Undefined;
   
   js_promise_settlement_t promise_state = js_promise_get_settlement(js, promise, &settled);
   if (promise_state == JS_PROMISE_INVALID) return JS_REACTOR_AWAIT_INVALID;

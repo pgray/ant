@@ -499,23 +499,23 @@ static inline void js_module_ctx_link_namespace(ant_t *js, ant_value_t module_ct
 }
 
 static inline ant_value_t js_module_ctx_namespace(ant_value_t module_ctx) {
-  if (!is_object_type(module_ctx)) return js_mkundef();
+  if (!is_object_type(module_ctx)) return Ant_Value_Undefined;
   ant_value_t ns = js_get_slot(module_ctx, SLOT_DATA);
-  return is_object_type(ns) ? ns : js_mkundef();
+  return is_object_type(ns) ? ns : Ant_Value_Undefined;
 }
 
 static inline ant_value_t js_module_eval_active_ns(ant_t *js) {
   ant_module_t *ctx = js->modules.module_stack;
   if (ctx) return ctx->module_ns;
   ctx = js->active_async_coro ? js_active_tla_module_ctx(js) : NULL;
-  return ctx ? ctx->module_ns : js_mkundef();
+  return ctx ? ctx->module_ns : Ant_Value_Undefined;
 }
 
 static inline ant_value_t js_module_eval_active_ctx(ant_t *js) {
   ant_module_t *ctx = js->modules.module_stack;
   if (ctx) return ctx->module_ctx;
   ctx = js->active_async_coro ? js_active_tla_module_ctx(js) : NULL;
-  return ctx ? ctx->module_ctx : js_mkundef();
+  return ctx ? ctx->module_ctx : Ant_Value_Undefined;
 }
 
 static inline const char *js_module_eval_active_filename(ant_t *js) {
@@ -544,9 +544,9 @@ static inline bool is_length_key(const char *key, size_t len) {
 }
 
 static inline ant_value_t js_string_wrapper_value(ant_value_t obj) {
-  if (vtype(obj) != kTypeObject) return js_mkundef();
+  if (vtype(obj) != kTypeObject) return Ant_Value_Undefined;
   ant_extra_slot_t *entry = ant_object_extra_slot((ant_object_t *)vptr(obj), SLOT_PRIMITIVE);
-  return entry && vtype(entry->value) == kTypeString ? entry->value : js_mkundef();
+  return entry && vtype(entry->value) == kTypeString ? entry->value : Ant_Value_Undefined;
 }
 
 static inline int js_brand_id(ant_value_t obj) {

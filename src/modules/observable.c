@@ -18,9 +18,9 @@ static void observable_report_error(ant_t *js, ant_value_t result, const char *w
   GC_ROOT_PIN(js, reason);
   char prefix[80];
   snprintf(prefix, sizeof(prefix), "Error in %s: ", where);
-  print_error_value(js, reason, js_mkundef(), prefix);
+  print_error_value(js, reason, Ant_Value_Undefined, prefix);
 
-  if (Ant_Exception_Pending(js)) js_take_thrown(js, js_mkundef());
+  if (Ant_Exception_Pending(js)) js_take_thrown(js, Ant_Value_Undefined);
   GC_ROOT_RESTORE(js, root_mark);
 }
 
@@ -34,8 +34,8 @@ static void cleanup_subscription(ant_t *js, ant_value_t subscription) {
   if (vtype(cleanup) == kTypeUndefined) return;
   if (!is_callable(cleanup)) return;
   
-  js_set_slot(subscription, SLOT_SUBSCRIPTION_CLEANUP, js_mkundef());
-  ant_value_t result = sv_vm_call(js->vm, js, cleanup, js_mkundef(), NULL, 0, NULL, js_mkundef());
+  js_set_slot(subscription, SLOT_SUBSCRIPTION_CLEANUP, Ant_Value_Undefined);
+  ant_value_t result = sv_vm_call(js->vm, js, cleanup, Ant_Value_Undefined, NULL, 0, NULL, Ant_Value_Undefined);
   
   if (is_err(result)) observable_report_error(js, result, "subscription cleanup");
 }
@@ -43,7 +43,7 @@ static void cleanup_subscription(ant_t *js, ant_value_t subscription) {
 static ant_value_t create_subscription(ant_t *js, ant_value_t observer) {
   ant_value_t subscription = Ant_Object_CreateBare(js);
   js_set_slot(subscription, SLOT_SUBSCRIPTION_OBSERVER, observer);
-  js_set_slot(subscription, SLOT_SUBSCRIPTION_CLEANUP, js_mkundef());
+  js_set_slot(subscription, SLOT_SUBSCRIPTION_CLEANUP, Ant_Value_Undefined);
   js_set_tostringtag(js, subscription, js_mkstr(js, "Subscription", 12));
   return subscription;
 }
@@ -64,12 +64,12 @@ static ant_value_t js_subscription_unsubscribe(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Subscription.unsubscribe called on non-object");
   }
   
-  if (subscription_closed(js, call_this)) return js_mkundef();
+  if (subscription_closed(js, call_this)) return Ant_Value_Undefined;
   
-  js_set_slot(call_this, SLOT_SUBSCRIPTION_OBSERVER, js_mkundef());
+  js_set_slot(call_this, SLOT_SUBSCRIPTION_OBSERVER, Ant_Value_Undefined);
   cleanup_subscription(js, call_this);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void setup_subscription_methods(ant_t *js, ant_value_t subscription) {
@@ -102,25 +102,25 @@ static ant_value_t js_subobs_next(ant_params_t) {
   if (!is_special_object(subscription))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid SubscriptionObserver");
   
-  if (subscription_closed(js, subscription)) return js_mkundef();
+  if (subscription_closed(js, subscription)) return Ant_Value_Undefined;
   
   ant_value_t observer = js_get_slot(subscription, SLOT_SUBSCRIPTION_OBSERVER);
-  if (!is_special_object(observer)) return js_mkundef();
+  if (!is_special_object(observer)) return Ant_Value_Undefined;
   
   ant_value_t nextMethod = js_get(js, observer, "next");
   if (is_err(nextMethod)) {
     observable_report_error(js, nextMethod, "observer.next");
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (is_callable(nextMethod)) {
-    ant_value_t value = (nargs > 0) ? args[0] : js_mkundef();
+    ant_value_t value = (nargs > 0) ? args[0] : Ant_Value_Undefined;
     ant_value_t call_args[1] = {value};
-    ant_value_t result = sv_vm_call(js->vm, js, nextMethod, observer, call_args, 1, NULL, js_mkundef());
+    ant_value_t result = sv_vm_call(js->vm, js, nextMethod, observer, call_args, 1, NULL, Ant_Value_Undefined);
     if (is_err(result)) observable_report_error(js, result, "observer.next");
   }
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_subobs_error(ant_params_t) {
@@ -134,24 +134,24 @@ static ant_value_t js_subobs_error(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid SubscriptionObserver");
   }
   
-  if (subscription_closed(js, subscription)) return js_mkundef();
+  if (subscription_closed(js, subscription)) return Ant_Value_Undefined;
   
   ant_value_t observer = js_get_slot(subscription, SLOT_SUBSCRIPTION_OBSERVER);
-  js_set_slot(subscription, SLOT_SUBSCRIPTION_OBSERVER, js_mkundef());
+  js_set_slot(subscription, SLOT_SUBSCRIPTION_OBSERVER, Ant_Value_Undefined);
   
   if (is_special_object(observer)) {
     ant_value_t errorMethod = js_get(js, observer, "error");
     if (is_err(errorMethod)) observable_report_error(js, errorMethod, "observer.error");
     if (is_callable(errorMethod)) {
-      ant_value_t exception = (nargs > 0) ? args[0] : js_mkundef();
+      ant_value_t exception = (nargs > 0) ? args[0] : Ant_Value_Undefined;
       ant_value_t call_args[1] = {exception};
-      ant_value_t result = sv_vm_call(js->vm, js, errorMethod, observer, call_args, 1, NULL, js_mkundef());
+      ant_value_t result = sv_vm_call(js->vm, js, errorMethod, observer, call_args, 1, NULL, Ant_Value_Undefined);
       if (is_err(result)) observable_report_error(js, result, "observer.error");
     }
   }
   
   cleanup_subscription(js, subscription);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_subobs_complete(ant_params_t) {
@@ -166,22 +166,22 @@ static ant_value_t js_subobs_complete(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid SubscriptionObserver");
   }
   
-  if (subscription_closed(js, subscription)) return js_mkundef();
+  if (subscription_closed(js, subscription)) return Ant_Value_Undefined;
   
   ant_value_t observer = js_get_slot(subscription, SLOT_SUBSCRIPTION_OBSERVER);
-  js_set_slot(subscription, SLOT_SUBSCRIPTION_OBSERVER, js_mkundef());
+  js_set_slot(subscription, SLOT_SUBSCRIPTION_OBSERVER, Ant_Value_Undefined);
   
   if (is_special_object(observer)) {
     ant_value_t completeMethod = js_get(js, observer, "complete");
     if (is_err(completeMethod)) observable_report_error(js, completeMethod, "observer.complete");
     if (is_callable(completeMethod)) {
-      ant_value_t result = sv_vm_call(js->vm, js, completeMethod, observer, NULL, 0, NULL, js_mkundef());
+      ant_value_t result = sv_vm_call(js->vm, js, completeMethod, observer, NULL, 0, NULL, Ant_Value_Undefined);
       if (is_err(result)) observable_report_error(js, result, "observer.complete");
     }
   }
   
   cleanup_subscription(js, subscription);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t create_subscription_observer(ant_t *js, ant_value_t subscription) {
@@ -202,22 +202,22 @@ static ant_value_t create_subscription_observer(ant_t *js, ant_value_t subscript
 static ant_value_t js_cleanup_fn(ant_params_t) {
   ant_value_t subscription = js_get_slot(call_func, SLOT_DATA);
   
-  if (!is_special_object(subscription)) return js_mkundef();
+  if (!is_special_object(subscription)) return Ant_Value_Undefined;
   
   ant_value_t unsubscribe = js_get(js, subscription, "unsubscribe");
   if (is_callable(unsubscribe)) {
-    return sv_vm_call(js->vm, js, unsubscribe, subscription, NULL, 0, NULL, js_mkundef());
+    return sv_vm_call(js->vm, js, unsubscribe, subscription, NULL, 0, NULL, Ant_Value_Undefined);
   }
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t execute_subscriber(ant_t *js, ant_value_t subscriber, ant_value_t observer) {
   ant_value_t call_args[1] = {observer};
-  ant_value_t subscriberResult = sv_vm_call(js->vm, js, subscriber, js_mkundef(), call_args, 1, NULL, js_mkundef());
+  ant_value_t subscriberResult = sv_vm_call(js->vm, js, subscriber, Ant_Value_Undefined, call_args, 1, NULL, Ant_Value_Undefined);
   
   if (vtype(subscriberResult) == kTypeError) return subscriberResult;
-  if (vtype(subscriberResult) == kTypeNull || vtype(subscriberResult) == kTypeUndefined) return js_mkundef();
+  if (vtype(subscriberResult) == kTypeNull || vtype(subscriberResult) == kTypeUndefined) return Ant_Value_Undefined;
   if (is_callable(subscriberResult)) return subscriberResult;
   
   if (is_special_object(subscriberResult)) {
@@ -252,8 +252,8 @@ static ant_value_t js_observable_subscribe(ant_params_t) {
   
   if (nargs > 0 && is_callable(args[0])) {
     ant_value_t nextCallback = args[0];
-    ant_value_t errorCallback = (nargs > 1) ? args[1] : js_mkundef();
-    ant_value_t completeCallback = (nargs > 2) ? args[2] : js_mkundef();
+    ant_value_t errorCallback = (nargs > 1) ? args[1] : Ant_Value_Undefined;
+    ant_value_t completeCallback = (nargs > 2) ? args[2] : Ant_Value_Undefined;
     
     observer = Ant_Object_CreateBare(js);
     js_set(js, observer, "next", nextCallback);
@@ -270,7 +270,7 @@ static ant_value_t js_observable_subscribe(ant_params_t) {
   if (is_err(start)) observable_report_error(js, start, "observer.start");
   if (is_callable(start)) {
     ant_value_t start_args[1] = {subscription};
-    ant_value_t result = sv_vm_call(js->vm, js, start, observer, start_args, 1, NULL, js_mkundef());
+    ant_value_t result = sv_vm_call(js->vm, js, start, observer, start_args, 1, NULL, Ant_Value_Undefined);
     if (vtype(result) == kTypeError) observable_report_error(js, result, "observer.start");
     if (subscription_closed(js, subscription)) return subscription;
   }
@@ -285,7 +285,7 @@ static ant_value_t js_observable_subscribe(ant_params_t) {
     
     ant_value_t error_args[1] = {thrown_error};
     ant_value_t error_method = js_get(js, subscriptionObserver, "error");
-    if (is_callable(error_method)) sv_vm_call(js->vm, js, error_method, subscriptionObserver, error_args, 1, NULL, js_mkundef());
+    if (is_callable(error_method)) sv_vm_call(js->vm, js, error_method, subscriptionObserver, error_args, 1, NULL, Ant_Value_Undefined);
     GC_ROOT_RESTORE(js, root_mark);
   } else js_set_slot_wb(js, subscription, SLOT_SUBSCRIPTION_CLEANUP, subscriberResult);
   
@@ -321,7 +321,7 @@ static ant_value_t js_observable_constructor(ant_params_t) {
 static ant_value_t js_of_subscriber(ant_params_t) {
   ant_value_t items = js_get_slot(call_func, SLOT_DATA);
   
-  if (nargs < 1) return js_mkundef();
+  if (nargs < 1) return Ant_Value_Undefined;
   
   ant_value_t observer = args[0];
   ant_value_t subscription = js_get_slot(observer, SLOT_DATA);
@@ -337,16 +337,16 @@ static ant_value_t js_of_subscriber(ant_params_t) {
     ant_value_t next = js_get(js, observer, "next");
     if (is_callable(next)) {
       ant_value_t next_args[1] = {value};
-      sv_vm_call(js->vm, js, next, observer, next_args, 1, NULL, js_mkundef());
+      sv_vm_call(js->vm, js, next, observer, next_args, 1, NULL, Ant_Value_Undefined);
     }
     
-    if (is_special_object(subscription) && subscription_closed(js, subscription)) return js_mkundef();
+    if (is_special_object(subscription) && subscription_closed(js, subscription)) return Ant_Value_Undefined;
   }
   
   ant_value_t complete = js_get(js, observer, "complete");
-  if (is_callable(complete)) sv_vm_call(js->vm, js, complete, observer, NULL, 0, NULL, js_mkundef());
+  if (is_callable(complete)) sv_vm_call(js->vm, js, complete, observer, NULL, 0, NULL, Ant_Value_Undefined);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_observable_of(ant_params_t) {
@@ -356,19 +356,19 @@ static ant_value_t js_observable_of(ant_params_t) {
   ant_value_t subscriber_func = js_heavy_mkfun(js, js_of_subscriber, items);
   ant_value_t ctor_args[1] = {subscriber_func};
   
-  return js_observable_constructor(js, ctor_args, 1, js_mkundef(), call_this, call_func);
+  return js_observable_constructor(js, ctor_args, 1, Ant_Value_Undefined, call_this, call_func);
 }
 
 static ant_value_t js_from_delegating(ant_params_t) {
   ant_value_t observable = js_get_slot(call_func, SLOT_DATA);
-  if (!is_special_object(observable)) return js_mkundef();
+  if (!is_special_object(observable)) return Ant_Value_Undefined;
   
   ant_value_t subscribe = js_get(js, observable, "subscribe");
   if (is_callable(subscribe)) {
-    return sv_vm_call(js->vm, js, subscribe, observable, args, nargs, NULL, js_mkundef());
+    return sv_vm_call(js->vm, js, subscribe, observable, args, nargs, NULL, Ant_Value_Undefined);
   }
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_from_iteration(ant_params_t) {
@@ -377,7 +377,7 @@ static ant_value_t js_from_iteration(ant_params_t) {
   ant_value_t iterable = js_get(js, data, "iterable");
   ant_value_t iteratorMethod = js_get(js, data, "iteratorMethod");
   
-  if (nargs < 1) return js_mkundef();
+  if (nargs < 1) return Ant_Value_Undefined;
   
   ant_value_t observer = args[0];
   ant_value_t subscription = js_get_slot(observer, SLOT_DATA);
@@ -385,7 +385,7 @@ static ant_value_t js_from_iteration(ant_params_t) {
   if (!is_callable(iteratorMethod))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Object is not iterable");
   
-  ant_value_t iterator = sv_vm_call(js->vm, js, iteratorMethod, iterable, NULL, 0, NULL, js_mkundef());
+  ant_value_t iterator = sv_vm_call(js->vm, js, iteratorMethod, iterable, NULL, 0, NULL, Ant_Value_Undefined);
   if (is_err(iterator)) return iterator;
 
   if (!is_special_object(iterator))
@@ -397,27 +397,27 @@ static ant_value_t js_from_iteration(ant_params_t) {
   }
   
   while (true) {
-    ant_value_t next = sv_vm_call(js->vm, js, nextMethod, iterator, NULL, 0, NULL, js_mkundef());
+    ant_value_t next = sv_vm_call(js->vm, js, nextMethod, iterator, NULL, 0, NULL, Ant_Value_Undefined);
     if (vtype(next) == kTypeError) return next;
     
     ant_value_t done = js_get(js, next, "done");
     if (js_truthy(js, done)) {
       ant_value_t complete = js_get(js, observer, "complete");
-      if (is_callable(complete)) sv_vm_call(js->vm, js, complete, observer, NULL, 0, NULL, js_mkundef());
-      return js_mkundef();
+      if (is_callable(complete)) sv_vm_call(js->vm, js, complete, observer, NULL, 0, NULL, Ant_Value_Undefined);
+      return Ant_Value_Undefined;
     }
     
     ant_value_t nextValue = js_get(js, next, "value");
     ant_value_t obs_next = js_get(js, observer, "next");
     if (is_callable(obs_next)) {
       ant_value_t next_args[1] = {nextValue};
-      sv_vm_call(js->vm, js, obs_next, observer, next_args, 1, NULL, js_mkundef());
+      sv_vm_call(js->vm, js, obs_next, observer, next_args, 1, NULL, Ant_Value_Undefined);
     }
     
     if (is_special_object(subscription) && subscription_closed(js, subscription)) {
       ant_value_t returnMethod = js_getprop_fallback(js, iterator, "return");
-      if (is_callable(returnMethod)) sv_vm_call(js->vm, js, returnMethod, iterator, NULL, 0, NULL, js_mkundef());
-      return js_mkundef();
+      if (is_callable(returnMethod)) sv_vm_call(js->vm, js, returnMethod, iterator, NULL, 0, NULL, Ant_Value_Undefined);
+      return Ant_Value_Undefined;
     }
   }
 }
@@ -433,7 +433,7 @@ static ant_value_t js_observable_from(ant_params_t) {
   ant_value_t observableMethod = js_get_sym(js, x, js->sym.observable_sym);
   
   if (is_callable(observableMethod)) {
-    ant_value_t observable = sv_vm_call(js->vm, js, observableMethod, x, NULL, 0, NULL, js_mkundef());
+    ant_value_t observable = sv_vm_call(js->vm, js, observableMethod, x, NULL, 0, NULL, Ant_Value_Undefined);
     if (is_err(observable)) return observable;
     
     if (!is_special_object(observable)) {
@@ -446,7 +446,7 @@ static ant_value_t js_observable_from(ant_params_t) {
     ant_value_t subscriber_func = js_heavy_mkfun(js, js_from_delegating, observable);
     ant_value_t ctor_args[1] = {subscriber_func};
     
-    return js_observable_constructor(js, ctor_args, 1, js_mkundef(), call_this, call_func);
+    return js_observable_constructor(js, ctor_args, 1, Ant_Value_Undefined, call_this, call_func);
   }
   
   ant_value_t iteratorMethod = js_get_sym(js, x, js->sym.iterator_sym);
@@ -459,7 +459,7 @@ static ant_value_t js_observable_from(ant_params_t) {
   ant_value_t subscriber_func = js_heavy_mkfun(js, js_from_iteration, data);
   ant_value_t ctor_args[1] = {subscriber_func};
   
-  return js_observable_constructor(js, ctor_args, 1, js_mkundef(), call_this, call_func);
+  return js_observable_constructor(js, ctor_args, 1, Ant_Value_Undefined, call_this, call_func);
 }
 
 void init_observable_module(ant_t *js) {  

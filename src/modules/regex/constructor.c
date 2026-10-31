@@ -51,11 +51,11 @@ void regexp_init_flags(ant_t *js, ant_value_t obj, ant_value_t flags, bool is_ne
   }
   js_set_slot(obj, SLOT_REGEXP_FLAGS_MASK, Ant_Value_FromNumber((double)mask));
   js_set_slot(obj, SLOT_REGEXP_FLAGS_STRING, flags_value);
-  js_set_slot(obj, SLOT_REGEXP_NAMED_GROUPS, js_mkundef());
+  js_set_slot(obj, SLOT_REGEXP_NAMED_GROUPS, Ant_Value_Undefined);
 }
 
 ant_value_t is_regexp_like(ant_t *js, ant_value_t value) {
-  if (!is_object_type(value)) return js_false;
+  if (!is_object_type(value)) return Ant_Value_False;
 
   ant_value_t match_sym = js->sym.match_sym;
   if (vtype(match_sym) == kTypeSymbol) {
@@ -72,7 +72,7 @@ ant_value_t reject_regexp_arg(ant_t *js, ant_value_t value, const char *method_n
   if (is_err(is_re)) return is_re;
   if (js_truthy(js, is_re))
     return js_mkerr_typed(js, JS_ERR_TYPE, "First argument to String.prototype.%s must not be a regular expression", method_name);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t regexp_species_ctor(ant_t *js, ant_value_t rx, const char *method) {
@@ -122,7 +122,7 @@ bool regexp_has_internal_slots(ant_t *js, ant_value_t value) {
 static ant_value_t regexp_check_flags(ant_t *js, ant_value_t flags) {
   ant_offset_t flen;
   const char *fstr = (const char *)(uintptr_t)vstr(js, flags, &flen);
-  if (regexp_flags_valid(fstr, flen)) return js_mkundef();
+  if (regexp_flags_valid(fstr, flen)) return Ant_Value_Undefined;
   return js_mkerr_typed(
     js, JS_ERR_SYNTAX, "Invalid flags supplied to RegExp constructor '%.*s'", (int)flen, fstr
   );
@@ -149,16 +149,16 @@ static ant_value_t regexp_check_pattern(ant_t *js, ant_value_t pattern, ant_valu
   regexp_validated_entry_t *validated = NULL;
   if (state && vtype(pattern) == kTypeString) {
     const regexp_site_entry_t *site = regexp_site_for(state, pattern);
-    if (site->pattern == pattern && site->epoch == epoch && site->entry->flags_mask == mask) return js_mkundef();
+    if (site->pattern == pattern && site->epoch == epoch && site->entry->flags_mask == mask) return Ant_Value_Undefined;
     validated = &state->validated[(vdata(pattern) >> 4) % REGEXP_SITE_CACHE_SIZE];
-    if (validated->pattern == pattern && validated->epoch == epoch && validated->flags_mask == mask) return js_mkundef();
+    if (validated->pattern == pattern && validated->epoch == epoch && validated->flags_mask == mask) return Ant_Value_Undefined;
   }
 
   const char *src = (const char *)(uintptr_t)vstr(js, pattern, &plen);
   const char *error = regexp_pattern_syntax_error(src, (size_t)plen, mask);
   if (error) return regexp_syntax_error_value(js, src, (size_t)plen, mask, error);
   if (validated) *validated = (regexp_validated_entry_t){ .pattern = pattern, .epoch = epoch, .flags_mask = mask };
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t regexp_escape_source(ant_t *js, ant_value_t pattern) {
@@ -487,7 +487,7 @@ static inline bool regexp_is_proto(ant_t *js, ant_value_t value) {
 
 static ant_value_t regexp_flag_getter(ant_t *js, ant_value_t rx, uint8_t bit, const char *name) {
   if (regexp_has_internal_slots(js, rx)) return js_bool((regexp_flags_mask(js, rx, NULL) & bit) != 0);
-  if (regexp_is_proto(js, rx)) return js_mkundef();
+  if (regexp_is_proto(js, rx)) return Ant_Value_Undefined;
   return js_mkerr_typed(js, JS_ERR_TYPE, "RegExp.prototype.%s getter called on incompatible receiver", name);
 }
 #define REGEXP_FLAG(id, name, ch)                                       \

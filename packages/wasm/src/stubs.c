@@ -29,7 +29,7 @@ ant_value_t js_esm_import_sync(ant_t *js, ant_value_t specifier) {
 ant_value_t js_esm_import_dynamic_ex(
   ant_t *js, ant_value_t specifier, const char *base_path, ant_value_t attrs, ant_value_t *out_tla_promise
 ) {
-  *out_tla_promise = js_mkundef();
+  *out_tla_promise = Ant_Value_Undefined;
   return js_mkerr_typed(js, JS_ERR_TYPE, "module imports are not available in @antjs.org/wasm" );
 }
 

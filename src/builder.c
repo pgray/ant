@@ -63,7 +63,7 @@ static bool js_inspect_each_hidden(ant_t *js, ant_value_t obj, js_inspect_hidden
   
   for (ant_offset_t i = 0; ok && i < count; i++) {
     ant_value_t args[2] = { obj, js_arr_get(js, keys, i) };
-    ant_value_t desc = builtin_object_getOwnPropertyDescriptor(js, args, 2, js_mkundef(), js_mkundef(), js_mkundef());
+    ant_value_t desc = builtin_object_getOwnPropertyDescriptor(js, args, 2, Ant_Value_Undefined, Ant_Value_Undefined, Ant_Value_Undefined);
     
     if (is_err(desc)) {
       Ant_Exception_Clear(js);
@@ -121,7 +121,7 @@ static bool is_small_object(ant_t *js, ant_value_t obj, int *prop_count) {
         continue;
       }
 
-      ant_value_t val = (i < ptr->prop_count) ? ant_object_prop_get_unchecked(ptr, i) : js_mkundef();
+      ant_value_t val = (i < ptr->prop_count) ? ant_object_prop_get_unchecked(ptr, i) : Ant_Value_Undefined;
       uint8_t t = vtype(val);
       if (t == kTypeObject || t == kTypeArray || t == kTypeFunction) has_nested = true;
       count++;
@@ -379,7 +379,7 @@ bool js_inspect_header_for(js_inspect_builder_t *builder, ant_value_t obj, const
 
 bool js_inspect_header(js_inspect_builder_t *builder, const char *fmt, ...) {
   va_list args; va_start(args, fmt);
-  bool ok = js_inspect_vheader_for(builder, js_mkundef(), fmt, args);
+  bool ok = js_inspect_vheader_for(builder, Ant_Value_Undefined, fmt, args);
   va_end(args);
   return ok;
 }
@@ -569,7 +569,7 @@ static bool js_inspect_shape_entry(js_inspect_builder_t *builder, ant_value_t as
   if (!prop) return true;
   if ((ant_shape_get_attrs(ptr->shape, i) & ANT_PROP_ATTR_ENUMERABLE) == 0) return true;
   
-  ant_value_t val = (i < ptr->prop_count) ? ant_object_prop_get_unchecked(ptr, i) : js_mkundef();
+  ant_value_t val = (i < ptr->prop_count) ? ant_object_prop_get_unchecked(ptr, i) : Ant_Value_Undefined;
   bool is_sym = prop->type == ANT_SHAPE_KEY_SYMBOL;
   const char *key = is_sym ? NULL : prop->key.interned;
   ant_offset_t klen = is_sym ? 0 : (ant_offset_t)intern_length(key);

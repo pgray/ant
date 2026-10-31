@@ -47,7 +47,7 @@ static ant_value_t set_commonjs_globals(ant_t *js, const char *tag) {
   else snprintf(path, sizeof(path), "%s", tag);
 
   GC_ROOT_SAVE(mark, js);
-  ant_value_t module = esm_create_cjs_module(js, path, js_mkundef());
+  ant_value_t module = esm_create_cjs_module(js, path, Ant_Value_Undefined);
   GC_ROOT_PIN(js, module);
 
   ant_value_t result = module;
@@ -113,7 +113,7 @@ int ant_entry_eval(
       return EXIT_FAILURE;
     }
     process_report_uncaught_exception(js);
-    result = js_mkundef();
+    result = Ant_Value_Undefined;
   }
 
   js_run_event_loop(js);
@@ -180,7 +180,7 @@ int ant_entry_stdin(ant_t *js, bool print, ant_input_mode_t mode, bool inspect) 
 }
 
 static void set_module_globals(ant_t *js, const char *filename) {
-  if (esm_is_url(filename)) js_set_global_builtin(js, "__dirname", js_mkundef());
+  if (esm_is_url(filename)) js_set_global_builtin(js, "__dirname", Ant_Value_Undefined);
   else {
     char *path = strdup(filename);
     char *dir = dirname(path);

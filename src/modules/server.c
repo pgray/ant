@@ -164,7 +164,7 @@ static ant_value_t server_mkreqfun(
   ant_cfunc_t fn,
   server_request_t *req
 ) {
-  ant_value_t func = js_heavy_mkfun(js, fn, js_mkundef());
+  ant_value_t func = js_heavy_mkfun(js, fn, Ant_Value_Undefined);
   js_set_native(func, req, SERVER_REQUEST_NATIVE_TAG);
   return func;
 }
@@ -272,11 +272,11 @@ static void server_request_reset(server_request_t *req) {
     .server = server,
     .conn_state = conn_state,
     .conn = conn_state ? conn_state->conn : NULL,
-    .request_obj = js_mkundef(),
-    .response_obj = js_mkundef(),
-    .response_promise = js_mkundef(),
-    .response_reader = js_mkundef(),
-    .response_read_promise = js_mkundef(),
+    .request_obj = Ant_Value_Undefined,
+    .response_obj = Ant_Value_Undefined,
+    .response_promise = Ant_Value_Undefined,
+    .response_reader = Ant_Value_Undefined,
+    .response_read_promise = Ant_Value_Undefined,
     .raw_headers = NULL,
   };
 }
@@ -383,7 +383,7 @@ static void stop_waiters_resolve(server_runtime_t *server) {
 
   while (waiter) {
     stop_waiter_t *next = waiter->next;
-    js_resolve_promise(server->js, waiter->promise, js_mkundef());
+    js_resolve_promise(server->js, waiter->promise, Ant_Value_Undefined);
     free(waiter);
     waiter = next;
   }
@@ -563,7 +563,7 @@ static ant_value_t server_make_chunk(ant_t *js, const char *data, size_t len) {
 static ant_value_t server_sse_enqueue(ant_t *js, server_sse_state_t *state, char *data, size_t len) {
   if (!state || state->closed) {
     free(data);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
   ant_value_t chunk = server_make_chunk(js, data, len);
   free(data);
@@ -573,16 +573,16 @@ static ant_value_t server_sse_enqueue(ant_t *js, server_sse_state_t *state, char
 
 static ant_value_t server_sse_send(ant_params_t) {
   server_sse_state_t *state = (server_sse_state_t *)js_get_native(call_func, SERVER_SSE_NATIVE_TAG);
-  ant_value_t input = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t input = nargs > 0 ? args[0] : Ant_Value_Undefined;
   
   ant_value_t data_v = input;
-  ant_value_t event_v = js_mkundef();
-  ant_value_t id_v = js_mkundef();
-  ant_value_t retry_v = js_mkundef();
+  ant_value_t event_v = Ant_Value_Undefined;
+  ant_value_t id_v = Ant_Value_Undefined;
+  ant_value_t retry_v = Ant_Value_Undefined;
   ant_value_t data_s = 0;
-  ant_value_t event_s = js_mkundef();
-  ant_value_t id_s = js_mkundef();
-  ant_value_t retry_s = js_mkundef();
+  ant_value_t event_s = Ant_Value_Undefined;
+  ant_value_t id_s = Ant_Value_Undefined;
+  ant_value_t retry_s = Ant_Value_Undefined;
   
   const char *data = "";
   const char *event = NULL;
@@ -591,7 +591,7 @@ static ant_value_t server_sse_send(ant_params_t) {
   size_t out_len = 0;
   char *out = NULL;
 
-  if (!state || state->closed) return js_mkundef();
+  if (!state || state->closed) return Ant_Value_Undefined;
   if (is_object_type(input)) {
     data_v = js_get(js, input, "data");
     event_v = js_get(js, input, "event");
@@ -635,7 +635,7 @@ static ant_value_t server_sse_comment(ant_params_t) {
   size_t out_len = 0;
   char *out = NULL;
 
-  if (!state || state->closed) return js_mkundef();
+  if (!state || state->closed) return Ant_Value_Undefined;
   if (is_err(text_v)) return text_v;
   text = js_getstr(js, text_v, NULL);
   out = ant_sse_format_comment(text, &out_len);
@@ -645,10 +645,10 @@ static ant_value_t server_sse_comment(ant_params_t) {
 
 static ant_value_t server_sse_close(ant_params_t) {
   server_sse_state_t *state = (server_sse_state_t *)js_get_native(call_func, SERVER_SSE_NATIVE_TAG);
-  if (!state || state->closed) return js_mkundef();
+  if (!state || state->closed) return Ant_Value_Undefined;
   state->closed = true;
   rs_controller_close(js, state->controller_obj);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t server_event_source(ant_params_t) {
@@ -661,7 +661,7 @@ static ant_value_t server_event_source(ant_params_t) {
 
   if (!state) return Ant_Error_CreateOutOfMemory(js);
 
-  stream = rs_create_stream(js, js_mkundef(), js_mkundef(), 1);
+  stream = rs_create_stream(js, Ant_Value_Undefined, Ant_Value_Undefined, 1);
   if (is_err(stream)) { free(state); return stream; }
   controller = rs_stream_controller(js, stream);
   if (!is_object_type(controller)) { free(state); return js_mkerr_typed(js, JS_ERR_TYPE, "Failed to create EventSource stream"); }
@@ -712,16 +712,16 @@ static ant_value_t server_upgrade_websocket_protocol(
   const char *offered = NULL;
 
   *out = NULL;
-  if (!is_object_type(options)) return js_mkundef();
+  if (!is_object_type(options)) return Ant_Value_Undefined;
 
   protocol_v = js_get(js, options, "protocol");
-  if (vtype(protocol_v) == kTypeUndefined || vtype(protocol_v) == kTypeNull) return js_mkundef();
+  if (vtype(protocol_v) == kTypeUndefined || vtype(protocol_v) == kTypeNull) return Ant_Value_Undefined;
 
   protocol_s = js_tostring_val(js, protocol_v);
   if (is_err(protocol_s)) return protocol_s;
 
   protocol = js_getstr(js, protocol_s, NULL);
-  if (!protocol || !*protocol) return js_mkundef();
+  if (!protocol || !*protocol) return Ant_Value_Undefined;
 
   offered = ant_ws_find_header(request_headers, "sec-websocket-protocol");
   if (!ant_ws_header_contains_token(offered, protocol))
@@ -729,15 +729,15 @@ static ant_value_t server_upgrade_websocket_protocol(
 
   *out = strdup(protocol);
   if (!*out) return Ant_Error_CreateOutOfMemory(js);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t server_upgrade_websocket(ant_params_t) {
   server_runtime_t *server = server_current_runtime(js, call_func);
   server_request_t *req = NULL;
   
-  ant_value_t request_obj = nargs > 0 ? args[0] : js_mkundef();
-  ant_value_t options_obj = nargs > 1 ? args[1] : js_mkundef();
+  ant_value_t request_obj = nargs > 0 ? args[0] : Ant_Value_Undefined;
+  ant_value_t options_obj = nargs > 1 ? args[1] : Ant_Value_Undefined;
   
   const ant_http_header_t *request_headers = NULL;
   const char *key = NULL;
@@ -815,7 +815,7 @@ static ant_value_t server_upgrade_websocket(ant_params_t) {
 static ant_value_t server_abort_signal_task(ant_params_t) {
   ant_value_t payload = js_get_slot(call_func, SLOT_DATA);
   ant_value_t signal = 0; ant_value_t reason = 0;
-  if (vtype(payload) != kTypeObject) return js_mkundef();
+  if (vtype(payload) != kTypeObject) return Ant_Value_Undefined;
 
   signal = js_get(js, payload, "signal");
   reason = js_get(js, payload, "reason");
@@ -823,7 +823,7 @@ static ant_value_t server_abort_signal_task(ant_params_t) {
   if (abort_signal_is_signal(signal) && !abort_signal_is_aborted(signal))
     signal_do_abort(js, signal, reason);
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void server_queue_abort_signal(ant_t *js, ant_value_t signal, ant_value_t reason) {
@@ -1195,11 +1195,11 @@ static void server_finish_with_response(server_request_t *req, ant_value_t respo
 
 static ant_value_t server_on_response_reject(ant_params_t) {
   server_request_t *req = server_current_request(js, call_func);
-  ant_value_t reason = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t reason = (nargs > 0) ? args[0] : Ant_Value_Undefined;
   const char *msg = NULL;
 
-  if (!req) return js_mkundef();
-  req->response_promise = js_mkundef();
+  if (!req) return Ant_Value_Undefined;
+  req->response_promise = Ant_Value_Undefined;
 
   if (req->conn && !ant_conn_is_closing(req->conn)) {
     msg = js_str(js, reason);
@@ -1207,15 +1207,15 @@ static ant_value_t server_on_response_reject(ant_params_t) {
   }
 
   server_request_release(req);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t server_on_response_fulfill(ant_params_t) {
   server_request_t *req = server_current_request(js, call_func);
-  ant_value_t value = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t value = (nargs > 0) ? args[0] : Ant_Value_Undefined;
 
-  if (!req) return js_mkundef();
-  req->response_promise = js_mkundef();
+  if (!req) return Ant_Value_Undefined;
+  req->response_promise = Ant_Value_Undefined;
 
   if (!response_get_data(value)) {
     if (req->conn && !ant_conn_is_closing(req->conn))
@@ -1223,7 +1223,7 @@ static ant_value_t server_on_response_fulfill(ant_params_t) {
   } else if (req->conn && !ant_conn_is_closing(req->conn)) server_finish_with_response(req, value);
 
   server_request_release(req);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void server_handle_fetch_result(server_request_t *req, ant_value_t result) {
@@ -1257,18 +1257,18 @@ static void server_handle_fetch_result(server_request_t *req, ant_value_t result
 
 static ant_value_t server_stream_read_reject(ant_params_t) {
   server_request_t *req = server_current_request(js, call_func);
-  if (!req) return js_mkundef();
+  if (!req) return Ant_Value_Undefined;
   
-  req->response_read_promise = js_mkundef();
+  req->response_read_promise = Ant_Value_Undefined;
   server_queue_final_chunk(req, SERVER_WRITE_CLOSE_CLIENT);
   server_request_release(req);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t server_stream_read_fulfill(ant_params_t) {
   server_request_t *req = server_current_request(js, call_func);
-  ant_value_t result = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t result = (nargs > 0) ? args[0] : Ant_Value_Undefined;
   
   ant_value_t done = 0;
   ant_value_t value = 0;
@@ -1280,16 +1280,16 @@ static ant_value_t server_stream_read_fulfill(ant_params_t) {
   char *out = NULL;
   size_t out_len = 0;
 
-  if (!req) return js_mkundef();
-  req->response_read_promise = js_mkundef();
+  if (!req) return Ant_Value_Undefined;
+  req->response_read_promise = Ant_Value_Undefined;
 
   if (!req->conn || ant_conn_is_closing(req->conn)) {
     server_request_release(req);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   done = js_get(js, result, "done");
-  if (done == js_true) {
+  if (done == Ant_Value_True) {
     ant_conn_set_timeout_ms(req->conn, req->server->idle_timeout_ms);
     server_queue_final_chunk(
       req, req->keep_alive 
@@ -1298,7 +1298,7 @@ static ant_value_t server_stream_read_fulfill(ant_params_t) {
     );
     
     server_request_release(req);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   value = js_get(js, result, "value");
@@ -1307,7 +1307,7 @@ static ant_value_t server_stream_read_fulfill(ant_params_t) {
     server_cancel_response_body(req, "Invalid response body chunk");
     server_queue_final_chunk(req, SERVER_WRITE_CLOSE_CLIENT);
     server_request_release(req);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
   ant_inspector_network_append_response_body(req->network_request_id, chunk, chunk_len);
 
@@ -1316,7 +1316,7 @@ static ant_value_t server_stream_read_fulfill(ant_params_t) {
     ant_http1_buffer_free(&buf);
     ant_conn_close(req->conn);
     server_request_release(req);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   out = ant_http1_buffer_take(&buf, &out_len);
@@ -1325,7 +1325,7 @@ static ant_value_t server_stream_read_fulfill(ant_params_t) {
   server_queue_write(req->conn, req, out, out_len, SERVER_WRITE_STREAM_READ);
   server_request_release(req);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void server_start_stream_read(server_request_t *req) {
@@ -1354,11 +1354,11 @@ static bool server_request_ensure_reader(server_request_t *req) {
   if (vtype(req->response_reader) != kTypeUndefined) return true;
 
   js = req->server->js;
-  req->response_reader = rs_reader_create(js, js_get_slot(req->response_obj, SLOT_RESPONSE_BODY_STREAM), js_mkundef());
+  req->response_reader = rs_reader_create(js, js_get_slot(req->response_obj, SLOT_RESPONSE_BODY_STREAM), Ant_Value_Undefined);
 
   if (is_err(req->response_reader)) {
     js_take_thrown(js, req->response_reader);
-    req->response_reader = js_mkundef();
+    req->response_reader = Ant_Value_Undefined;
     return false;
   }
 
@@ -1442,9 +1442,9 @@ static ant_value_t server_request_ip(ant_params_t) {
   server_request_t *req = NULL;
   ant_value_t out = 0;
 
-  if (!server || nargs < 1) return js_mknull();
+  if (!server || nargs < 1) return Ant_Value_Null;
   req = server_find_request(server, args[0]);
-  if (!req || !req->conn || !ant_conn_has_remote_addr(req->conn)) return js_mknull();
+  if (!req || !req->conn || !ant_conn_has_remote_addr(req->conn)) return Ant_Value_Null;
 
   out = Ant_Object_CreateBare(js);
   js_set(js, out, "address", js_mkstr(js, ant_conn_remote_addr(req->conn), strlen(ant_conn_remote_addr(req->conn))));
@@ -1457,14 +1457,14 @@ static ant_value_t server_timeout(ant_params_t) {
   server_request_t *req = NULL;
   int timeout = 0;
 
-  if (!server || nargs < 2) return js_mkundef();
+  if (!server || nargs < 2) return Ant_Value_Undefined;
   req = server_find_request(server, args[0]);
-  if (!req || !req->conn) return js_mkundef();
+  if (!req || !req->conn) return Ant_Value_Undefined;
 
   timeout = (int)Ant_Value_AsNumberUnchecked(args[1]);
   ant_conn_set_timeout_ms(req->conn, (uint64_t)timeout * 1000ULL);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t server_stop(ant_params_t) {
@@ -1474,7 +1474,7 @@ static ant_value_t server_stop(ant_params_t) {
   bool force = (nargs > 0 && js_truthy(js, args[0]));
 
   if (!server) {
-    js_resolve_promise(js, promise, js_mkundef());
+    js_resolve_promise(js, promise, Ant_Value_Undefined);
     return promise;
   }
 
@@ -1506,7 +1506,7 @@ static ant_value_t server_reload(ant_params_t) {
   server->export_obj = args[0];
   server->fetch_fn = fetch;
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void server_process_client_request(
@@ -1661,7 +1661,7 @@ static void server_on_conn_close(ant_conn_t *conn, void *user_data) {
     cs->conn = NULL;
     if (is_object_type(cs->websocket_obj)) {
       ant_websocket_server_on_close(server ? server->js : NULL, cs->websocket_obj);
-      cs->websocket_obj = js_mkundef();
+      cs->websocket_obj = Ant_Value_Undefined;
     } else ant_http1_conn_parser_free(&cs->parser);
     
     if (!uv_is_closing((uv_handle_t *)&cs->drain_timer))
@@ -1734,7 +1734,7 @@ static void server_on_accept(ant_listener_t *listener, ant_conn_t *conn, void *u
 
   cs->server = server;
   cs->conn = conn;
-  cs->websocket_obj = js_mkundef();
+  cs->websocket_obj = Ant_Value_Undefined;
   cs->drain_timer_closed = true;
   cs->request.server = server;
   cs->request.conn_state = cs;
@@ -1835,7 +1835,7 @@ int server_maybe_start_from_export(ant_t *js, ant_value_t default_export) {
 
   server_result = server_start_from_export(js, default_export);
   if (is_err(server_result)) {
-    print_error_value(js, server_result, js_mkundef(), NULL);
+    print_error_value(js, server_result, Ant_Value_Undefined, NULL);
     return EXIT_FAILURE;
   }
 

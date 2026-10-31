@@ -61,7 +61,7 @@ ant_value_t make_array_iterator(ant_t *js, ant_value_t array, array_iter_kind_t 
 
 static inline ant_value_t js_iter_next_result(ant_t *js, ant_value_t call_this, js_iter_advance_fn advance) {
   iterator_t it = { .iterator = call_this };
-  ant_value_t value = js_mkundef();
+  ant_value_t value = Ant_Value_Undefined;
   bool has_value = advance(js, &it, &value);
   return js_iter_result(js, has_value, value);
 }

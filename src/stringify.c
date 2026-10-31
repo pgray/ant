@@ -232,7 +232,7 @@ static ant_value_t get_obj_ctor(ant_t *js, ant_value_t obj) {
   ant_value_t ctor = get_slot(obj, SLOT_CTOR);
   if (vtype(ctor) == kTypeFunction) return ctor;
   ant_value_t proto = get_slot(obj, SLOT_PROTO);
-  if (vtype(proto) != kTypeObject) return js_mkundef();
+  if (vtype(proto) != kTypeObject) return Ant_Value_Undefined;
   return lkp_interned_val(js, proto, js->intern.constructor);
 }
 
@@ -352,7 +352,7 @@ static void arr_for_each_entry(ant_t *js, ant_value_t obj, arr_entry_fn fn, void
     
     sparse[sparse_len++] = (arr_sparse_entry_t){
       (ant_offset_t)idx,
-      i < ptr->prop_count ? ant_object_prop_get_unchecked(ptr, i) : js_mkundef(),
+      i < ptr->prop_count ? ant_object_prop_get_unchecked(ptr, i) : Ant_Value_Undefined,
       arr_accessor_labels[(prop->has_getter ? 1 : 0) | (prop->has_setter ? 2 : 0)],
     };
   }
@@ -369,12 +369,12 @@ static void arr_for_each_entry(ant_t *js, ant_value_t obj, arr_entry_fn fn, void
     const char *accessor = NULL;
     if (pos < iter_len && doff) value = dense_get(doff, pos);
     if (is_empty_slot(value) && k < sparse_len && sparse[k].index == pos) {
-      value = sparse[k].accessor ? js_mkundef() : sparse[k].value;
+      value = sparse[k].accessor ? Ant_Value_Undefined : sparse[k].value;
       accessor = sparse[k].accessor;
     }
     
     if (!is_empty_slot(value)) {
-      if (holes && !fn(js, ctx, pos - holes, holes, js_mkundef(), NULL)) goto done;
+      if (holes && !fn(js, ctx, pos - holes, holes, Ant_Value_Undefined, NULL)) goto done;
       holes = 0;
       if (!fn(js, ctx, pos, 0, value, accessor)) goto done;
       pos++;
@@ -387,7 +387,7 @@ static void arr_for_each_entry(ant_t *js, ant_value_t obj, arr_entry_fn fn, void
     pos = next;
   }
   
-  if (holes) fn(js, ctx, length - holes, holes, js_mkundef(), NULL);
+  if (holes) fn(js, ctx, length - holes, holes, Ant_Value_Undefined, NULL);
 
 done:
   free(sparse);
@@ -505,7 +505,7 @@ static size_t strarr_body(ant_t *js, ant_value_t obj, char *buf, size_t len) {
       if (printed_first) n += cpy(buf + n, Ant_Remaining(n, len), inline_mode ? ", " : ",\n", 2);
       if (!inline_mode) n += add_indent(buf + n, Ant_Remaining(n, len), js->stringify->indent);
       
-      ant_value_t val = (i < ptr->prop_count) ? ant_object_prop_get_unchecked(ptr, i) : js_mkundef();
+      ant_value_t val = (i < ptr->prop_count) ? ant_object_prop_get_unchecked(ptr, i) : Ant_Value_Undefined;
       if (arguments && is_array_index(key, klen)) {
         n += (size_t) snprintf(buf + n, Ant_Remaining(n, len), "'%.*s': ", (int)klen, key);
         n += tostr(js, val, buf + n, Ant_Remaining(n, len));
@@ -612,17 +612,17 @@ static ant_value_t strobj_inspect_tag(ant_t *js, ant_value_t obj) {
   
   for (int hops = 0; is_object_type(cur) && !is_proxy(cur) && hops < 64; hops++) {
     if (lookup_symbol_prop_meta(js, cur, sym_off, &meta)) {
-      if (cur == obj && meta.enumerable) return js_mkundef();
+      if (cur == obj && meta.enumerable) return Ant_Value_Undefined;
       if (!meta.has_getter) {
         ant_prop_loc_t loc = lkp_sym(cur, sym_off);
-        return loc.obj ? js_prop_load(loc) : js_mkundef();
+        return loc.obj ? js_prop_load(loc) : Ant_Value_Undefined;
       }
       
       GC_ROOT_SAVE(mark, js);
       ant_value_t saved = Ant_Exception_Peek(js);
       GC_ROOT_PIN(js, saved);
       ant_value_t tag = js_call_getter(js, obj, meta.getter);
-      if (is_err(tag) || Ant_Exception_Pending(js)) tag = js_mkundef();
+      if (is_err(tag) || Ant_Exception_Pending(js)) tag = Ant_Value_Undefined;
       Ant_Exception_Set(js, saved);
       GC_ROOT_RESTORE(js, mark);
       return tag;
@@ -630,7 +630,7 @@ static ant_value_t strobj_inspect_tag(ant_t *js, ant_value_t obj) {
     cur = js_get_proto(js, cur);
   }
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static size_t strobj_trailing_props(ant_t *js, ant_value_t obj, char *buf, size_t len, size_t n) {
@@ -674,7 +674,7 @@ static size_t strregexp(ant_t *js, ant_value_t obj, char *buf, size_t len) {
 }
 
 static size_t strobj_body(ant_t *js, ant_value_t obj, char *buf, size_t len, size_t n) {
-  if (get_slot(obj, SLOT_ERROR_BRAND) == js_true || vtype(get_slot(obj, SLOT_ERR_TYPE)) == kTypeNumber)
+  if (get_slot(obj, SLOT_ERROR_BRAND) == Ant_Value_True || vtype(get_slot(obj, SLOT_ERR_TYPE)) == kTypeNumber)
     return strobj_error(js, obj, buf, len, n);
   if (is_date_instance(obj)) return strobj_trailing_props(js, obj, buf, len, n + strdate(js, obj, buf + n, Ant_Remaining(n, len)));
   if (js_obj_ptr(obj)->flags.regexp_brand) return strobj_trailing_props(js, obj, buf, len, n + strregexp(js, obj, buf + n, Ant_Remaining(n, len)));
@@ -704,10 +704,10 @@ static size_t strobj_body(ant_t *js, ant_value_t obj, char *buf, size_t len, siz
 
 static ant_value_t strobj_call_custom_inspect(ant_t *js, ant_value_t obj) {
   ant_value_t inspect_sym = js->sym.inspect_sym;
-  if (vtype(inspect_sym) != kTypeSymbol) return js_mkundef();
+  if (vtype(inspect_sym) != kTypeSymbol) return Ant_Value_Undefined;
 
   ant_value_t inspect_fn = lkp_sym_proto_val(js, obj, (ant_offset_t)vdata(inspect_sym));
-  if (!is_callable(inspect_fn)) return js_mkundef();
+  if (!is_callable(inspect_fn)) return Ant_Value_Undefined;
 
   GC_ROOT_SAVE(exception_mark, js);
   ant_value_t saved = Ant_Exception_Peek(js);
@@ -719,7 +719,7 @@ static ant_value_t strobj_call_custom_inspect(ant_t *js, ant_value_t obj) {
   if (is_err(result) || Ant_Exception_Pending(js) || vtype(result) != kTypeString) {
     Ant_Exception_Set(js, saved);
     GC_ROOT_RESTORE(js, exception_mark);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   Ant_Exception_Set(js, saved);
@@ -899,7 +899,7 @@ static size_t strfunc(ant_t *js, ant_value_t value, char *buf, size_t len) {
     (closure->func && closure->func->is_class_ctor))
   ) return strclass(js, value, name, name_len, buf, len);
   
-  bool is_async = (async_slot == js_true);
+  bool is_async = (async_slot == Ant_Value_True);
   bool has_code = func_has_code(code_slot);
   bool is_generator = closure != NULL && closure->func != NULL && closure->func->is_generator;
   

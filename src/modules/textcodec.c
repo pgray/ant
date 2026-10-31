@@ -173,12 +173,12 @@ static ant_value_t js_textdecoder_get_encoding(ant_params_t) {
 
 static ant_value_t js_textdecoder_get_fatal(ant_params_t) {
   td_state_t *st = td_get_state(call_this);
-  return (st && st->fatal) ? js_true : js_false;
+  return (st && st->fatal) ? Ant_Value_True : Ant_Value_False;
 }
 
 static ant_value_t js_textdecoder_get_ignore_bom(ant_params_t) {
   td_state_t *st = td_get_state(call_this);
-  return (st && st->ignore_bom) ? js_true : js_false;
+  return (st && st->ignore_bom) ? Ant_Value_True : Ant_Value_False;
 }
 
 static inline uint16_t u16_read(const uint8_t *p, bool be) {

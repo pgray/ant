@@ -185,11 +185,11 @@ static inline int32_t ffi_to_int32(double number) {
 static inline ant_value_t ffi_to_number(ant_t *js, ant_value_t value, double *out) {
   if (vtype(value) == kTypeNumber) {
     *out = Ant_Value_AsNumberUnchecked(value);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   *out = js_to_number(js, value);
-  return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : js_mkundef();
+  return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : Ant_Value_Undefined;
 }
 
 static ffi_value_type_id_t ffi_type_from_value(ant_t *js, ant_value_t value) {
@@ -265,7 +265,7 @@ static ant_value_t ffi_parse_signature(ant_t *js, ant_value_t value, bool for_ca
     return FFI_ERR_RANGE("FFI signatures support at most %zu arguments", FFI_MAX_ARGS);
 
   size_t count = (size_t)len;
-  if (count == 0) return js_mkundef();
+  if (count == 0) return Ant_Value_Undefined;
 
   out->ffi_arg_types = malloc(count * (sizeof(*out->ffi_arg_types) + sizeof(*out->args)));
   if (!out->ffi_arg_types) return Ant_Error_CreateOutOfMemory(js);
@@ -287,7 +287,7 @@ static ant_value_t ffi_parse_signature(ant_t *js, ant_value_t value, bool for_ca
     out->arg_count = i + 1;
   }
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static bool ffi_prep_signature(ffi_cif *cif, ffi_signature_t *signature) {
@@ -419,12 +419,12 @@ static ant_value_t ffi_pointer_new(ant_t *js, void *ptr, size_t size, unsigned f
 }
 
 static ant_value_t ffi_make_pointer_or_null(ant_t *js, void *ptr) {
-  return ptr ? ffi_pointer_new(js, ptr, 0, 0) : js_mknull();
+  return ptr ? ffi_pointer_new(js, ptr, 0, 0) : Ant_Value_Null;
 }
 
 static ant_value_t ffi_pointer_from_js(ant_t *js, ant_value_t value, void **out) {
   *out = NULL;
-  if (ffi_is_nullish(value)) return js_mkundef();
+  if (ffi_is_nullish(value)) return Ant_Value_Undefined;
 
   ffi_pointer_handle_t *pointer = ffi_pointer_data(value);
   if (pointer) {
@@ -436,7 +436,7 @@ static ant_value_t ffi_pointer_from_js(ant_t *js, ant_value_t value, void **out)
     if (region->sourced && pointer->byte_offset > region->size) return FFI_ERR_RANGE("Pointer offset is out of bounds");
 
     *out = ffi_pointer_address_raw(pointer);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   ffi_callback_handle_t *callback = ffi_callback_data(value);
@@ -444,7 +444,7 @@ static ant_value_t ffi_pointer_from_js(ant_t *js, ant_value_t value, void **out)
   if (callback->closed) return FFI_ERR_TYPE("FFICallback has been closed");
 
   *out = callback->code_ptr;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t ffi_pointer_to_c(ant_t *js, ant_value_t value, void *dst) {
@@ -470,7 +470,7 @@ static ant_value_t ffi_copy_js_string(ant_t *js, ant_value_t value, char **out, 
   *out = copy;
   if (len_out) *len_out = len;
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 #define FFI_STORE_NUM(id, ctype, convert)               \
@@ -504,14 +504,14 @@ static ant_value_t ffi_value_to_c(ant_t *js, ant_value_t value, ffi_value_type_i
 #define FFI_FROM_C_WIDE            FFI_FROM_C_INT
 #define FFI_FROM_C_REAL            FFI_FROM_C_INT
 #define FFI_FROM_C_PTR(id, ctype)  case FFI_VALUE_##id: { FFI_LOAD(ctype); return ffi_make_pointer_or_null(js, v_); }
-#define FFI_FROM_C_STR(id, ctype)  case FFI_VALUE_##id: { FFI_LOAD(ctype); return v_ ? js_mkstr(js, v_, strlen(v_)) : js_mknull(); }
+#define FFI_FROM_C_STR(id, ctype)  case FFI_VALUE_##id: { FFI_LOAD(ctype); return v_ ? js_mkstr(js, v_, strlen(v_)) : Ant_Value_Null; }
 #define FFI_FROM_C_NONE(id, ctype)
 
 static ant_value_t ffi_value_from_c(ant_t *js, const void *src, ffi_value_type_id_t type) {
   switch (type) {
 #define ANT_FFI_TYPE(id, key, name, ffi, ctype, kind) FFI_FROM_C_##kind(id, ctype)
 #include "ffi/types.h"
-    default: return js_mkundef();
+    default: return Ant_Value_Undefined;
   }
 }
 
@@ -521,13 +521,13 @@ static ant_value_t ffi_pointer_check(ant_t *js, const ffi_pointer_handle_t *hand
   if (region->freed) return FFI_ERR_TYPE("FFIPointer has been freed");
   if (!region->ptr && region->sourced) return FFI_ERR_TYPE("FFIPointer source buffer is detached");
   if (!region->ptr) return FFI_ERR_TYPE("Cannot %s through a null pointer", op);
-  if (!region->size_known) return js_mkundef();
+  if (!region->size_known) return Ant_Value_Undefined;
 
   if (handle->byte_offset > region->size) return FFI_ERR_RANGE("Pointer offset is out of bounds");
   if (size > region->size - handle->byte_offset)
     return FFI_ERR_RANGE("FFIPointer %s would exceed the tracked allocation", op);
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t ffi_pointer_load(ant_t *js, const ffi_pointer_handle_t *handle, ffi_value_type_id_t type) {
@@ -655,7 +655,7 @@ static ant_value_t ffi_frame_arg(ant_t *js, ffi_frame_t *frame, size_t i, ant_va
   if (type == FFI_VALUE_POINTER || (type == FFI_VALUE_STRING && (ffi_pointer_data(value) || ffi_callback_data(value)))) {
     frame->avalues[i] = NULL;
     frame->pending++;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (type != FFI_VALUE_STRING) return ffi_value_to_c(js, value, type, dst);
@@ -708,7 +708,7 @@ ant_value_t ffi_function_call(ant_params_t) {
   ffi_frame_t frame;
   if (!ffi_frame_init(&frame, argc)) return Ant_Error_CreateOutOfMemory(js);
 
-  ant_value_t out = js_mkundef();
+  ant_value_t out = Ant_Value_Undefined;
   for (size_t i = 0; i < argc && !is_err(out); i++) {
     ffi_value_type_id_t type = i < signature->arg_count ? signature->args[i] : ffi_infer_variadic_type(args[i]);
     out = ffi_frame_arg(js, &frame, i, args[i], type);
@@ -746,7 +746,7 @@ static void ffi_callback_trampoline(ffi_cif *cif, void *ret, void **args, void *
   memset(ret, 0, ffi_type_table[signature->returns].size);
 
   if (!pthread_equal(pthread_self(), callback->owner_thread))
-    FFI_CALLBACK_BAIL(js_mkundef(), "invoked off the JS thread");
+    FFI_CALLBACK_BAIL(Ant_Value_Undefined, "invoked off the JS thread");
 
   ant_value_t js_args[FFI_MAX_ARGS];
   for (size_t i = 0; i < signature->arg_count; i++) {
@@ -755,9 +755,9 @@ static void ffi_callback_trampoline(ffi_cif *cif, void *ret, void **args, void *
   }
 
   ant_value_t fn = js_get_slot(callback->owner_obj, SLOT_DATA);
-  if (!is_callable(fn)) FFI_CALLBACK_BAIL(js_mkundef(), "target is no longer callable");
+  if (!is_callable(fn)) FFI_CALLBACK_BAIL(Ant_Value_Undefined, "target is no longer callable");
 
-  ant_value_t result = sv_vm_call(js->vm, js, fn, js_mkundef(), js_args, (int)signature->arg_count, NULL, js_mkundef());
+  ant_value_t result = sv_vm_call(js->vm, js, fn, Ant_Value_Undefined, js_args, (int)signature->arg_count, NULL, Ant_Value_Undefined);
   if (is_err(result)) FFI_CALLBACK_BAIL(result, "threw an exception");
   if (signature->returns == FFI_VALUE_VOID) return;
 
@@ -870,7 +870,7 @@ ant_value_t ffi_library_call(ant_params_t) {
   ant_value_t fn = js_get(js, call_this, js_getstr(js, args[0], NULL));
   if (!is_callable(fn)) return FFI_ERR_TYPE("Symbol '%s' has not been defined", js_getstr(js, args[0], NULL));
 
-  return sv_vm_call(js->vm, js, fn, js_mkundef(), args + 1, nargs - 1, NULL, js_mkundef());
+  return sv_vm_call(js->vm, js, fn, Ant_Value_Undefined, args + 1, nargs - 1, NULL, Ant_Value_Undefined);
 }
 
 ant_value_t ffi_function_address(ant_params_t) {
@@ -892,7 +892,7 @@ static ant_value_t ffi_alloc_memory(ant_params_t) {
 }
 
 static ant_value_t ffi_pointer_value(ant_params_t) {
-  ant_value_t value = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t value = nargs > 0 ? args[0] : Ant_Value_Undefined;
   if (ffi_is_nullish(value)) return ffi_pointer_new(js, NULL, 0, 0);
   if (ffi_pointer_data(value)) return value;
 

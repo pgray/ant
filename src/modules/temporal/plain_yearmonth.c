@@ -38,7 +38,7 @@ static bool temporal_plain_yearmonth_from_value(ant_t *js, ant_value_t value, Pl
 static ant_value_t temporal_plain_yearmonth_ctor(ant_params_t) {
   if (vtype(call_new_target) == kTypeUndefined) return temporal_require_new(js, "Temporal.PlainYearMonth");
   int64_t year = 0, month = 0, reference_day = 1;
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   if ((nargs > 0 && vtype(args[0]) == kTypeUndefined) || (nargs > 1 && vtype(args[1]) == kTypeUndefined))
     return js_mkerr_typed(js, JS_ERR_RANGE, "Temporal.PlainYearMonth fields must be finite numbers");
   if (
@@ -47,7 +47,7 @@ static ant_value_t temporal_plain_yearmonth_ctor(ant_params_t) {
   )
     return err;
   AnyCalendarKind calendar;
-  if (!temporal_calendar_identifier_kind(js, nargs > 2 ? args[2] : js_mkundef(), AnyCalendarKind_Iso, &calendar, &err))
+  if (!temporal_calendar_identifier_kind(js, nargs > 2 ? args[2] : Ant_Value_Undefined, AnyCalendarKind_Iso, &calendar, &err))
     return err;
   if (nargs > 3 && !temporal_integer(js, args[3], 1, &reference_day, &err)) return err;
   if (
@@ -65,12 +65,12 @@ static ant_value_t temporal_plain_yearmonth_ctor(ant_params_t) {
 
 static ant_value_t temporal_plain_yearmonth_from(ant_params_t) {
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "Temporal.PlainYearMonth.from requires an argument");
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   ArithmeticOverflow_option overflow = {0};
   if (vtype(args[0]) == kTypeString || js_get_native(args[0], TEMPORAL_PLAIN_YEARMONTH_TAG)) {
     PlainYearMonth *value;
     if (!temporal_plain_yearmonth_from_value(js, args[0], &value, &err)) return err;
-    if (!temporal_overflow_option(js, nargs > 1 ? args[1] : js_mkundef(), &overflow, &err)) {
+    if (!temporal_overflow_option(js, nargs > 1 ? args[1] : Ant_Value_Undefined, &overflow, &err)) {
       temporal_rs_PlainYearMonth_destroy(value);
       return err;
     }
@@ -78,7 +78,7 @@ static ant_value_t temporal_plain_yearmonth_from(ant_params_t) {
   }
   temporal_partial_date_t partial;
   if (!temporal_partial_date(js, args[0], AnyCalendarKind_Iso, &partial, false, true, &err)) return err;
-  if (!temporal_overflow_option(js, nargs > 1 ? args[1] : js_mkundef(), &overflow, &err)) return err;
+  if (!temporal_overflow_option(js, nargs > 1 ? args[1] : Ant_Value_Undefined, &overflow, &err)) return err;
   temporal_rs_PlainYearMonth_from_partial_result result =
     temporal_rs_PlainYearMonth_from_partial(partial.partial, overflow);
   if (!result.is_ok) return temporal_error(js, result.err);
@@ -88,7 +88,7 @@ static ant_value_t temporal_plain_yearmonth_from(ant_params_t) {
 static ant_value_t temporal_plain_yearmonth_compare(ant_params_t) {
   if (nargs < 2) return js_mkerr_typed(js, JS_ERR_TYPE, "Temporal.PlainYearMonth.compare requires two arguments");
   PlainYearMonth *one = NULL, *two = NULL;
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   if (!temporal_plain_yearmonth_from_value(js, args[0], &one, &err)) return err;
   if (!temporal_plain_yearmonth_from_value(js, args[1], &two, &err)) {
     temporal_rs_PlainYearMonth_destroy(one);
@@ -108,7 +108,7 @@ static PlainYearMonth *temporal_plain_yearmonth_this(ant_t *js, ant_value_t call
     static ant_value_t temporal_plain_yearmonth_get_##name(ant_params_t) {                  \
       (void)args;                                                                                                      \
       (void)nargs;                                                                                                     \
-      ant_value_t err = js_mkundef();                                                                                  \
+      ant_value_t err = Ant_Value_Undefined;                                                                                  \
       PlainYearMonth *self = temporal_plain_yearmonth_this(js, call_this, "Temporal.PlainYearMonth.prototype." #name, &err);      \
       return self ? Ant_Value_FromNumber((double)capi(self)) : err;                                                                \
     }
@@ -122,14 +122,14 @@ PLAIN_YEARMONTH_NUMBER_GETTER(months_in_year, temporal_rs_PlainYearMonth_months_
 static ant_value_t temporal_plain_yearmonth_get_calendar_id(ant_params_t) {
   (void)args;
   (void)nargs;
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   PlainYearMonth *self = temporal_plain_yearmonth_this(js, call_this, "Temporal.PlainYearMonth.prototype.calendarId", &err);
   return self ? temporal_calendar_identifier(js, temporal_rs_PlainYearMonth_calendar(self)) : err;
 }
 static ant_value_t temporal_plain_yearmonth_get_month_code(ant_params_t) {
   (void)args;
   (void)nargs;
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   PlainYearMonth *self = temporal_plain_yearmonth_this(js, call_this, "Temporal.PlainYearMonth.prototype.monthCode", &err);
   if (!self) return err;
   DiplomatWrite *write = diplomat_buffer_write_create(4);
@@ -139,36 +139,36 @@ static ant_value_t temporal_plain_yearmonth_get_month_code(ant_params_t) {
 static ant_value_t temporal_plain_yearmonth_get_in_leap_year(ant_params_t) {
   (void)args;
   (void)nargs;
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   PlainYearMonth *self = temporal_plain_yearmonth_this(js, call_this, "Temporal.PlainYearMonth.prototype.inLeapYear", &err);
   return self ? js_bool(temporal_rs_PlainYearMonth_in_leap_year(self)) : err;
 }
 static ant_value_t temporal_plain_yearmonth_get_era(ant_params_t) {
   (void)args;
   (void)nargs;
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   PlainYearMonth *self = temporal_plain_yearmonth_this(js, call_this, "Temporal.PlainYearMonth.prototype.era", &err);
   if (!self) return err;
   DiplomatWrite *write = diplomat_buffer_write_create(8);
   temporal_rs_PlainYearMonth_era(self, write);
   if (diplomat_buffer_write_len(write) == 0) {
     diplomat_buffer_write_destroy(write);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
   return temporal_string_from_write(js, write);
 }
 static ant_value_t temporal_plain_yearmonth_get_era_year(ant_params_t) {
   (void)args;
   (void)nargs;
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   PlainYearMonth *self = temporal_plain_yearmonth_this(js, call_this, "Temporal.PlainYearMonth.prototype.eraYear", &err);
   if (!self) return err;
   temporal_rs_PlainYearMonth_era_year_result result = temporal_rs_PlainYearMonth_era_year(self);
-  return result.is_ok ? Ant_Value_FromNumber(result.ok) : js_mkundef();
+  return result.is_ok ? Ant_Value_FromNumber(result.ok) : Ant_Value_Undefined;
 }
 
 static ant_value_t temporal_plain_yearmonth_binary_duration(ant_native_params_t, ant_value_t call_this, bool subtract) {
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   PlainYearMonth *self = temporal_plain_yearmonth_this(
     js, call_this, subtract ? "Temporal.PlainYearMonth.prototype.subtract" : "Temporal.PlainYearMonth.prototype.add", &err
   );
@@ -177,7 +177,7 @@ static ant_value_t temporal_plain_yearmonth_binary_duration(ant_native_params_t,
   Duration *duration;
   if (!temporal_duration_from_value(js, args[0], &duration, &err)) return err;
   ArithmeticOverflow_option overflow_option = {0};
-  if (!temporal_overflow_option(js, nargs > 1 ? args[1] : js_mkundef(), &overflow_option, &err)) {
+  if (!temporal_overflow_option(js, nargs > 1 ? args[1] : Ant_Value_Undefined, &overflow_option, &err)) {
     temporal_rs_Duration_destroy(duration);
     return err;
   }
@@ -207,7 +207,7 @@ static ant_value_t temporal_plain_yearmonth_subtract(ant_params_t) {
   return temporal_plain_yearmonth_binary_duration(js, args, nargs, call_this, true);
 }
 static ant_value_t temporal_plain_yearmonth_equals(ant_params_t) {
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   PlainYearMonth *self = temporal_plain_yearmonth_this(js, call_this, "Temporal.PlainYearMonth.prototype.equals", &err);
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "PlainYearMonth argument is required");
@@ -218,7 +218,7 @@ static ant_value_t temporal_plain_yearmonth_equals(ant_params_t) {
   return js_bool(equal);
 }
 static ant_value_t temporal_plain_yearmonth_difference(ant_native_params_t, ant_value_t call_this, bool since) {
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   PlainYearMonth *self = temporal_plain_yearmonth_this(
     js, call_this, since ? "Temporal.PlainYearMonth.prototype.since" : "Temporal.PlainYearMonth.prototype.until", &err
   );
@@ -227,7 +227,7 @@ static ant_value_t temporal_plain_yearmonth_difference(ant_native_params_t, ant_
   PlainYearMonth *other;
   if (!temporal_plain_yearmonth_from_value(js, args[0], &other, &err)) return err;
   DifferenceSettings settings;
-  if (!temporal_difference_settings(js, nargs > 1 ? args[1] : js_mkundef(), &settings, &err)) {
+  if (!temporal_difference_settings(js, nargs > 1 ? args[1] : Ant_Value_Undefined, &settings, &err)) {
     temporal_rs_PlainYearMonth_destroy(other);
     return err;
   }
@@ -256,7 +256,7 @@ static ant_value_t temporal_plain_yearmonth_until(ant_params_t) {
   return temporal_plain_yearmonth_difference(js, args, nargs, call_this, false);
 }
 static ant_value_t temporal_plain_yearmonth_with(ant_params_t) {
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   PlainYearMonth *self = temporal_plain_yearmonth_this(js, call_this, "Temporal.PlainYearMonth.prototype.with", &err);
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "Date-like argument is required");
@@ -274,13 +274,13 @@ static ant_value_t temporal_plain_yearmonth_with(ant_params_t) {
   temporal_partial_date_t partial;
   if (!temporal_partial_date_impl(js, args[0], calendar, &partial, false, true, false, &err)) return err;
   ArithmeticOverflow_option overflow = {0};
-  if (!temporal_overflow_option(js, nargs > 1 ? args[1] : js_mkundef(), &overflow, &err)) return err;
+  if (!temporal_overflow_option(js, nargs > 1 ? args[1] : Ant_Value_Undefined, &overflow, &err)) return err;
   temporal_rs_PlainYearMonth_with_result result = temporal_rs_PlainYearMonth_with(self, partial.partial, overflow);
   if (!result.is_ok) return temporal_error(js, result.err);
   return temporal_wrap(js, TEMPORAL_PLAIN_YEARMONTH, result.ok);
 }
 static ant_value_t temporal_plain_yearmonth_to_plain_date(ant_params_t) {
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   PlainYearMonth *self = temporal_plain_yearmonth_this(js, call_this, "Temporal.PlainYearMonth.prototype.toPlainDate", &err);
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "day object is required");
@@ -298,12 +298,12 @@ static ant_value_t temporal_plain_yearmonth_to_plain_date(ant_params_t) {
   return temporal_wrap(js, TEMPORAL_PLAIN_DATE, result.ok);
 }
 static ant_value_t temporal_plain_yearmonth_to_string(ant_params_t) {
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   PlainYearMonth *self = temporal_plain_yearmonth_this(js, call_this, "Temporal.PlainYearMonth.prototype.toString", &err);
   if (!self) return err;
   DiplomatWrite *write = diplomat_buffer_write_create(20);
   temporal_to_string_options_t options;
-  if (!temporal_to_string_options(js, nargs > 0 ? args[0] : js_mkundef(), TEMPORAL_TOSTRING_CALENDAR, &options, &err)) {
+  if (!temporal_to_string_options(js, nargs > 0 ? args[0] : Ant_Value_Undefined, TEMPORAL_TOSTRING_CALENDAR, &options, &err)) {
     diplomat_buffer_write_destroy(write);
     return err;
   }
@@ -313,7 +313,7 @@ static ant_value_t temporal_plain_yearmonth_to_string(ant_params_t) {
 static ant_value_t temporal_plain_yearmonth_to_string_default(ant_params_t) {
   (void)args;
   (void)nargs;
-  return temporal_plain_yearmonth_to_string(js, NULL, 0, js_mkundef(), call_this, call_func);
+  return temporal_plain_yearmonth_to_string(js, NULL, 0, Ant_Value_Undefined, call_this, call_func);
 }
 static ant_value_t temporal_plain_yearmonth_value_of(ant_params_t) {
   (void)args;

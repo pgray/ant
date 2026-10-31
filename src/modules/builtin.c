@@ -42,7 +42,7 @@ static void general_signal_handler(int signum) {
   
   if (js && vtype(handler) != kTypeUndefined) {
     ant_value_t args[] = {Ant_Value_FromNumber(signum)};
-    sv_vm_call(js->vm, js, handler, js_mkundef(), args, 1, NULL, js_mkundef());
+    sv_vm_call(js->vm, js, handler, Ant_Value_Undefined, args, 1, NULL, Ant_Value_Undefined);
   }
   
   exit(0);
@@ -61,7 +61,7 @@ static ant_value_t js_signal(ant_params_t) {
   signal_handlers[signum].handler = args[1];
   signal(signum, general_signal_handler);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 // Ant.raw.stack()
@@ -100,7 +100,7 @@ static ant_value_t js_raw_gc_mark_profile_enable(ant_params_t) {
 
 static ant_value_t js_raw_gc_mark_profile_reset(ant_params_t) {
   gc_func_mark_profile_reset(js);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 // Ant.sleep(seconds)
@@ -108,7 +108,7 @@ static ant_value_t js_sleep(ant_params_t) {
   if (nargs < 1) return js_mkerr(js, "Ant.sleep() requires 1 argument");
   unsigned int seconds = (unsigned int)Ant_Value_AsNumberUnchecked(args[0]);
   sleep(seconds);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 // Ant.msleep(milliseconds)
@@ -118,7 +118,7 @@ static ant_value_t js_msleep(ant_params_t) {
   struct timespec ts = { .tv_sec = ms / 1000, .tv_nsec = (ms % 1000) * 1000000 };
   struct timespec rem;
   while (nanosleep(&ts, &rem) == -1 && errno == EINTR) ts = rem;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 // Ant.usleep(microseconds)
@@ -126,13 +126,13 @@ static ant_value_t js_usleep(ant_params_t) {
   if (nargs < 1) return js_mkerr(js, "Ant.usleep() requires 1 argument");
   useconds_t us = (useconds_t)Ant_Value_AsNumberUnchecked(args[0]);
   usleep(us);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 // Ant.suppressReporting()
 static ant_value_t js_suppress_reporting(ant_params_t) {
   ant_crash_suppress_reporting();
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 // Ant.serve(options)
@@ -330,7 +330,7 @@ static ant_value_t js_stats_fn(ant_params_t) {
 
 static inline ant_value_t match_resolve_arm(ant_t *js, ant_value_t arm, ant_value_t value) {
   if (!is_callable(arm)) return arm;
-  return sv_vm_call(js->vm, js, arm, js_mkundef(), &value, 1, NULL, js_mkundef());
+  return sv_vm_call(js->vm, js, arm, Ant_Value_Undefined, &value, 1, NULL, Ant_Value_Undefined);
 }
 
 static ant_value_t js_match(ant_params_t) {
@@ -340,19 +340,19 @@ static ant_value_t js_match(ant_params_t) {
   ant_value_t arms = args[1];
 
   if (is_callable(arms)) {
-    arms = sv_vm_call(js->vm, js, arms, js_mkundef(), &value, 1, NULL, js_mkundef());
+    arms = sv_vm_call(js->vm, js, arms, Ant_Value_Undefined, &value, 1, NULL, Ant_Value_Undefined);
     if (is_err(arms)) return arms;
   }
 
-  if (!is_object_type(arms)) return js_mkundef();
+  if (!is_object_type(arms)) return Ant_Value_Undefined;
   ant_value_t value_str = js_tostring_val(js, value);
   const char *vs = js_getstr(js, value_str, NULL);
 
   ant_iter_t iter = js_prop_iter_begin(js, arms);
-  ant_value_t guard_arm = js_mkundef();
+  ant_value_t guard_arm = Ant_Value_Undefined;
   
-  ant_value_t key = js_mkundef();
-  ant_value_t arm = js_mkundef();
+  ant_value_t key = Ant_Value_Undefined;
+  ant_value_t arm = Ant_Value_Undefined;
 
   while (js_prop_iter_next_val(&iter, &key, &arm)) {
     if (vtype(key) == kTypeSymbol) continue;
@@ -377,7 +377,7 @@ static ant_value_t js_match(ant_params_t) {
   ant_value_t fallback = js_get_sym(js, arms, js->sym.default_sym);
   if (vtype(fallback) != kTypeUndefined) return match_resolve_arm(js, fallback, value);
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t hl_get_tagged(ant_native_params_t) {
@@ -447,7 +447,7 @@ void init_builtin_module(ant_t *js) {
   js_set(js, ant_obj, "usleep", Ant_Function_Create(js_usleep));
   js_set(js, ant_obj, "suppressReporting", Ant_Function_Create(js_suppress_reporting));
   
-  ant_value_t hl_fn = Ant_Function_CreateWithData(js, js_highlight, "highlight", 1, js_mkundef());
+  ant_value_t hl_fn = Ant_Function_CreateWithData(js, js_highlight, "highlight", 1, Ant_Value_Undefined);
   js_set(js, hl_fn, "render", Ant_Function_Create(js_highlight_render));
   js_set(js, hl_fn, "tags", Ant_Function_Create(js_highlight_tags));
   js_set(js, ant_obj, "highlight", hl_fn);

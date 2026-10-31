@@ -301,5 +301,5 @@ ant_value_t dns_channel_set_servers(ant_t *js, dns_channel_t *channel, ant_value
     return js_mkerr_code(js, JS_ERR_GENERIC, "ERR_DNS_SET_SERVERS_FAILED", message);
   }
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }

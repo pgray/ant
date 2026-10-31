@@ -19,7 +19,7 @@ ant_value_t DesktopNativeIpcReply(ant_params_t) {
                                      payload_length)) {
     return js_mkerr(js, "Chromium is not running for this BrowserWindow");
   }
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static const char *IpcChannelArgument(ant_t *js, ant_value_t *args, int nargs, size_t *length) {
@@ -38,7 +38,7 @@ ant_value_t DesktopIpcMainHandle(ant_params_t) {
   ant_value_t current = js_get(js, state->ipc_handlers, channel);
   if (vtype(current) != kTypeUndefined) { return js_mkerr(js, "an IPC handler is already registered for %s", channel); }
   js_set(js, state->ipc_handlers, channel, args[1]);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t DesktopIpcMainRemoveHandler(ant_params_t) {
@@ -47,8 +47,8 @@ ant_value_t DesktopIpcMainRemoveHandler(ant_params_t) {
   size_t length = 0;
   const char *channel = IpcChannelArgument(js, args, nargs, &length);
   if (!channel || length == 0) { return js_mkerr(js, "ipcMain.removeHandler(channel) requires a non-empty channel"); }
-  js_set(js, state->ipc_handlers, channel, js_mkundef());
-  return js_mkundef();
+  js_set(js, state->ipc_handlers, channel, Ant_Value_Undefined);
+  return Ant_Value_Undefined;
 }
 
 ant_value_t DesktopIpcMainOn(ant_params_t) {
@@ -65,5 +65,5 @@ ant_value_t DesktopIpcMainOn(ant_params_t) {
     js_set(js, state->ipc_listeners, channel, listeners);
   }
   js_arr_push(js, listeners, args[1]);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }

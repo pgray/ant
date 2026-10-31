@@ -204,7 +204,7 @@ static void generator_clear_coro(ant_value_t gen, coroutine_t *coro) {
   generator_data_t *data = generator_data(gen);
   if (data && data->coro == coro) data->coro = NULL;
   if (coro) {
-    coro->owner_gen = js_mkundef();
+    coro->owner_gen = Ant_Value_Undefined;
     coroutine_unhold(coro, CORO_HOLD_GENERATOR);
   }
 }
@@ -234,7 +234,7 @@ void Ant_Generator_SettleYield(ant_t *js, ant_value_t gen, ant_value_t value) {
   ant_value_t out = generator_result(js, false, value);
   GC_ROOT_PIN(js, out);
 
-  coro->async_promise = js_mkundef();
+  coro->async_promise = Ant_Value_Undefined;
   generator_set_state(gen, GEN_SUSPENDED_YIELD);
   js_resolve_promise(js, pending, out);
   js_maybe_drain_microtasks_after_async_settle(js);
@@ -267,7 +267,7 @@ bool generator_resume_pending_request(ant_t *js, coroutine_t *coro, ant_value_t 
     ant_value_t reject_value = js_take_thrown(js, result);
     
     GC_ROOT_PIN(js, reject_value);
-    coro->async_promise = js_mkundef();
+    coro->async_promise = Ant_Value_Undefined;
     generator_set_state(gen, GEN_COMPLETED);
     generator_clear_coro(gen, coro);
     
@@ -294,7 +294,7 @@ bool generator_resume_pending_request(ant_t *js, coroutine_t *coro, ant_value_t 
 
     ant_value_t out = generator_result(js, false, result);
     GC_ROOT_PIN(js, out);
-    coro->async_promise = js_mkundef();
+    coro->async_promise = Ant_Value_Undefined;
     generator_set_state(gen, GEN_SUSPENDED_YIELD);
     
     js_resolve_promise(js, pending, out);
@@ -307,7 +307,7 @@ bool generator_resume_pending_request(ant_t *js, coroutine_t *coro, ant_value_t 
 
   ant_value_t out = generator_result(js, true, result);
   GC_ROOT_PIN(js, out);
-  coro->async_promise = js_mkundef();
+  coro->async_promise = Ant_Value_Undefined;
   
   generator_set_state(gen, GEN_COMPLETED);
   generator_clear_coro(gen, coro);
@@ -358,7 +358,7 @@ static ant_value_t generator_resume_kind_inner(
     
     ant_value_t out = generator_out(
       js, raw_done, true, resume_kind == SV_RESUME_RETURN
-      ? resume_value : js_mkundef()
+      ? resume_value : Ant_Value_Undefined
     );
     
     GC_ROOT_RESTORE(js, root_mark);
@@ -373,7 +373,7 @@ static ant_value_t generator_resume_kind_inner(
     
     ant_value_t out = generator_out(
       js, raw_done, true, resume_kind == SV_RESUME_RETURN
-      ? resume_value : js_mkundef()
+      ? resume_value : Ant_Value_Undefined
     );
     
     GC_ROOT_RESTORE(js, root_mark);
@@ -525,7 +525,7 @@ static ant_value_t generator_next(ant_params_t) {
   if (generator_state(call_this) == GEN_EXECUTING && !generator_is_async(call_this))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Generator is already running");
     
-  ant_value_t resume_value = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t resume_value = nargs > 0 ? args[0] : Ant_Value_Undefined;
   ant_value_t result = generator_resume(js, call_this, resume_value);
   
   if (generator_is_async(call_this) && vtype(result) == kTypePromise) return result;
@@ -540,7 +540,7 @@ static ant_value_t generator_return(ant_params_t) {
   if (state == GEN_EXECUTING && !generator_is_async(call_this))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Generator is already running");
     
-  ant_value_t value = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t value = nargs > 0 ? args[0] : Ant_Value_Undefined;
   ant_value_t result = generator_resume_kind(js, call_this, value, SV_RESUME_RETURN);
   
   if (generator_is_async(call_this) && vtype(result) == kTypePromise) return result;
@@ -555,7 +555,7 @@ static ant_value_t generator_throw(ant_params_t) {
   if (state == GEN_EXECUTING && !generator_is_async(call_this))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Generator is already running");
     
-  ant_value_t value = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t value = nargs > 0 ? args[0] : Ant_Value_Undefined;
   ant_value_t result = generator_resume_kind(js, call_this, value, SV_RESUME_THROW);
   
   if (generator_is_async(call_this) && vtype(result) == kTypePromise) return result;
@@ -588,7 +588,7 @@ ant_value_t js_generator_resume_sync(
 
 static bool generator_iter_advance(ant_t *js, iterator_t *it, ant_value_t *out) {
   bool done = true;
-  ant_value_t value = js_generator_resume_sync(js, it->iterator, js_mkundef(), SV_RESUME_NEXT, &done);
+  ant_value_t value = js_generator_resume_sync(js, it->iterator, Ant_Value_Undefined, SV_RESUME_NEXT, &done);
   
   if (is_err(value) || done) return false;
   *out = value;
@@ -670,13 +670,13 @@ ant_value_t sv_call_generator_closure_dispatch(
     .this_val = this_val,
     .super_val = super_val,
     .new_target = new_target,
-    .awaited_promise = js_mkundef(),
+    .awaited_promise = Ant_Value_Undefined,
     .async_func = callee_func,
     .owner_gen = gen,
     .args = copied_args,
     .nargs = argc,
     .active_parent = NULL,
-    .async_promise = js_mkundef(),
+    .async_promise = Ant_Value_Undefined,
     .refcount = 1,
     .hold_bits = 0,
     .await_registered = false,

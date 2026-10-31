@@ -171,7 +171,7 @@ size_t error_render_value(errbuf_t *eb, ant_t *js, size_t used, ant_value_t valu
   ant_value_t name, message;
   
   if (is_err(js_error_header_parts(js, value, &name, &message))) {
-    js_take_thrown(js, js_mkundef());
+    js_take_thrown(js, Ant_Value_Undefined);
     name = js_mkstr(js, "Error", 5);
     message = js_mkstr(js, "", 0);
   }

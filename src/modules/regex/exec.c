@@ -94,17 +94,17 @@ void regexp_note_replace_property_write(ant_t *js) {
 }
 
 static ant_value_t builtin_regexp_groups_getter(ant_params_t) {
-  if (!is_object_type(call_this)) return js_mkundef();
+  if (!is_object_type(call_this)) return Ant_Value_Undefined;
 
   ant_value_t cached = js_get_slot(call_this, SLOT_REGEXP_GROUPS_CACHE);
   if (is_object_type(cached)) return cached;
 
   ant_value_t meta = js_get_slot(call_this, SLOT_REGEXP_RESULT_GROUPS);
-  if (!is_object_type(meta)) return js_mkundef();
+  if (!is_object_type(meta)) return Ant_Value_Undefined;
 
   ant_value_t groups = Ant_Object_CreateBare(js);
   if (is_err(groups)) return groups;
-  js_set_proto_init(groups, js_mknull());
+  js_set_proto_init(groups, Ant_Value_Null);
 
   for (ant_offset_t i = 0; ; i += 2) {
     ant_value_t name = js_arr_get(js, meta, i);
@@ -152,7 +152,7 @@ double regexp_advance_string_index(
 }
 
 static ant_value_t regexp_build_indices_pair(ant_t *js, utf16_pos_t *pos, PCRE2_SIZE start, PCRE2_SIZE end) {
-  if (start == PCRE2_UNSET) return js_mkundef();
+  if (start == PCRE2_UNSET) return Ant_Value_Undefined;
 
   ant_value_t pair = js_mkarr(js);
   if (is_err(pair)) return pair;
@@ -169,7 +169,7 @@ static ant_value_t regexp_build_indices_groups(
 ) {
   ant_value_t groups = Ant_Object_CreateBare(js);
   if (is_err(groups)) return groups;
-  js_set_proto_init(groups, js_mknull());
+  js_set_proto_init(groups, Ant_Value_Null);
 
   for (ant_offset_t i = 0; ; i += 2) {
     ant_value_t name = js_arr_get(js, groups_meta, i);
@@ -209,7 +209,7 @@ static ant_value_t regexp_build_indices_result(
     ant_value_t groups = regexp_build_indices_groups(js, groups_meta, indices_arr);
     if (is_err(groups)) return groups;
     if (is_err(setprop_cstr(js, indices_arr, "groups", 6, groups))) return js_mkerr(js, "oom");
-  } else if (is_err(setprop_cstr(js, indices_arr, "groups", 6, js_mkundef()))) return js_mkerr(js, "oom");
+  } else if (is_err(setprop_cstr(js, indices_arr, "groups", 6, Ant_Value_Undefined))) return js_mkerr(js, "oom");
 
   return indices_arr;
 }
@@ -218,7 +218,7 @@ static ant_value_t regexp_attach_exec_result(ant_t *js,const regexp_exec_result_
   bool has_named_groups = is_object_type(ctx->groups_meta);
   
   if (!has_named_groups && regexp_result_apply_shape(
-    js, ctx->array, ctx->index, ctx->input, js_mkundef(),
+    js, ctx->array, ctx->index, ctx->input, Ant_Value_Undefined,
     ctx->indices, ctx->with_indices
   )) return ctx->array;
 
@@ -229,13 +229,13 @@ static ant_value_t regexp_attach_exec_result(ant_t *js,const regexp_exec_result_
 
   if (has_named_groups) {
     js_set_slot(ctx->array, SLOT_REGEXP_RESULT_GROUPS, ctx->groups_meta);
-    js_set_slot(ctx->array, SLOT_REGEXP_GROUPS_CACHE, js_mkundef());
+    js_set_slot(ctx->array, SLOT_REGEXP_GROUPS_CACHE, Ant_Value_Undefined);
     js_set_getter_desc(
       js, js_as_obj(ctx->array), "groups", 6,
       Ant_Function_Create(builtin_regexp_groups_getter), JS_DESC_E | JS_DESC_C
     );
   }
-  else if (is_err(setprop_cstr(js, ctx->array, "groups", 6, js_mkundef()))) 
+  else if (is_err(setprop_cstr(js, ctx->array, "groups", 6, Ant_Value_Undefined))) 
     return js_mkerr(js, "oom");
 
   if (
@@ -289,7 +289,7 @@ ant_value_t regexp_exec_result(
     PCRE2_SIZE start = ovector[2*i];
     PCRE2_SIZE end = ovector[2*i+1];
     if (start == PCRE2_UNSET) {
-      js_arr_push(js, result_arr, js_mkundef());
+      js_arr_push(js, result_arr, Ant_Value_Undefined);
     } else {
       ant_value_t match_str = js_mkstr_byte_range(js, str_ptr, start, end - start);
       if (is_err(match_str)) return match_str;
@@ -297,7 +297,7 @@ ant_value_t regexp_exec_result(
     }
   }
 
-  ant_value_t indices = js_mkundef();
+  ant_value_t indices = Ant_Value_Undefined;
   if (has_indices) {
     indices = regexp_build_indices_result(js, groups_meta, pos, ovector, ovcount);
     if (is_err(indices)) return indices;
@@ -321,7 +321,7 @@ ant_value_t regexp_exec_general(ant_t *js, ant_value_t regexp, ant_value_t str_a
   double li = 0;
   ant_object_t *lastindex_obj = js_obj_ptr(regexp);
   uint32_t lastindex_slot = REGEXP_LAST_INDEX_SLOT;
-  ant_value_t li_val = js_mkundef();
+  ant_value_t li_val = Ant_Value_Undefined;
   bool known = lastindex_obj && !lastindex_obj->flags.is_exotic && js->regex_state &&
     lastindex_obj->shape == js->regex_state->instance_shape.shape;
   if (!known) known = regexp_lastindex_fast_location(compiled_hint, regexp, &lastindex_obj, &lastindex_slot);
@@ -337,9 +337,9 @@ ant_value_t regexp_exec_general(ant_t *js, ant_value_t regexp, ant_value_t str_a
     .flags = flags_mask,
   };
   if (!fast.compiled) {
-    if (!(flags_mask & (REGEXP_FLAG_GLOBAL | REGEXP_FLAG_STICKY))) return js_mknull();
+    if (!(flags_mask & (REGEXP_FLAG_GLOBAL | REGEXP_FLAG_STICKY))) return Ant_Value_Null;
     ant_value_t stored = regexp_set_lastindex(js, NULL, regexp, Ant_Value_FromNumber(0));
-    return is_err(stored) ? stored : js_mknull();
+    return is_err(stored) ? stored : Ant_Value_Null;
   }
   regexp_lastindex_cache_location(js, fast.compiled, regexp);
   return regexp_exec_run(js, regexp, &fast, li, str_arg, truthy_only);
@@ -395,12 +395,12 @@ ant_value_t regexp_build_groups_object(
 ) {
   ant_value_t groups = Ant_Object_CreateBare(js);
   if (is_err(groups)) return groups;
-  js_set_proto_init(groups, js_mknull());
+  js_set_proto_init(groups, Ant_Value_Null);
 
   for (uint32_t i = 0; i < compiled->namecount; i++) {
     const regexp_group_name_t *entry = &compiled->group_names[i];
     PCRE2_SIZE start = entry->group < ovcount ? ovector[2 * entry->group] : PCRE2_UNSET;
-    ant_value_t value = js_mkundef();
+    ant_value_t value = Ant_Value_Undefined;
     if (start != PCRE2_UNSET) {
       value = js_mkstr_byte_range(js, str_ptr, start, ovector[2 * entry->group + 1] - start);
       if (is_err(value)) return value;
@@ -415,7 +415,7 @@ ant_value_t regexp_build_groups_object(
 static ant_value_t regexp_exec_with_exec_fn(ant_t *js, ant_value_t rx, ant_value_t str, ant_value_t exec_fn) {
   if (vtype(exec_fn) == kTypeFunction || vtype(exec_fn) == kTypeBuiltin) {
     ant_value_t call_args[1] = { str };
-    ant_value_t result = sv_vm_call(js->vm, js, exec_fn, rx, call_args, 1, NULL, js_mkundef());
+    ant_value_t result = sv_vm_call(js->vm, js, exec_fn, rx, call_args, 1, NULL, Ant_Value_Undefined);
     if (is_err(result)) return result;
     if (!is_object_type(result) && vtype(result) != kTypeNull)
       return js_mkerr_typed(js, JS_ERR_TYPE, "RegExp exec returned non-object");
@@ -441,7 +441,7 @@ ant_value_t regexp_read_flags(ant_t *js, ant_value_t rx, bool *global, bool *ful
   const char *flags = (const char *)(uintptr_t)off;
   if (global) *global = memchr(flags, 'g', (size_t)len) != NULL;
   if (full_unicode) *full_unicode = memchr(flags, 'u', (size_t)len) || memchr(flags, 'v', (size_t)len);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t regexp_advance_last_index(ant_t *js, ant_value_t rx, ant_value_t str, bool full_unicode) {

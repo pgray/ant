@@ -336,9 +336,9 @@ static ant_value_t ant_c_parse_signature(
   ant_t *js, ant_value_t options_value, ant_c_signature_t *signature
 ) {
   *signature = (ant_c_signature_t){
-    .entry_value = js_mkundef(),
-    .returns_value = js_mkundef(),
-    .args_value = js_mkundef(),
+    .entry_value = Ant_Value_Undefined,
+    .returns_value = Ant_Value_Undefined,
+    .args_value = Ant_Value_Undefined,
     .entry_name = "main",
     .returns_name = "int",
     .returns = ANT_C_RETURNS_STATUS,
@@ -347,7 +347,7 @@ static ant_value_t ant_c_parse_signature(
     .mir_return_type = MIR_T_I32,
   };
   
-  if (vtype(options_value) == kTypeUndefined) return js_mkundef();
+  if (vtype(options_value) == kTypeUndefined) return Ant_Value_Undefined;
   if (!is_object_type(options_value))
     return js_mkerr(js, "Ant.unsafe.c() options must be an object");
 
@@ -409,7 +409,7 @@ static ant_value_t ant_c_parse_signature(
       &signature->ffi_arg_types[i], &signature->mir_arg_types[i]
     )) return js_mkerr(js, "Ant.unsafe.c() options.args[%zu] has an unsupported type", i);
   }
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static bool ant_c_signature_matches(MIR_func_t entry_func, const ant_c_signature_t *signature) {
@@ -470,7 +470,7 @@ static ant_value_t ant_c_result_to_js(
 ) {
   if (returns == ANT_C_RETURNS_STRING) return result->string
     ? js_mkstr(js, result->string, strlen(result->string))
-    : js_mknull();
+    : Ant_Value_Null;
 
   switch (return_type) {
     case ANT_C_ARG_INT8: return Ant_Value_FromNumber((double)result->i8);
@@ -880,7 +880,7 @@ static ant_value_t js_unsafe_c(ant_params_t) {
   if (nargs >= 1 && vtype(args[0]) == kTypeArray) {
     ant_value_t source = ant_c_template_source(js, args, nargs);
     if (is_err(source)) return source;
-    return ant_c_compile(js, source, js_mkundef());
+    return ant_c_compile(js, source, Ant_Value_Undefined);
   }
 
   if (nargs == 1 && is_object_type(args[0])) {

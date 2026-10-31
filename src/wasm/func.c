@@ -21,7 +21,7 @@ static ant_value_t js_wasm_exported_func_call(ant_params_t) {
   wasm_val_vec_t wasm_args = WASM_EMPTY_VEC;
   wasm_val_vec_t wasm_results = WASM_EMPTY_VEC;
   wasm_trap_t *trap = NULL;
-  ant_value_t result = js_mkundef();
+  ant_value_t result = Ant_Value_Undefined;
 
   wasm_val_vec_new_uninitialized(&wasm_args, params ? params->size : 0);
   wasm_val_vec_new_uninitialized(&wasm_results, results_t ? results_t->size : 0);
@@ -88,7 +88,7 @@ ant_value_t wasm_wrap_func(ant_t *js, wasm_func_t *func, ant_value_t owner, bool
   wasm_func_handle_t *handle;
   ant_value_t state;
 
-  if (!func) return js_mkundef();
+  if (!func) return Ant_Value_Undefined;
 
   handle = calloc(1, sizeof(*handle));
   if (!handle) {

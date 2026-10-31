@@ -514,7 +514,7 @@ void jit_emit_control(jit_compile_t *c) {
                         MIR_new_insn(c->ctx, MIR_BEQ,
                                      MIR_new_label_op(c->ctx, lbl),
                                      MIR_new_reg_op(c->ctx, cond),
-                                     MIR_new_uint_op(c->ctx, is_false_branch ? js_false : js_true)));
+                                     MIR_new_uint_op(c->ctx, is_false_branch ? Ant_Value_False : Ant_Value_True)));
         break;
       }
       mir_emit_truthy_branch(c->ctx, c->jit_func, cond, c->r_bool, c->r_js,

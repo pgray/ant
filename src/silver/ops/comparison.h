@@ -156,11 +156,11 @@ static inline ant_value_t sv_bigint_compare_number(
   *ordered = false;
   *cmp = 0;
 
-  if (isnan(num)) return js_mkundef();
+  if (isnan(num)) return Ant_Value_Undefined;
   *ordered = true;
   if (isinf(num)) {
     *cmp = num > 0 ? -1 : 1;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   number_bigint = bigint_from_integral_double(js, integer);
@@ -169,7 +169,7 @@ static inline ant_value_t sv_bigint_compare_number(
   *cmp = bigint_compare(js, bigint, number_bigint);
   if (fractional && *cmp == 0) *cmp = -1;
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline bool sv_rel_from_bigint_cmp(int cmp, bool left_is_bigint, sv_rel_op_t op) {
@@ -422,13 +422,13 @@ static inline __attribute__((noinline)) ant_value_t sv_instanceof_ic_miss(
   ant_t *js, ant_value_t l, ant_value_t r, sv_ic_entry_t *ic
 ) {
   ant_object_t *lhs_ptr = NULL;
-  ant_value_t lhs_proto = js_mkundef();
+  ant_value_t lhs_proto = Ant_Value_Undefined;
   ant_object_t *lhs_proto_ptr = NULL;
   
   bool lhs_cacheable = sv_instanceof_lhs_cache_key(l, &lhs_ptr, &lhs_proto, &lhs_proto_ptr);
   bool primitive = !is_object_type(l) && vtype(l) != kTypeBuiltin;
   
-  ant_value_t ctor_proto = js_mkundef();
+  ant_value_t ctor_proto = Ant_Value_Undefined;
   bool rhs_cacheable = ic && (lhs_cacheable || primitive) && sv_instanceof_rhs_ordinary_proto(js, r, &ctor_proto);
   if (rhs_cacheable && lhs_cacheable && !sv_instanceof_chain_has_no_proxy(lhs_proto)) rhs_cacheable = false;
   
@@ -441,7 +441,7 @@ static inline __attribute__((noinline)) ant_value_t sv_instanceof_ic_miss(
     ic->guard.comparison.receiver_proto = ctor_proto;
     ic->guard.comparison.object_epoch = js->ic.obj_epoch;
     ic->prototype_epoch = js->prototype_write_epoch;
-    return js_false;
+    return Ant_Value_False;
   }
   
   ant_value_t res = rhs_cacheable ? js_bool(js_instance_of_proto(js, l, ctor_proto)) : do_instanceof(js, l, r);
@@ -468,7 +468,7 @@ static inline ant_value_t sv_instanceof_ic_eval(
   sv_ic_entry_t *ic = sv_instanceof_ic_slot(func, ip);
   
   ant_object_t *lhs_ptr = NULL;
-  ant_value_t lhs_proto = js_mkundef();
+  ant_value_t lhs_proto = Ant_Value_Undefined;
   ant_object_t *lhs_proto_ptr = NULL;
   bool lhs_cacheable = sv_instanceof_lhs_cache_key(l, &lhs_ptr, &lhs_proto, &lhs_proto_ptr);
   
@@ -480,11 +480,11 @@ static inline ant_value_t sv_instanceof_ic_eval(
   ) goto miss;
   
   if (!lhs_cacheable) {
-    if (!is_object_type(l) && vtype(l) != kTypeBuiltin) return js_false;
+    if (!is_object_type(l) && vtype(l) != kTypeBuiltin) return Ant_Value_False;
     goto miss;
   }
   
-  if (lhs_proto == ic->guard.comparison.receiver_proto) return js_true;
+  if (lhs_proto == ic->guard.comparison.receiver_proto) return Ant_Value_True;
   
   if (
     lhs_ptr->shape == ic->cached_shape && lhs_proto_ptr == ic->cached_holder &&
@@ -533,7 +533,7 @@ static inline ant_value_t sv_isproto_ic_eval(
   if (ic && proto_ptr && obj_ptr && cacheable) {
     ic->cached_holder = proto_ptr;
     ic->cached_shape = (ant_shape_t *)(uintptr_t)obj_ptr;
-    ic->cached_index = result == js_true ? 1u : 0u;
+    ic->cached_index = result == Ant_Value_True ? 1u : 0u;
     ic->epoch = js->ic.epoch;
     ic->guard.comparison.object_epoch = js->ic.obj_epoch;
   }

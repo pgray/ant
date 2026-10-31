@@ -830,10 +830,10 @@ void jit_emit_inline_body(
         mir_load_imm(ctx, jit_func, inl_vs[isp++], mkval(kTypeNull, 0));
         break;
       case OP_TRUE:
-        mir_load_imm(ctx, jit_func, inl_vs[isp++], js_true);
+        mir_load_imm(ctx, jit_func, inl_vs[isp++], Ant_Value_True);
         break;
       case OP_FALSE:
-        mir_load_imm(ctx, jit_func, inl_vs[isp++], js_false);
+        mir_load_imm(ctx, jit_func, inl_vs[isp++], Ant_Value_False);
         break;
 
       case OP_THIS: {
@@ -1291,7 +1291,7 @@ void jit_emit_inline_body(
           MIR_append_insn(ctx, jit_func,
                           MIR_new_insn(ctx, MIR_OR,
                                        MIR_new_reg_op(ctx, inl_vs[isp]),
-                                       MIR_new_uint_op(ctx, js_false),
+                                       MIR_new_uint_op(ctx, Ant_Value_False),
                                        MIR_new_reg_op(ctx, r_bool)));
           inl_num[isp++] = 0;
           inl_num[isp] = 0;
@@ -1358,7 +1358,7 @@ void jit_emit_inline_body(
         MIR_append_insn(ctx, jit_func,
                         MIR_new_insn(ctx, MIR_OR,
                                      MIR_new_reg_op(ctx, rd),
-                                     MIR_new_uint_op(ctx, js_false),
+                                     MIR_new_uint_op(ctx, Ant_Value_False),
                                      MIR_new_reg_op(ctx, r_tmp)));
         break;
       }
@@ -1460,10 +1460,10 @@ void jit_emit_inline_body(
         MIR_label_t done = MIR_new_label(ctx);
         mir_emit_truthy_branch(ctx, jit_func, value, r_bool, r_js,
             ext->truthy_proto, ext->imp_is_truthy, true, falsy);
-        mir_load_imm(ctx, jit_func, value, js_false);
+        mir_load_imm(ctx, jit_func, value, Ant_Value_False);
         MIR_append_insn(ctx, jit_func, MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, done)));
         MIR_append_insn(ctx, jit_func, falsy);
-        mir_load_imm(ctx, jit_func, value, js_true);
+        mir_load_imm(ctx, jit_func, value, Ant_Value_True);
         MIR_append_insn(ctx, jit_func, done);
         break;
       }
@@ -1482,11 +1482,11 @@ void jit_emit_inline_body(
                                      MIR_new_label_op(ctx, is_true),
                                      MIR_new_reg_op(ctx, rs),
                                      MIR_new_uint_op(ctx, cmp_val)));
-        mir_load_imm(ctx, jit_func, rs, js_false);
+        mir_load_imm(ctx, jit_func, rs, Ant_Value_False);
         MIR_append_insn(ctx, jit_func,
                         MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, is_done)));
         MIR_append_insn(ctx, jit_func, is_true);
-        mir_load_imm(ctx, jit_func, rs, js_true);
+        mir_load_imm(ctx, jit_func, rs, Ant_Value_True);
         MIR_append_insn(ctx, jit_func, is_done);
         break;
       }
@@ -1506,11 +1506,11 @@ void jit_emit_inline_body(
                                      MIR_new_label_op(ctx, is_true),
                                      MIR_new_reg_op(ctx, rs),
                                      MIR_new_uint_op(ctx, mkval(kTypeNull, 0))));
-        mir_load_imm(ctx, jit_func, rs, js_false);
+        mir_load_imm(ctx, jit_func, rs, Ant_Value_False);
         MIR_append_insn(ctx, jit_func,
                         MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, is_done)));
         MIR_append_insn(ctx, jit_func, is_true);
-        mir_load_imm(ctx, jit_func, rs, js_true);
+        mir_load_imm(ctx, jit_func, rs, Ant_Value_True);
         MIR_append_insn(ctx, jit_func, is_done);
         break;
       }

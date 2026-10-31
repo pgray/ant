@@ -67,7 +67,7 @@ static bool http_writer_append_raw_headers(
 ) {
   ant_offset_t len = 0;
 
-  if (error_out) *error_out = js_mkundef();
+  if (error_out) *error_out = Ant_Value_Undefined;
   if (vtype(raw_headers) == kTypeUndefined || vtype(raw_headers) == kTypeNull) return true;
   
   if (vtype(raw_headers) != kTypeArray) {
@@ -141,7 +141,7 @@ static bool http_writer_parse_bytes(
   const char *str = NULL;
   size_t len = 0;
 
-  if (error_out) *error_out = js_mkundef();
+  if (error_out) *error_out = Ant_Value_Undefined;
   if (bytes_out) *bytes_out = NULL;
   if (len_out) *len_out = 0;
   
@@ -175,10 +175,10 @@ static ant_value_t js_http_writer_write_chunk(ant_params_t) {
   ant_http1_buffer_t buf;
   const uint8_t *bytes = NULL;
   size_t len = 0;
-  ant_value_t error = js_mkundef();
+  ant_value_t error = Ant_Value_Undefined;
 
   ant_http1_buffer_init(&buf);
-  if (!http_writer_parse_bytes(js, nargs > 0 ? args[0] : js_mkundef(), &bytes, &len, &error)) return error;
+  if (!http_writer_parse_bytes(js, nargs > 0 ? args[0] : Ant_Value_Undefined, &bytes, &len, &error)) return error;
   if (!ant_http1_write_chunk(&buf, bytes, len)) {
     ant_http1_buffer_free(&buf);
     return Ant_Error_CreateOutOfMemory(js);
@@ -201,7 +201,7 @@ static ant_value_t js_http_writer_write_final_chunk(ant_params_t) {
 
 static ant_value_t js_http_writer_write_basic_response(ant_params_t) {
   ant_http1_buffer_t buf;
-  ant_value_t error = js_mkundef();
+  ant_value_t error = Ant_Value_Undefined;
   const uint8_t *body = NULL;
   
   size_t body_len = 0;
@@ -223,7 +223,7 @@ static ant_value_t js_http_writer_write_basic_response(ant_params_t) {
     content_type = js_getstr(js, content_type_value, NULL);
   }
 
-  if (!http_writer_parse_bytes(js, nargs > 3 ? args[3] : js_mkundef(), &body, &body_len, &error)) return error;
+  if (!http_writer_parse_bytes(js, nargs > 3 ? args[3] : Ant_Value_Undefined, &body, &body_len, &error)) return error;
   keep_alive = nargs > 4 && js_truthy(js, args[4]);
 
   ant_http1_buffer_init(&buf);
@@ -237,11 +237,11 @@ static ant_value_t js_http_writer_write_basic_response(ant_params_t) {
 
 static ant_value_t js_http_writer_write_head(ant_params_t) {
   ant_http1_buffer_t buf;
-  ant_value_t error = js_mkundef();
+  ant_value_t error = Ant_Value_Undefined;
   
   int status = nargs > 0 ? (int)Ant_Value_AsNumberUnchecked(args[0]) : 200;
   const char *status_text = NULL;
-  ant_value_t raw_headers = js_mkundef();
+  ant_value_t raw_headers = Ant_Value_Undefined;
   
   bool body_is_stream = false;
   size_t body_size = 0;
@@ -289,14 +289,14 @@ static ant_value_t js_http_writer_write_head(ant_params_t) {
 }
 
 static ant_value_t js_http_writer_is_token(ant_params_t) {
-  if (nargs < 1 || vtype(args[0]) != kTypeString) return js_false;
+  if (nargs < 1 || vtype(args[0]) != kTypeString) return Ant_Value_False;
   size_t len = 0;
   const char *s = js_getstr(js, args[0], &len);
   return js_bool(s && http_writer_is_token(s, len));
 }
 
 static ant_value_t js_http_writer_is_field_value(ant_params_t) {
-  if (nargs < 1 || vtype(args[0]) != kTypeString) return js_false;
+  if (nargs < 1 || vtype(args[0]) != kTypeString) return Ant_Value_False;
   size_t len = 0;
   const char *s = js_getstr(js, args[0], &len);
   return js_bool(s && http_writer_is_latin1_field_value(s, len));
@@ -325,7 +325,7 @@ static ant_value_t http_writer_header_value_error(ant_t *js, ant_value_t value) 
 }
 
 static ant_value_t js_http_writer_header_key(ant_params_t) {
-  ant_value_t name = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t name = nargs > 0 ? args[0] : Ant_Value_Undefined;
   if (vtype(name) != kTypeString) return Ant_Value_FromNumber(1);
 
   size_t len = 0;
@@ -339,7 +339,7 @@ static ant_value_t js_http_writer_header_key(ant_params_t) {
     upper |= ant_ascii_is_upper(c);
   }
 
-  ant_value_t error = http_writer_header_value_error(js, nargs > 1 ? args[1] : js_mkundef());
+  ant_value_t error = http_writer_header_value_error(js, nargs > 1 ? args[1] : Ant_Value_Undefined);
   if (is_err(error) || Ant_Value_AsNumberUnchecked(error) != 0) return error;
   if (!upper) return name;
 

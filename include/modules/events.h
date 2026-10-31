@@ -103,9 +103,9 @@ bool Ant_EventTarget_AddDataListener(ant_t *js, ant_value_t target, ant_value_t 
     ant_value_t self = call_this;                                            \
     ant_value_t invalid = invalid_this(js, self);                            \
     if (invalid) return invalid;                                             \
-    ant_value_t handler = nargs > 0 ? args[0] : js_mknull();                 \
+    ant_value_t handler = nargs > 0 ? args[0] : Ant_Value_Null;              \
     Ant_EventTarget_SetHandler(js, self, #type, sizeof(#type) - 1, handler); \
-    return js_mkundef();                                                     \
+    return Ant_Value_Undefined;                                              \
   }
 
 #define ANT_EVENT_HANDLER_DEFINE(proto, prefix, type)                        \

@@ -191,14 +191,14 @@ static inline ant_value_t sv_spread_into(sv_vm_t *vm, ant_t *js, ant_value_t arr
   }
 
   GC_ROOT_SAVE(root_mark, js);
-  ant_value_t state[3] = { js_mkundef(), js_mkundef(), js_mkundef() };
+  ant_value_t state[3] = { Ant_Value_Undefined, Ant_Value_Undefined, Ant_Value_Undefined };
   
   GC_ROOT_PIN(js, state[0]);
   GC_ROOT_PIN(js, state[1]);
   
   ant_value_t status = sv_for_of_open(vm, js, iterable, state);
   while (!is_err(status)) {
-    ant_value_t value = js_mkundef();
+    ant_value_t value = Ant_Value_Undefined;
     bool done = true;
     
     status = sv_iter_advance_values(vm, js, state, &value, &done);
@@ -235,7 +235,7 @@ static inline ant_value_t sv_op_define_class(
   sv_atom_t *a = has_name ? &func->atoms[atom_idx] : NULL;
   ant_value_t ctor = vm->stack[vm->sp - 1];
   ant_value_t parent = vm->stack[vm->sp - 2];
-  ant_value_t proto = js_mkundef();
+  ant_value_t proto = Ant_Value_Undefined;
   
   uint8_t pt = vtype(parent);
   bool parent_is_callable = false;
@@ -259,7 +259,7 @@ static inline ant_value_t sv_op_define_class(
   if (!has_heritage) js_set_proto_init(proto, js->sym.object_proto);
   
   else if (pt == kTypeNull) {
-    js_set_proto_init(proto, js_mknull());
+    js_set_proto_init(proto, Ant_Value_Null);
     ant_value_t func_proto = js_get_slot(js->global, SLOT_FUNC_PROTO);
     if (vtype(func_proto) == kTypeFunction) js_set_proto_wb(js, ctor, func_proto);
   } else {
@@ -315,7 +315,7 @@ static inline ant_value_t sv_op_define_class(
   vm->stack[vm->sp - 1] = proto;
   GC_ROOT_RESTORE(js, root_mark);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_op_define_class_comp(

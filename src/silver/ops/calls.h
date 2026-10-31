@@ -20,7 +20,7 @@ typedef struct {
 static inline ant_value_t sv_load_stable_builtin(
   ant_t *js, sv_stable_builtin_t kind, ant_value_t *receiver_out
 ) {
-  *receiver_out = js_mkundef();
+  *receiver_out = Ant_Value_Undefined;
   if (kind != SV_STABLE_BUILTIN_PROMISE_RESOLVE)
     return js_mkerr(js, "invalid stable builtin");
 
@@ -29,7 +29,7 @@ static inline ant_value_t sv_load_stable_builtin(
     return js->sym.promise_resolve;
   }
 
-  ant_value_t receiver = js_mkundef();
+  ant_value_t receiver = Ant_Value_Undefined;
   if (sv_global_sandboxed(js)) {
     if (!sv_sandbox_global_lookup(js, js->intern.promise, 7, &receiver))
       return js_mkerr_typed(js, JS_ERR_REFERENCE, "'Promise' is not defined");
@@ -70,7 +70,7 @@ static inline ant_value_t sv_op_call_stable_builtin(
   ) return js_promise_assimilate_awaitable(js, args[0]);
 
   return sv_vm_call(
-    vm, js, call_func, call_this, args, argc, NULL, js_mkundef());
+    vm, js, call_func, call_this, args, argc, NULL, Ant_Value_Undefined);
 }
 
 static inline ant_value_t sv_op_call_char_code_at(
@@ -79,7 +79,7 @@ static inline ant_value_t sv_op_call_char_code_at(
 ) {
   ant_value_t result;
   if (!js_try_char_code_at(js, func, receiver, args, argc, &result))
-    return sv_vm_call(vm, js, func, receiver, args, argc, NULL, js_mkundef());
+    return sv_vm_call(vm, js, func, receiver, args, argc, NULL, Ant_Value_Undefined);
   sv_vm_maybe_checkpoint_microtasks(js);
   return result;
 }
@@ -93,7 +93,7 @@ static inline ant_value_t sv_op_call_string_intrinsic(
     return js_string_intrinsic_call(js, kind, call_this, args, argc);
 
   return sv_vm_call(
-    vm, js, call_func, call_this, args, argc, NULL, js_mkundef());
+    vm, js, call_func, call_this, args, argc, NULL, Ant_Value_Undefined);
 }
 
 static inline void sv_call_args_reset(sv_call_args_t *a, ant_value_t *args, int argc) {
@@ -139,18 +139,18 @@ static inline ant_value_t sv_call_args_place(
   a->args = dst;
   a->argc = fixed + len;
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_apply_normalize_args(ant_t *js, sv_call_args_t *a, int cap) {
-  if (a->argc != 1) return js_mkundef();
+  if (a->argc != 1) return Ant_Value_Undefined;
 
   ant_value_t arg_array = a->args[0];
   uint8_t t = vtype(arg_array);
   if (t == kTypeUndefined || t == kTypeNull) {
     a->args = NULL;
     a->argc = 0;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
   if (t != kTypeArray) {
     return js_mkerr_typed(js, JS_ERR_TYPE,
@@ -165,7 +165,7 @@ static inline ant_value_t sv_apply_normalize_args(ant_t *js, sv_call_args_t *a, 
   if (len <= 0) {
     a->args = NULL;
     a->argc = 0;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (len > INT_MAX)
@@ -178,7 +178,7 @@ static inline ant_value_t sv_apply_normalize_args(ant_t *js, sv_call_args_t *a, 
   a->args = slots;
   a->argc = (int)len;
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_spread_call_args(sv_vm_t *vm, ant_t *js, sv_call_args_t *a, int cap) {
@@ -247,7 +247,7 @@ static inline ant_value_t sv_op_new(sv_vm_t *vm, ant_t *js, uint8_t *ip) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "not a constructor");
   }
 
-  ant_value_t proto = js_mkundef();
+  ant_value_t proto = Ant_Value_Undefined;
   if (vtype(func) == kTypeFunction || vtype(func) == kTypeBuiltin) {
     proto = sv_prepare_construct_meta(js, func, new_target, &effective_new_target);
     
@@ -257,14 +257,14 @@ static inline ant_value_t sv_op_new(sv_vm_t *vm, ant_t *js, uint8_t *ip) {
     }
   }
 
-  ant_value_t obj = js_mkundef();
+  ant_value_t obj = Ant_Value_Undefined;
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, proto);
   GC_ROOT_PIN(js, obj);
   
   obj = js_mkobj_with_proto_slots(
     js, is_object_type(proto) ? proto : 
-    js_mkundef(), sv_construct_slots_of(func)
+    Ant_Value_Undefined, sv_construct_slots_of(func)
   );
   
   ant_value_t ctor_this = obj;
@@ -294,7 +294,7 @@ static inline __attribute__((noinline)) ant_value_t sv_op_apply(sv_vm_t *vm, ant
   ant_value_t status = sv_stack_call_args(vm, js, &call, base + 2, argc, false);
   if (is_err(status)) { vm->sp = base; return status; }
 
-  ant_value_t result = sv_vm_call(vm, js, func, this, call.args, call.argc, NULL, js_mkundef());
+  ant_value_t result = sv_vm_call(vm, js, func, this, call.args, call.argc, NULL, Ant_Value_Undefined);
   sv_call_args_release(&call);
   
   vm->sp = base;
@@ -314,7 +314,7 @@ static inline __attribute__((noinline)) ant_value_t sv_op_call_spread(sv_vm_t *v
   ant_value_t status = sv_stack_call_args(vm, js, &call, base + 2, argc, true);
   if (is_err(status)) { vm->sp = base; return status; }
 
-  ant_value_t result = sv_vm_call(vm, js, func, this, call.args, call.argc, NULL, js_mkundef());
+  ant_value_t result = sv_vm_call(vm, js, func, this, call.args, call.argc, NULL, Ant_Value_Undefined);
   sv_call_args_release(&call);
   
   vm->sp = base;
@@ -403,7 +403,7 @@ static inline __attribute__((noinline)) ant_value_t sv_op_new_apply(sv_vm_t *vm,
     return js_mkerr_typed(js, JS_ERR_TYPE, "not a constructor");
   }
 
-  ant_value_t proto = js_mkundef();
+  ant_value_t proto = Ant_Value_Undefined;
   if (vtype(func) == kTypeFunction || vtype(func) == kTypeBuiltin) {
     proto = sv_prepare_construct_meta(js, func, new_target, &effective_new_target);
     
@@ -414,14 +414,14 @@ static inline __attribute__((noinline)) ant_value_t sv_op_new_apply(sv_vm_t *vm,
     }
   }
 
-  ant_value_t obj = js_mkundef();
+  ant_value_t obj = Ant_Value_Undefined;
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, proto);
   GC_ROOT_PIN(js, obj);
   
   obj = js_mkobj_with_proto_slots(
     js, is_object_type(proto) ? proto : 
-    js_mkundef(), sv_construct_slots_of(func)
+    Ant_Value_Undefined, sv_construct_slots_of(func)
   );
   
   ant_value_t ctor_this = obj;
@@ -512,7 +512,7 @@ static inline ant_value_t sv_materialize_builder_args(ant_t *js, ant_value_t *ar
     if (is_err(value)) return value;
     args[i] = value;
   }
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline bool sv_op_call_call_fused(
@@ -557,8 +557,8 @@ static inline bool sv_op_call_call_fused(
         .bound_argc = 0,
         .func = f2,
         .upvalues = NULL,
-        .bound_this = js_mkundef(),
-        .super_val = js_mkundef(),
+        .bound_this = Ant_Value_Undefined,
+        .super_val = Ant_Value_Undefined,
         .func_obj = 0,
         .u.pending = { .name = NULL, .len = 0 },
         .js = js,
@@ -576,9 +576,9 @@ static inline bool sv_op_call_call_fused(
       }
 
       ant_value_t result = sv_jit_invoke(js, SV_JIT_FROM_INTERP, f2->jit_code, vm, &(sv_call_ctx_t){
-        .this_val = js_mkundef(),
-        .new_target = js_mkundef(),
-        .super_val = js_mkundef(),
+        .this_val = Ant_Value_Undefined,
+        .new_target = Ant_Value_Undefined,
+        .super_val = Ant_Value_Undefined,
         .args = args2,
         .argc = n2,
       }, &fake);
@@ -586,9 +586,9 @@ static inline bool sv_op_call_call_fused(
       if (sv_is_jit_bailout(result)) {
         sv_jit_on_bailout(f2);
         sv_call_ctx_t ctx = {
-          .this_val = js_mkundef(),
-          .super_val = js_mkundef(),
-          .new_target = js_mkundef(),
+          .this_val = Ant_Value_Undefined,
+          .super_val = Ant_Value_Undefined,
+          .new_target = Ant_Value_Undefined,
           .args = args2,
           .argc = n2,
           .alloc = NULL,
@@ -612,9 +612,9 @@ static inline ant_value_t sv_op_call_call(
 ) {
   ant_value_t result;
   if (sv_op_call_call_fused(vm, js, xv, args1, n1, args2, n2, false, &result)) return result;
-  ant_value_t r = sv_vm_call(vm, js, xv, js_mkundef(), args1, n1, NULL, js_mkundef());
+  ant_value_t r = sv_vm_call(vm, js, xv, Ant_Value_Undefined, args1, n1, NULL, Ant_Value_Undefined);
   if (is_err(r)) return r;
-  return sv_vm_call(vm, js, r, js_mkundef(), args2, n2, NULL, js_mkundef());
+  return sv_vm_call(vm, js, r, Ant_Value_Undefined, args2, n2, NULL, Ant_Value_Undefined);
 }
 
 static inline ant_value_t sv_op_call_call_slot(
@@ -624,7 +624,7 @@ static inline ant_value_t sv_op_call_call_slot(
   ant_value_t args1[1] = {arg1};
   sv_frame_t *frame = vm->fp >= 0 ? &vm->frames[vm->fp] : NULL;
   ant_value_t *slot = sv_frame_slot_ptr(frame, slot_idx);
-  ant_value_t arg2 = slot ? *slot : js_mkundef();
+  ant_value_t arg2 = slot ? *slot : Ant_Value_Undefined;
   ant_value_t result;
 
   GC_ROOT_SAVE(root_mark, js);
@@ -635,7 +635,7 @@ static inline ant_value_t sv_op_call_call_slot(
     return result;
   }
 
-  ant_value_t r = sv_vm_call(vm, js, xv, js_mkundef(), args1, 1, NULL, js_mkundef());
+  ant_value_t r = sv_vm_call(vm, js, xv, Ant_Value_Undefined, args1, 1, NULL, Ant_Value_Undefined);
   if (is_err(r)) { 
     GC_ROOT_RESTORE(js, root_mark);
     return r;
@@ -643,7 +643,7 @@ static inline ant_value_t sv_op_call_call_slot(
 
   frame = vm->fp >= 0 ? &vm->frames[vm->fp] : NULL;
   slot = sv_frame_slot_ptr(frame, slot_idx);
-  arg2 = slot ? *slot : js_mkundef();
+  arg2 = slot ? *slot : Ant_Value_Undefined;
   
   if (vtype(arg2) == kTypeString && str_is_heap_builder(arg2)) {
     GC_ROOT_PIN(js, r);
@@ -651,7 +651,7 @@ static inline ant_value_t sv_op_call_call_slot(
     if (is_err(arg2)) { GC_ROOT_RESTORE(js, root_mark); return arg2; }
   }
   
-  result = sv_vm_call(vm, js, r, js_mkundef(), &arg2, 1, NULL, js_mkundef());
+  result = sv_vm_call(vm, js, r, Ant_Value_Undefined, &arg2, 1, NULL, Ant_Value_Undefined);
   GC_ROOT_RESTORE(js, root_mark);
   
   return result;
@@ -662,21 +662,21 @@ static inline ant_value_t sv_op_call_call_slot_ptr(
   ant_value_t *slot
 ) {
   ant_value_t args1[1] = {arg1};
-  ant_value_t arg2 = slot ? *slot : js_mkundef();
+  ant_value_t arg2 = slot ? *slot : Ant_Value_Undefined;
   
   ant_value_t result;
   if (sv_op_call_call_fused(vm, js, xv, args1, 1, &arg2, 1, true, &result)) return result;
 
-  ant_value_t r = sv_vm_call(vm, js, xv, js_mkundef(), args1, 1, NULL, js_mkundef());
+  ant_value_t r = sv_vm_call(vm, js, xv, Ant_Value_Undefined, args1, 1, NULL, Ant_Value_Undefined);
   if (is_err(r)) return r;
   
-  arg2 = slot ? *slot : js_mkundef();
+  arg2 = slot ? *slot : Ant_Value_Undefined;
   if (vtype(arg2) == kTypeString && str_is_heap_builder(arg2)) {
     arg2 = sv_string_builder_read_value(js, arg2);
     if (is_err(arg2)) return arg2;
   }
   
-  return sv_vm_call(vm, js, r, js_mkundef(), &arg2, 1, NULL, js_mkundef());
+  return sv_vm_call(vm, js, r, Ant_Value_Undefined, &arg2, 1, NULL, Ant_Value_Undefined);
 }
 
 #endif

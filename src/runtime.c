@@ -197,9 +197,9 @@ void code_arenas_destroy(ant_t *js) {
 void ant_runtime_init(ant_t *js, int argc, char **argv, struct arg_file *ls_p) {
   ant_value_t global = js_glob(js);
 
-  js->primordials = js_mkundef();
+  js->primordials = Ant_Value_Undefined;
   for (size_t i = 0; i < ANT_PRIMORDIAL_COUNT; i++)
-    js->primordial_values[i] = js_mkundef();
+    js->primordial_values[i] = Ant_Value_Undefined;
   js->Ant = Ant_Object_Create(js);
   js->runtime.flags = 0;
   js->runtime.argc = argc;
@@ -212,13 +212,13 @@ void ant_runtime_init(ant_t *js, int argc, char **argv, struct arg_file *ls_p) {
   js->runtime.ls_fp = (ls_p && ls_p->count > 0) ? ls_p->filename[0] : NULL;
 #endif
 
-  js_set(js, global, "onerror", js_mknull());
+  js_set(js, global, "onerror", Ant_Value_Null);
   js_set_descriptor(js, global, "onerror", 7, JS_DESC_W | JS_DESC_C);
 
-  js_set(js, global, "onunhandledrejection", js_mknull());
+  js_set(js, global, "onunhandledrejection", Ant_Value_Null);
   js_set_descriptor(js, global, "onunhandledrejection", 20, JS_DESC_W | JS_DESC_C);
 
-  js_set(js, global, "onrejectionhandled", js_mknull());
+  js_set(js, global, "onrejectionhandled", Ant_Value_Null);
   js_set_descriptor(js, global, "onrejectionhandled", 18, JS_DESC_W | JS_DESC_C);
   
   js_set(js, global, "self", global);

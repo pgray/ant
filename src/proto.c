@@ -10,15 +10,15 @@ bool same_object_identity(ant_value_t a, ant_value_t b) {
 }
 
 static inline ant_value_t proto_next_obj_or_null(ant_t *js, ant_value_t cur) {
-  if (!is_object_type(cur)) return js_mknull();
+  if (!is_object_type(cur)) return Ant_Value_Null;
   ant_value_t next = get_proto(js, cur);
-  return is_object_type(next) ? next : js_mknull();
+  return is_object_type(next) ? next : Ant_Value_Null;
 }
 
 void proto_overflow_guard_init(proto_overflow_guard_t *g) {
   g->depth = 0;
   g->overflow = false;
-  g->fast = js_mknull();
+  g->fast = Ant_Value_Null;
 }
 
 bool proto_overflow_guard_hit_cycle(ant_t *js, proto_overflow_guard_t *g, ant_value_t cur) {
@@ -83,7 +83,7 @@ void proto_walk_overflow_guard_init(proto_walk_overflow_guard_t *g) {
   g->depth = 0;
   g->overflow = false;
   g->fast_active = false;
-  g->fast_cur = js_mknull();
+  g->fast_cur = Ant_Value_Null;
   g->fast_t = kTypeNull;
 }
 
@@ -111,7 +111,7 @@ bool proto_walk_overflow_guard_hit_cycle(
 }
 
 ant_value_t js_instance_proto_from_new_target(ant_t *js, ant_value_t fallback_proto, ant_value_t new_target) {
-  ant_value_t instance_proto = js_mkundef();
+  ant_value_t instance_proto = Ant_Value_Undefined;
 
   if (vtype(new_target) == kTypeFunction || vtype(new_target) == kTypeBuiltin) {
     ant_value_t nt_obj = js_as_obj(new_target);
@@ -149,7 +149,7 @@ bool is_wrapper_ctor_target(ant_t *js, ant_value_t this_val, ant_value_t new_tar
 }
 
 ant_value_t get_ctor_species_value(ant_t *js, ant_value_t ctor) {
-  if (!is_object_type(ctor) && vtype(ctor) != kTypeBuiltin) return js_mkundef();
+  if (!is_object_type(ctor) && vtype(ctor) != kTypeBuiltin) return Ant_Value_Undefined;
   return js_get_sym(js, ctor, js->sym.species_sym);
 }
 
@@ -192,11 +192,11 @@ static ant_value_t walk_prototype_chain_ex(
 
 ant_value_t js_object_is_prototype_of(ant_t *js, ant_value_t self, ant_value_t value, bool *cacheable) {
   if (cacheable) *cacheable = false;
-  if (!is_object_type(value) && vtype(value) != kTypeBuiltin) return js_false;
+  if (!is_object_type(value) && vtype(value) != kTypeBuiltin) return Ant_Value_False;
 
   if (vtype(self) == kTypeUndefined || vtype(self) == kTypeNull)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert undefined or null to object");
-  if (!is_object_type(self) && vtype(self) != kTypeBuiltin) return js_false;
+  if (!is_object_type(self) && vtype(self) != kTypeBuiltin) return Ant_Value_False;
 
   bool saw_proxy = false;
   ant_value_t result = walk_prototype_chain_ex(js, value, self, &saw_proxy);
@@ -250,9 +250,9 @@ static ant_value_t walk_prototype_chain_ex(
       current = proxy_proto_hop(js, current, &proxy_hops);
       if (is_err(current)) return current;
     } else current = get_proto(js, current);
-    if (!is_object_type(current)) return js_false;
-    if (same_object_identity(current, ctor_proto)) return js_true;
-    if (proto_overflow_guard_hit_cycle(js, &guard, current)) return js_false;
+    if (!is_object_type(current)) return Ant_Value_False;
+    if (same_object_identity(current, ctor_proto)) return Ant_Value_True;
+    if (proto_overflow_guard_hit_cycle(js, &guard, current)) return Ant_Value_False;
   }
 }
 

@@ -5,7 +5,7 @@ static uv_once_t g_wasm_engine_once = UV_ONCE_INIT;
 
 void wasm_clear_pending_import_throw(ant_t *js) {
   js->wasm_pending_import_throw = false;
-  js->mutable_roots.wasm_pending_import_throw = js_mkundef();
+  js->mutable_roots.wasm_pending_import_throw = Ant_Value_Undefined;
 }
 
 void wasm_set_pending_import_throw(ant_t *js, ant_value_t value) {
@@ -16,7 +16,7 @@ void wasm_set_pending_import_throw(ant_t *js, ant_value_t value) {
 ant_value_t wasm_consume_pending_import_throw(ant_t *js) {
   ant_value_t value = js->wasm_pending_import_throw
     ? js->mutable_roots.wasm_pending_import_throw
-    : js_mkundef();
+    : Ant_Value_Undefined;
   wasm_clear_pending_import_throw(js);
   return value;
 }
@@ -34,7 +34,7 @@ void wasm_unregister_instance_owner(ant_t *js, wasm_instance_t *instance) {
 ant_value_t wasm_find_instance_owner(ant_t *js, WASMModuleInstanceCommon *runtime_instance) {
   ant_value_t owner;
   if (runtime_instance && ant_ptr_pair_get(&js->wasm_instance_owners, (uintptr_t)runtime_instance, 0, &owner)) return owner;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void create_wasm_engine(void) {
@@ -98,7 +98,7 @@ static ant_value_t wasm_make_error(ant_t *js, ant_value_t proto, const char *mes
   GC_ROOT_PIN(js, err);
   js_set_proto_init(err, proto);
   defhidden(js, err, "message", 7, js_mkstr(js, message ? message : "", message ? strlen(message) : 0));
-  js_set_slot(err, SLOT_ERROR_BRAND, js_true);
+  js_set_slot(err, SLOT_ERROR_BRAND, Ant_Value_True);
   js_capture_stack(js, err);
   GC_ROOT_RESTORE(js, root_mark);
 
@@ -160,15 +160,15 @@ ant_value_t wasm_value_to_js(ant_t *js, const wasm_val_t *value) {
     case WASM_F32: return Ant_Value_FromNumber((double)value->of.f32);
     case WASM_F64: return Ant_Value_FromNumber(value->of.f64);
     case WASM_EXTERNREF:
-      return value->of.ref ? js_mkundef() : js_mknull();
+      return value->of.ref ? Ant_Value_Undefined : Ant_Value_Null;
     case WASM_FUNCREF: {
       wasm_func_t *func;
-      if (!value->of.ref) return js_mknull();
+      if (!value->of.ref) return Ant_Value_Null;
       func = wasm_ref_as_func(value->of.ref);
-      if (!func) return js_mkundef();
-      return wasm_wrap_func(js, func, js_mkundef(), true);
+      if (!func) return Ant_Value_Undefined;
+      return wasm_wrap_func(js, func, Ant_Value_Undefined, true);
     }
-    default: return js_mkundef();
+    default: return Ant_Value_Undefined;
   }
 }
 
@@ -230,7 +230,7 @@ bool js_value_to_wasm(ant_t *js, ant_value_t value, wasm_valkind_t kind, wasm_va
 }
 
 ant_value_t wasm_js_from_result_vec(ant_t *js, wasm_val_vec_t *results) {
-  if (!results || results->size == 0) return js_mkundef();
+  if (!results || results->size == 0) return Ant_Value_Undefined;
   if (results->size == 1) return wasm_value_to_js(js, &results->data[0]);
 
   ant_value_t arr = js_mkarr(js);
@@ -258,7 +258,7 @@ ant_value_t wasm_wrap_extern_object(ant_t *js, wasm_extern_wrap_kind_t kind, ant
   handle->kind = kind;
   handle->store = store;
   handle->own_handle = own_handle;
-  handle->memory_buffer = js_mkundef();
+  handle->memory_buffer = Ant_Value_Undefined;
   handle->cached_value = (wasm_val_t)WASM_INIT_VAL;
 
   switch (kind) {

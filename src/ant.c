@@ -40,7 +40,7 @@ ant_value_t js_codegen_refused(ant_t *js) {
 }
 
 static ant_value_t builtin_eval(ant_params_t) {
-  if (nargs == 0) return js_mkundef();
+  if (nargs == 0) return Ant_Value_Undefined;
   ant_value_t code = args[0];
   
   if (vtype(code) != kTypeString) return code;
@@ -102,8 +102,8 @@ static ant_t *isolate_init(void *buf, size_t len, const ant_isolate_options_t *o
   js->stringify_root.max_depth = ANT_INSPECT_MAX_DEPTH;
   Ant_List_Insert(&js->stringify, &js->stringify_root);
   
-  js->exception = js_mkundef();
-  js->exception_oom = js_mkundef();
+  js->exception = Ant_Value_Undefined;
+  js->exception_oom = Ant_Value_Undefined;
   js_init_intern_cache(js);
   
   js->pool.rope.block_size = ANT_POOL_ROPE_BLOCK_SIZE;
@@ -143,13 +143,13 @@ static ant_t *isolate_init(void *buf, size_t len, const ant_isolate_options_t *o
   Ant_List_Insert(&js->realms, main_realm);
   js->realm = js->main_realm = main_realm;
 
-  js->modules.cjs.cache = js_mkundef();
-  js->modules.cjs.parent = js_mkundef();
-  js->modules.cjs.main = js_mkundef();
-  js->modules.cjs.constructor = js_mkundef();
+  js->modules.cjs.cache = Ant_Value_Undefined;
+  js->modules.cjs.parent = Ant_Value_Undefined;
+  js->modules.cjs.main = Ant_Value_Undefined;
+  js->modules.cjs.constructor = Ant_Value_Undefined;
   js->modules.cjs.generation = 0;
-  js->modules.hooks = js_mkundef();
-  js->modules.import_meta = js_mkundef();
+  js->modules.hooks = Ant_Value_Undefined;
+  js->modules.import_meta = Ant_Value_Undefined;
   js->modules.state = NULL;
   js->length_str = Ant_String_FromLiteral(js, "length");
   
@@ -188,7 +188,7 @@ ant_t *Ant_Create(const ant_isolate_options_t *options) {
     return NULL;
   }
 
-  js->exception_oom = Ant_Exception_CreateRecord(js, oom, js_mkundef());
+  js->exception_oom = Ant_Exception_CreateRecord(js, oom, Ant_Value_Undefined);
   if (!is_err(js->exception_oom) || vdata(js->exception_oom) < 2) {
     Ant_Destroy(js);
     return NULL;
@@ -396,7 +396,7 @@ ant_value_t js_execute_compiled_bytecode(ant_t *js, sv_func_t *func, coroutine_t
 }
 
 ant_value_t js_execute_compiled_module(ant_t *js, sv_func_t *func) {
-  return execute_top_level(js, func, js_mkundef(), NULL);
+  return execute_top_level(js, func, Ant_Value_Undefined, NULL);
 }
 
 static ant_value_t js_execute_compiled_repl_bytecode(
@@ -529,19 +529,19 @@ ant_value_t js_eval_bytecode_eval_in_env_with_strict(
 }
 
 ant_value_t js_eval_bytecode(ant_t *js, const char *buf, size_t len) {
-  return js_eval_bytecode_mode(js, buf, len, SV_COMPILE_SCRIPT, false, js_mkundef(), js_mkundef(), js_mkundef());
+  return js_eval_bytecode_mode(js, buf, len, SV_COMPILE_SCRIPT, false, Ant_Value_Undefined, Ant_Value_Undefined, Ant_Value_Undefined);
 }
 
 ant_value_t js_eval_bytecode_module(ant_t *js, const char *buf, size_t len) {
-  return js_eval_bytecode_mode(js, buf, len, SV_COMPILE_MODULE, false, js_mkundef(), js_mkundef(), js_mkundef());
+  return js_eval_bytecode_mode(js, buf, len, SV_COMPILE_MODULE, false, Ant_Value_Undefined, Ant_Value_Undefined, Ant_Value_Undefined);
 }
 
 ant_value_t js_eval_bytecode_eval(ant_t *js, const char *buf, size_t len) {
-  return js_eval_bytecode_mode(js, buf, len, SV_COMPILE_EVAL, false, js->global, js->global, js_mkundef());
+  return js_eval_bytecode_mode(js, buf, len, SV_COMPILE_EVAL, false, js->global, js->global, Ant_Value_Undefined);
 }
 
 ant_value_t js_eval_bytecode_eval_with_strict(ant_t *js, const char *buf, size_t len, bool inherit_strict) {
-  return js_eval_bytecode_mode(js, buf, len, SV_COMPILE_EVAL, inherit_strict, js->global, js->global, js_mkundef());
+  return js_eval_bytecode_mode(js, buf, len, SV_COMPILE_EVAL, inherit_strict, js->global, js->global, Ant_Value_Undefined);
 }
 
 ant_value_t js_vm_script_compile(ant_t *js, const char *buf, size_t len) {
@@ -553,7 +553,7 @@ ant_value_t js_vm_script_compile(ant_t *js, const char *buf, size_t len) {
   }
   
   sv_func_t *func = program
-    ? js_compile_parsed_bytecode(js, program, buf, len, SV_COMPILE_REPL, js_mkundef())
+    ? js_compile_parsed_bytecode(js, program, buf, len, SV_COMPILE_REPL, Ant_Value_Undefined)
     : NULL;
   
   parse_arena_rewind(js, parse_mark);
@@ -575,11 +575,11 @@ ant_value_t js_vm_script_run(ant_t *js, ant_value_t compiled) {
 }
 
 ant_value_t js_function_from_source(ant_t *js, ant_value_t *params_and_body, int nargs) {
-  return build_dynamic_function(js, params_and_body, nargs, js_mkundef(), false, false);
+  return build_dynamic_function(js, params_and_body, nargs, Ant_Value_Undefined, false, false);
 }
 
 js_eval_result_t js_eval_bytecode_repl(ant_t *js, const char *buf, size_t len) {
-  return js_eval_bytecode_mode_result(js, buf, len, SV_COMPILE_REPL, false, js_mkundef(), js_mkundef(), js_mkundef());
+  return js_eval_bytecode_mode_result(js, buf, len, SV_COMPILE_REPL, false, Ant_Value_Undefined, Ant_Value_Undefined, Ant_Value_Undefined);
 }
 
 ant_value_t sv_call_native(ant_t *js, ant_value_t func, ant_value_t this_val, ant_call_params_t) {

@@ -75,7 +75,7 @@ static int decode_escape_sequence(const char *str, size_t len, size_t *pos, unsi
 }
 
 static ant_value_t escape_arg_string(ant_native_params_t) {
-  ant_value_t value = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t value = nargs > 0 ? args[0] : Ant_Value_Undefined;
   if (vtype(value) == kTypeString) return value;
   if (vtype(value) == kTypeSymbol)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert a Symbol value to a string");

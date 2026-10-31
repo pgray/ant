@@ -219,7 +219,7 @@ static bool wire_encode_value(
       ok = length <= ANT_WASM_WIRE_MAX_CONTAINER_ENTRIES &&
         wire_writer_u8(writer, ANT_WASM_WIRE_ARRAY) &&
         wire_writer_u32(writer, (uint32_t)length);
-      ant_value_t item = js_mkundef();
+      ant_value_t item = Ant_Value_Undefined;
       GC_ROOT_PIN(js, item);
       for (ant_offset_t i = 0; ok && i < length; i++) {
         if (ant_wasm_deadline_expired(runtime)) {
@@ -248,8 +248,8 @@ static bool wire_encode_value(
       ok = length <= ANT_WASM_WIRE_MAX_CONTAINER_ENTRIES &&
         wire_writer_u8(writer, ANT_WASM_WIRE_OBJECT) &&
         wire_writer_u32(writer, (uint32_t)length);
-      ant_value_t key = js_mkundef();
-      ant_value_t item = js_mkundef();
+      ant_value_t key = Ant_Value_Undefined;
+      ant_value_t item = Ant_Value_Undefined;
       GC_ROOT_PIN(js, key);
       GC_ROOT_PIN(js, item);
       for (ant_offset_t i = 0; ok && i < length; i++) {
@@ -299,16 +299,16 @@ static bool wire_decode_value(
 
   switch (tag) {
     case ANT_WASM_WIRE_UNDEFINED:
-      *output = js_mkundef();
+      *output = Ant_Value_Undefined;
       return true;
     case ANT_WASM_WIRE_NULL:
-      *output = js_mknull();
+      *output = Ant_Value_Null;
       return true;
     case ANT_WASM_WIRE_FALSE:
-      *output = js_false;
+      *output = Ant_Value_False;
       return true;
     case ANT_WASM_WIRE_TRUE:
-      *output = js_true;
+      *output = Ant_Value_True;
       return true;
     case ANT_WASM_WIRE_NUMBER: {
       double number = 0;
@@ -343,7 +343,7 @@ static bool wire_decode_value(
 
       GC_ROOT_SAVE(root_mark, js);
       ant_value_t array = js_mkarr(js);
-      ant_value_t item = js_mkundef();
+      ant_value_t item = Ant_Value_Undefined;
       GC_ROOT_PIN(js, array);
       GC_ROOT_PIN(js, item);
       if (is_err(array)) {
@@ -374,7 +374,7 @@ static bool wire_decode_value(
 
       GC_ROOT_SAVE(root_mark, js);
       ant_value_t object = Ant_Object_Create(js);
-      ant_value_t item = js_mkundef();
+      ant_value_t item = Ant_Value_Undefined;
       GC_ROOT_PIN(js, object);
       GC_ROOT_PIN(js, item);
       if (is_err(object)) {
@@ -491,7 +491,7 @@ static const uint8_t *serialize_timeout(ant_wasm_runtime_t *runtime) {
 }
 
 static const uint8_t *serialize_transfer_error(ant_wasm_runtime_t *runtime) {
-  js_take_thrown(runtime->js, js_mkundef());
+  js_take_thrown(runtime->js, Ant_Value_Undefined);
   return serialize_error_literal(
     runtime, "TypeError", "The value cannot be transferred from Ant"
   );
@@ -527,9 +527,9 @@ static ant_value_t error_payload(
 
   ant_value_t thrown = js_take_thrown(js, fallback);
   ant_value_t payload = Ant_Object_CreateBare(js);
-  ant_value_t name = js_mkundef();
-  ant_value_t message = js_mkundef();
-  ant_value_t stack = js_mkundef();
+  ant_value_t name = Ant_Value_Undefined;
+  ant_value_t message = Ant_Value_Undefined;
+  ant_value_t stack = Ant_Value_Undefined;
   GC_ROOT_PIN(js, thrown);
   GC_ROOT_PIN(js, payload);
   GC_ROOT_PIN(js, name);
@@ -553,7 +553,7 @@ static ant_value_t error_payload(
 
   if (!define_payload_property(js, payload, "name", 4, name) ||
       !define_payload_property(js, payload, "message", 7, message)) {
-    js_take_thrown(js, js_mkundef());
+    js_take_thrown(js, Ant_Value_Undefined);
     payload = Ant_Object_CreateBare(js);
     if (!is_err(payload)) {
       define_payload_property(
@@ -566,7 +566,7 @@ static ant_value_t error_payload(
     }
   } else if (vtype(stack) == kTypeString &&
              !define_payload_property(js, payload, "stack", 5, stack)) {
-    js_take_thrown(js, js_mkundef());
+    js_take_thrown(js, Ant_Value_Undefined);
   }
 
   GC_ROOT_RESTORE(js, root_mark);
@@ -617,7 +617,7 @@ static ant_value_t host_function_call(ant_params_t) {
 
   uint8_t *response = (uint8_t *)(uintptr_t)response_pointer;
   uint8_t status = response[0];
-  ant_value_t decoded = js_mkundef();
+  ant_value_t decoded = Ant_Value_Undefined;
   GC_ROOT_PIN(js, decoded);
   bool decoded_ok = (status == ANT_WASM_RESPONSE_OK ||
     status == ANT_WASM_RESPONSE_ERROR) &&
@@ -629,7 +629,7 @@ static ant_value_t host_function_call(ant_params_t) {
   }
 
   if (status == ANT_WASM_RESPONSE_ERROR) {
-    ant_value_t message = js_mkundef();
+    ant_value_t message = Ant_Value_Undefined;
     if (is_object_type(decoded))
       js_try_get_own_data_prop(js, decoded, "message", 7, &message);
     size_t message_length = 0;
@@ -732,12 +732,12 @@ const uint8_t *ant_wasm_set_global(
   js_setstacklimit(js, 768 * 1024);
 
   GC_ROOT_SAVE(root_mark, js);
-  ant_value_t value = js_mkundef();
+  ant_value_t value = Ant_Value_Undefined;
   GC_ROOT_PIN(js, value);
   if (function_id >= 0) {
     value = js_heavy_mkfun(js, host_function_call, Ant_Value_FromNumber((double)function_id));
   } else if (!wire_value || !wire_decode(js, wire_value, wire_length, &value)) {
-    js_take_thrown(js, js_mkundef());
+    js_take_thrown(js, Ant_Value_Undefined);
     const uint8_t *response = serialize_transfer_error(runtime);
     GC_ROOT_RESTORE(js, root_mark);
     return response;
@@ -766,7 +766,7 @@ const uint8_t *ant_wasm_set_global(
   }
 
   const uint8_t *response = serialize_value(
-    runtime, ANT_WASM_RESPONSE_OK, js_mkundef()
+    runtime, ANT_WASM_RESPONSE_OK, Ant_Value_Undefined
   );
   GC_ROOT_RESTORE(js, root_mark);
   return response;
@@ -795,7 +795,7 @@ const uint8_t *ant_wasm_eval(
 
   const uint8_t *response = NULL;
   if (runtime->timed_out) {
-    js_take_thrown(js, js_mkundef());
+    js_take_thrown(js, Ant_Value_Undefined);
     ant_microtasks_discard(js);
     response = serialize_timeout(runtime);
   } else if (is_err(result)) {
@@ -804,7 +804,7 @@ const uint8_t *ant_wasm_eval(
       runtime, ANT_WASM_RESPONSE_ERROR, payload
     );
     if (!response && runtime->timed_out) {
-      js_take_thrown(js, js_mkundef());
+      js_take_thrown(js, Ant_Value_Undefined);
       ant_microtasks_discard(js);
       response = serialize_timeout(runtime);
     } else if (!response) {
@@ -813,7 +813,7 @@ const uint8_t *ant_wasm_eval(
   } else {
     response = serialize_value(runtime, ANT_WASM_RESPONSE_OK, result);
     if (!response && runtime->timed_out) {
-      js_take_thrown(js, js_mkundef());
+      js_take_thrown(js, Ant_Value_Undefined);
       ant_microtasks_discard(js);
       response = serialize_timeout(runtime);
     } else if (!response) {

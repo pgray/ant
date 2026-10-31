@@ -488,7 +488,7 @@ void jit_emit_calls(jit_compile_t *c) {
           }
           if (inl_uses_this) {
             mir_load_imm(c->ctx, c->jit_func, r_inl_this,
-                inline_callee->is_strict || inline_callee->is_arrow ? js_mkundef() : c->js->global_this);
+                inline_callee->is_strict || inline_callee->is_arrow ? Ant_Value_Undefined : c->js->global_this);
             mir_emit_resolve_call_this(c->ctx, c->jit_func, r_inl_this, r_inl_cl,
                                        r_inl_this, r_inl_flags, r_inl_bound);
           } else

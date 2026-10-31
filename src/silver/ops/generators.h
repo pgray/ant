@@ -55,10 +55,10 @@ static inline void sv_yield_star_push_state(sv_vm_t *vm, ant_value_t *lp, uint16
 }
 
 static inline void sv_yield_star_clear_state(ant_t *js, ant_value_t *lp, uint16_t base) {
-  lp[base + SV_YS_ITER] = js_mkundef();
-  lp[base + SV_YS_NEXT] = js_mkundef();
-  lp[base + SV_YS_TAG] = js_mkundef();
-  lp[base + SV_YS_STATE] = js_false;
+  lp[base + SV_YS_ITER] = Ant_Value_Undefined;
+  lp[base + SV_YS_NEXT] = Ant_Value_Undefined;
+  lp[base + SV_YS_TAG] = Ant_Value_Undefined;
+  lp[base + SV_YS_STATE] = Ant_Value_False;
 }
 
 static inline ant_value_t sv_yield_star_unpack_result(
@@ -81,14 +81,14 @@ static inline ant_value_t sv_yield_star_unpack_result(
     if (!*out_done) {
       *out_value = result;
       *raw = true;
-      return js_mkundef();
+      return Ant_Value_Undefined;
     }
 
     *out_value = sv_iter_result_get_named(js, result, js->intern.value, "value", 5);
-    return is_err(*out_value) ? *out_value : js_mkundef();
+    return is_err(*out_value) ? *out_value : Ant_Value_Undefined;
   }
 
-  ant_value_t done = js_mkundef();
+  ant_value_t done = Ant_Value_Undefined;
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, result);
   
@@ -99,7 +99,7 @@ static inline ant_value_t sv_yield_star_unpack_result(
   if (is_err(*out_value)) return *out_value;
   *out_done = js_truthy(js, done);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_yield_star_resume_generator(
@@ -107,7 +107,7 @@ static inline ant_value_t sv_yield_star_resume_generator(
   ant_value_t *out_value, bool *out_done
 ) {
   *out_value = js_generator_resume_sync(js, iterator, arg, kind, out_done);
-  return is_err(*out_value) ? *out_value : js_mkundef();
+  return is_err(*out_value) ? *out_value : Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_yield_star_call_return(
@@ -121,7 +121,7 @@ static inline ant_value_t sv_yield_star_call_return(
   if (is_undefined(method) || is_null(method)) {
     *out_value = arg;
     *out_done = true;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
   
   if (!is_callable(method))
@@ -131,16 +131,16 @@ static inline ant_value_t sv_yield_star_call_return(
     return sv_yield_star_resume_generator(js, iterator, arg, SV_RESUME_RETURN, out_value, out_done);
 
   ant_value_t call_args[1] = { arg };
-  ant_value_t result = sv_vm_call(vm, js, method, iterator, call_args, 1, NULL, js_mkundef());
+  ant_value_t result = sv_vm_call(vm, js, method, iterator, call_args, 1, NULL, Ant_Value_Undefined);
   if (is_err(result)) return result;
 
   return sv_yield_star_unpack_result(js, result, out_value, out_done, raw);
 }
 
 static inline ant_value_t sv_yield_star_close_iterator(sv_vm_t *vm, ant_t *js, ant_value_t iterator) {
-  ant_value_t close_value = js_mkundef();
+  ant_value_t close_value = Ant_Value_Undefined;
   bool close_done = true;
-  return sv_yield_star_call_return(vm, js, iterator, js_mkundef(), &close_value, &close_done, NULL);
+  return sv_yield_star_call_return(vm, js, iterator, Ant_Value_Undefined, &close_value, &close_done, NULL);
 }
 
 static inline ant_value_t sv_yield_star_next(
@@ -149,7 +149,7 @@ static inline ant_value_t sv_yield_star_next(
 ) {
   int tag = (int)Ant_Value_AsNumberUnchecked(lp[base + SV_YS_TAG]);
   bool first = js_truthy(js, lp[base + SV_YS_STATE]);
-  lp[base + SV_YS_STATE] = js_false;
+  lp[base + SV_YS_STATE] = Ant_Value_False;
 
   if (tag == SV_ITER_GENERIC) {
     ant_value_t iterator = lp[base + SV_YS_ITER];
@@ -166,7 +166,7 @@ static inline ant_value_t sv_yield_star_next(
     ant_value_t call_args[1] = { sent };
     ant_value_t result = sv_vm_call(
       vm, js, next_method, iterator, first ? NULL : call_args, first ? 0 : 1,
-      NULL, js_mkundef()
+      NULL, Ant_Value_Undefined
     );
     
     if (is_err(result)) return result;
@@ -181,11 +181,11 @@ static inline ant_value_t sv_yield_star_next(
   sv_yield_star_store_state(vm, lp, base);
   vm->sp -= 3;
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_yield_star_make_generic(ant_t *js, ant_value_t *lp, uint16_t base) {
-  if ((int)Ant_Value_AsNumberUnchecked(lp[base + SV_YS_TAG]) == SV_ITER_GENERIC) return js_mkundef();
+  if ((int)Ant_Value_AsNumberUnchecked(lp[base + SV_YS_TAG]) == SV_ITER_GENERIC) return Ant_Value_Undefined;
 
   ant_value_t state[3] = { lp[base + SV_YS_ITER], lp[base + SV_YS_NEXT], lp[base + SV_YS_TAG] };
   ant_value_t iterator = sv_iter_record_iterator(js, state);
@@ -202,7 +202,7 @@ static inline ant_value_t sv_yield_star_make_generic(ant_t *js, ant_value_t *lp,
   lp[base + SV_YS_NEXT] = next_method;
   lp[base + SV_YS_TAG] = Ant_Value_FromNumber(SV_ITER_GENERIC);
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_yield_star_throw(
@@ -233,7 +233,7 @@ static inline ant_value_t sv_yield_star_throw(
     return sv_yield_star_resume_generator(js, iterator, thrown, SV_RESUME_THROW, out_value, out_done);
 
   ant_value_t call_args[1] = { thrown };
-  ant_value_t result = sv_vm_call(vm, js, throw_method, iterator, call_args, 1, NULL, js_mkundef());
+  ant_value_t result = sv_vm_call(vm, js, throw_method, iterator, call_args, 1, NULL, Ant_Value_Undefined);
   if (is_err(result)) return result;
 
   *raw = want_raw;
@@ -251,7 +251,7 @@ static inline ant_value_t sv_yield_star_return(
   if (tag != SV_ITER_GENERIC && ant_protector_intact(js, ANT_PROTECTOR_ITERATOR_RETURN)) {
     *out_value = value;
     *out_done = true;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   GC_ROOT_SAVE(value_mark, js);
@@ -276,8 +276,8 @@ static inline ant_value_t sv_yield_star_init(sv_vm_t *vm, ant_t *js, ant_value_t
   
   sv_yield_star_store_state(vm, lp, base);
   vm->sp -= 3;
-  lp[base + SV_YS_STATE] = js_true;
-  vm->stack[vm->sp++] = js_mkundef();
+  lp[base + SV_YS_STATE] = Ant_Value_True;
+  vm->stack[vm->sp++] = Ant_Value_Undefined;
   
   return status;
 }
@@ -287,14 +287,14 @@ static inline __attribute__((noinline)) ant_value_t sv_yield_star_init_async(
 ) {
   ant_value_t iterable = vm->stack[vm->sp - 1];
   ant_value_t method = sv_array_lacks_async_iterator(js, iterable)
-    ? js_mkundef()
+    ? Ant_Value_Undefined
     : js_get_sym(js, iterable, js->sym.asyncIterator_sym);
   
   if (is_err(method)) return method;
   
   if (vtype(method) == kTypeUndefined || vtype(method) == kTypeNull) {
     ant_value_t status = sv_yield_star_init(vm, js, lp, base);
-    return is_err(status) ? status : js_false;
+    return is_err(status) ? status : Ant_Value_False;
   }
   
   if (!is_callable(method))
@@ -303,7 +303,7 @@ static inline __attribute__((noinline)) ant_value_t sv_yield_star_init_async(
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, method);
   
-  ant_value_t iterator = sv_vm_call(vm, js, method, iterable, NULL, 0, NULL, js_mkundef());
+  ant_value_t iterator = sv_vm_call(vm, js, method, iterable, NULL, 0, NULL, Ant_Value_Undefined);
   GC_ROOT_RESTORE(js, root_mark);
   
   if (is_err(iterator)) return iterator;
@@ -315,11 +315,11 @@ static inline __attribute__((noinline)) ant_value_t sv_yield_star_init_async(
   if (is_err(next_method)) return next_method;
   
   lp[base + SV_YS_NEXT] = next_method;
-  lp[base + SV_YS_TAG] = js_mkundef();
+  lp[base + SV_YS_TAG] = Ant_Value_Undefined;
   lp[base + SV_YS_STATE] = Ant_Value_FromNumber(SV_YS_ASYNC_CONTINUE);
-  vm->stack[vm->sp - 1] = js_mkundef();
+  vm->stack[vm->sp - 1] = Ant_Value_Undefined;
   
-  return js_true;
+  return Ant_Value_True;
 }
 
 static inline __attribute__((noinline)) ant_value_t sv_yield_star_async_call(
@@ -327,7 +327,7 @@ static inline __attribute__((noinline)) ant_value_t sv_yield_star_async_call(
 ) {
   ant_value_t iterator = lp[base + SV_YS_ITER];
   ant_value_t received = vm->stack[vm->sp - 1];
-  ant_value_t method = js_mkundef();
+  ant_value_t method = Ant_Value_Undefined;
   sv_ys_async_mode_t mode = SV_YS_ASYNC_CONTINUE;
 
   switch (kind) {
@@ -341,7 +341,7 @@ static inline __attribute__((noinline)) ant_value_t sv_yield_star_async_call(
       if (is_err(method)) return method;
       if (!is_callable(method)) {
         lp[base + SV_YS_STATE] = Ant_Value_FromNumber(SV_YS_ASYNC_RETURN_DIRECT);
-        return js_mkundef();
+        return Ant_Value_Undefined;
       }
       mode = SV_YS_ASYNC_RETURN;
       break;
@@ -363,13 +363,13 @@ static inline __attribute__((noinline)) ant_value_t sv_yield_star_async_call(
   lp[base + SV_YS_STATE] = Ant_Value_FromNumber(mode);
   ant_value_t result = sv_vm_call(
     vm, js, method, iterator, &received,
-    mode == SV_YS_ASYNC_THROW_CLOSED ? 0 : 1, NULL, js_mkundef()
+    mode == SV_YS_ASYNC_THROW_CLOSED ? 0 : 1, NULL, Ant_Value_Undefined
   );
   
   if (is_err(result)) return result;
   vm->stack[vm->sp - 1] = result;
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline __attribute__((noinline)) sv_ys_step_t sv_yield_star_async_result(
@@ -394,13 +394,13 @@ static inline __attribute__((noinline)) sv_ys_step_t sv_yield_star_async_result(
   }
   
   vm->stack[vm->sp - 1] = value;
-  if (!done) return (sv_ys_step_t){ .status = js_mkundef(), .kind = SV_YS_STEP_SUSPEND };
+  if (!done) return (sv_ys_step_t){ .status = Ant_Value_Undefined, .kind = SV_YS_STEP_SUSPEND };
 
   sv_yield_star_clear_state(js, lp, base);
   bool is_return = mode == SV_YS_ASYNC_RETURN || mode == SV_YS_ASYNC_RETURN_DIRECT;
 
   return (sv_ys_step_t){
-    .status = js_mkundef(),
+    .status = Ant_Value_Undefined,
     .kind = is_return ? SV_YS_STEP_RETURN : SV_YS_STEP_CONTINUE,
   };
 }

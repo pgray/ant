@@ -9,7 +9,7 @@ static void jit_emit_compare_bit(jit_compile_t *c, MIR_insn_code_t cmp, MIR_reg_
   c->cmp_insn = MIR_new_insn(c->ctx, cmp, MIR_new_reg_op(c->ctx, bit),
                              MIR_new_reg_op(c->ctx, l), MIR_new_reg_op(c->ctx, r));
   c->cmp_box = MIR_new_insn(c->ctx, MIR_OR, MIR_new_reg_op(c->ctx, rd),
-                            MIR_new_uint_op(c->ctx, js_false), MIR_new_reg_op(c->ctx, bit));
+                            MIR_new_uint_op(c->ctx, Ant_Value_False), MIR_new_reg_op(c->ctx, bit));
   MIR_append_insn(c->ctx, c->jit_func, c->cmp_insn);
   MIR_append_insn(c->ctx, c->jit_func, c->cmp_box);
   c->cmp_bit = bit;
@@ -132,7 +132,7 @@ void jit_emit_compare(jit_compile_t *c) {
         MIR_append_insn(c->ctx, c->jit_func,
                         MIR_new_insn(c->ctx, MIR_OR,
                                      MIR_new_reg_op(c->ctx, rd),
-                                     MIR_new_uint_op(c->ctx, js_false),
+                                     MIR_new_uint_op(c->ctx, Ant_Value_False),
                                      MIR_new_reg_op(c->ctx, c->r_tmp)));
         MIR_append_insn(c->ctx, c->jit_func,
                         MIR_new_insn(c->ctx, MIR_JMP, MIR_new_label_op(c->ctx, done)));
@@ -250,7 +250,7 @@ void jit_emit_compare(jit_compile_t *c) {
         MIR_append_insn(c->ctx, c->jit_func,
                         MIR_new_insn(c->ctx, MIR_OR,
                                      MIR_new_reg_op(c->ctx, rd),
-                                     MIR_new_uint_op(c->ctx, js_false),
+                                     MIR_new_uint_op(c->ctx, Ant_Value_False),
                                      MIR_new_reg_op(c->ctx, c->r_tmp)));
         MIR_append_insn(c->ctx, c->jit_func,
                         MIR_new_insn(c->ctx, MIR_JMP, MIR_new_label_op(c->ctx, done)));
@@ -356,7 +356,7 @@ void jit_emit_compare(jit_compile_t *c) {
 
       if (strict && (r_const || l_const)) {
         if (known_number_vs_singleton)
-          mir_load_imm(c->ctx, c->jit_func, dst, invert ? js_true : js_false);
+          mir_load_imm(c->ctx, c->jit_func, dst, invert ? Ant_Value_True : Ant_Value_False);
         else {
           MIR_reg_t other = r_const ? rl : rr;
           MIR_label_t matched = MIR_new_label(c->ctx);
@@ -366,11 +366,11 @@ void jit_emit_compare(jit_compile_t *c) {
                                        MIR_new_label_op(c->ctx, matched),
                                        MIR_new_reg_op(c->ctx, other),
                                        MIR_new_uint_op(c->ctx, cval)));
-          mir_load_imm(c->ctx, c->jit_func, dst, invert ? js_true : js_false);
+          mir_load_imm(c->ctx, c->jit_func, dst, invert ? Ant_Value_True : Ant_Value_False);
           MIR_append_insn(c->ctx, c->jit_func,
                           MIR_new_insn(c->ctx, MIR_JMP, MIR_new_label_op(c->ctx, eq_done)));
           MIR_append_insn(c->ctx, c->jit_func, matched);
-          mir_load_imm(c->ctx, c->jit_func, dst, invert ? js_false : js_true);
+          mir_load_imm(c->ctx, c->jit_func, dst, invert ? Ant_Value_False : Ant_Value_True);
           MIR_append_insn(c->ctx, c->jit_func, eq_done);
         }
       } else if (strict) {
@@ -404,11 +404,11 @@ void jit_emit_compare(jit_compile_t *c) {
                                      MIR_new_label_op(c->ctx, matched),
                                      MIR_new_reg_op(c->ctx, other),
                                      MIR_new_uint_op(c->ctx, mkval(kTypeUndefined, 0))));
-        mir_load_imm(c->ctx, c->jit_func, dst, invert ? js_true : js_false);
+        mir_load_imm(c->ctx, c->jit_func, dst, invert ? Ant_Value_True : Ant_Value_False);
         MIR_append_insn(c->ctx, c->jit_func,
                         MIR_new_insn(c->ctx, MIR_JMP, MIR_new_label_op(c->ctx, is_done)));
         MIR_append_insn(c->ctx, c->jit_func, matched);
-        mir_load_imm(c->ctx, c->jit_func, dst, invert ? js_false : js_true);
+        mir_load_imm(c->ctx, c->jit_func, dst, invert ? Ant_Value_False : Ant_Value_True);
         MIR_append_insn(c->ctx, c->jit_func, is_done);
       } else {
         MIR_item_t helper = c->op == OP_SEQ  ? c->imp_seq
@@ -501,7 +501,7 @@ void jit_emit_compare(jit_compile_t *c) {
         MIR_append_insn(c->ctx, c->jit_func,
                         MIR_new_insn(c->ctx, MIR_OR,
                                      MIR_new_reg_op(c->ctx, rd),
-                                     MIR_new_uint_op(c->ctx, js_false),
+                                     MIR_new_uint_op(c->ctx, Ant_Value_False),
                                      MIR_new_reg_op(c->ctx, c->r_tmp)));
         MIR_append_insn(c->ctx, c->jit_func,
                         MIR_new_insn(c->ctx, MIR_JMP, MIR_new_label_op(c->ctx, done)));
@@ -598,7 +598,7 @@ void jit_emit_compare(jit_compile_t *c) {
         MIR_append_insn(c->ctx, c->jit_func,
                         MIR_new_insn(c->ctx, MIR_OR,
                                      MIR_new_reg_op(c->ctx, rd),
-                                     MIR_new_uint_op(c->ctx, js_false),
+                                     MIR_new_uint_op(c->ctx, Ant_Value_False),
                                      MIR_new_reg_op(c->ctx, c->r_tmp)));
         MIR_append_insn(c->ctx, c->jit_func,
                         MIR_new_insn(c->ctx, MIR_JMP, MIR_new_label_op(c->ctx, done)));
@@ -824,7 +824,7 @@ void jit_emit_compare(jit_compile_t *c) {
         MIR_append_insn(c->ctx, c->jit_func,
                         MIR_new_insn(c->ctx, MIR_OR,
                                      MIR_new_reg_op(c->ctx, dst),
-                                     MIR_new_uint_op(c->ctx, js_false),
+                                     MIR_new_uint_op(c->ctx, Ant_Value_False),
                                      MIR_new_reg_op(c->ctx, r_ic_idx_val)));
         MIR_append_insn(c->ctx, c->jit_func,
                         MIR_new_insn(c->ctx, MIR_JMP,
@@ -834,7 +834,7 @@ void jit_emit_compare(jit_compile_t *c) {
         MIR_append_insn(c->ctx, c->jit_func,
                         MIR_new_insn(c->ctx, MIR_MOV,
                                      MIR_new_reg_op(c->ctx, dst),
-                                     MIR_new_uint_op(c->ctx, js_true)));
+                                     MIR_new_uint_op(c->ctx, Ant_Value_True)));
         MIR_append_insn(c->ctx, c->jit_func,
                         MIR_new_insn(c->ctx, MIR_JMP,
                                      MIR_new_label_op(c->ctx, no_err)));
@@ -997,7 +997,7 @@ void jit_emit_compare(jit_compile_t *c) {
         MIR_append_insn(c->ctx, c->jit_func,
                         MIR_new_insn(c->ctx, MIR_OR,
                                      MIR_new_reg_op(c->ctx, dst),
-                                     MIR_new_uint_op(c->ctx, js_false),
+                                     MIR_new_uint_op(c->ctx, Ant_Value_False),
                                      MIR_new_reg_op(c->ctx, r_ic_idx_val)));
         MIR_append_insn(c->ctx, c->jit_func,
                         MIR_new_insn(c->ctx, MIR_JMP,

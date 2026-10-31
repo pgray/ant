@@ -88,7 +88,7 @@ int main(void) {
     .len = 2, .depth = 1,
     .left = mkref(kTypeString, released),
     .right = mkref(kTypeString, released),
-    .cached = js_mkundef(),
+    .cached = Ant_Value_Undefined,
   };
   js.rope_gc.old.head = stale;
   assert(gc_ropes_begin(&js, false) == GC_ROPES_BEGIN_NORMAL);

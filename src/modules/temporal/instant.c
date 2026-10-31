@@ -35,7 +35,7 @@ static ant_value_t temporal_instant_ctor(ant_params_t) {
   if (vtype(call_new_target) == kTypeUndefined) return temporal_require_new(js, "Temporal.Instant");
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "Temporal.Instant requires epoch nanoseconds");
   I128Nanoseconds ns;
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   if (!temporal_i128_from_value(js, args[0], &ns, &err)) return err;
   temporal_rs_Instant_try_new_result result = temporal_rs_Instant_try_new(ns);
   if (!result.is_ok) return temporal_error(js, result.err);
@@ -45,7 +45,7 @@ static ant_value_t temporal_instant_ctor(ant_params_t) {
 static ant_value_t temporal_instant_from(ant_params_t) {
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "Temporal.Instant.from requires an argument");
   Instant *instant;
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   if (!temporal_instant_from_value(js, args[0], &instant, &err)) return err;
   return temporal_wrap(js, TEMPORAL_INSTANT, instant);
 }
@@ -54,7 +54,7 @@ static ant_value_t temporal_instant_from_epoch_milliseconds(ant_params_t) {
   if (nargs < 1 || vtype(args[0]) == kTypeUndefined)
     return js_mkerr_typed(js, JS_ERR_RANGE, "epoch milliseconds must be an integral number");
   int64_t milliseconds;
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   if (!temporal_integral(js, args[0], 0, &milliseconds, &err)) return err;
   temporal_rs_Instant_from_epoch_milliseconds_result result =
     temporal_rs_Instant_from_epoch_milliseconds(milliseconds);
@@ -65,7 +65,7 @@ static ant_value_t temporal_instant_from_epoch_milliseconds(ant_params_t) {
 static ant_value_t temporal_instant_from_epoch_nanoseconds(ant_params_t) {
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "epoch nanoseconds are required");
   I128Nanoseconds ns;
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   if (!temporal_i128_from_value(js, args[0], &ns, &err)) return err;
   temporal_rs_Instant_try_new_result result = temporal_rs_Instant_try_new(ns);
   if (!result.is_ok) return temporal_error(js, result.err);
@@ -75,7 +75,7 @@ static ant_value_t temporal_instant_from_epoch_nanoseconds(ant_params_t) {
 static ant_value_t temporal_instant_compare(ant_params_t) {
   if (nargs < 2) return js_mkerr_typed(js, JS_ERR_TYPE, "Temporal.Instant.compare requires two arguments");
   Instant *one = NULL, *two = NULL;
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   if (!temporal_instant_from_value(js, args[0], &one, &err)) return err;
   if (!temporal_instant_from_value(js, args[1], &two, &err)) {
     temporal_rs_Instant_destroy(one);
@@ -93,14 +93,14 @@ static Instant *temporal_instant_this(ant_t *js, ant_value_t call_this, const ch
 
 static ant_value_t temporal_instant_get_epoch_milliseconds(ant_params_t) {
   (void)args; (void)nargs;
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   Instant *self = temporal_instant_this(js, call_this, "Temporal.Instant.prototype.epochMilliseconds", &err);
   return self ? Ant_Value_FromNumber((double)temporal_rs_Instant_epoch_milliseconds(self)) : err;
 }
 
 static ant_value_t temporal_instant_get_epoch_nanoseconds(ant_params_t) {
   (void)args; (void)nargs;
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   Instant *self = temporal_instant_this(js, call_this, "Temporal.Instant.prototype.epochNanoseconds", &err);
   return self ? temporal_i128_to_bigint(js, temporal_rs_Instant_epoch_nanoseconds(self)) : err;
 }
@@ -108,7 +108,7 @@ static ant_value_t temporal_instant_get_epoch_nanoseconds(ant_params_t) {
 static ant_value_t temporal_instant_binary_duration(
   ant_native_params_t, ant_value_t call_this, bool subtract
 ) {
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   Instant *self = temporal_instant_this(js, call_this,
     subtract ? "Temporal.Instant.prototype.subtract" : "Temporal.Instant.prototype.add", &err);
   if (!self) return err;
@@ -141,7 +141,7 @@ static ant_value_t temporal_instant_subtract(ant_params_t) {
 }
 
 static ant_value_t temporal_instant_equals(ant_params_t) {
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   Instant *self = temporal_instant_this(js, call_this, "Temporal.Instant.prototype.equals", &err);
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "Instant argument is required");
@@ -155,7 +155,7 @@ static ant_value_t temporal_instant_equals(ant_params_t) {
 static ant_value_t temporal_instant_difference(
   ant_native_params_t, ant_value_t call_this, bool since
 ) {
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   Instant *self = temporal_instant_this(js, call_this,
     since ? "Temporal.Instant.prototype.since" : "Temporal.Instant.prototype.until", &err);
   if (!self) return err;
@@ -163,7 +163,7 @@ static ant_value_t temporal_instant_difference(
   Instant *other;
   if (!temporal_instant_from_value(js, args[0], &other, &err)) return err;
   DifferenceSettings settings;
-  if (!temporal_difference_settings(js, nargs > 1 ? args[1] : js_mkundef(), &settings, &err)) {
+  if (!temporal_difference_settings(js, nargs > 1 ? args[1] : Ant_Value_Undefined, &settings, &err)) {
     temporal_rs_Instant_destroy(other); return err;
   }
   Duration *value = NULL;
@@ -192,13 +192,13 @@ static ant_value_t temporal_instant_until(ant_params_t) {
 }
 
 static ant_value_t temporal_instant_to_string(ant_params_t) {
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   Instant *self = temporal_instant_this(js, call_this, "Temporal.Instant.prototype.toString", &err);
   if (!self) return err;
   DiplomatWrite *write = diplomat_buffer_write_create(40);
   if (!write) return js_mkerr_typed(js, JS_ERR_INTERNAL, "Temporal string allocation failed");
   temporal_to_string_options_t options;
-  if (!temporal_to_string_options(js, nargs > 0 ? args[0] : js_mkundef(),
+  if (!temporal_to_string_options(js, nargs > 0 ? args[0] : Ant_Value_Undefined,
       TEMPORAL_TOSTRING_DIGITS | TEMPORAL_TOSTRING_ROUNDING_MODE |
         TEMPORAL_TOSTRING_SMALLEST_UNIT | TEMPORAL_TOSTRING_TIME_ZONE,
       &options, &err)) {
@@ -215,11 +215,11 @@ static ant_value_t temporal_instant_to_string(ant_params_t) {
 }
 
 static ant_value_t temporal_instant_to_string_default(ant_params_t) {
-  (void)args; (void)nargs; return temporal_instant_to_string(js, NULL, 0, js_mkundef(), call_this, call_func);
+  (void)args; (void)nargs; return temporal_instant_to_string(js, NULL, 0, Ant_Value_Undefined, call_this, call_func);
 }
 
 static ant_value_t temporal_instant_round(ant_params_t) {
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   Instant *self = temporal_instant_this(js, call_this, "Temporal.Instant.prototype.round", &err);
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "round options are required");
@@ -230,7 +230,7 @@ static ant_value_t temporal_instant_round(ant_params_t) {
 }
 
 static ant_value_t temporal_instant_to_zdt_iso(ant_params_t) {
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   Instant *self = temporal_instant_this(js, call_this, "Temporal.Instant.prototype.toZonedDateTimeISO", &err);
   if (!self) return err;
   if (nargs < 1) return js_mkerr_typed(js, JS_ERR_TYPE, "time zone is required");

@@ -26,7 +26,7 @@ static inline void sv_op_void(sv_vm_t *vm) {
 static inline ant_value_t sv_op_delete(sv_vm_t *vm, ant_t *js) {
   ant_value_t key = vm->stack[vm->sp - 1];
   ant_value_t obj = vm->stack[vm->sp - 2];
-  ant_value_t key_str = js_mkundef();
+  ant_value_t key_str = Ant_Value_Undefined;
 
   if (vtype(key) == kTypeSymbol) {
     ant_value_t result = js_delete_sym_prop(js, obj, key);
@@ -35,7 +35,7 @@ static inline ant_value_t sv_op_delete(sv_vm_t *vm, ant_t *js) {
     if (is_err(result)) return result;
     vm->stack[vm->sp++] = result;
     
-    return js_mkundef();
+    return Ant_Value_Undefined;
   } else key_str = coerce_to_str(js, key);
 
   if (!is_err(key_str) && vtype(key_str) == kTypeString) {
@@ -54,7 +54,7 @@ static inline ant_value_t sv_op_delete(sv_vm_t *vm, ant_t *js) {
     vm->stack[vm->sp++] = mkval(kTypeBool, 0);
   }
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline void sv_op_delete_var(

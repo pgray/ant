@@ -622,12 +622,12 @@ ant_value_t opt_rt_enter_frame(sv_vm_t *vm, opt_entry_t *entry, const opt_code_t
   frame->prev_sp = prev_sp;
   frame->argc = argc;
   frame->completion.kind = SV_COMPLETION_NONE;
-  frame->completion.value = js_mkundef();
+  frame->completion.value = Ant_Value_Undefined;
   frame->upvalues = closure->upvalues;
   frame->upvalue_count = func->upvalue_count;
   frame->handler_base = (uint16_t)vm->handler_depth;
   frame->handler_top = (uint16_t)vm->handler_depth;
-  frame->arguments_obj = js_mkundef();
+  frame->arguments_obj = Ant_Value_Undefined;
   frame->eval_env = sv_closure_eval_env(closure);
   vm->fp++;
 
@@ -656,7 +656,7 @@ ant_value_t opt_rt_leave_frame(ant_value_t result, sv_vm_t *vm, opt_entry_t *ent
     GC_ROOT_SAVE(mark, js);
     GC_ROOT_PIN(js, result);
     js_arguments_detach(js, frame->arguments_obj);
-    frame->arguments_obj = js_mkundef();
+    frame->arguments_obj = Ant_Value_Undefined;
     GC_ROOT_RESTORE(js, mark);
   }
   if (entry->owns_frame) {
@@ -700,7 +700,7 @@ ant_value_t opt_rt_resume(
     sv_rebase_open_upvalues(&vm->open_upvalues, frame->lp, locals, code->local_count);
     if (is_object_type(frame->arguments_obj)) arguments = frame->arguments_obj;
     if (code->func->is_derived_ctor) this_val = frame->this;
-    frame->arguments_obj = js_mkundef();
+    frame->arguments_obj = Ant_Value_Undefined;
     opt_rt_leave_frame(0, vm, entry);
   }
   vm->jit.resume.arguments_obj = arguments;
@@ -714,7 +714,7 @@ ant_value_t opt_rt_resume(
 static bool opt_push_waiting_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t callee, uint32_t call_off) {
   if (vm->fp + 1 >= vm->max_frames && !sv_vm_reserve(vm, 0)) return false;
   sv_frame_t *frame = &vm->frames[++vm->fp];
-  ant_value_t undefined = js_mkundef();
+  ant_value_t undefined = Ant_Value_Undefined;
   *frame = (sv_frame_t){
     .ip = func->code + call_off + 1,
     .bp = &vm->stack[vm->sp],
@@ -759,7 +759,7 @@ ant_value_t opt_rt_exit_frames(sv_vm_t *vm, opt_code_t *code, const opt_site_t *
     sv_rebase_open_upvalues(&vm->open_upvalues, frame->lp, root->locals, locals);
     if (is_object_type(frame->arguments_obj)) arguments = frame->arguments_obj;
     if (func->is_derived_ctor) root_this = frame->this;
-    frame->arguments_obj = js_mkundef();
+    frame->arguments_obj = Ant_Value_Undefined;
     opt_rt_leave_frame(0, vm, entry);
   }
 
@@ -774,7 +774,7 @@ ant_value_t opt_rt_exit_frames(sv_vm_t *vm, opt_code_t *code, const opt_site_t *
     room &= waits[k] || (k == count - 1 && borrowed);
   }
 
-  ant_value_t result = js_mkundef();
+  ant_value_t result = Ant_Value_Undefined;
   for (uint32_t k = 0; k < count; k++) {
     opt_exit_frame_t *frame = &frames[k];
     const opt_site_frame_t *at = frame->site;
@@ -808,7 +808,7 @@ ant_value_t opt_rt_exit_frames(sv_vm_t *vm, opt_code_t *code, const opt_site_t *
       uint32_t argc = is_object_type(frame->arguments) ? at->argc : at->argc < frame_params ? at->argc : frame_params;
       vm->jit.resume.arguments_obj = frame->arguments;
       result = jit_resume_in_interpreter(
-        vm, frame->closure, frame->this_val, at->construct ? frame->callee : js_mkundef(), frame->closure->super_val,
+        vm, frame->closure, frame->this_val, at->construct ? frame->callee : Ant_Value_Undefined, frame->closure->super_val,
         frame->params, (int)argc, frame->stack, depth, frame->params, frame_params,
         frame->locals, frame_locals, bc_off, false, NULL
       );
@@ -823,8 +823,8 @@ ant_value_t opt_rt_call(sv_vm_t *vm, ant_value_t callee, ant_value_t this_val, a
   
   if (vtype(callee) == kTypeBuiltin && sv_native_direct_allowed(js)) {
     ant_cfunc_t fn = ((const ant_cfunc_meta_t *)vptr(callee))->fn;
-    ant_value_t native_this = vtype(this_val) == kTypeNull ? js_mkundef() : this_val;
-    ant_value_t result = fn(js, args, (int)argc, js_mkundef(), native_this, callee);
+    ant_value_t native_this = vtype(this_val) == kTypeNull ? Ant_Value_Undefined : this_val;
+    ant_value_t result = fn(js, args, (int)argc, Ant_Value_Undefined, native_this, callee);
     
     if (is_err(result) || vtype(js->exception) != kTypeUndefined) result = jit_helper_native_finish(js, result);
     return result;
@@ -832,9 +832,9 @@ ant_value_t opt_rt_call(sv_vm_t *vm, ant_value_t callee, ant_value_t this_val, a
   
   ant_value_t cfunc = sv_native_closure_cfunc(callee);
   if (cfunc && sv_native_direct_allowed(js))
-    return sv_invoke_builtin(js, cfunc, this_val, callee, args, (int)argc, js_mkundef());
+    return sv_invoke_builtin(js, cfunc, this_val, callee, args, (int)argc, Ant_Value_Undefined);
   
-  return sv_vm_call(vm, js, callee, this_val, args, (int)argc, NULL, js_mkundef());
+  return sv_vm_call(vm, js, callee, this_val, args, (int)argc, NULL, Ant_Value_Undefined);
 }
 
 ant_value_t opt_rt_char_code_at(sv_vm_t *vm, ant_value_t callee, ant_value_t this_val, ant_value_t *args, int64_t argc, int64_t kind) {
@@ -929,7 +929,7 @@ ant_value_t opt_rt_in_field(sv_vm_t *vm, ant_value_t object, ant_value_t unused,
 
 ant_value_t opt_rt_set_proto(sv_vm_t *vm, ant_value_t object, ant_value_t proto, ant_value_t *args, int64_t argc, int64_t kind) {
   js_set_literal_proto(vm->js, object, proto);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t opt_rt_builder_read(sv_vm_t *vm, ant_value_t value, ant_value_t unused, ant_value_t *args, int64_t argc, int64_t kind) {
@@ -1010,7 +1010,7 @@ ant_value_t opt_rt_allocate_array(sv_vm_t *vm, uint64_t count) {
   ant_value_t *data;
   ant_value_t array = js_mkarr_dense_uninit(vm->js, (uint32_t)count, &data);
   if (is_err(array)) return array;
-  for (uint64_t i = 0; i < count; i++) data[i] = js_mkundef();
+  for (uint64_t i = 0; i < count; i++) data[i] = Ant_Value_Undefined;
   return array;
 }
 
@@ -1053,7 +1053,7 @@ ant_value_t opt_rt_new_box(sv_vm_t *vm, ant_value_t value, ant_value_t unused, a
 
 ant_value_t opt_rt_osr_box(sv_vm_t *vm, ant_value_t unused, ant_value_t unused2, ant_value_t *args, int64_t argc, int64_t slot) {
   ant_value_t *location = sv_frame_slot_ptr(&vm->frames[vm->fp], (uint16_t)slot);
-  ant_value_t value = location ? *location : js_mkundef();
+  ant_value_t value = location ? *location : Ant_Value_Undefined;
   for (sv_upvalue_t **pp = &vm->open_upvalues; location && *pp; pp = &(*pp)->next) {
     sv_upvalue_t *box = *pp;
     if ((uintptr_t)box->location < (uintptr_t)location) break;
@@ -1100,7 +1100,7 @@ ant_value_t opt_rt_arguments_object(sv_vm_t *vm, ant_value_t callee, ant_value_t
 
 ant_value_t opt_rt_close_upvalues(sv_vm_t *vm, ant_value_t unused, ant_value_t unused2, ant_value_t *args, int64_t argc, int64_t slot) {
   jit_helper_close_frame_upvalues(vm, (uint32_t)slot);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t opt_rt_get_global(sv_vm_t *vm, ant_value_t unused, ant_value_t unused2, ant_value_t *args, int64_t argc, const opt_rt_site_t *site) {

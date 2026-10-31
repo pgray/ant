@@ -51,8 +51,8 @@ static void jit_emit_forward_arguments_call(jit_compile_t *c, bool is_tail) {
   MIR_append_insn(c->ctx, c->jit_func, MIR_new_call_insn(c->ctx, 10,
     MIR_new_ref_op(c->ctx, c->self_proto), MIR_new_reg_op(c->ctx, code),
     MIR_new_reg_op(c->ctx, result), MIR_new_reg_op(c->ctx, c->r_vm),
-    MIR_new_reg_op(c->ctx, receiver), MIR_new_uint_op(c->ctx, js_mkundef()),
-    MIR_new_uint_op(c->ctx, js_mkundef()), MIR_new_reg_op(c->ctx, c->r_args),
+    MIR_new_reg_op(c->ctx, receiver), MIR_new_uint_op(c->ctx, Ant_Value_Undefined),
+    MIR_new_uint_op(c->ctx, Ant_Value_Undefined), MIR_new_reg_op(c->ctx, c->r_args),
     MIR_new_reg_op(c->ctx, c->r_argc), MIR_new_reg_op(c->ctx, closure)));
   MIR_append_insn(c->ctx, c->jit_func, MIR_new_insn(c->ctx, MIR_JMP, MIR_new_label_op(c->ctx, done)));
   MIR_append_insn(c->ctx, c->jit_func, slow);

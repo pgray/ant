@@ -709,7 +709,7 @@ static ant_value_t bigint_bitwise_binary(ant_t *js, ant_value_t a, ant_value_t b
 
   uint32_t stack_limbs[BIGINT_LIMB_SIZE];
   bigint_payload_t *payload = NULL;
-  ant_value_t out = js_mkundef();
+  ant_value_t out = Ant_Value_Undefined;
   uint32_t *result = stack_limbs;
 
   if (width > BIGINT_LIMB_SIZE) {
@@ -764,7 +764,7 @@ ant_value_t bigint_bitnot(ant_t *js, ant_value_t value) {
 
   uint32_t stack_limbs[BIGINT_LIMB_SIZE];
   bigint_payload_t *payload = NULL;
-  ant_value_t out = js_mkundef();
+  ant_value_t out = Ant_Value_Undefined;
   uint32_t *result = stack_limbs;
 
   if (width > BIGINT_LIMB_SIZE) {
@@ -1248,7 +1248,7 @@ ant_value_t bigint_add(ant_t *js, ant_value_t a, ant_value_t b) {
 
   uint32_t stack_limbs[BIGINT_LIMB_SIZE];
   bigint_payload_t *payload = NULL;
-  ant_value_t out = js_mkundef();
+  ant_value_t out = Ant_Value_Undefined;
   uint32_t *result = stack_limbs;
 
   if (capacity > BIGINT_LIMB_SIZE) {
@@ -1300,7 +1300,7 @@ ant_value_t bigint_sub(ant_t *js, ant_value_t a, ant_value_t b) {
 
   uint32_t stack_limbs[BIGINT_LIMB_SIZE];
   bigint_payload_t *payload = NULL;
-  ant_value_t out = js_mkundef();
+  ant_value_t out = Ant_Value_Undefined;
   uint32_t *result = stack_limbs;
 
   if (capacity > BIGINT_LIMB_SIZE) {
@@ -1334,7 +1334,7 @@ ant_value_t bigint_mul(ant_t *js, ant_value_t a, ant_value_t b) {
   size_t capacity = alen + blen + 1;
   uint32_t stack_limbs[BIGINT_LIMB_SIZE];
   bigint_payload_t *payload = NULL;
-  ant_value_t out = js_mkundef();
+  ant_value_t out = Ant_Value_Undefined;
   uint32_t *result = stack_limbs;
 
   if (capacity > BIGINT_LIMB_SIZE) {
@@ -1446,7 +1446,7 @@ ant_value_t bigint_shift_left(ant_t *js, ant_value_t value, uint64_t shift) {
 
   uint32_t stack_limbs[BIGINT_LIMB_SIZE];
   bigint_payload_t *payload = NULL;
-  ant_value_t out = js_mkundef();
+  ant_value_t out = Ant_Value_Undefined;
   uint32_t *result = stack_limbs;
 
   if (capacity > BIGINT_LIMB_SIZE) {
@@ -1480,7 +1480,7 @@ ant_value_t bigint_shift_right(ant_t *js, ant_value_t value, uint64_t shift) {
 
   uint32_t stack_limbs[BIGINT_LIMB_SIZE];
   bigint_payload_t *payload = NULL;
-  ant_value_t out = js_mkundef();
+  ant_value_t out = Ant_Value_Undefined;
   uint32_t *result = stack_limbs;
 
   if (capacity > BIGINT_LIMB_SIZE) {
@@ -1616,10 +1616,10 @@ ant_value_t bigint_from_string_literal(ant_t *js, ant_value_t value) {
     if (base != 10) digits += 2;
   }
 
-  if (digits == end) return js_mkundef();
+  if (digits == end) return Ant_Value_Undefined;
   for (size_t i = digits; i < end; i++) {
     int digit = ant_ascii_hex_value((unsigned char)str[i]);
-    if (digit < 0 || (uint32_t)digit >= base) return js_mkundef();
+    if (digit < 0 || (uint32_t)digit >= base) return Ant_Value_Undefined;
   }
 
   return bigint_from_string_digits(js, str + start, end - start, neg, false, false);
@@ -1680,7 +1680,7 @@ static ant_value_t bigint_to_u64(ant_t *js, ant_value_t value, uint64_t *out) {
   if (!bigint_parse_u64(js, value, out)) {
     return js_mkerr_typed(js, JS_ERR_RANGE, "Invalid bits");
   }
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t bigint_asint_bits(ant_t *js, ant_value_t arg, uint64_t *bits_out) {
@@ -1696,7 +1696,7 @@ ant_value_t bigint_asint_bits(ant_t *js, ant_value_t arg, uint64_t *bits_out) {
   }
 
   *bits_out = (uint64_t)bits;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t builtin_BigInt_asIntN(ant_params_t) {
@@ -1770,7 +1770,7 @@ static ant_value_t bigint_this_value(ant_t *js, ant_value_t call_this, const cha
 static ant_value_t bigint_radix_arg(ant_t *js, ant_value_t value, uint32_t *out) {
   if (vtype(value) == kTypeUndefined) {
     *out = 10;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (is_object_type(value) || vtype(value) == kTypeBuiltin) {
@@ -1787,7 +1787,7 @@ static ant_value_t bigint_radix_arg(ant_t *js, ant_value_t value, uint32_t *out)
     return js_mkerr_typed(js, JS_ERR_RANGE, "toString() radix must be between 2 and 36");
 
   *out = (uint32_t)radix;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t bigint_to_radix_string(ant_t *js, ant_value_t val, uint32_t radix, bool grouped) {
@@ -1828,7 +1828,7 @@ static ant_value_t builtin_bigint_toString(ant_params_t) {
   if (is_err(val)) return val;
 
   uint32_t radix = 10;
-  ant_value_t status = bigint_radix_arg(js, nargs > 0 ? args[0] : js_mkundef(), &radix);
+  ant_value_t status = bigint_radix_arg(js, nargs > 0 ? args[0] : Ant_Value_Undefined, &radix);
   if (is_err(status)) return status;
 
   return bigint_to_radix_string(js, val, radix, false);

@@ -404,7 +404,7 @@ static bool cron_resolve_zone(
   char **name_out,
   ant_value_t *error
 ) {
-  ant_value_t zone_value = js_mkundef();
+  ant_value_t zone_value = Ant_Value_Undefined;
   char system_zone[256];
   if (vtype(options) != kTypeUndefined && vtype(options) != kTypeNull) {
     if (!is_object_type(options)) {
@@ -815,7 +815,7 @@ static void cron_close_job(cron_job_t *job) {
   if (!job) return;
   job->stopped = true;
   job->busy = false;
-  job->handler = js_mkundef();
+  job->handler = Ant_Value_Undefined;
   cron_remove_job(job);
   uv_timer_stop(&job->timer);
   if (!job->closing && !uv_is_closing((uv_handle_t *)&job->timer)) {
@@ -864,17 +864,17 @@ static ant_value_t cron_handler_fulfilled(ant_params_t) {
   ant_value_t object = js_get_slot(state, SLOT_DATA);
   
   cron_job_t *job = js_get_native(object, CRON_JOB_NATIVE_TAG);
-  if (!job || job->stopped || job->closing) return js_mkundef();
+  if (!job || job->stopped || job->closing) return Ant_Value_Undefined;
   
   job->busy = false;
-  ant_value_t error = js_mkundef();
+  ant_value_t error = Ant_Value_Undefined;
   if (!cron_schedule_job(job, &error) && is_err(error)) return error;
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t cron_handler_rejected(ant_params_t) {
-  ant_value_t reason = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t reason = nargs > 0 ? args[0] : Ant_Value_Undefined;
   ant_value_t state = js_func_data(call_func);
   ant_value_t promise = js_get_slot(state, SLOT_AUX);
   
@@ -887,7 +887,7 @@ static ant_value_t cron_handler_rejected(ant_params_t) {
     js->fatal_error = true;
   }
   
-  return cron_handler_fulfilled(js, NULL, 0, js_mkundef(), call_this, call_func);
+  return cron_handler_fulfilled(js, NULL, 0, Ant_Value_Undefined, call_this, call_func);
 }
 
 static void cron_timer_callback(uv_timer_t *timer) {
@@ -901,7 +901,7 @@ static void cron_timer_callback(uv_timer_t *timer) {
   GC_ROOT_PIN(js, job->object);
   GC_ROOT_PIN(js, job->handler);
   ant_value_t result = sv_vm_call(
-    js->vm, js, job->handler, job->object, NULL, 0, NULL, js_mkundef()
+    js->vm, js, job->handler, job->object, NULL, 0, NULL, Ant_Value_Undefined
   );
   GC_ROOT_PIN(js, result);
 
@@ -912,13 +912,13 @@ handler_failed:
     if (process_has_event_listeners(js, "uncaughtException")) {
       emit_process_event(js, "uncaughtException", &reason, 1);
     } else {
-      print_error_value(js, reason, js_mkundef(), NULL);
+      print_error_value(js, reason, Ant_Value_Undefined, NULL);
       GC_ROOT_RESTORE(js, root_mark);
       process_exit_with(js, EXIT_FAILURE);
     }
     
     job->busy = false;
-    ant_value_t error = js_mkundef();
+    ant_value_t error = Ant_Value_Undefined;
     cron_schedule_job(job, &error);
     GC_ROOT_RESTORE(js, root_mark);
     process_microtasks(js);
@@ -943,7 +943,7 @@ handler_failed:
     promise_mark_handled(continuation);
   } else {
     job->busy = false;
-    ant_value_t error = js_mkundef();
+    ant_value_t error = Ant_Value_Undefined;
     cron_schedule_job(job, &error);
   }
 
@@ -978,13 +978,13 @@ static bool cron_schedule_job(cron_job_t *job, ant_value_t *error) {
 }
 
 static ant_value_t cron_job_get_cron(ant_params_t) {
-  ant_value_t error = js_mkundef();
+  ant_value_t error = Ant_Value_Undefined;
   cron_job_t *job = cron_job_from_this(js, call_this, "cron getter", &error);
   return job ? js_mkstr(js, job->source, strlen(job->source)) : error;
 }
 
 static ant_value_t cron_job_stop(ant_params_t) {
-  ant_value_t error = js_mkundef();
+  ant_value_t error = Ant_Value_Undefined;
   cron_job_t *job = cron_job_from_this(js, call_this, "stop()", &error);
   if (!job) return error;
   if (!job->stopped) cron_close_job(job);
@@ -992,7 +992,7 @@ static ant_value_t cron_job_stop(ant_params_t) {
 }
 
 static ant_value_t cron_job_ref(ant_params_t) {
-  ant_value_t error = js_mkundef();
+  ant_value_t error = Ant_Value_Undefined;
   cron_job_t *job = cron_job_from_this(js, call_this, "ref()", &error);
   if (!job) return error;
   if (job && !job->closing) uv_ref((uv_handle_t *)&job->timer);
@@ -1000,7 +1000,7 @@ static ant_value_t cron_job_ref(ant_params_t) {
 }
 
 static ant_value_t cron_job_unref(ant_params_t) {
-  ant_value_t error = js_mkundef();
+  ant_value_t error = Ant_Value_Undefined;
   cron_job_t *job = cron_job_from_this(js, call_this, "unref()", &error);
   if (!job) return error;
   if (job && !job->closing) uv_unref((uv_handle_t *)&job->timer);
@@ -1008,8 +1008,8 @@ static ant_value_t cron_job_unref(ant_params_t) {
 }
 
 static ant_value_t cron_job_dispose(ant_params_t) {
-  ant_value_t result = cron_job_stop(js, args, nargs, js_mkundef(), call_this, call_func);
-  return is_err(result) ? result : js_mkundef();
+  ant_value_t result = cron_job_stop(js, args, nargs, Ant_Value_Undefined, call_this, call_func);
+  return is_err(result) ? result : Ant_Value_Undefined;
 }
 
 static ant_value_t cron_parse(ant_params_t) {
@@ -1023,17 +1023,17 @@ static ant_value_t cron_parse(ant_params_t) {
   if (cron_parse_expression(source, source_len, &expression, parse_error, sizeof(parse_error)) != 0)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid cron expression: %s", parse_error);
 
-  ant_value_t error = js_mkundef();
+  ant_value_t error = Ant_Value_Undefined;
   int64_t relative = 0;
-  if (!cron_relative_ms(js, nargs > 1 ? args[1] : js_mkundef(), &relative, &error)) return error;
+  if (!cron_relative_ms(js, nargs > 1 ? args[1] : Ant_Value_Undefined, &relative, &error)) return error;
   cron_zone_t zone;
-  if (!cron_resolve_zone(js, nargs > 2 ? args[2] : js_mkundef(), &zone, NULL, &error)) return error;
+  if (!cron_resolve_zone(js, nargs > 2 ? args[2] : Ant_Value_Undefined, &zone, NULL, &error)) return error;
 
   int64_t next = 0;
   bool found = false;
   
   if (!cron_next_epoch(js, &expression, zone, relative, &next, &found, &error)) return error;
-  return found ? js_mkdate(js, (double)next) : js_mknull();
+  return found ? js_mkdate(js, (double)next) : Ant_Value_Null;
 }
 
 static ant_value_t cron_create_job(
@@ -1056,7 +1056,7 @@ static ant_value_t cron_create_job(
   if (cron_parse_expression(source, source_len, &expression, parse_error, sizeof(parse_error)) != 0)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid cron expression: %s", parse_error);
 
-  ant_value_t error = js_mkundef();
+  ant_value_t error = Ant_Value_Undefined;
   cron_zone_t zone;
   char *zone_name = NULL;
   if (!cron_resolve_zone(js, options, &zone, &zone_name, &error)) return error;
@@ -2235,7 +2235,7 @@ static int cron_platform_remove(const char *title, char *error, size_t error_len
 
 static ant_value_t cron_settle_promise(ant_t *js, int rc, const char *message) {
   ant_value_t promise = js_mkpromise(js);
-  if (rc == 0) js_resolve_promise(js, promise, js_mkundef());
+  if (rc == 0) js_resolve_promise(js, promise, Ant_Value_Undefined);
   else js_reject_promise(js, promise, js_mkerr(js, "%s", message));
   return promise;
 }
@@ -2361,7 +2361,7 @@ static void cron_request_after(uv_work_t *work, int status) {
   }
   if (request->js) {
     if (request->rc == 0)
-      js_resolve_promise(request->js, request->promise, js_mkundef());
+      js_resolve_promise(request->js, request->promise, Ant_Value_Undefined);
     else js_reject_promise(
       request->js, request->promise,
       js_mkerr(request->js, "%s", request->error[0] ? request->error : "cron operation failed")
@@ -2492,8 +2492,8 @@ static ant_value_t cron_call(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Ant.cron() expects a string path as the first argument");
   if (nargs < 3 || (nargs > 1 && is_callable(args[1])))
     return cron_create_job(
-      js, args[0], nargs > 1 ? args[1] : js_mkundef(),
-      nargs > 2 ? args[2] : js_mkundef()
+      js, args[0], nargs > 1 ? args[1] : Ant_Value_Undefined,
+      nargs > 2 ? args[2] : Ant_Value_Undefined
     );
   return cron_register_os(js, args, nargs);
 }
@@ -2566,7 +2566,7 @@ void cleanup_cron_module(ant_t *js) {
   request = cron_state.active_request;
   if (request && request->js == js) {
     request->js = NULL;
-    request->promise = js_mkundef();
+    request->promise = Ant_Value_Undefined;
     uv_cancel((uv_req_t *)&request->work);
   }
 }
@@ -2599,21 +2599,21 @@ int cron_run_scheduled_export(
   js_set(js, controller, "type", js_mkstr(js, "scheduled", 9));
   js_set(js, controller, "scheduledTime", Ant_Value_FromNumber((double)scheduled_time));
   ant_value_t result = sv_vm_call(
-    js->vm, js, handler, default_export, &controller, 1, NULL, js_mkundef()
+    js->vm, js, handler, default_export, &controller, 1, NULL, Ant_Value_Undefined
   );
   if (is_err(result) || Ant_Exception_Pending(js)) {
     if (Ant_Exception_Pending(js)) print_uncaught_throw(js);
-    else print_error_value(js, result, js_mkundef(), NULL);
+    else print_error_value(js, result, Ant_Value_Undefined, NULL);
     return EXIT_FAILURE;
   }
   if (vtype(result) == kTypePromise) {
-    ant_value_t settled = js_mkundef();
+    ant_value_t settled = Ant_Value_Undefined;
     js_reactor_await_status_t status = js_reactor_blocking_await_promise(
       js, result, &settled, NULL, NULL
     );
     if (status == JS_REACTOR_AWAIT_FULFILLED) return EXIT_SUCCESS;
     if (status == JS_REACTOR_AWAIT_REJECTED)
-      print_error_value(js, settled, js_mkundef(), "Uncaught (in promise) ");
+      print_error_value(js, settled, Ant_Value_Undefined, "Uncaught (in promise) ");
     else fprintf(stderr, "Cron scheduled() promise could not be awaited\n");
     return EXIT_FAILURE;
   }

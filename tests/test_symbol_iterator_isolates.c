@@ -29,7 +29,7 @@ static ant_t *Create(void) {
 }
 
 static ant_value_t Next(ant_params_t) {
-  return js_iter_result(js, false, js_mkundef());
+  return js_iter_result(js, false, Ant_Value_Undefined);
 }
 
 static ant_value_t OtherNext(ant_params_t) {
@@ -70,7 +70,7 @@ static void CheckGrowth(ant_t *js) {
     protos[i] = Ant_Object_CreateBare(js);
     GC_ROOT_PIN(js, protos[i]);
     js_set(js, protos[i], "next", Ant_Function_Create(Next));
-    js_set_sym(js, protos[i], js->sym.iterator_sym, Ant_Function_Create(sym_this_cb));
+    js_set_sym(js, protos[i], js->sym.iterator_sym, Ant_Function_Create(js_return_this));
     js_iter_register_advance(js, protos[i], Advance);
     GC_ROOT_RESTORE(js, setup_mark);
   }

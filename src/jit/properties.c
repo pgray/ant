@@ -1414,7 +1414,7 @@ bool mir_emit_get_field_ic_fastpath(
     MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_BNE,
         MIR_new_label_op(ctx, slow), MIR_new_reg_op(ctx, r_obj_proto), MIR_new_reg_op(ctx, r_ic_proto)));
     MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_BEQ,
-        MIR_new_label_op(ctx, missing_done), MIR_new_reg_op(ctx, r_obj_proto), MIR_new_uint_op(ctx, js_mknull())));
+        MIR_new_label_op(ctx, missing_done), MIR_new_reg_op(ctx, r_obj_proto), MIR_new_uint_op(ctx, Ant_Value_Null)));
     mir_emit_value_to_objptr_or_jmp(ctx, fn, r_obj_proto, r_proto_ptr, r_ic_proto_id, slow);
     MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_MOV,
         MIR_new_reg_op(ctx, r_proto_id), MIR_new_mem_op(ctx, MIR_T_U32, offsetof(ant_object_t, ic_identity), r_proto_ptr, 0, 1)));
@@ -1425,7 +1425,7 @@ bool mir_emit_get_field_ic_fastpath(
     MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_BNE,
         MIR_new_label_op(ctx, slow), MIR_new_reg_op(ctx, r_proto_id), MIR_new_reg_op(ctx, r_ic_proto_id)));
     MIR_append_insn(ctx, fn, missing_done);
-    mir_load_imm(ctx, fn, dst, js_mkundef());
+    mir_load_imm(ctx, fn, dst, Ant_Value_Undefined);
     MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, fast_done)));
 
   }

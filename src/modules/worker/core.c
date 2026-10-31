@@ -53,11 +53,11 @@ ant_worker_t *worker_new(ant_t *js, ant_value_t obj, const worker_ops_t *ops) {
   w->obj = obj;
   w->parent = js;
   w->bundle = js_esm_bundle(js);
-  w->exit_promise = js_mkundef();
-  w->stdin_obj = js_mkundef();
-  w->stdout_obj = js_mkundef();
-  w->stderr_obj = js_mkundef();
-  w->child_stdin = js_mkundef();
+  w->exit_promise = Ant_Value_Undefined;
+  w->stdin_obj = Ant_Value_Undefined;
+  w->stdout_obj = Ant_Value_Undefined;
+  w->stderr_obj = Ant_Value_Undefined;
+  w->child_stdin = Ant_Value_Undefined;
   w->pipe_stdout = true;
   w->pipe_stderr = true;
 
@@ -193,7 +193,7 @@ static ant_wire_t *worker_serialize_error(ant_t *js, ant_value_t error) {
     text = js_mkstr(js, "Uncaught exception in worker", 28);
   }
 
-  r = ant_wire_serialize(js, text, js_mkundef(), js_mkundef(), &wire);
+  r = ant_wire_serialize(js, text, Ant_Value_Undefined, Ant_Value_Undefined, &wire);
   if (is_err(r)) {
     js_take_thrown(js, r);
     return NULL;
@@ -239,7 +239,7 @@ uint64_t ant_worker_thread_id(ant_t *js) {
 ant_value_t worker_parent_port(ant_t *js) {
   ant_worker_t *w = js->worker;
   if (is_object_type(js->mutable_roots.worker_parent_port)) return js->mutable_roots.worker_parent_port;
-  if (!w || !w->child_end) return js_mknull();
+  if (!w || !w->child_end) return Ant_Value_Null;
 
   ant_port_end_t *end = w->child_end;
   w->child_end = NULL;
@@ -258,12 +258,12 @@ static ant_value_t worker_run_entry(ant_t *js, ant_worker_t *w) {
     js_setup_import_meta(js, tag);
     ant_value_t ns = Ant_Object_CreateBare(js);
     if (is_err(ns)) return ns;
-    return esm_load_commonjs_module(js, tag, w->entry, strlen(w->entry), ns, js_mkundef());
+    return esm_load_commonjs_module(js, tag, w->entry, strlen(w->entry), ns, Ant_Value_Undefined);
   }
 
   ant_value_t specifier;
   if (strncmp(w->entry, "data:", 5) == 0) {
-    js_set_global_builtin(js, "__dirname", js_mkundef());
+    js_set_global_builtin(js, "__dirname", Ant_Value_Undefined);
     specifier = js_mkstr(js, w->entry, strlen(w->entry));
     js_set_filename(js, w->entry);
     js_setup_import_meta(js, w->entry);
@@ -287,7 +287,7 @@ static ant_value_t worker_run_entry(ant_t *js, ant_worker_t *w) {
 
 static void worker_report_pending(ant_t *js) {
   if (!Ant_Exception_Pending(js)) return;
-  ant_value_t thrown = js_take_thrown(js, js_mkundef());
+  ant_value_t thrown = js_take_thrown(js, Ant_Value_Undefined);
   if (js_is_termination(thrown)) return;
   ant_worker_report_uncaught(js, thrown);
 }
@@ -392,7 +392,7 @@ static void worker_finalize(ant_t *js, ant_object_t *obj) {
   ant_worker_t *w = worker_data(value);
   if (!w) return;
   js_clear_native(value, WORKER_NATIVE_TAG);
-  w->obj = js_mkundef();
+  w->obj = Ant_Value_Undefined;
   if (w->binding) {
     ant_port_binding_free(w->binding);
     w->binding = NULL;
@@ -444,7 +444,7 @@ static void worker_finish(ant_t *js, ant_worker_t *w, int code) {
   w->ops->exit(js, w, code);
 
   if (vtype(promise) == kTypePromise) js_resolve_promise(js, promise, Ant_Value_FromNumber(code));
-  w->exit_promise = js_mkundef();
+  w->exit_promise = Ant_Value_Undefined;
   GC_ROOT_RESTORE(js, mark);
 }
 
@@ -554,7 +554,7 @@ static char *worker_entry_text(ant_t *js, ant_value_t spec, ant_value_t *error) 
 }
 
 char *worker_resolve_entry(ant_t *js, ant_value_t spec, worker_entry_mode_t mode, ant_value_t *error) {
-  *error = js_mkundef();
+  *error = Ant_Value_Undefined;
   char *path = worker_entry_text(js, spec, error);
   if (!path) return NULL;
   if (strncmp(path, "data:", 5) == 0) return path;
@@ -653,7 +653,7 @@ static char **worker_env_from_object(ant_t *js, ant_value_t env_obj) {
 ant_value_t worker_environment_map(ant_t *js) {
   if (!is_object_type(js->mutable_roots.worker_environment_data)) {
     ant_value_t ctor = js_get(js, js->global, "Map");
-    ant_value_t map = sv_vm_call(js->vm, js, ctor, js_mkundef(), NULL, 0, NULL, ctor);
+    ant_value_t map = sv_vm_call(js->vm, js, ctor, Ant_Value_Undefined, NULL, 0, NULL, ctor);
     if (is_err(map)) return map;
     js->mutable_roots.worker_environment_data = map;
   }
@@ -672,7 +672,7 @@ static ant_value_t worker_read_limits(ant_t *js, ant_worker_t *w, ant_value_t li
   if (w->limits[WORKER_LIMIT_OLD] < old_min) w->limits[WORKER_LIMIT_OLD] = old_min;
   if (w->limits[WORKER_LIMIT_OLD] > old_max) w->limits[WORKER_LIMIT_OLD] = old_max;
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t worker_limits_object(ant_t *js, const double limits[WORKER_LIMIT_COUNT], double unset) {
@@ -699,11 +699,11 @@ static ant_value_t worker_build_argv(ant_t *js, ant_worker_t *w, ant_value_t arg
     w->argv[w->argc++] = strndup(str, len);
   }
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t worker_option(ant_t *js, ant_value_t options, const char *name) {
-  return is_object_type(options) ? js_get(js, options, name) : js_mkundef();
+  return is_object_type(options) ? js_get(js, options, name) : Ant_Value_Undefined;
 }
 
 ant_value_t worker_read_options(ant_t *js, ant_worker_t *w, ant_value_t options) {
@@ -725,15 +725,15 @@ ant_value_t worker_read_options(ant_t *js, ant_worker_t *w, ant_value_t options)
 
   ant_value_t data = worker_option(js, options, "workerData");
   ant_value_t transfer = worker_option(js, options, "transferList");
-  r = ant_wire_serialize(js, data, transfer, js_mkundef(), &w->worker_data);
+  r = ant_wire_serialize(js, data, transfer, Ant_Value_Undefined, &w->worker_data);
   if (is_err(r)) return r;
 
   ant_value_t map = worker_environment_map(js);
-  return is_err(map) ? map : ant_wire_serialize(js, map, js_mkundef(), js_mkundef(), &w->environment_data);
+  return is_err(map) ? map : ant_wire_serialize(js, map, Ant_Value_Undefined, Ant_Value_Undefined, &w->environment_data);
 }
 
 ant_value_t worker_transfer_arg(ant_native_params_t) {
-  if (nargs < 2) return js_mkundef();
+  if (nargs < 2) return Ant_Value_Undefined;
   ant_value_t opt = args[1];
   if (!is_object_type(opt) || vtype(opt) == kTypeArray) return opt;
   ant_value_t transfer = js_get(js, opt, "transfer");
@@ -761,7 +761,7 @@ static ant_value_t worker_bind_parent(ant_t *js, ant_worker_t *w) {
   w->refed = true;
   atomic_fetch_add_explicit(&w->refs, 1, memory_order_relaxed);
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t worker_start(ant_t *js, ant_worker_t *w) {
@@ -782,11 +782,11 @@ ant_value_t worker_start(ant_t *js, ant_worker_t *w) {
   if (uv_thread_create_ex(&w->thread, &opts, worker_thread_main, w) != 0) {
     atomic_fetch_sub_explicit(&w->refs, 1, memory_order_relaxed);
     worker_post(w, WORKER_EVENT_EXIT, 1, NULL);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   w->thread_started = true;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 void cleanup_worker_threads_module(ant_t *js) {
@@ -802,7 +802,7 @@ void cleanup_worker_threads_module(ant_t *js) {
 
     worker_join(w);
     w->exited = true;
-    w->exit_promise = js_mkundef();
+    w->exit_promise = Ant_Value_Undefined;
 
     if (w->binding) {
       ant_port_binding_free(w->binding);

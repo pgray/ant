@@ -14,8 +14,8 @@ int main(void) {
   js_setstackbase(js, NULL);
   assert(ant_object_flag_masks_match_layout());
   sv_frame_t empty_frame = {0};
-  ant_value_t early = js_create_arguments_object(js, js->vm, js_mkundef(), &empty_frame, 0, 0, true);
-  assert(!is_err(early) && js_get_slot(early, SLOT_ARGUMENTS_OBJECT) == js_true);
+  ant_value_t early = js_create_arguments_object(js, js->vm, Ant_Value_Undefined, &empty_frame, 0, 0, true);
+  assert(!is_err(early) && js_get_slot(early, SLOT_ARGUMENTS_OBJECT) == Ant_Value_True);
   init_symbol_module(js);
   init_intrinsic_symbols(js);
   init_iterator_module(js);
@@ -27,7 +27,7 @@ int main(void) {
     sv_frame_t frame = {.bp = values, .argc = (int)count};
     GC_ROOT_SAVE(roots, js);
     size_t before = js->alloc_bytes.arrays;
-    ant_value_t args = js_create_arguments_object(js, js->vm, js_mkundef(), &frame, (int)count, 0, true);
+    ant_value_t args = js_create_arguments_object(js, js->vm, Ant_Value_Undefined, &frame, (int)count, 0, true);
     assert(!is_err(args));
     GC_ROOT_PIN(js, args);
     ant_object_t *ptr = js_obj_ptr(args);
@@ -35,7 +35,7 @@ int main(void) {
     assert(ptr->u.array.cap == capacity && ptr->u.array.len == count);
     assert(js->alloc_bytes.arrays - before == capacity * sizeof(ant_value_t));
     assert(ptr->extra_slots == NULL && ptr->flags.arguments_object);
-    assert(js_get_slot(args, SLOT_ARGUMENTS_OBJECT) == js_true);
+    assert(js_get_slot(args, SLOT_ARGUMENTS_OBJECT) == Ant_Value_True);
     for (uint32_t i = 0; i < count; i++) assert(js_arr_get(js, args, i) == values[i]);
     js_arr_push(js, args, Ant_Value_FromNumber(99));
     assert(js_arr_get(js, args, count) == Ant_Value_FromNumber(99));
@@ -45,8 +45,8 @@ int main(void) {
     ant_value_t payload = Ant_Object_CreateBare(js);
     js_set_slot_wb(js, args, SLOT_ARGUMENTS_OBJECT, payload);
     assert(js_get_slot(args, SLOT_ARGUMENTS_OBJECT) == payload);
-    js_set_slot(args, SLOT_ARGUMENTS_OBJECT, js_true);
-    assert(js_get_slot(args, SLOT_ARGUMENTS_OBJECT) == js_true);
+    js_set_slot(args, SLOT_ARGUMENTS_OBJECT, Ant_Value_True);
+    assert(js_get_slot(args, SLOT_ARGUMENTS_OBJECT) == Ant_Value_True);
     GC_ROOT_RESTORE(js, roots);
   }
   Ant_Destroy(js);

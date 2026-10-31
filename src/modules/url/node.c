@@ -45,7 +45,7 @@ static bool url_prop_undefined(ant_t *js, ant_value_t obj, const char *name, ant
 
 int Ant_URL_IsURLLike(ant_t *js, ant_value_t value, ant_value_t *err) {
   if (!is_object_type(value)) return 0;
-  *err = js_mkundef();
+  *err = Ant_Value_Undefined;
   bool ok =
     url_prop_truthy(js, value, "href", err) &&
     url_prop_truthy(js, value, "protocol", err) &&
@@ -66,7 +66,7 @@ static bool url_prop_equals(ant_t *js, ant_value_t obj, const char *name, const 
 
 ant_value_t Ant_URL_FileURLToPath(ant_t *js, ant_value_t input) {
   ant_value_t url = input;
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
 
   if (vtype(input) == kTypeString) {
     size_t len = 0;
@@ -75,7 +75,7 @@ ant_value_t Ant_URL_FileURLToPath(ant_t *js, ant_value_t input) {
     if (!s) return js_mkerr(js, "out of memory");
     if (!str || parse_url_to_state_n(str, len, NULL, 0, s) != 0) {
       free(s);
-      return url_invalid_url_error(js, input, js_mkundef());
+      return url_invalid_url_error(js, input, Ant_Value_Undefined);
     }
     url = make_url_obj(js, s);
   } else {
@@ -114,11 +114,11 @@ ant_value_t Ant_URL_FileURLToPath(ant_t *js, ant_value_t input) {
       return js_mkerr_code(js, JS_ERR_TYPE, "ERR_INVALID_FILE_URL_PATH", "File URL path must not include encoded / characters");
   }
 
-  return js_decodeURIComponent(js, &text, 1, js_mkundef(), js_mkundef(), js_mkundef());
+  return js_decodeURIComponent(js, &text, 1, Ant_Value_Undefined, Ant_Value_Undefined, Ant_Value_Undefined);
 }
 
 static ant_value_t builtin_fileURLToPath(ant_params_t) {
-  return Ant_URL_FileURLToPath(js, nargs > 0 ? args[0] : js_mkundef());
+  return Ant_URL_FileURLToPath(js, nargs > 0 ? args[0] : Ant_Value_Undefined);
 }
 
 static bool url_path_needs_escape(unsigned char c) {
@@ -170,7 +170,7 @@ static bool url_resolve_posix_path(url_fmt_buf_t *out, const char *path, size_t 
 }
 
 static ant_value_t builtin_pathToFileURL(ant_params_t) {
-  ant_value_t input = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t input = nargs > 0 ? args[0] : Ant_Value_Undefined;
   if (vtype(input) != kTypeString) return url_invalid_arg_type(js, "string", input);
 
   size_t len = 0;
@@ -203,7 +203,7 @@ static ant_value_t builtin_pathToFileURL(ant_params_t) {
     ant_value_t href_val = js_mkstr(js, href.buf, href.len);
     free(href.buf);
     free(s);
-    return url_invalid_url_error(js, href_val, js_mkundef());
+    return url_invalid_url_error(js, href_val, Ant_Value_Undefined);
   }
 
   free(href.buf);

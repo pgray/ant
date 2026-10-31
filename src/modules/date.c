@@ -935,7 +935,7 @@ static ant_value_t builtin_Date_valueOf(ant_params_t) {
 }
 
 static ant_value_t builtin_Date_getTime(ant_params_t) {
-  return builtin_Date_valueOf(js, args, nargs, js_mkundef(), call_this, call_func);
+  return builtin_Date_valueOf(js, args, nargs, Ant_Value_Undefined, call_this, call_func);
 }
 
 static ant_value_t builtin_Date_toUTCString(ant_params_t) {
@@ -1177,7 +1177,7 @@ static ant_value_t date_to_primitive_number(ant_t *js, ant_value_t obj) {
     uint8_t et = vtype(ex);
     if (et == kTypeFunction || et == kTypeBuiltin) {
       ant_value_t hint = js_mkstr(js, "number", 6);
-      ant_value_t result = sv_vm_call(js->vm, js, ex, obj, &hint, 1, NULL, js_mkundef());
+      ant_value_t result = sv_vm_call(js->vm, js, ex, obj, &hint, 1, NULL, Ant_Value_Undefined);
       if (is_err(result)) return result;
       if (date_is_primitive(result)) return result;
       return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert object to primitive value");
@@ -1192,7 +1192,7 @@ static ant_value_t date_to_primitive_number(ant_t *js, ant_value_t obj) {
     ant_value_t method = js_getprop_fallback(js, obj, methods[i]);
     uint8_t mt = vtype(method);
     if (mt == kTypeFunction || mt == kTypeBuiltin) {
-      ant_value_t result = sv_vm_call(js->vm, js, method, obj, NULL, 0, NULL, js_mkundef());
+      ant_value_t result = sv_vm_call(js->vm, js, method, obj, NULL, 0, NULL, Ant_Value_Undefined);
       if (is_err(result)) return result;
       if (date_is_primitive(result)) return result;
     }
@@ -1210,7 +1210,7 @@ static ant_value_t builtin_Date_toJSON(ant_params_t) {
   if (is_err(tv)) return tv;
 
   if (vtype(tv) == kTypeNumber && !isfinite(Ant_Value_AsNumberUnchecked(tv))) {
-    return js_mknull();
+    return Ant_Value_Null;
   }
 
   ant_value_t method = js_getprop_fallback(js, call_this, "toISOString");
@@ -1219,7 +1219,7 @@ static ant_value_t builtin_Date_toJSON(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "object needs toISOString method");
   }
 
-  return sv_vm_call(js->vm, js, method, call_this, NULL, 0, NULL, js_mkundef());
+  return sv_vm_call(js->vm, js, method, call_this, NULL, 0, NULL, Ant_Value_Undefined);
 }
 
 static ant_value_t date_toPrimitive(ant_params_t) {
@@ -1253,7 +1253,7 @@ static ant_value_t date_toPrimitive(ant_params_t) {
     ant_value_t method = js_getprop_fallback(js, call_this, methods[i]);
     uint8_t mt = vtype(method);
     if (mt == kTypeFunction || mt == kTypeBuiltin) {
-      ant_value_t result = sv_vm_call(js->vm, js, method, call_this, NULL, 0, NULL, js_mkundef());
+      ant_value_t result = sv_vm_call(js->vm, js, method, call_this, NULL, 0, NULL, Ant_Value_Undefined);
       if (is_err(result)) return result;
       if (date_is_primitive(result)) return result;
     }

@@ -276,7 +276,7 @@ static __attribute__((noinline)) ant_value_t sd_init_this(ant_t *js, ant_value_t
 }
 
 static ant_value_t js_sd_ctor(ant_params_t) {
-  ant_value_t encoding = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t encoding = nargs > 0 ? args[0] : Ant_Value_Undefined;
 
   if (!is_undefined(call_new_target) || !is_object_type(call_this))
     return string_decoder_create(js, encoding, call_new_target);

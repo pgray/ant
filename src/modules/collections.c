@@ -838,7 +838,7 @@ static ant_value_t collection_receiver_error(ant_t *js, const char *method) {
 }
 
 static inline ant_value_t collection_arg(ant_args_t, int i) {
-  return i < nargs ? args[i] : js_mkundef();
+  return i < nargs ? args[i] : Ant_Value_Undefined;
 }
 
 static ant_value_t map_set(ant_params_t) {
@@ -866,7 +866,7 @@ ant_value_t collections_map_get(ant_t *js, ant_value_t map, ant_value_t key) {
   map_entry_t **map_ptr = get_map_from_obj(map);
   if (!map_ptr) return collection_receiver_error(js, "Map.prototype.get");
   map_entry_t *entry = Ant_Map_Find(js, map_ptr, key);
-  return entry ? entry->value : js_mkundef();
+  return entry ? entry->value : Ant_Value_Undefined;
 }
 
 static ant_value_t map_get(ant_params_t) {
@@ -930,7 +930,7 @@ __attribute__((aligned(64))) ant_value_t collections_map_get_numeric_pair(
   HASH_FIND_BYHASHVALUE(hh, *map_ptr, key, key_len, key_hash, entry);
   
   if (key != inline_key) free(key);
-  return entry ? entry->value : js_mkundef();
+  return entry ? entry->value : Ant_Value_Undefined;
 }
 
 ant_value_t collections_map_has(ant_t *js, ant_value_t map, ant_value_t key) {
@@ -1002,7 +1002,7 @@ static ant_value_t map_numeric_template_general(
   
   return return_presence 
     ? js_bool(entry != NULL)
-    : (entry ? entry->value : js_mkundef());
+    : (entry ? entry->value : Ant_Value_Undefined);
 }
 
 ant_value_t collections_map_numeric_template(
@@ -1049,10 +1049,10 @@ static ant_value_t map_upsert(ant_params_t) {
 
   if (entry) {
     ant_value_t call_args[3] = { entry->value, key, call_this };
-    value = sv_vm_call(js->vm, js, update_fn, js_mkundef(), call_args, 3, NULL, js_mkundef());
+    value = sv_vm_call(js->vm, js, update_fn, Ant_Value_Undefined, call_args, 3, NULL, Ant_Value_Undefined);
   } else {
     ant_value_t call_args[2] = { key, call_this };
-    value = sv_vm_call(js->vm, js, insert_fn, js_mkundef(), call_args, 2, NULL, js_mkundef());
+    value = sv_vm_call(js->vm, js, insert_fn, Ant_Value_Undefined, call_args, 2, NULL, Ant_Value_Undefined);
   }
 
   if (is_err(value)) return value;
@@ -1078,10 +1078,10 @@ static ant_value_t map_delete(ant_params_t) {
 
   if (entry) {
     collections_map_remove(map_ptr, entry);
-    return js_true;
+    return Ant_Value_True;
   }
 
-  return js_false;
+  return Ant_Value_False;
 }
 
 static ant_value_t map_clear(ant_params_t) {
@@ -1090,7 +1090,7 @@ static ant_value_t map_clear(ant_params_t) {
   if (!map_ptr) return collection_receiver_error(js, "Map.prototype.clear");
   collections_map_clear(map_ptr);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t map_size(ant_params_t) {
@@ -1107,11 +1107,11 @@ static ant_value_t map_forEach(ant_params_t) {
   if (nargs < 1 || !is_callable(args[0]))
     return js_mkerr_typed(js, JS_ERR_TYPE, "forEach requires a callback function");
   
-  sv_callback_t cb = sv_callback_prepare(js, args[0], nargs > 1 ? args[1] : js_mkundef());
+  sv_callback_t cb = sv_callback_prepare(js, args[0], nargs > 1 ? args[1] : Ant_Value_Undefined);
   
   map_iterator_state_t it;
   collections_map_iter_open(&it, map_ptr, ITER_TYPE_MAP_ENTRIES);
-  ant_value_t result = js_mkundef();
+  ant_value_t result = Ant_Value_Undefined;
   
   for (map_entry_t *entry; (entry = map_iter_take(&it));) {
     ant_value_t call_args[3] = { entry->value, entry->key_val, call_this };
@@ -1120,7 +1120,7 @@ static ant_value_t map_forEach(ant_params_t) {
   }
   
   collections_map_iter_close(&it);
-  return is_err(result) ? result : js_mkundef();
+  return is_err(result) ? result : Ant_Value_Undefined;
 }
 
 static void collection_iter_finalize(ant_t *js, ant_object_t *obj) {
@@ -1239,10 +1239,10 @@ static ant_value_t set_delete(ant_params_t) {
   
   if (entry) {
     collections_set_remove(set_ptr, entry);
-    return js_true;
+    return Ant_Value_True;
   }
 
-  return js_false;
+  return Ant_Value_False;
 }
 
 static ant_value_t set_clear(ant_params_t) {
@@ -1250,7 +1250,7 @@ static ant_value_t set_clear(ant_params_t) {
   if (!set_ptr) return collection_receiver_error(js, "Set.prototype.clear");
 
   collections_set_clear(set_ptr);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t set_size(ant_params_t) {
@@ -1275,11 +1275,11 @@ static ant_value_t set_forEach(ant_params_t) {
   if (nargs < 1 || !is_callable(args[0]))
     return js_mkerr_typed(js, JS_ERR_TYPE, "forEach requires a callback function");
   
-  sv_callback_t cb = sv_callback_prepare(js, args[0], nargs > 1 ? args[1] : js_mkundef());
+  sv_callback_t cb = sv_callback_prepare(js, args[0], nargs > 1 ? args[1] : Ant_Value_Undefined);
   
   set_iterator_state_t it;
   collections_set_iter_open(&it, set_ptr, ITER_TYPE_SET_VALUES);
-  ant_value_t result = js_mkundef();
+  ant_value_t result = Ant_Value_Undefined;
   
   for (set_entry_t *entry; (entry = set_iter_take(&it));) {
     ant_value_t call_args[3] = { entry->value, entry->value, call_this };
@@ -1288,7 +1288,7 @@ static ant_value_t set_forEach(ant_params_t) {
   }
   
   collections_set_iter_close(&it);
-  return is_err(result) ? result : js_mkundef();
+  return is_err(result) ? result : Ant_Value_Undefined;
 }
 
 ant_value_t collections_set_create(ant_t *js, set_entry_t ***out_set) {
@@ -1396,14 +1396,14 @@ static ant_value_t get_set_record(ant_t *js, ant_value_t value, const char *meth
   out->size = int_size;
   out->native = vtype(has) == kTypeBuiltin && js_cfunc_same_entrypoint(has, set_has) ? get_set_from_obj(value) : NULL;
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t set_record_has(ant_t *js, set_record_t *record, ant_value_t value, bool *out) {
-  ant_value_t result = sv_vm_call(js->vm, js, record->has, record->obj, &value, 1, NULL, js_mkundef());
+  ant_value_t result = sv_vm_call(js->vm, js, record->has, record->obj, &value, 1, NULL, Ant_Value_Undefined);
   if (is_err(result)) return result;
   *out = js_truthy(js, result);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t set_record_has_entry(ant_t *js, set_record_t *record, const set_entry_t *entry, bool *out) {
@@ -1411,17 +1411,17 @@ static ant_value_t set_record_has_entry(ant_t *js, set_record_t *record, const s
   set_entry_t *found = NULL;
   HASH_FIND_BYHASHVALUE(hh, *record->native, entry->key, entry->key_len, entry->hh.hashv, found);
   *out = found != NULL;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t set_record_close_keys_iterator(ant_t *js, ant_value_t iterator) {
   iterator_t it = { .iterator = iterator };
   js_iter_close(js, &it);
-  return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : js_mkundef();
+  return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : Ant_Value_Undefined;
 }
 
 static ant_value_t set_record_for_each_key(ant_t *js, set_record_t *record, set_key_cb cb, void *ctx) {
-  ant_value_t iterator = sv_vm_call(js->vm, js, record->keys, record->obj, NULL, 0, NULL, js_mkundef());
+  ant_value_t iterator = sv_vm_call(js->vm, js, record->keys, record->obj, NULL, 0, NULL, Ant_Value_Undefined);
   if (is_err(iterator)) return iterator;
   if (!is_object_type(iterator))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Set keys() result is not an iterator");
@@ -1432,19 +1432,19 @@ static ant_value_t set_record_for_each_key(ant_t *js, set_record_t *record, set_
     return js_mkerr_typed(js, JS_ERR_TYPE, "Set keys() iterator has no callable next method");
 
   while (true) {
-    ant_value_t next = sv_vm_call(js->vm, js, next_fn, iterator, NULL, 0, NULL, js_mkundef());
+    ant_value_t next = sv_vm_call(js->vm, js, next_fn, iterator, NULL, 0, NULL, Ant_Value_Undefined);
     if (is_err(next)) return next;
     if (!is_object_type(next))
       return js_mkerr_typed(js, JS_ERR_TYPE, "Set keys() iterator result is not an object");
     
     ant_value_t done = js_getprop_fallback(js, next, "done");
     if (is_err(done)) return done;
-    if (js_truthy(js, done)) return js_mkundef();
+    if (js_truthy(js, done)) return Ant_Value_Undefined;
     
     ant_value_t value = js_getprop_fallback(js, next, "value");
     if (is_err(value)) return value;
     
-    ant_value_t result = js_mkundef();
+    ant_value_t result = Ant_Value_Undefined;
     set_key_status_t status = cb(js, value, &result, ctx);
     
     if (is_err(result)) {
@@ -1454,7 +1454,7 @@ static ant_value_t set_record_for_each_key(ant_t *js, set_record_t *record, set_
     
     if (status == SET_KEY_STOP) {
       ant_value_t close_result = set_record_close_keys_iterator(js, iterator);
-      return is_err(close_result) ? close_result : js_mkundef();
+      return is_err(close_result) ? close_result : Ant_Value_Undefined;
     }
   }
 }
@@ -1637,11 +1637,11 @@ static ant_value_t set_isSubsetOf(ant_params_t) {
   ant_value_t rec = get_set_record(js, collection_arg(args, nargs, 0), "isSubsetOf", &other);
   
   if (is_err(rec)) return rec;
-  if ((double)HASH_COUNT(*this_set) > other.size) return js_false;
+  if ((double)HASH_COUNT(*this_set) > other.size) return Ant_Value_False;
 
   set_iterator_state_t it;
   collections_set_iter_open(&it, this_set, ITER_TYPE_SET_VALUES);
-  ant_value_t result = js_true;
+  ant_value_t result = Ant_Value_True;
   for (set_entry_t *entry; (entry = set_iter_take(&it));) {
     bool has = false;
     result = set_record_has_entry(js, &other, entry, &has);
@@ -1674,7 +1674,7 @@ static ant_value_t set_isSupersetOf(ant_params_t) {
   set_record_t other;
   ant_value_t rec = get_set_record(js, collection_arg(args, nargs, 0), "isSupersetOf", &other);
   if (is_err(rec)) return rec;
-  if ((double)HASH_COUNT(*this_set) < other.size) return js_false;
+  if ((double)HASH_COUNT(*this_set) < other.size) return Ant_Value_False;
 
   set_predicate_ctx_t pred = { this_set, true };
   ant_value_t result = set_record_for_each_key(js, &other, set_superset_key_cb, &pred);
@@ -1702,7 +1702,7 @@ static ant_value_t set_isDisjointFrom(ant_params_t) {
   if ((double)HASH_COUNT(*this_set) <= other.size) {
     set_iterator_state_t it;
     collections_set_iter_open(&it, this_set, ITER_TYPE_SET_VALUES);
-    ant_value_t result = js_true;
+    ant_value_t result = Ant_Value_True;
     for (set_entry_t *entry; (entry = set_iter_take(&it));) {
       bool has = false;
       result = set_record_has_entry(js, &other, entry, &has);
@@ -1741,10 +1741,10 @@ static ant_value_t weakmap_get(ant_params_t) {
   if (!table) return collection_receiver_error(js, "WeakMap.prototype.get");
 
   ant_value_t key = collection_arg(args, nargs, 0);
-  if (!can_be_held_weakly(key)) return js_mkundef();
+  if (!can_be_held_weakly(key)) return Ant_Value_Undefined;
   
   weakmap_entry_t *entry = weakmap_table_find(table, key);
-  return entry ? entry->value : js_mkundef();
+  return entry ? entry->value : Ant_Value_Undefined;
 }
 
 static ant_value_t weakmap_has(ant_params_t) {
@@ -1752,7 +1752,7 @@ static ant_value_t weakmap_has(ant_params_t) {
   if (!table) return collection_receiver_error(js, "WeakMap.prototype.has");
 
   ant_value_t key = collection_arg(args, nargs, 0);
-  if (!can_be_held_weakly(key)) return js_false;
+  if (!can_be_held_weakly(key)) return Ant_Value_False;
   
   return js_bool(weakmap_table_find(table, key) != NULL);
 }
@@ -1779,10 +1779,10 @@ static ant_value_t weakmap_upsert(ant_params_t) {
   ant_value_t value;
   if (entry) {
     ant_value_t call_args[3] = { entry->value, key_obj, call_this };
-    value = sv_vm_call(js->vm, js, update_fn, js_mkundef(), call_args, 3, NULL, js_mkundef());
+    value = sv_vm_call(js->vm, js, update_fn, Ant_Value_Undefined, call_args, 3, NULL, Ant_Value_Undefined);
   } else {
     ant_value_t call_args[2] = { key_obj, call_this };
-    value = sv_vm_call(js->vm, js, insert_fn, js_mkundef(), call_args, 2, NULL, js_mkundef());
+    value = sv_vm_call(js->vm, js, insert_fn, Ant_Value_Undefined, call_args, 2, NULL, Ant_Value_Undefined);
   }
 
   if (is_err(value)) return value;
@@ -1798,7 +1798,7 @@ static ant_value_t weakmap_delete(ant_params_t) {
   if (!table) return collection_receiver_error(js, "WeakMap.prototype.delete");
 
   ant_value_t key = collection_arg(args, nargs, 0);
-  if (!can_be_held_weakly(key)) return js_false;
+  if (!can_be_held_weakly(key)) return Ant_Value_False;
   
   return js_bool(weakmap_table_delete(table, key));
 }
@@ -1835,7 +1835,7 @@ static ant_value_t weakset_has(ant_params_t) {
   if (!ws_ptr) return collection_receiver_error(js, "WeakSet.prototype.has");
 
   ant_value_t value_obj = collection_arg(args, nargs, 0);
-  if (!can_be_held_weakly(value_obj)) return js_false;
+  if (!can_be_held_weakly(value_obj)) return Ant_Value_False;
   weakset_entry_t *entry;
   HASH_FIND(hh, *ws_ptr, &value_obj, sizeof(ant_value_t), entry);
   return js_bool(entry != NULL);
@@ -1846,16 +1846,16 @@ static ant_value_t weakset_delete(ant_params_t) {
   if (!ws_ptr) return collection_receiver_error(js, "WeakSet.prototype.delete");
 
   ant_value_t value_obj = collection_arg(args, nargs, 0);
-  if (!can_be_held_weakly(value_obj)) return js_false;
+  if (!can_be_held_weakly(value_obj)) return Ant_Value_False;
   weakset_entry_t *entry;
   HASH_FIND(hh, *ws_ptr, &value_obj, sizeof(ant_value_t), entry);
   
   if (entry) {
     HASH_DEL(*ws_ptr, entry);
     free(entry);
-    return js_true;
+    return Ant_Value_True;
   }
-  return js_false;
+  return Ant_Value_False;
 }
 
 static void weakref_finalize(ant_t *js, ant_object_t *obj) {
@@ -1943,14 +1943,14 @@ static ant_value_t builtin_FinalizationRegistry(ant_params_t) {
 }
 
 static ant_value_t finreg_register(ant_params_t) {
-  if (vtype(call_this) != kTypeObject) return js_mkundef();
+  if (vtype(call_this) != kTypeObject) return Ant_Value_Undefined;
   
   if (nargs < 1 || !can_be_held_weakly(args[0]))
     return js_mkerr(js, "FinalizationRegistry.register target must be an object");
   
   ant_value_t target = args[0];
-  ant_value_t held_value = nargs > 1 ? args[1] : js_mkundef();
-  ant_value_t unregister_token = nargs > 2 ? args[2] : js_mkundef();
+  ant_value_t held_value = nargs > 1 ? args[1] : Ant_Value_Undefined;
+  ant_value_t unregister_token = nargs > 2 ? args[2] : Ant_Value_Undefined;
   
   if (target == held_value)
     return js_mkerr(js, "target and held value must not be the same");
@@ -1959,7 +1959,7 @@ static ant_value_t finreg_register(ant_params_t) {
     return js_mkerr(js, "FinalizationRegistry.register token must be an object");
   
   ant_value_t registrations = js_get_slot(call_this, SLOT_MAP);
-  if (vtype(registrations) != kTypeArray) return js_mkundef();
+  if (vtype(registrations) != kTypeArray) return Ant_Value_Undefined;
   
   ant_value_t entry = js_mkarr(js);
   ant_offset_t len = js_arr_len(js, registrations);
@@ -1977,18 +1977,18 @@ static ant_value_t finreg_register(ant_params_t) {
   js_setprop(js, registrations, js_mkstr(js, idx, idx_len), entry);
   js_setprop(js, registrations, js->length_str, Ant_Value_FromNumber((double)(len + 1)));
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t finreg_unregister(ant_params_t) {
-  if (vtype(call_this) != kTypeObject) return js_false;
+  if (vtype(call_this) != kTypeObject) return Ant_Value_False;
   
   if (nargs < 1 || !can_be_held_weakly(args[0]))
     return js_mkerr(js, "FinalizationRegistry.unregister token must be an object");
   
   ant_value_t token = args[0];
   ant_value_t registrations = js_get_slot(call_this, SLOT_MAP);
-  if (vtype(registrations) != kTypeArray) return js_false;
+  if (vtype(registrations) != kTypeArray) return Ant_Value_False;
   
   ant_offset_t len = js_arr_len(js, registrations);
   bool removed = false;
@@ -2000,7 +2000,7 @@ static ant_value_t finreg_unregister(ant_params_t) {
     if (entry_token == token) {
       char idx[16];
       size_t idx_len = uint_to_str(idx, sizeof(idx), i);
-      js_setprop(js, registrations, js_mkstr(js, idx, idx_len), js_mkundef());
+      js_setprop(js, registrations, js_mkstr(js, idx, idx_len), Ant_Value_Undefined);
       removed = true;
     }
   }
@@ -2021,7 +2021,7 @@ static ant_value_t map_group_add(ant_t *js, void *ctx, ant_value_t key, ant_valu
   }
   
   js_arr_push(js, group, value);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t map_groupBy(ant_params_t) {
@@ -2061,7 +2061,7 @@ static ant_value_t map_init_from_iterable(ant_t *js, ant_value_t map_obj, map_en
       ? Ant_Exception_Current(js)
       : js_mkerr_typed(js, JS_ERR_TYPE, "Map constructor argument is not iterable");
 
-  ant_value_t result = js_mkundef();
+  ant_value_t result = Ant_Value_Undefined;
   ant_value_t entry;
   
   while (js_iter_next(js, &it, &entry)) {
@@ -2088,7 +2088,7 @@ static ant_value_t map_init_from_iterable(ant_t *js, ant_value_t map_obj, map_en
     }
     
     ant_value_t call_args[2] = { js_arr_get(js, entry, 0), js_arr_get(js, entry, 1) };
-    result = sv_vm_call(js->vm, js, adder, map_obj, call_args, 2, NULL, js_mkundef());
+    result = sv_vm_call(js->vm, js, adder, map_obj, call_args, 2, NULL, Ant_Value_Undefined);
     if (is_err(result)) goto close_iter;
   }
 
@@ -2114,7 +2114,7 @@ static ant_value_t set_init_from_iterable(ant_t *js, ant_value_t set_obj, set_en
       ? Ant_Exception_Current(js)
       : js_mkerr_typed(js, JS_ERR_TYPE, "Set constructor argument is not iterable");
 
-  ant_value_t result = js_mkundef();
+  ant_value_t result = Ant_Value_Undefined;
   ant_value_t value;
   
   while (js_iter_next(js, &it, &value)) {
@@ -2126,7 +2126,7 @@ static ant_value_t set_init_from_iterable(ant_t *js, ant_value_t set_obj, set_en
       continue;
     }
     
-    result = sv_vm_call(js->vm, js, adder, set_obj, &value, 1, NULL, js_mkundef());
+    result = sv_vm_call(js->vm, js, adder, set_obj, &value, 1, NULL, Ant_Value_Undefined);
     if (is_err(result)) goto close_iter;
   }
 
@@ -2155,7 +2155,7 @@ static ant_value_t weakmap_init_from_iterable(
       ? Ant_Exception_Current(js)
       : js_mkerr_typed(js, JS_ERR_TYPE, "WeakMap constructor argument is not iterable");
 
-  ant_value_t result = js_mkundef();
+  ant_value_t result = Ant_Value_Undefined;
   ant_value_t entry;
   
   while (js_iter_next(js, &it, &entry)) {
@@ -2173,7 +2173,7 @@ static ant_value_t weakmap_init_from_iterable(
     
     if (!use_fast_path) {
       ant_value_t call_args[2] = { js_arr_get(js, entry, 0), js_arr_get(js, entry, 1) };
-      result = sv_vm_call(js->vm, js, adder, wm_obj, call_args, 2, NULL, js_mkundef());
+      result = sv_vm_call(js->vm, js, adder, wm_obj, call_args, 2, NULL, Ant_Value_Undefined);
       if (is_err(result)) goto close_iter;
       continue;
     }
@@ -2212,12 +2212,12 @@ static ant_value_t weakset_init_from_iterable(ant_t *js, ant_value_t ws_obj, wea
       ? Ant_Exception_Current(js)
       : js_mkerr_typed(js, JS_ERR_TYPE, "WeakSet constructor argument is not iterable");
 
-  ant_value_t result = js_mkundef();
+  ant_value_t result = Ant_Value_Undefined;
   ant_value_t value;
   
   while (js_iter_next(js, &it, &value)) {
     if (!use_fast_path) {
-      result = sv_vm_call(js->vm, js, adder, ws_obj, &value, 1, NULL, js_mkundef());
+      result = sv_vm_call(js->vm, js, adder, ws_obj, &value, 1, NULL, Ant_Value_Undefined);
       if (is_err(result)) goto close_iter;
       continue;
     }

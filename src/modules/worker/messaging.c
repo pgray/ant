@@ -132,7 +132,7 @@ static void thread_request_timer_closed(uv_handle_t *handle) {
 static void thread_request_free(thread_request_t *req) {
   ant_thread_mailbox_t *mb = req->mailbox;
   Ant_List_Remove(req);
-  req->promise = js_mkundef();
+  req->promise = Ant_Value_Undefined;
   if (--mb->request_count == 0) uv_unref((uv_handle_t *)&mb->async);
   if (!req->has_timer) {
     free(req);
@@ -182,7 +182,7 @@ static thread_msg_status_t mailbox_deliver(ant_t *js, thread_msg_t *msg) {
   
   if (!Ant_Exception_Pending(js)) return THREAD_MSG_DELIVERED;
   if (js_termination_pending(js)) return THREAD_MSG_FAILED;
-  js_take_thrown(js, js_mkundef());
+  js_take_thrown(js, Ant_Value_Undefined);
   
   return THREAD_MSG_ERRORED;
 }
@@ -207,7 +207,7 @@ static void mailbox_wake(uv_async_t *handle) {
       thread_request_t *req = mb->requests;
       while (req && req->id != msg->request_id) req = req->next;
       if (req) thread_request_settle(js, req, msg->status == THREAD_MSG_DELIVERED
-        ? js_mkundef() : mailbox_error(js, msg->status));
+        ? Ant_Value_Undefined : mailbox_error(js, msg->status));
     }
     thread_msg_free(msg);
     process_microtasks(js);
@@ -280,14 +280,14 @@ static ant_thread_mailbox_t *mailbox_find(uint64_t thread_id) {
 }
 
 ant_value_t worker_post_message_to_thread(ant_native_params_t) {
-  ant_value_t id = nargs > 0 ? args[0] : js_mkundef();
-  ant_value_t value = nargs > 1 ? args[1] : js_mkundef();
-  ant_value_t transfer = nargs > 2 ? args[2] : js_mkundef();
-  ant_value_t timeout = nargs > 3 ? args[3] : js_mkundef();
+  ant_value_t id = nargs > 0 ? args[0] : Ant_Value_Undefined;
+  ant_value_t value = nargs > 1 ? args[1] : Ant_Value_Undefined;
+  ant_value_t transfer = nargs > 2 ? args[2] : Ant_Value_Undefined;
+  ant_value_t timeout = nargs > 3 ? args[3] : Ant_Value_Undefined;
 
   if (vtype(transfer) == kTypeNumber && vtype(timeout) == kTypeUndefined) {
     timeout = transfer;
-    transfer = js_mkundef();
+    transfer = Ant_Value_Undefined;
   }
   
   if (vtype(timeout) != kTypeUndefined) {
@@ -310,7 +310,7 @@ ant_value_t worker_post_message_to_thread(ant_native_params_t) {
   if (!own) return mailbox_rejected(js, Ant_Error_CreateOutOfMemory(js));
 
   ant_wire_t *wire = NULL;
-  ant_value_t ser = ant_wire_serialize(js, value, transfer, js_mkundef(), &wire);
+  ant_value_t ser = ant_wire_serialize(js, value, transfer, Ant_Value_Undefined, &wire);
   if (is_err(ser)) return mailbox_rejected(js, ser);
 
   bool valid = num >= 0 && num <= 9007199254740991.0 && num == (double)(uint64_t)num;

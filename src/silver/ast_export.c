@@ -90,7 +90,7 @@ static void syntax_set_bool(syntax_export_ctx_t *ctx, ant_value_t obj, const cha
 }
 
 static syntax_exported_t syntax_none(void) {
-  return (syntax_exported_t){ .value = js_mknull() };
+  return (syntax_exported_t){ .value = Ant_Value_Null };
 }
 
 static void syntax_span_merge(syntax_exported_t *dst, const syntax_exported_t *child) {
@@ -234,7 +234,7 @@ static ant_value_t syntax_export_list(
   for (int i = 0; i < list->count && !ctx->failed; i++) {
     const sv_ast_t *item = list->items[i];
     if (item && item->type == N_EMPTY && role == SYNTAX_ROLE_EXPRESSION) {
-      js_arr_push(ctx->js, out, js_mknull());
+      js_arr_push(ctx->js, out, Ant_Value_Null);
       continue;
     }
     syntax_exported_t child = syntax_export_node(ctx, item, role);
@@ -315,7 +315,7 @@ static syntax_exported_t syntax_export_function(
     syntax_exported_t id = syntax_named_identifier(ctx, node->str, node->len, NULL);
     syntax_set(ctx, out.value, "id", id.value);
   } else if (!arrow) {
-    syntax_set(ctx, out.value, "id", js_mknull());
+    syntax_set(ctx, out.value, "id", Ant_Value_Null);
   }
   syntax_set(ctx, out.value, "params", syntax_export_list(ctx, &node->args, SYNTAX_ROLE_PATTERN, &out));
   syntax_set_child(ctx, &out, "body", node->body,
@@ -373,7 +373,7 @@ static syntax_exported_t syntax_export_class_element(
     syntax_add_common(ctx, &out, "MethodDefinition");
   } else {
     if (!node->right || node->right->type == N_UNDEF)
-      syntax_set(ctx, out.value, "value", js_mknull());
+      syntax_set(ctx, out.value, "value", Ant_Value_Null);
     else syntax_set_child(ctx, &out, "value", node->right, SYNTAX_ROLE_EXPRESSION);
     syntax_add_common(ctx, &out, "PropertyDefinition");
   }
@@ -412,7 +412,7 @@ static syntax_exported_t syntax_export_node(
   case N_BIGINT: {
     size_t len = node->len;
     if (len && node->str[len - 1] == 'n') len--;
-    syntax_set(ctx, out.value, "value", js_mknull());
+    syntax_set(ctx, out.value, "value", Ant_Value_Null);
     syntax_set(ctx, out.value, "bigint", syntax_strn(ctx, node->str, len));
     syntax_add_common(ctx, &out, "Literal");
     return out;
@@ -422,7 +422,7 @@ static syntax_exported_t syntax_export_node(
     syntax_add_common(ctx, &out, "Literal");
     return out;
   case N_NULL:
-    syntax_set(ctx, out.value, "value", js_mknull());
+    syntax_set(ctx, out.value, "value", Ant_Value_Null);
     syntax_add_common(ctx, &out, "Literal");
     return out;
   case N_UNDEF: {
@@ -442,7 +442,7 @@ static syntax_exported_t syntax_export_node(
     ant_value_t regex = syntax_obj(ctx);
     syntax_set(ctx, regex, "pattern", syntax_strn(ctx, node->str, node->len));
     syntax_set(ctx, regex, "flags", syntax_strn(ctx, node->aux, node->aux_len));
-    syntax_set(ctx, out.value, "value", js_mknull());
+    syntax_set(ctx, out.value, "value", Ant_Value_Null);
     syntax_set(ctx, out.value, "regex", regex);
     syntax_add_common(ctx, &out, "Literal");
     return out;
@@ -460,7 +460,7 @@ static syntax_exported_t syntax_export_node(
         ant_value_t value = syntax_obj(ctx);
         syntax_set(ctx, value, "raw", syntax_strn(ctx, part->aux, part->aux_len));
         syntax_set(ctx, value, "cooked", (part->flags & FN_INVALID_COOKED)
-          ? js_mknull() : syntax_strn(ctx, part->str, part->len));
+          ? Ant_Value_Null : syntax_strn(ctx, part->str, part->len));
         syntax_set(ctx, quasi.value, "value", value);
         syntax_set_bool(ctx, quasi.value, "tail", ++quasi_index == quasi_count);
         syntax_add_common(ctx, &quasi, "TemplateElement");
@@ -658,7 +658,7 @@ static syntax_exported_t syntax_export_node(
     if (node->str && node->len) {
       syntax_exported_t label = syntax_named_identifier(ctx, node->str, node->len, NULL);
       syntax_set(ctx, out.value, "label", label.value);
-    } else syntax_set(ctx, out.value, "label", js_mknull());
+    } else syntax_set(ctx, out.value, "label", Ant_Value_Null);
     syntax_add_common(ctx, &out, node->type == N_BREAK ? "BreakStatement" : "ContinueStatement");
     return out;
   case N_TRY: {
@@ -671,7 +671,7 @@ static syntax_exported_t syntax_export_node(
       syntax_add_common(ctx, &handler, "CatchClause");
       syntax_set(ctx, out.value, "handler", handler.value);
       syntax_span_merge(&out, &handler);
-    } else syntax_set(ctx, out.value, "handler", js_mknull());
+    } else syntax_set(ctx, out.value, "handler", Ant_Value_Null);
     syntax_set_child(ctx, &out, "finalizer", node->finally_body, SYNTAX_ROLE_STATEMENT);
     syntax_add_common(ctx, &out, "TryStatement");
     return out;
@@ -709,7 +709,7 @@ static syntax_exported_t syntax_export_node(
     if (node->str && node->len) {
       syntax_exported_t id = syntax_named_identifier(ctx, node->str, node->len, NULL);
       syntax_set(ctx, out.value, "id", id.value);
-    } else syntax_set(ctx, out.value, "id", js_mknull());
+    } else syntax_set(ctx, out.value, "id", Ant_Value_Null);
     syntax_set_child(ctx, &out, "superClass", node->left, SYNTAX_ROLE_EXPRESSION);
     syntax_exported_t body = syntax_span_from_node(ctx, node);
     body.value = syntax_obj(ctx);
@@ -756,7 +756,7 @@ static syntax_exported_t syntax_export_node(
       syntax_set_child(ctx, &out, "source", node->right, SYNTAX_ROLE_EXPRESSION);
       if ((node->flags & EX_NAMESPACE) && node->args.count > 0)
         syntax_set_child(ctx, &out, "exported", node->args.items[0]->right, SYNTAX_ROLE_EXPRESSION);
-      else syntax_set(ctx, out.value, "exported", js_mknull());
+      else syntax_set(ctx, out.value, "exported", Ant_Value_Null);
       syntax_add_common(ctx, &out, "ExportAllDeclaration");
     } else {
       syntax_set_child(ctx, &out, "declaration", node->left, SYNTAX_ROLE_STATEMENT);

@@ -181,9 +181,9 @@ static ant_value_t fetch_clear_redirect_request_body(fetch_request_t *req) {
   request->body_is_stream = false;
   request->has_body = false;
   request->body_used = false;
-  js_set_slot_wb(req->js, req->request_obj, SLOT_REQUEST_BODY_STREAM, js_mkundef());
+  js_set_slot_wb(req->js, req->request_obj, SLOT_REQUEST_BODY_STREAM, Ant_Value_Undefined);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t fetch_set_redirect_method(fetch_request_t *req, const char *method) {
@@ -196,9 +196,9 @@ static ant_value_t fetch_set_redirect_method(fetch_request_t *req, const char *m
   
   free(request->method);
   request->method = dup;
-  js_set_slot(req->request_obj, SLOT_REQUEST_METHOD, js_mkundef());
+  js_set_slot(req->request_obj, SLOT_REQUEST_METHOD, Ant_Value_Undefined);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static bool fetch_str_eq(const char *a, const char *b) {
@@ -234,7 +234,7 @@ static ant_value_t fetch_parse_redirect_url(fetch_request_t *req, const char *lo
     return fetch_type_error(req->js, "fetch failed: redirect location is not an HTTP(S) URL");
   }
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t fetch_prepare_redirect(fetch_request_t *req, const ant_http_response_t *resp) {
@@ -247,7 +247,7 @@ static ant_value_t fetch_prepare_redirect(fetch_request_t *req, const ant_http_r
   bool rewrite_to_get = false;
   bool cross_origin = false;
 
-  if (!request || !location || location[0] == '\0') return js_mkundef();
+  if (!request || !location || location[0] == '\0') return Ant_Value_Undefined;
   if (req->redirect_count >= FETCH_MAX_REDIRECTS)
     return fetch_type_error(req->js, "fetch failed: too many redirects");
 
@@ -270,12 +270,12 @@ static ant_value_t fetch_prepare_redirect(fetch_request_t *req, const ant_http_r
 
   url_state_clear(&request->url);
   request->url = next;
-  js_set_slot(req->request_obj, SLOT_REQUEST_URL, js_mkundef());
+  js_set_slot(req->request_obj, SLOT_REQUEST_URL, Ant_Value_Undefined);
 
   req->redirect_count++;
   req->restart_pending = true;
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 typedef struct {
@@ -487,7 +487,7 @@ static void fetch_http_on_response(ant_http_request_t *http_req, const ant_http_
     return;
   }
 
-  stream = rs_create_stream(js, js_mkundef(), js_mkundef(), 1.0);
+  stream = rs_create_stream(js, Ant_Value_Undefined, Ant_Value_Undefined, 1.0);
   if (is_err(stream)) {
     fetch_reject(req, stream);
     ant_http_request_cancel(http_req);
@@ -668,10 +668,10 @@ static bool fetch_handle_blob_url(fetch_request_t *req) {
 
 static ant_value_t fetch_upload_on_reject(ant_params_t) {
   fetch_request_t *req = (fetch_request_t *)js_get_native(call_func, FETCH_REQUEST_NATIVE_TAG);
-  ant_value_t reason = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t reason = (nargs > 0) ? args[0] : Ant_Value_Undefined;
 
-  if (!req) return js_mkundef();
-  req->upload_read_promise = js_mkundef();
+  if (!req) return Ant_Value_Undefined;
+  req->upload_read_promise = Ant_Value_Undefined;
 
   if (!req->aborted) {
     if (req->http_req) ant_http_request_cancel(req->http_req);
@@ -680,14 +680,14 @@ static ant_value_t fetch_upload_on_reject(ant_params_t) {
   }
 
   fetch_request_release(req);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void fetch_upload_schedule_next_read(fetch_request_t *req);
 static ant_value_t fetch_upload_on_read(ant_params_t) {
   fetch_request_t *req = (fetch_request_t *)js_get_native(call_func, FETCH_REQUEST_NATIVE_TAG);
   
-  ant_value_t result = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t result = (nargs > 0) ? args[0] : Ant_Value_Undefined;
   ant_value_t done = 0;
   ant_value_t value = 0;
   
@@ -695,20 +695,20 @@ static ant_value_t fetch_upload_on_read(ant_params_t) {
   size_t chunk_len = 0;
   int rc = 0;
 
-  if (!req) return js_mkundef();
-  req->upload_read_promise = js_mkundef();
+  if (!req) return Ant_Value_Undefined;
+  req->upload_read_promise = Ant_Value_Undefined;
 
   if (req->aborted || !req->http_req) {
     fetch_request_release(req);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   done = js_get(js, result, "done");
   value = js_get(js, result, "value");
-  if (done == js_true) {
+  if (done == Ant_Value_True) {
     ant_http_request_end(req->http_req);
     fetch_request_release(req);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (!fetch_get_upload_chunk(value, &chunk, &chunk_len)) {
@@ -722,7 +722,7 @@ static ant_value_t fetch_upload_on_read(ant_params_t) {
     fetch_request_release(req);
     GC_ROOT_RESTORE(js, root_mark);
 
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   rc = ant_http_request_write(req->http_req, chunk, chunk_len);
@@ -737,13 +737,13 @@ static ant_value_t fetch_upload_on_read(ant_params_t) {
     fetch_request_release(req);
     GC_ROOT_RESTORE(js, root_mark);
 
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   fetch_upload_schedule_next_read(req);
   fetch_request_release(req);
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void fetch_upload_schedule_next_read(fetch_request_t *req) {
@@ -769,7 +769,7 @@ static void fetch_start_upload(fetch_request_t *req) {
 
   ant_value_t stream = js_get_slot(req->request_obj, SLOT_REQUEST_BODY_STREAM);
   if (!rs_is_stream(stream)) return;
-  ant_value_t reader = rs_reader_create(js, stream, js_mkundef());
+  ant_value_t reader = rs_reader_create(js, stream, Ant_Value_Undefined);
 
   if (is_err(reader)) {
     GC_ROOT_SAVE(root_mark, js);
@@ -932,7 +932,7 @@ static ant_value_t fetch_abort_listener(ant_params_t) {
   ant_value_t signal = 0;
   ant_value_t reason = 0;
 
-  if (!req || req->aborted) return js_mkundef();
+  if (!req || req->aborted) return Ant_Value_Undefined;
   req->aborted = true;
   signal = request_get_signal(js, req->request_obj);
   reason = abort_signal_get_reason(signal);
@@ -941,12 +941,12 @@ static ant_value_t fetch_abort_listener(ant_params_t) {
   fetch_reject(req, reason);
   if (!req->http_req) fetch_request_release(req);
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t ant_fetch(ant_params_t) {
-  ant_value_t input = (nargs >= 1) ? args[0] : js_mkundef();
-  ant_value_t init = (nargs >= 2) ? args[1] : js_mkundef();
+  ant_value_t input = (nargs >= 1) ? args[0] : Ant_Value_Undefined;
+  ant_value_t init = (nargs >= 2) ? args[1] : Ant_Value_Undefined;
   
   ant_value_t promise = js_mkpromise(js);
   ant_value_t request_obj = 0;
@@ -976,10 +976,10 @@ ant_value_t ant_fetch(ant_params_t) {
   req->js = js;
   req->promise = promise;
   req->request_obj = request_obj;
-  req->response_obj = js_mkundef();
-  req->abort_listener = js_mkundef();
-  req->upload_reader = js_mkundef();
-  req->upload_read_promise = js_mkundef();
+  req->response_obj = Ant_Value_Undefined;
+  req->abort_listener = Ant_Value_Undefined;
+  req->upload_reader = Ant_Value_Undefined;
+  req->upload_read_promise = Ant_Value_Undefined;
   req->refs = 1;
   Ant_List_Insert(&js->fetch_requests, req);
 

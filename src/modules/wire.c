@@ -164,7 +164,7 @@ static ant_value_t wire_uncloneable(wire_writer_t *w, ant_value_t value) {
     } else if (is_err(str)) js_take_thrown(js, str);
   } else if (is_object_type(value)) {
     ant_value_t tag = js_get(js, value, "constructor");
-    ant_value_t name = is_object_type(tag) || vtype(tag) == kTypeFunction ? js_get(js, tag, "name") : js_mkundef();
+    ant_value_t name = is_object_type(tag) || vtype(tag) == kTypeFunction ? js_get(js, tag, "name") : Ant_Value_Undefined;
     if (vtype(name) == kTypeString) {
       size_t len = 0;
       const char *ptr = js_getstr(js, name, &len);
@@ -249,7 +249,7 @@ static ant_value_t wire_write_props(wire_writer_t *w, ant_value_t obj, ant_offse
   }
 
   js_prop_iter_end(&iter);
-  return put_u8(w, WIRE_END) ? js_mkundef() : wire_oom(js);
+  return put_u8(w, WIRE_END) ? Ant_Value_Undefined : wire_oom(js);
 }
 
 static bool wire_boxed_value(ant_value_t obj, ant_value_t *out) {
@@ -267,21 +267,21 @@ static ant_value_t wire_write_bigint(wire_writer_t *w, ant_value_t value) {
   if (is_err(str)) return str;
   size_t len = 0;
   const char *digits = js_getstr(w->js, str, &len);
-  return put_u8(w, WIRE_BIGINT) && put_str(w, digits, len) ? js_mkundef() : wire_oom(w->js);
+  return put_u8(w, WIRE_BIGINT) && put_str(w, digits, len) ? Ant_Value_Undefined : wire_oom(w->js);
 }
 
 static ant_value_t wire_write_string(wire_writer_t *w, uint8_t tag, ant_value_t value) {
   size_t len = 0;
   const char *bytes = js_getstr(w->js, value, &len);
-  return put_u8(w, tag) && put_str(w, bytes ? bytes : "", bytes ? len : 0) ? js_mkundef() : wire_oom(w->js);
+  return put_u8(w, tag) && put_str(w, bytes ? bytes : "", bytes ? len : 0) ? Ant_Value_Undefined : wire_oom(w->js);
 }
 
 static ant_value_t wire_write_primitive(wire_writer_t *w, ant_value_t value) {
   switch (vtype(value)) {
-    case kTypeUndefined: return put_u8(w, WIRE_UNDEFINED) ? js_mkundef() : wire_oom(w->js);
-    case kTypeNull: return put_u8(w, WIRE_NULL) ? js_mkundef() : wire_oom(w->js);
-    case kTypeBool: return put_u8(w, js_truthy(w->js, value) ? WIRE_TRUE : WIRE_FALSE) ? js_mkundef() : wire_oom(w->js);
-    case kTypeNumber: return put_u8(w, WIRE_NUMBER) && put_f64(w, Ant_Value_AsNumberUnchecked(value)) ? js_mkundef() : wire_oom(w->js);
+    case kTypeUndefined: return put_u8(w, WIRE_UNDEFINED) ? Ant_Value_Undefined : wire_oom(w->js);
+    case kTypeNull: return put_u8(w, WIRE_NULL) ? Ant_Value_Undefined : wire_oom(w->js);
+    case kTypeBool: return put_u8(w, js_truthy(w->js, value) ? WIRE_TRUE : WIRE_FALSE) ? Ant_Value_Undefined : wire_oom(w->js);
+    case kTypeNumber: return put_u8(w, WIRE_NUMBER) && put_f64(w, Ant_Value_AsNumberUnchecked(value)) ? Ant_Value_Undefined : wire_oom(w->js);
     case kTypeBigInt: return wire_write_bigint(w, value);
     case kTypeString: return wire_write_string(w, WIRE_STRING, value);
     default: return wire_uncloneable(w, value);
@@ -313,7 +313,7 @@ static ant_value_t wire_write_buffer(wire_writer_t *w, ant_value_t value, ArrayB
     wire->shared[wire->shared_count] = data;
     
     if (!put_u8(w, WIRE_SHARED_BUFFER) || !put_varint(w, wire->shared_count++)) return wire_oom(js);
-    return wire_remember(w, value) ? js_mkundef() : wire_oom(js);
+    return wire_remember(w, value) ? Ant_Value_Undefined : wire_oom(js);
   }
 
   if (buffer_can_transfer(data) && wire_in_transfer(w, value)) {
@@ -327,7 +327,7 @@ static ant_value_t wire_write_buffer(wire_writer_t *w, ant_value_t value, ArrayB
     
     w->moving[w->moving_count] = data;
     if (!put_u8(w, WIRE_MOVED_BUFFER) || !put_varint(w, w->moving_count++)) return wire_oom(js);
-    return wire_remember(w, value) ? js_mkundef() : wire_oom(js);
+    return wire_remember(w, value) ? Ant_Value_Undefined : wire_oom(js);
   }
 
   bool ok = data->resizable
@@ -339,7 +339,7 @@ static ant_value_t wire_write_buffer(wire_writer_t *w, ant_value_t value, ArrayB
     !put_bytes(w, data->data, data->length)
   ) return wire_oom(js);
   
-  return wire_remember(w, value) ? js_mkundef() : wire_oom(js);
+  return wire_remember(w, value) ? Ant_Value_Undefined : wire_oom(js);
 }
 
 static ant_value_t wire_write_view(wire_writer_t *w, ant_value_t value, uint8_t kind, size_t offset, size_t length, bool tracking) {
@@ -348,7 +348,7 @@ static ant_value_t wire_write_view(wire_writer_t *w, ant_value_t value, uint8_t 
     return wire_oom(w->js);
   ant_value_t r = wire_write(w, buffer);
   if (is_err(r)) return r;
-  return wire_remember(w, value) ? js_mkundef() : wire_oom(w->js);
+  return wire_remember(w, value) ? Ant_Value_Undefined : wire_oom(w->js);
 }
 
 static ant_value_t wire_error_field(ant_t *js, ant_value_t error, const char *key, const char **out, size_t *len) {
@@ -384,18 +384,18 @@ static ant_value_t wire_write_error(wire_writer_t *w, ant_value_t value) {
   if (!ok) return wire_oom(js);
   if (!wire_remember(w, value)) return wire_oom(js);
 
-  ant_value_t cause = js_mkundef();
+  ant_value_t cause = Ant_Value_Undefined;
   bool has_cause = js_try_get_own_data_prop(js, value, "cause", 5, &cause);
   if (!put_u8(w, has_cause ? 1 : 0)) return wire_oom(js);
   if (has_cause && is_err(r = wire_write(w, cause))) return r;
 
-  ant_value_t errors = js_mkundef();
+  ant_value_t errors = Ant_Value_Undefined;
   bool has_errors = js_try_get_own_data_prop(js, value, "errors", 6, &errors);
   if (!put_u8(w, has_errors ? 1 : 0)) return wire_oom(js);
   if (has_errors && is_err(r = wire_write(w, errors))) return r;
 
   if (w->error_props) return wire_write_props(w, value, 0);
-  return put_u8(w, WIRE_END) ? js_mkundef() : wire_oom(js);
+  return put_u8(w, WIRE_END) ? Ant_Value_Undefined : wire_oom(js);
 }
 
 static bool wire_add_blob(ant_wire_t *wire, blob_storage_t *storage) {
@@ -415,7 +415,7 @@ static bool wire_add_blob(ant_wire_t *wire, blob_storage_t *storage) {
 static ant_value_t wire_write_object(wire_writer_t *w, ant_value_t value) {
   ant_t *js = w->js;
   uint32_t id = 0;
-  if (wire_lookup(w, value, &id)) return put_u8(w, WIRE_REF) && put_varint(w, id) ? js_mkundef() : wire_oom(js);
+  if (wire_lookup(w, value, &id)) return put_u8(w, WIRE_REF) && put_varint(w, id) ? Ant_Value_Undefined : wire_oom(js);
   if (ant_wire_is_uncloneable(js, value))
     return wire_clone_error(js, "Cannot clone object of unsupported type.");
 
@@ -423,7 +423,7 @@ static ant_value_t wire_write_object(wire_writer_t *w, ant_value_t value) {
     int index = wire_port_index(w, value);
     if (index < 0) return wire_clone_error(js, "Object that needs transfer was found in message but not listed in transferList");
     if (!put_u8(w, WIRE_PORT) || !put_varint(w, (uint64_t)index)) return wire_oom(js);
-    return wire_remember(w, value) ? js_mkundef() : wire_oom(js);
+    return wire_remember(w, value) ? Ant_Value_Undefined : wire_oom(js);
   }
 
   TypedArrayData *ta = buffer_get_typedarray_data(value);
@@ -458,14 +458,14 @@ static ant_value_t wire_write_object(wire_writer_t *w, ant_value_t value) {
     if (!put_u8(w, WIRE_BOXED)) return wire_oom(js);
     ant_value_t r = wire_write_primitive(w, boxed);
     if (is_err(r)) return r;
-    return wire_remember(w, value) ? js_mkundef() : wire_oom(js);
+    return wire_remember(w, value) ? Ant_Value_Undefined : wire_oom(js);
   }
 
   if (is_date_instance(value)) {
     ant_value_t time = js_get_slot(value, SLOT_DATA);
     double ms = vtype(time) == kTypeNumber ? Ant_Value_AsNumberUnchecked(time) : 0;
     if (!put_u8(w, WIRE_DATE) || !put_f64(w, ms)) return wire_oom(js);
-    return wire_remember(w, value) ? js_mkundef() : wire_oom(js);
+    return wire_remember(w, value) ? Ant_Value_Undefined : wire_oom(js);
   }
 
   if (ptr->flags.regexp_brand) {
@@ -475,10 +475,10 @@ static ant_value_t wire_write_object(wire_writer_t *w, ant_value_t value) {
     const char *s = vtype(source) == kTypeString ? js_getstr(js, source, &slen) : "";
     const char *f = vtype(flags) == kTypeString ? js_getstr(js, flags, &flen) : "";
     if (!put_u8(w, WIRE_REGEXP) || !put_str(w, s, slen) || !put_str(w, f, flen)) return wire_oom(js);
-    return wire_remember(w, value) ? js_mkundef() : wire_oom(js);
+    return wire_remember(w, value) ? Ant_Value_Undefined : wire_oom(js);
   }
 
-  if (js_get_slot(value, SLOT_ERROR_BRAND) == js_true) return wire_write_error(w, value);
+  if (js_get_slot(value, SLOT_ERROR_BRAND) == Ant_Value_True) return wire_write_error(w, value);
 
   blob_data_t *blob = blob_is_blob(js, value) ? blob_get_data(value) : NULL;
   if (blob) {
@@ -488,7 +488,7 @@ static ant_value_t wire_write_object(wire_writer_t *w, ant_value_t value) {
       return wire_oom(js);
     if (!put_u8(w, blob->name ? 1 : 0)) return wire_oom(js);
     if (blob->name && (!put_str(w, blob->name, strlen(blob->name)) || !put_f64(w, (double)blob->last_modified))) return wire_oom(js);
-    return wire_remember(w, value) ? js_mkundef() : wire_oom(js);
+    return wire_remember(w, value) ? Ant_Value_Undefined : wire_oom(js);
   }
 
   if (ptr->type_tag == kTypeMap) {
@@ -504,7 +504,7 @@ static ant_value_t wire_write_object(wire_writer_t *w, ant_value_t value) {
         if (is_err(r)) return r;
       }
     }
-    return put_u8(w, WIRE_END) ? js_mkundef() : wire_oom(js);
+    return put_u8(w, WIRE_END) ? Ant_Value_Undefined : wire_oom(js);
   }
 
   if (ptr->type_tag == kTypeSet) {
@@ -518,7 +518,7 @@ static ant_value_t wire_write_object(wire_writer_t *w, ant_value_t value) {
         if (is_err(r)) return r;
       }
     }
-    return put_u8(w, WIRE_END) ? js_mkundef() : wire_oom(js);
+    return put_u8(w, WIRE_END) ? Ant_Value_Undefined : wire_oom(js);
   }
 
   if (t == kTypeArray) {
@@ -544,8 +544,8 @@ static ant_value_t wire_write(wire_writer_t *w, ant_value_t value) {
 }
 
 static ant_value_t wire_check_transfer(ant_t *js, ant_value_t list, ant_value_t source_port, ant_value_t *out) {
-  *out = js_mkundef();
-  if (vtype(list) == kTypeUndefined || vtype(list) == kTypeNull) return js_mkundef();
+  *out = Ant_Value_Undefined;
+  if (vtype(list) == kTypeUndefined || vtype(list) == kTypeNull) return Ant_Value_Undefined;
 
   iterator_t it;
   if (!is_object_type(list) || !js_iter_open(js, list, &it)) return Ant_Exception_Pending(js)
@@ -557,7 +557,7 @@ static ant_value_t wire_check_transfer(ant_t *js, ant_value_t list, ant_value_t 
   while (js_iter_next(js, &it, &item)) {
     ArrayBufferData *data = is_object_type(item) ? buffer_get_arraybuffer_data(item) : NULL;
     bool port = ant_message_port_is(item);
-    ant_value_t error = js_mkundef();
+    ant_value_t error = Ant_Value_Undefined;
 
     if (!data && !port) error = js_mkerr_typed(js, JS_ERR_TYPE, "Found invalid value in transferList.");
     else if (port && item == source_port) error = wire_clone_error(js, "Transfer list contains source port");
@@ -579,7 +579,7 @@ static ant_value_t wire_check_transfer(ant_t *js, ant_value_t list, ant_value_t 
 
   if (Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
   *out = items;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void wire_free_refs(wire_writer_t *w) {
@@ -633,7 +633,7 @@ static ant_value_t wire_serialize(
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, value);
 
-  ant_value_t transfer = js_mkundef();
+  ant_value_t transfer = Ant_Value_Undefined;
   ant_value_t r = wire_check_transfer(js, transfer_list, source_port, &transfer);
   if (is_err(r)) {
     GC_ROOT_RESTORE(js, root_mark);
@@ -693,7 +693,7 @@ static ant_value_t wire_serialize(
 
   GC_ROOT_RESTORE(js, root_mark);
   *out = wire;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t ant_wire_serialize(
@@ -704,7 +704,7 @@ ant_value_t ant_wire_serialize(
 }
 
 ant_value_t ant_wire_serialize_error(ant_t *js, ant_value_t error, ant_wire_t **out) {
-  return wire_serialize(js, error, js_mkundef(), js_mkundef(), true, out);
+  return wire_serialize(js, error, Ant_Value_Undefined, Ant_Value_Undefined, true, out);
 }
 
 static bool get_u8(wire_reader_t *r, uint8_t *out) {
@@ -791,10 +791,10 @@ static ant_value_t wire_read_props(wire_reader_t *r, ant_value_t obj) {
 static ant_value_t wire_read_primitive_tag(wire_reader_t *r, uint8_t tag) {
   ant_t *js = r->js;
   switch (tag) {
-    case WIRE_UNDEFINED: return js_mkundef();
-    case WIRE_NULL: return js_mknull();
-    case WIRE_TRUE: return js_true;
-    case WIRE_FALSE: return js_false;
+    case WIRE_UNDEFINED: return Ant_Value_Undefined;
+    case WIRE_NULL: return Ant_Value_Null;
+    case WIRE_TRUE: return Ant_Value_True;
+    case WIRE_FALSE: return Ant_Value_False;
     case WIRE_NUMBER: {
       double d;
       return get_f64(r, &d) ? Ant_Value_FromNumber(d) : wire_corrupt(js);
@@ -836,9 +836,9 @@ static ant_value_t wire_read_error(wire_reader_t *r) {
   js_set_proto_init(err, js->builtins.error_protos[type]);
   wire_track(r, err);
 
-  if (stack) js_error_define_stack(js, err, js_mkundef(), js_mkstr(js, stack, stack_len));
+  if (stack) js_error_define_stack(js, err, Ant_Value_Undefined, js_mkstr(js, stack, stack_len));
   if (message) defhidden(js, err, "message", 7, js_mkstr(js, message, message_len));
-  js_set_slot(err, SLOT_ERROR_BRAND, js_true);
+  js_set_slot(err, SLOT_ERROR_BRAND, Ant_Value_True);
   js_set_slot(err, SLOT_ERR_TYPE, Ant_Value_FromNumber((double)type));
   if (type == JS_ERR_GENERIC && !(name_len == 5 && memcmp(name, "Error", 5) == 0))
     defhidden(js, err, "name", 4, js_mkstr(js, name, name_len));
@@ -1076,7 +1076,7 @@ ant_value_t ant_wire_deserialize(ant_t *js, ant_wire_t *wire, ant_value_t *ports
     for (uint32_t i = 0; i < wire->port_count; i++) {
       ant_port_end_t *end = wire->ports[i];
       wire->ports[i] = NULL;
-      ant_value_t port = end ? ant_message_port_adopt(js, end) : js_mknull();
+      ant_value_t port = end ? ant_message_port_adopt(js, end) : Ant_Value_Null;
       if (is_err(port)) {
         GC_ROOT_RESTORE(js, root_mark);
         return port;
@@ -1095,22 +1095,22 @@ ant_value_t ant_wire_deserialize(ant_t *js, ant_wire_t *wire, ant_value_t *ports
 static ant_value_t wire_weakset_add(ant_t *js, ant_value_t *root, ant_value_t value) {
   if (!is_object_type(*root)) {
     ant_value_t ctor = js_get(js, js->global, "WeakSet");
-    ant_value_t set = sv_vm_call(js->vm, js, ctor, js_mkundef(), NULL, 0, NULL, ctor);
+    ant_value_t set = sv_vm_call(js->vm, js, ctor, Ant_Value_Undefined, NULL, 0, NULL, ctor);
     if (is_err(set)) return set;
     *root = set;
   }
   
   ant_value_t add = js_get(js, *root, "add");
-  ant_value_t r = sv_vm_call(js->vm, js, add, *root, &value, 1, NULL, js_mkundef());
+  ant_value_t r = sv_vm_call(js->vm, js, add, *root, &value, 1, NULL, Ant_Value_Undefined);
   
-  return is_err(r) ? r : js_mkundef();
+  return is_err(r) ? r : Ant_Value_Undefined;
 }
 
 static bool wire_weakset_has(ant_t *js, ant_value_t root, ant_value_t value) {
   if (!is_object_type(root) || !is_object_type(value)) return false;
   
   ant_value_t has = js_get(js, root, "has");
-  ant_value_t r = sv_vm_call(js->vm, js, has, root, &value, 1, NULL, js_mkundef());
+  ant_value_t r = sv_vm_call(js->vm, js, has, root, &value, 1, NULL, Ant_Value_Undefined);
   
   if (is_err(r)) {
     js_take_thrown(js, r);
@@ -1126,7 +1126,7 @@ ant_value_t ant_wire_mark_untransferable(ant_t *js, ant_value_t value) {
   
   if (ta) data = ta->backing;
   if (data) data->untransferable = 1;
-  if (!is_object_type(value)) return js_mkundef();
+  if (!is_object_type(value)) return Ant_Value_Undefined;
   
   return wire_weakset_add(js, &js->mutable_roots.untransferable, value);
 }
@@ -1144,12 +1144,12 @@ bool ant_wire_is_untransferable(ant_t *js, ant_value_t value) {
 }
 
 ant_value_t ant_wire_mark_uncloneable(ant_t *js, ant_value_t value) {
-  if (!is_object_type(value)) return js_mkundef();
-  js_set_slot(value, SLOT_UNCLONEABLE, js_true);
+  if (!is_object_type(value)) return Ant_Value_Undefined;
+  js_set_slot(value, SLOT_UNCLONEABLE, Ant_Value_True);
   js->uncloneable_marked = true;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 bool ant_wire_is_uncloneable(ant_t *js, ant_value_t value) {
-  return js->uncloneable_marked && js_get_slot(value, SLOT_UNCLONEABLE) == js_true;
+  return js->uncloneable_marked && js_get_slot(value, SLOT_UNCLONEABLE) == Ant_Value_True;
 }

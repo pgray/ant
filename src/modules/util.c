@@ -193,7 +193,7 @@ static void util_free_parse_options(util_parse_arg_option_t *options, size_t opt
 }
 
 static ant_value_t util_parse_args(ant_params_t) {
-  ant_value_t config = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t config = nargs > 0 ? args[0] : Ant_Value_Undefined;
   if (!is_object_type(config)) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "parseArgs(config) requires an options object");
   }
@@ -242,16 +242,16 @@ static ant_value_t util_parse_args(ant_params_t) {
       ant_value_t spec = js_get(js, options_obj, key);
       if (is_err(spec)) goto option_error;
 
-      ant_value_t type_val = is_object_type(spec) ? js_get(js, spec, "type") : js_mkundef();
+      ant_value_t type_val = is_object_type(spec) ? js_get(js, spec, "type") : Ant_Value_Undefined;
       if (is_err(type_val)) goto option_error;
 
-      ant_value_t short_val = is_object_type(spec) ? js_get(js, spec, "short") : js_mkundef();
+      ant_value_t short_val = is_object_type(spec) ? js_get(js, spec, "short") : Ant_Value_Undefined;
       if (is_err(short_val)) goto option_error;
 
-      ant_value_t multiple_val = is_object_type(spec) ? js_get(js, spec, "multiple") : js_mkundef();
+      ant_value_t multiple_val = is_object_type(spec) ? js_get(js, spec, "multiple") : Ant_Value_Undefined;
       if (is_err(multiple_val)) goto option_error;
 
-      ant_value_t default_val = is_object_type(spec) ? js_get(js, spec, "default") : js_mkundef();
+      ant_value_t default_val = is_object_type(spec) ? js_get(js, spec, "default") : Ant_Value_Undefined;
       if (is_err(default_val)) goto option_error;
       
       options[idx].name = strndup(key, key_len);
@@ -344,7 +344,7 @@ option_error:
         
         ant_value_t unknown = inline_value
           ? js_mkstr(js, inline_value, inline_len)
-          : js_true;
+          : Ant_Value_True;
           
         js_set(js, values, name_buf, unknown);
         free(name_buf);
@@ -352,7 +352,7 @@ option_error:
         continue;
       }
 
-      ant_value_t parsed_value = js_true;
+      ant_value_t parsed_value = Ant_Value_True;
       if (opt->type == UTIL_PARSE_ARG_TYPE_STRING) {
         if (inline_value) parsed_value = js_mkstr(js, inline_value, inline_len);
         else if (i + 1 < arg_len) parsed_value = js_arr_get(js, args_list, ++i);
@@ -382,11 +382,11 @@ option_error:
             return js_mkerr_typed(js, JS_ERR_TYPE, "Unknown option '-%c'", arg[j]);
           }
           char key[2] = {arg[j], '\0'};
-          js_set(js, values, key, js_true);
+          js_set(js, values, key, Ant_Value_True);
           continue;
         }
 
-        ant_value_t parsed_value = js_true;
+        ant_value_t parsed_value = Ant_Value_True;
         if (opt->type == UTIL_PARSE_ARG_TYPE_STRING) {
           if (j + 1 < arg_slen) {
             parsed_value = js_mkstr(js, arg + j + 1, arg_slen - (j + 1));
@@ -580,7 +580,7 @@ static ant_value_t util_format_with_options(ant_params_t) {
 }
 
 static int util_inspect_depth(ant_native_params_t) {
-  ant_value_t depth = js_mkundef();
+  ant_value_t depth = Ant_Value_Undefined;
   
   if (nargs > 1 && is_object_type(args[1])) depth = js_get(js, args[1], "depth");
   else if (nargs > 2) depth = args[2];
@@ -600,8 +600,8 @@ static uint8_t util_inspect_flags(ant_native_params_t) {
 
   uint8_t flags = 0;
   if (js_truthy(js, js_get(js, args[1], "showHidden"))) flags |= ANT_INSPECT_SHOW_HIDDEN;
-  if (js_get(js, args[1], "compact") == js_false) flags |= ANT_INSPECT_EXPAND;
-  if (js_get(js, args[1], "sorted") == js_true) flags |= ANT_INSPECT_SORTED;
+  if (js_get(js, args[1], "compact") == Ant_Value_False) flags |= ANT_INSPECT_EXPAND;
+  if (js_get(js, args[1], "sorted") == Ant_Value_True) flags |= ANT_INSPECT_SORTED;
   return flags;
 }
 
@@ -642,7 +642,7 @@ static bool util_is_boxed_primitive(ant_value_t value, uint8_t *type_out) {
 
 static ant_value_t util_is_array(ant_params_t) {
   bool result = false;
-  ant_value_t checked = js_is_array_value_checked(js, nargs > 0 ? args[0] : js_mkundef(), &result);
+  ant_value_t checked = js_is_array_value_checked(js, nargs > 0 ? args[0] : Ant_Value_Undefined, &result);
   return is_err(checked) ? checked : js_bool(result);
 }
 
@@ -666,30 +666,30 @@ static ant_value_t util_types_is_shared_array_buffer(ant_params_t) {
 }
 
 static ant_value_t util_types_is_array_buffer_view(ant_params_t) {
-  if (nargs < 1) return js_false;
+  if (nargs < 1) return Ant_Value_False;
   return js_bool(buffer_is_dataview(args[0]) || buffer_get_typedarray_data(args[0]) != NULL);
 }
 
 static ant_value_t util_types_is_data_view(ant_params_t) {
-  if (nargs < 1) return js_false;
+  if (nargs < 1) return Ant_Value_False;
   return js_bool(buffer_is_dataview(args[0]));
 }
 
 static ant_value_t util_types_is_typed_array(ant_params_t) {
-  if (nargs < 1) return js_false;
+  if (nargs < 1) return Ant_Value_False;
   return js_bool(buffer_get_typedarray_data(args[0]) != NULL);
 }
 
 static ant_value_t util_types_is_float16_array(ant_params_t) {
   TypedArrayData *typed_array = (nargs > 0) ? buffer_get_typedarray_data(args[0]) : NULL;
-  if (!typed_array) return js_false;
+  if (!typed_array) return Ant_Value_False;
   return js_bool(typed_array != NULL && typed_array->type == TYPED_ARRAY_FLOAT16);
 }
 
 #define DEFINE_TYPED_ARRAY_CHECK(fn_name, typed_array_kind)                                   \
   static ant_value_t fn_name(ant_params_t) {                       \
     TypedArrayData *typed_array = (nargs > 0) ? buffer_get_typedarray_data(args[0]) : NULL;   \
-    if (!typed_array) return js_false;                                                        \
+    if (!typed_array) return Ant_Value_False;                                                        \
     return js_bool(typed_array != NULL && typed_array->type == typed_array_kind);             \
   }
 
@@ -706,75 +706,75 @@ DEFINE_TYPED_ARRAY_CHECK(util_types_is_biguint64_array, TYPED_ARRAY_BIGUINT64)
 DEFINE_TYPED_ARRAY_CHECK(util_types_is_uint8_clamped_array, TYPED_ARRAY_UINT8_CLAMPED)
 
 static ant_value_t util_types_is_promise(ant_params_t) {
-  if (nargs < 1) return js_false;
+  if (nargs < 1) return Ant_Value_False;
   return js_bool(vtype(args[0]) == kTypePromise);
 }
 
 static ant_value_t util_types_is_proxy(ant_params_t) {
-  if (nargs < 1 || !is_object_type(args[0])) return js_false;
+  if (nargs < 1 || !is_object_type(args[0])) return Ant_Value_False;
   return js_bool(is_proxy(args[0]) && !js_proxy_is_host(args[0]));
 }
 
 static ant_value_t util_types_is_regexp(ant_params_t) {
-  if (nargs < 1 || !is_object_type(args[0])) return js_false;
+  if (nargs < 1 || !is_object_type(args[0])) return Ant_Value_False;
   ant_object_t *obj = js_obj_ptr(js_as_obj(args[0]));
   return js_bool(obj && obj->flags.regexp_brand);
 }
 
 static ant_value_t util_types_is_date(ant_params_t) {
-  if (nargs < 1) return js_false;
+  if (nargs < 1) return Ant_Value_False;
   return js_bool(is_date_instance(args[0]));
 }
 
 static ant_value_t util_types_is_map(ant_params_t) {
-  if (nargs < 1 || vtype(args[0]) != kTypeObject) return js_false;
+  if (nargs < 1 || vtype(args[0]) != kTypeObject) return Ant_Value_False;
   return js_bool(js_obj_ptr(args[0])->type_tag == kTypeMap);
 }
 
 static ant_value_t util_types_is_set(ant_params_t) {
-  if (nargs < 1 || vtype(args[0]) != kTypeObject) return js_false;
+  if (nargs < 1 || vtype(args[0]) != kTypeObject) return Ant_Value_False;
   return js_bool(js_obj_ptr(args[0])->type_tag == kTypeSet);
 }
 
 static ant_value_t util_types_is_weak_map(ant_params_t) {
-  if (nargs < 1 || vtype(args[0]) != kTypeObject) return js_false;
+  if (nargs < 1 || vtype(args[0]) != kTypeObject) return Ant_Value_False;
   return js_bool(js_obj_ptr(args[0])->type_tag == kTypeWeakMap);
 }
 
 static ant_value_t util_types_is_weak_set(ant_params_t) {
-  if (nargs < 1 || vtype(args[0]) != kTypeObject) return js_false;
+  if (nargs < 1 || vtype(args[0]) != kTypeObject) return Ant_Value_False;
   return js_bool(js_obj_ptr(args[0])->type_tag == kTypeWeakSet);
 }
 
 static ant_value_t util_types_is_async_function(ant_params_t) {
   ant_value_t func_obj;
-  if (nargs < 1 || vtype(args[0]) != kTypeFunction) return js_false;
+  if (nargs < 1 || vtype(args[0]) != kTypeFunction) return Ant_Value_False;
   func_obj = js_func_obj(args[0]);
-  return js_bool(js_get_slot(func_obj, SLOT_ASYNC) == js_true);
+  return js_bool(js_get_slot(func_obj, SLOT_ASYNC) == Ant_Value_True);
 }
 
 static ant_value_t util_types_is_generator_function(ant_params_t) {
   sv_closure_t *closure;
 
-  if (nargs < 1 || vtype(args[0]) != kTypeFunction) return js_false;
+  if (nargs < 1 || vtype(args[0]) != kTypeFunction) return Ant_Value_False;
 
   closure = js_func_closure(args[0]);
   return js_bool(closure != NULL && closure->func != NULL && closure->func->is_generator);
 }
 
 static ant_value_t util_types_is_generator_object(ant_params_t) {
-  if (nargs < 1) return js_false;
+  if (nargs < 1) return Ant_Value_False;
   return js_bool(vtype(args[0]) == kTypeGenerator);
 }
 
 static ant_value_t util_types_is_arguments_object(ant_params_t) {
-  if (nargs < 1) return js_false;
+  if (nargs < 1) return Ant_Value_False;
   return js_bool(util_is_arguments_object_value(args[0]));
 }
 
 static ant_value_t util_types_is_native_error(ant_params_t) {
-  if (nargs < 1 || !is_object_type(args[0])) return js_false;
-  return js_bool(js_get_slot(args[0], SLOT_ERROR_BRAND) == js_true);
+  if (nargs < 1 || !is_object_type(args[0])) return Ant_Value_False;
+  return js_bool(js_get_slot(args[0], SLOT_ERROR_BRAND) == Ant_Value_True);
 }
 
 static ant_value_t util_types_is_boxed_primitive(ant_params_t) {
@@ -807,17 +807,17 @@ static ant_value_t util_types_is_bigint_object(ant_params_t) {
 }
 
 static ant_value_t util_types_is_map_iterator(ant_params_t) {
-  if (nargs < 1 || !is_object_type(args[0])) return js_false;
+  if (nargs < 1 || !is_object_type(args[0])) return Ant_Value_False;
   return js_bool(util_has_proto_in_chain(js, args[0], js->builtins.map_iter_proto));
 }
 
 static ant_value_t util_types_is_set_iterator(ant_params_t) {
-  if (nargs < 1 || !is_object_type(args[0])) return js_false;
+  if (nargs < 1 || !is_object_type(args[0])) return Ant_Value_False;
   return js_bool(util_has_proto_in_chain(js, args[0], js->builtins.set_iter_proto));
 }
 
 static ant_value_t util_types_is_module_namespace_object(ant_params_t) {
-  if (nargs < 1) return js_false;
+  if (nargs < 1) return Ant_Value_False;
   return js_bool(js_check_brand(args[0], BRAND_MODULE_NAMESPACE));
 }
 
@@ -873,16 +873,16 @@ static ant_value_t util_get_types_object(ant_t *js) {
 }
 
 static ant_value_t util_debuglog_call(ant_params_t) {
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t util_debuglog(ant_params_t) {
   ant_value_t logger = Ant_Function_Create(util_debuglog_call);
-  js_set(js, logger, "enabled", js_false);
+  js_set(js, logger, "enabled", Ant_Value_False);
 
   if (nargs >= 2 && is_callable(args[1])) {
     ant_value_t cb_args[1] = { logger };
-    ant_value_t result = sv_vm_call(js->vm, js, args[1], js_mkundef(), cb_args, 1, NULL, js_mkundef());
+    ant_value_t result = sv_vm_call(js->vm, js, args[1], Ant_Value_Undefined, cb_args, 1, NULL, Ant_Value_Undefined);
     if (is_err(result) || Ant_Exception_Pending(js)) return result;
   }
 
@@ -1130,7 +1130,7 @@ static const util_style_entry_t *util_find_style(const char *name) {
 }
 
 static bool util_style_should_colorize(ant_t *js, ant_value_t options) {
-  ant_value_t stream = js_mkundef();
+  ant_value_t stream = Ant_Value_Undefined;
   if (is_object_type(options)) {
     ant_value_t validate = js_get(js, options, "validateStream");
     if (vtype(validate) == kTypeBool && !js_truthy(js, validate)) return true;
@@ -1150,7 +1150,7 @@ static bool util_style_should_colorize(ant_t *js, ant_value_t options) {
   ant_value_t get_depth = js_get(js, stream, "getColorDepth");
   if (!is_callable(get_depth)) return true;
 
-  ant_value_t depth = sv_vm_call(js->vm, js, get_depth, stream, NULL, 0, NULL, js_mkundef());
+  ant_value_t depth = sv_vm_call(js->vm, js, get_depth, stream, NULL, 0, NULL, Ant_Value_Undefined);
   return vtype(depth) == kTypeNumber && Ant_Value_AsNumberUnchecked(depth) > 2;
 }
 
@@ -1178,7 +1178,7 @@ static ant_value_t util_style_text(ant_params_t) {
     }
   }
 
-  if (picked_n == 0 || !util_style_should_colorize(js, nargs > 2 ? args[2] : js_mkundef())) {
+  if (picked_n == 0 || !util_style_should_colorize(js, nargs > 2 ? args[2] : Ant_Value_Undefined)) {
     ant_value_t out = js_mkstr(js, text_cstr.ptr, strlen(text_cstr.ptr));
     if (text_cstr.needs_free) free((void *)text_cstr.ptr);
     return out;
@@ -1201,34 +1201,34 @@ static ant_value_t util_style_text(ant_params_t) {
 
 static ant_value_t util_promisify_callback(ant_params_t) {
   ant_value_t ctx = js_get_slot(call_func, SLOT_DATA);
-  if (!is_object_type(ctx)) return js_mkundef();
+  if (!is_object_type(ctx)) return Ant_Value_Undefined;
 
   ant_value_t settled = js_get_slot(ctx, SLOT_SETTLED);
-  if (vtype(settled) == kTypeBool && settled == js_true) return js_mkundef();
-  js_set_slot(ctx, SLOT_SETTLED, js_true);
+  if (vtype(settled) == kTypeBool && settled == Ant_Value_True) return Ant_Value_Undefined;
+  js_set_slot(ctx, SLOT_SETTLED, Ant_Value_True);
 
   ant_value_t promise = js_get_slot(ctx, SLOT_DATA);
-  if (!is_object_type(promise)) return js_mkundef();
+  if (!is_object_type(promise)) return Ant_Value_Undefined;
 
   if (nargs > 0 && !is_null(args[0]) && !is_undefined(args[0])) {
     js_reject_promise(js, promise, args[0]);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (nargs <= 1) {
-    js_resolve_promise(js, promise, js_mkundef());
-    return js_mkundef();
+    js_resolve_promise(js, promise, Ant_Value_Undefined);
+    return Ant_Value_Undefined;
   }
 
   if (nargs == 2) {
     js_resolve_promise(js, promise, args[1]);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   ant_value_t arr = js_mkarr(js);
   for (int i = 1; i < nargs; i++) js_arr_push(js, arr, args[i]);
   js_resolve_promise(js, promise, arr);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t util_promisified_call(ant_params_t) {
@@ -1238,7 +1238,7 @@ static ant_value_t util_promisified_call(ant_params_t) {
   ant_value_t promise = js_mkpromise(js);
   ant_value_t ctx = Ant_Object_CreateBare(js);
   js_set_slot(ctx, SLOT_DATA, promise);
-  js_set_slot(ctx, SLOT_SETTLED, js_false);
+  js_set_slot(ctx, SLOT_SETTLED, Ant_Value_False);
   ant_value_t cb = js_heavy_mkfun(js, util_promisify_callback, ctx);
 
   ant_value_t *call_args = (ant_value_t *)malloc((size_t)(nargs + 1) * sizeof(ant_value_t));
@@ -1255,19 +1255,19 @@ static ant_value_t util_promisified_call(ant_params_t) {
   
   ant_value_t call_result = sv_vm_call(
     js->vm, js, original, call_this, 
-    call_args, nargs + 1, NULL, js_mkundef()
+    call_args, nargs + 1, NULL, Ant_Value_Undefined
   );
   
   GC_ROOT_RESTORE(js, root_mark);
   free(call_args);
 
   ant_value_t settled = js_get_slot(ctx, SLOT_SETTLED);
-  bool is_settled = (vtype(settled) == kTypeBool && settled == js_true);
+  bool is_settled = (vtype(settled) == kTypeBool && settled == Ant_Value_True);
 
   if (is_err(call_result) || Ant_Exception_Pending(js)) {
     ant_value_t ex = js_take_thrown(js, call_result);
     if (!is_settled) {
-      js_set_slot(ctx, SLOT_SETTLED, js_true);
+      js_set_slot(ctx, SLOT_SETTLED, Ant_Value_True);
       js_reject_promise(js, promise, ex);
     }
   }
@@ -1277,30 +1277,30 @@ static ant_value_t util_promisified_call(ant_params_t) {
 
 static ant_value_t util_callbackify_success(ant_params_t) {
   ant_value_t state = js_func_data(call_func);
-  if (!is_object_type(state)) return js_mkundef();
+  if (!is_object_type(state)) return Ant_Value_Undefined;
 
   ant_value_t callback = js_get_slot(state, SLOT_DATA);
-  if (!is_callable(callback)) return js_mkundef();
+  if (!is_callable(callback)) return Ant_Value_Undefined;
 
   ant_value_t cb_args[2] = {
-    js_mknull(),
-    nargs > 0 ? args[0] : js_mkundef()
+    Ant_Value_Null,
+    nargs > 0 ? args[0] : Ant_Value_Undefined
   };
   
-  return sv_vm_call(js->vm, js, callback, js_mkundef(), cb_args, 2, NULL, js_mkundef());
+  return sv_vm_call(js->vm, js, callback, Ant_Value_Undefined, cb_args, 2, NULL, Ant_Value_Undefined);
 }
 
 static ant_value_t util_callbackify_error(ant_params_t) {
   ant_value_t state = js_func_data(call_func);
-  if (!is_object_type(state)) return js_mkundef();
+  if (!is_object_type(state)) return Ant_Value_Undefined;
 
   ant_value_t callback = js_get_slot(state, SLOT_DATA);
-  if (!is_callable(callback)) return js_mkundef();
+  if (!is_callable(callback)) return Ant_Value_Undefined;
 
   ant_value_t err = nargs > 0 ? args[0]
     : Ant_Error_Create(js, JS_ERR_TYPE, "Promise was rejected");
   ant_value_t cb_args[1] = { err };
-  return sv_vm_call(js->vm, js, callback, js_mkundef(), cb_args, 1, NULL, js_mkundef());
+  return sv_vm_call(js->vm, js, callback, Ant_Value_Undefined, cb_args, 1, NULL, Ant_Value_Undefined);
 }
 
 static ant_value_t util_callbackified_call(ant_params_t) {
@@ -1320,7 +1320,7 @@ static ant_value_t util_callbackified_call(ant_params_t) {
     for (int i = 0; i < call_nargs; i++) call_args[i] = args[i];
   }
 
-  ant_value_t result = sv_vm_call(js->vm, js, original, call_this, call_args, call_nargs, NULL, js_mkundef());
+  ant_value_t result = sv_vm_call(js->vm, js, original, call_this, call_args, call_nargs, NULL, Ant_Value_Undefined);
   free(call_args);
 
   if (is_err(result) || Ant_Exception_Pending(js)) {
@@ -1329,16 +1329,16 @@ static ant_value_t util_callbackified_call(ant_params_t) {
 
     GC_ROOT_PIN(js, ex);
     ant_value_t cb_args[1] = { ex };
-    ant_value_t cb_result = sv_vm_call(js->vm, js, callback, js_mkundef(), cb_args, 1, NULL, js_mkundef());
+    ant_value_t cb_result = sv_vm_call(js->vm, js, callback, Ant_Value_Undefined, cb_args, 1, NULL, Ant_Value_Undefined);
 
     GC_ROOT_RESTORE(js, root_mark);
-    return is_err(cb_result) ? cb_result : js_mkundef();
+    return is_err(cb_result) ? cb_result : Ant_Value_Undefined;
   }
 
   if (vtype(result) != kTypePromise) {
-    ant_value_t cb_args[2] = { js_mknull(), result };
-    ant_value_t cb_result = sv_vm_call(js->vm, js, callback, js_mkundef(), cb_args, 2, NULL, js_mkundef());
-    return is_err(cb_result) ? cb_result : js_mkundef();
+    ant_value_t cb_args[2] = { Ant_Value_Null, result };
+    ant_value_t cb_result = sv_vm_call(js->vm, js, callback, Ant_Value_Undefined, cb_args, 2, NULL, Ant_Value_Undefined);
+    return is_err(cb_result) ? cb_result : Ant_Value_Undefined;
   }
 
   ant_value_t state = Ant_Object_CreateBare(js);
@@ -1347,23 +1347,23 @@ static ant_value_t util_callbackified_call(ant_params_t) {
   ant_value_t error = js_heavy_mkfun(js, util_callbackify_error, state);
   ant_value_t then_result = js_promise_then(js, result, success, error);
   
-  return is_err(then_result) ? then_result : js_mkundef();
+  return is_err(then_result) ? then_result : Ant_Value_Undefined;
 }
 
 static ant_value_t util_deprecated_call(ant_params_t) {
   ant_value_t ctx = js_get_slot(call_func, SLOT_DATA);
-  if (!is_object_type(ctx)) return js_mkundef();
+  if (!is_object_type(ctx)) return Ant_Value_Undefined;
 
   ant_value_t warned = js_get_slot(ctx, SLOT_SETTLED);
-  if (!(vtype(warned) == kTypeBool && warned == js_true)) {
-    js_set_slot(ctx, SLOT_SETTLED, js_true);
+  if (!(vtype(warned) == kTypeBool && warned == Ant_Value_True)) {
+    js_set_slot(ctx, SLOT_SETTLED, Ant_Value_True);
     ant_value_t msg_val = js_get(js, ctx, "msg");
     const char *msg = js_getstr(js, msg_val, NULL);
     if (msg) fprintf(stderr, "DeprecationWarning: %s\n", msg);
   }
 
   ant_value_t original = js_get_slot(ctx, SLOT_DATA);
-  return sv_vm_call(js->vm, js, original, call_this, args, nargs, NULL, js_mkundef());
+  return sv_vm_call(js->vm, js, original, call_this, args, nargs, NULL, Ant_Value_Undefined);
 }
 
 static ant_value_t util_deprecate(ant_params_t) {
@@ -1373,7 +1373,7 @@ static ant_value_t util_deprecate(ant_params_t) {
 
   ant_value_t ctx = Ant_Object_CreateBare(js);
   js_set_slot(ctx, SLOT_DATA, args[0]);
-  js_set_slot(ctx, SLOT_SETTLED, js_false);
+  js_set_slot(ctx, SLOT_SETTLED, Ant_Value_False);
   if (nargs >= 2) js_set(js, ctx, "msg", args[1]);
 
   return js_heavy_mkfun(js, util_deprecated_call, ctx);
@@ -1398,8 +1398,8 @@ static ant_value_t util_callbackify(ant_params_t) {
 
 static ant_value_t util_aborted_listener(ant_params_t) {
   ant_value_t promise = js_func_data(call_func);
-  if (vtype(promise) == kTypePromise) js_resolve_promise(js, promise, js_mkundef());
-  return js_mkundef();
+  if (vtype(promise) == kTypePromise) js_resolve_promise(js, promise, Ant_Value_Undefined);
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t util_aborted(ant_params_t) {
@@ -1410,7 +1410,7 @@ static ant_value_t util_aborted(ant_params_t) {
   }
 
   if (abort_signal_is_aborted(args[0])) {
-    js_resolve_promise(js, promise, js_mkundef());
+    js_resolve_promise(js, promise, Ant_Value_Undefined);
     return promise;
   }
 
@@ -1435,7 +1435,7 @@ static ant_value_t util_inherits(ant_params_t) {
   js_set(js, ctor, "super_", super_ctor);
   js_set_proto_init(ctor_proto, super_proto);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t util_is_deep_strict_equal(ant_params_t) {
@@ -1447,7 +1447,7 @@ ant_value_t util_library(ant_t *js) {
   ant_value_t lib = Ant_Object_CreateBare(js);
   ant_value_t types = util_get_types_object(js);
   
-  ant_value_t promisify = Ant_Function_CreateWithData(js, util_promisify, "promisify", 1, js_mkundef());
+  ant_value_t promisify = Ant_Function_CreateWithData(js, util_promisify, "promisify", 1, Ant_Value_Undefined);
   js_set(js, promisify, "custom", js_mksym_for(js, "nodejs.util.promisify.custom"));
 
   js_set(js, lib, "types", types);

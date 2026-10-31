@@ -131,7 +131,7 @@ static void sv_stack_resolve(sv_stack_iter_t *it, const sv_jit_activation_t *a, 
   bool outer = sv_frame_is_construct(it->vm, frames[n - 1].func, host_fp);
   for (int k = 0; k < n; k++) it->pending[n - 1 - k] = (sv_stack_entry_t){
     .func = frames[k].func,
-    .callee = k == n - 1 ? callee : js_mkundef(),
+    .callee = k == n - 1 ? callee : Ant_Value_Undefined,
     .bc_off = frames[k].bc_off,
     .frame_index = -1,
     .construct = sv_jit_frame_is_construct(frames, k, n, outer),
@@ -158,7 +158,7 @@ bool sv_stack_iter_next(sv_stack_iter_t *it, sv_stack_entry_t *out) {
       if (!a->func) continue;
       
       int host_fp = host ? a->vm_fp : -1;
-      ant_value_t callee = host ? vm->frames[a->vm_fp].callee : js_mkundef();
+      ant_value_t callee = host ? vm->frames[a->vm_fp].callee : Ant_Value_Undefined;
       if (it->resolve) {
         sv_stack_resolve(it, a, callee, host_fp);
         *out = it->pending[--it->n_pending];
@@ -382,7 +382,7 @@ static size_t error_append_live_frames(ant_t *js, int limit, const char *file, e
 
 ant_value_t js_capture_raw_stack(ant_t *js) {
   errbuf_t eb;
-  if (!errbuf_init(&eb, 4096)) return js_mkundef();
+  if (!errbuf_init(&eb, 4096)) return Ant_Value_Undefined;
   const char *file = js->filename ? js->filename : "<eval>";
   size_t n = error_append_live_frames(js, error_stack_trace_limit(js), file, &eb, 0, ERROR_FRAME_RAW);
   return errbuf_take_string(js, &eb, n);
@@ -452,7 +452,7 @@ static void error_record_finalize(ant_t *js, ant_object_t *obj) {
 
 ant_value_t js_error_record_capture(ant_t *js, ant_value_t call_func, const js_error_site_t *at, ant_value_t above_fn) {
   int limit = error_stack_trace_limit(js);
-  if (limit < 0) return js_mkundef();
+  if (limit < 0) return Ant_Value_Undefined;
 
   error_frame_t local[ERROR_FRAMES_INLINE], *frames;
   error_above_t above = error_above_of(call_func, above_fn);
@@ -461,14 +461,14 @@ ant_value_t js_error_record_capture(ant_t *js, ant_value_t call_func, const js_e
   
   for (int i = 0; i < n; i++) {
     error_frame_t *f = &frames[i];
-    if (f->func && f->func->debug->name && f->func->debug->name[0]) f->callee = js_mkundef();
+    if (f->func && f->func->debug->name && f->func->debug->name[0]) f->callee = Ant_Value_Undefined;
     if (!f->func || !f->func->debug->filename) need_file = true;
   }
 
   error_record_t *rec = calloc(1, sizeof(*rec) + (size_t)n * sizeof(rec->frames[0]));
   if (rec) memcpy(rec->frames, frames, (size_t)n * sizeof(rec->frames[0]));
   if (frames != local) free(frames);
-  if (!rec) return js_mkundef();
+  if (!rec) return Ant_Value_Undefined;
   
   rec->limit = limit;
   rec->no_site_frame = above.active;
@@ -497,7 +497,7 @@ ant_value_t js_error_record_capture(ant_t *js, ant_value_t call_func, const js_e
   rec->col = site.col;
 
   GC_ROOT_SAVE(root_mark, js);
-  ant_value_t rendered = js_mkundef(), file_str = js_mkundef();
+  ant_value_t rendered = Ant_Value_Undefined, file_str = Ant_Value_Undefined;
   GC_ROOT_PIN(js, rendered);
   GC_ROOT_PIN(js, file_str);
   
@@ -519,7 +519,7 @@ ant_value_t js_error_record_capture(ant_t *js, ant_value_t call_func, const js_e
     js_set_finalizer(record, error_record_finalize);
   } else {
     free(rec);
-    record = js_mkundef();
+    record = Ant_Value_Undefined;
   }
 
   GC_ROOT_RESTORE(js, root_mark);
@@ -551,7 +551,7 @@ static void error_render_begin(ant_t *js, const error_record_t *rec, error_rende
       if (!error_frames_reserve(&r->frames, r->local, &cap, r->n + 1)) return;
       r->frames[r->n++] = (error_frame_t){
         .func = at[i].func,
-        .callee = i == m - 1 ? f->callee : js_mkundef(),
+        .callee = i == m - 1 ? f->callee : Ant_Value_Undefined,
         .bc_off = at[i].bc_off,
         .construct = sv_jit_frame_is_construct(at, i, m, f->construct),
       };
@@ -627,7 +627,7 @@ ant_value_t js_error_record_throw_text(ant_t *js, ant_value_t value, ant_value_t
   error_record_t *rec = error_record_of(record);
   errbuf_t eb;
   
-  if (!rec || !errbuf_init(&eb, 4096)) return js_mkundef();
+  if (!rec || !errbuf_init(&eb, 4096)) return Ant_Value_Undefined;
 
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, value);
@@ -653,7 +653,7 @@ ant_value_t js_error_record_stack_text(ant_t *js, ant_value_t header, ant_value_
   error_record_t *rec = error_record_of(record);
   errbuf_t eb;
   
-  if (!rec || !errbuf_init(&eb, 1024)) return js_mkundef();
+  if (!rec || !errbuf_init(&eb, 1024)) return Ant_Value_Undefined;
 
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, header);
@@ -684,7 +684,7 @@ enum {
 
 static ant_value_t callsite_field(ant_t *js, ant_value_t call_this, int field) {
   ant_value_t data = js_get_slot(call_this, SLOT_DATA);
-  if (vtype(data) != kTypeArray) return js_mkundef();
+  if (vtype(data) != kTypeArray) return Ant_Value_Undefined;
   return js_arr_get(js, data, field);
 }
 
@@ -694,9 +694,9 @@ static ant_value_t callsite_getColumnNumber(ant_params_t) { return callsite_fiel
 static ant_value_t callsite_getFunctionName(ant_params_t) { return callsite_field(js, call_this, CS_NAME); }
 static ant_value_t callsite_isConstructor(ant_params_t)   { return js_bool(js_truthy(js, callsite_field(js, call_this, CS_CONSTRUCT))); }
 
-static ant_value_t callsite_null(ant_params_t)      { return js_mknull(); }
-static ant_value_t callsite_false(ant_params_t)     { return js_false; }
-static ant_value_t callsite_undefined(ant_params_t) { return js_mkundef(); }
+static ant_value_t callsite_null(ant_params_t)      { return Ant_Value_Null; }
+static ant_value_t callsite_false(ant_params_t)     { return Ant_Value_False; }
+static ant_value_t callsite_undefined(ant_params_t) { return Ant_Value_Undefined; }
 
 static ant_value_t callsite_toString(ant_params_t) {
   ant_value_t name = callsite_field(js, call_this, CS_NAME);
@@ -758,7 +758,7 @@ ant_value_t js_build_callsite_array(ant_t *js, ant_value_t call_func, ant_value_
   int count = error_collect_frames(js, error_stack_trace_limit(js), error_above_of(call_func, above), true, local, &frames);
   const char *file = js->filename ? js->filename : "<eval>";
 
-  ant_value_t data = js_mkundef(), site = js_mkundef();
+  ant_value_t data = Ant_Value_Undefined, site = Ant_Value_Undefined;
   GC_ROOT_PIN(js, data);
   GC_ROOT_PIN(js, site);
 

@@ -155,8 +155,8 @@ static descriptor_entry_t *get_or_create_desc(ant_t *js, ant_value_t obj, const 
   entry->configurable = true;
   entry->has_getter = false;
   entry->has_setter = false;
-  entry->getter = js_mkundef();
-  entry->setter = js_mkundef();
+  entry->getter = Ant_Value_Undefined;
+  entry->setter = Ant_Value_Undefined;
 
   HASH_ADD(hh, js->desc_registry, key, sizeof(uint64_t), entry);
   return entry;
@@ -178,8 +178,8 @@ static descriptor_entry_t *get_or_create_sym_desc(ant_t *js, ant_value_t obj, an
   entry->configurable = true;
   entry->has_getter = false;
   entry->has_setter = false;
-  entry->getter = js_mkundef();
-  entry->setter = js_mkundef();
+  entry->getter = Ant_Value_Undefined;
+  entry->setter = Ant_Value_Undefined;
 
   HASH_ADD(hh, js->desc_registry, key, sizeof(uint64_t), entry);
   return entry;
@@ -212,7 +212,7 @@ static bool ensure_symbol_shape_slot(ant_t *js, ant_value_t obj, ant_offset_t sy
   int32_t slot = ant_shape_lookup_symbol(ptr->shape, sym_off);
   if (slot < 0) {
     ant_value_t sym = mkval(kTypeSymbol, sym_off);
-    if (is_err(mkprop(js, obj, sym, js_mkundef(), 0))) return false;
+    if (is_err(mkprop(js, obj, sym, Ant_Value_Undefined, 0))) return false;
     slot = ant_shape_lookup_symbol(ptr->shape, sym_off);
     if (slot < 0) return false;
   }
@@ -263,7 +263,7 @@ static inline ant_shape_prop_t *ensure_symbol_shape_prop(
 
 static void clear_accessor_slot(ant_value_t obj, uint32_t slot) {
   ant_object_t *ptr = js_obj_ptr(obj);
-  if (ptr && slot < ptr->prop_count) ant_object_prop_set_unchecked(ptr, slot, js_mkundef());
+  if (ptr && slot < ptr->prop_count) ant_object_prop_set_unchecked(ptr, slot, Ant_Value_Undefined);
 }
 
 static void apply_shape_desc_update(
@@ -281,11 +281,11 @@ static void apply_shape_desc_update(
   prop->attrs = attrs_from_flags(flags, include_writable);
   if (set_getter_flag) {
     prop->has_getter = has_getter ? 1 : 0;
-    prop->getter = has_getter ? getter : js_mkundef();
+    prop->getter = has_getter ? getter : Ant_Value_Undefined;
   }
   if (set_setter_flag) {
     prop->has_setter = has_setter ? 1 : 0;
-    prop->setter = has_setter ? setter : js_mkundef();
+    prop->setter = has_setter ? setter : Ant_Value_Undefined;
   }
 }
 
@@ -306,11 +306,11 @@ static void apply_registry_desc_update(
   entry->configurable = (flags & JS_DESC_C) != 0;
   if (set_getter_flag) {
     entry->has_getter = has_getter;
-    entry->getter = has_getter ? getter : js_mkundef();
+    entry->getter = has_getter ? getter : Ant_Value_Undefined;
   }
   if (set_setter_flag) {
     entry->has_setter = has_setter;
-    entry->setter = has_setter ? setter : js_mkundef();
+    entry->setter = has_setter ? setter : Ant_Value_Undefined;
   }
 }
 
@@ -323,8 +323,8 @@ void js_set_descriptor(ant_t *js, ant_value_t obj, const char *key, size_t klen,
   if (prop) {
     apply_shape_desc_update(
       prop, flags, true,
-      false, false, js_mkundef(),
-      false, false, js_mkundef()
+      false, false, Ant_Value_Undefined,
+      false, false, Ant_Value_Undefined
     );
 
     ant_ic_epoch_bump(js);
@@ -336,8 +336,8 @@ void js_set_descriptor(ant_t *js, ant_value_t obj, const char *key, size_t klen,
 
   apply_registry_desc_update(
     entry, flags, true,
-    false, false, js_mkundef(),
-    false, false, js_mkundef()
+    false, false, Ant_Value_Undefined,
+    false, false, Ant_Value_Undefined
   );
 }
 
@@ -351,8 +351,8 @@ void js_set_sym_descriptor(ant_t *js, ant_value_t obj, ant_value_t sym, int flag
   if (prop) {
     apply_shape_desc_update(
       prop, flags, true,
-      false, false, js_mkundef(),
-      false, false, js_mkundef()
+      false, false, Ant_Value_Undefined,
+      false, false, Ant_Value_Undefined
     );
 
     ant_symbol_property_mutation_invalidate(js, js_obj_ptr(obj), sym_off);
@@ -365,8 +365,8 @@ void js_set_sym_descriptor(ant_t *js, ant_value_t obj, ant_value_t sym, int flag
 
   apply_registry_desc_update(
     entry, flags, true,
-    false, false, js_mkundef(),
-    false, false, js_mkundef()
+    false, false, Ant_Value_Undefined,
+    false, false, Ant_Value_Undefined
   );
 }
 
@@ -382,7 +382,7 @@ void js_set_getter_desc(ant_t *js, ant_value_t obj, const char *key, size_t klen
     apply_shape_desc_update(
       prop, flags, false,
       true, true, getter,
-      false, false, js_mkundef()
+      false, false, Ant_Value_Undefined
     );
     clear_accessor_slot(obj, slot);
 
@@ -403,7 +403,7 @@ void js_set_getter_desc(ant_t *js, ant_value_t obj, const char *key, size_t klen
   apply_registry_desc_update(
     entry, flags, false,
     true, true, getter,
-    false, false, js_mkundef()
+    false, false, Ant_Value_Undefined
   );
 }
 
@@ -418,7 +418,7 @@ void js_set_setter_desc(ant_t *js, ant_value_t obj, const char *key, size_t klen
   if (prop) {
     apply_shape_desc_update(
       prop, flags, false,
-      false, false, js_mkundef(),
+      false, false, Ant_Value_Undefined,
       true, true, setter
     );
     
@@ -440,7 +440,7 @@ void js_set_setter_desc(ant_t *js, ant_value_t obj, const char *key, size_t klen
 
   apply_registry_desc_update(
     entry, flags, false,
-    false, false, js_mkundef(),
+    false, false, Ant_Value_Undefined,
     true, true, setter
   );
 }
@@ -464,7 +464,7 @@ void js_define_accessor_desc(ant_t *js, ant_value_t obj, const char *key, size_t
   ant_object_invalidate_guarded_absence(js, ptr);
   if (!ensure_added_shape_slot_storage(js, ptr, slot)) return;
   
-  ant_object_prop_set_unchecked(ptr, slot, js_mkundef());
+  ant_object_prop_set_unchecked(ptr, slot, Ant_Value_Undefined);
   ant_property_mutation_invalidate(js, ptr, interned);
   gc_write_barrier(js, ptr, getter);
   gc_write_barrier(js, ptr, setter);
@@ -525,7 +525,7 @@ void js_set_sym_getter_desc(ant_t *js, ant_value_t obj, ant_value_t sym, ant_val
     apply_shape_desc_update(
       prop, flags, false,
       true, true, getter,
-      false, false, js_mkundef()
+      false, false, Ant_Value_Undefined
     );
     clear_accessor_slot(obj, slot);
 
@@ -542,7 +542,7 @@ void js_set_sym_getter_desc(ant_t *js, ant_value_t obj, ant_value_t sym, ant_val
   apply_registry_desc_update(
     entry, flags, false,
     true, true, getter,
-    false, false, js_mkundef()
+    false, false, Ant_Value_Undefined
   );
 }
 
@@ -561,7 +561,7 @@ void js_set_sym_setter_desc(ant_t *js, ant_value_t obj, ant_value_t sym, ant_val
   if (prop) {
     apply_shape_desc_update(
       prop, flags, false,
-      false, false, js_mkundef(),
+      false, false, Ant_Value_Undefined,
       true, true, setter
     );
     clear_accessor_slot(obj, slot);
@@ -578,7 +578,7 @@ void js_set_sym_setter_desc(ant_t *js, ant_value_t obj, ant_value_t sym, ant_val
 
   apply_registry_desc_update(
     entry, flags, false,
-    false, false, js_mkundef(),
+    false, false, Ant_Value_Undefined,
     true, true, setter
   );
 }
@@ -652,7 +652,7 @@ static bool define_desc_field(
   }
 
   if (Ant_Exception_Pending(js)) {
-    *err_out = js_throw(js, js_take_thrown(js, js_mkundef()));
+    *err_out = js_throw(js, js_take_thrown(js, Ant_Value_Undefined));
     return false;
   }
 
@@ -742,7 +742,7 @@ static ant_value_t define_desc_check(ant_t *js, ant_value_t descriptor, const de
     return descriptor_value_error(js, "Setter must be a function: ", raw->val[DESC_SET]);
   if ((raw->has[DESC_VALUE] || raw->has[DESC_WRITABLE]) && (raw->has[DESC_GET] || raw->has[DESC_SET]))
     return descriptor_value_error(js, "Invalid property descriptor. Cannot both specify accessors and a value or writable attribute, ", descriptor);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t define_desc_read(ant_t *js, ant_value_t descriptor, define_desc_raw_t *raw) {
@@ -805,7 +805,7 @@ static __attribute__((noinline)) bool string_wrapper_define(
   ant_t *js, ant_value_t obj, ant_value_t as_obj, const char *key, size_t key_len,
   const define_desc_fields_t *desc, ant_value_t *result
 ) {
-  ant_value_t current = js_mkundef();
+  ant_value_t current = Ant_Value_Undefined;
   bool is_length = false;
   if (!js_try_get_string_own_exotic(js, as_obj, key, key_len, &current, &is_length)) return false;
 
@@ -912,9 +912,9 @@ static ant_value_t define_desc_parse(
     .has_writable = raw.has[DESC_WRITABLE],
     .has_enumerable = raw.has[DESC_ENUMERABLE],
     .has_configurable = raw.has[DESC_CONFIGURABLE],
-    .value = raw.has[DESC_VALUE] ? raw.val[DESC_VALUE] : js_mkundef(),
-    .getter = raw.has[DESC_GET] ? raw.val[DESC_GET] : js_mkundef(),
-    .setter = raw.has[DESC_SET] ? raw.val[DESC_SET] : js_mkundef(),
+    .value = raw.has[DESC_VALUE] ? raw.val[DESC_VALUE] : Ant_Value_Undefined,
+    .getter = raw.has[DESC_GET] ? raw.val[DESC_GET] : Ant_Value_Undefined,
+    .setter = raw.has[DESC_SET] ? raw.val[DESC_SET] : Ant_Value_Undefined,
   };
   
   d->enumerable = d->has_enumerable && js_truthy(js, raw.val[DESC_ENUMERABLE]);
@@ -924,7 +924,7 @@ static ant_value_t define_desc_parse(
   if ((d->has_value || d->has_writable) && (d->has_get || d->has_set))
     return descriptor_value_error(js, "Invalid property descriptor. Cannot both specify accessors and a value or writable attribute, ", descriptor);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline define_desc_fields_t define_desc_fields(const define_desc_t *d) {
@@ -1082,7 +1082,7 @@ static ant_value_t define_validate_existing(
   if (!e->found) {
     if (ptr && (ptr->flags.frozen || ptr->flags.sealed || !ptr->flags.extensible))
       return js_mkerr(js, "Cannot define property %.*s, object is not extensible", (int)t->len, t->str);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   bool frozen = ptr && ptr->flags.frozen;
@@ -1090,7 +1090,7 @@ static ant_value_t define_validate_existing(
     (e->has_meta && !e->meta.configurable) ||
     (e->loc.obj && is_nonconfig_prop(e->loc)) ||
     (ptr && ptr->flags.sealed) || frozen;
-  if (!nonconfig) return js_mkundef();
+  if (!nonconfig) return Ant_Value_Undefined;
   
   bool accessor = e->has_meta && (e->meta.has_getter || e->meta.has_setter);
   bool readonly =
@@ -1109,9 +1109,9 @@ static ant_value_t define_validate_existing(
       return define_redefine_error(js, t->str, t->len, "cannot convert accessor property to data property");
     if (!accessor && (d->has_get || d->has_set))
       return define_redefine_error(js, t->str, t->len, "cannot convert data property to accessor property");
-    if (accessor && d->has_get && d->getter != (e->meta.has_getter ? e->meta.getter : js_mkundef()))
+    if (accessor && d->has_get && d->getter != (e->meta.has_getter ? e->meta.getter : Ant_Value_Undefined))
       return define_redefine_error(js, t->str, t->len, "cannot replace getter of a non-configurable property");
-    if (accessor && d->has_set && d->setter != (e->meta.has_setter ? e->meta.setter : js_mkundef()))
+    if (accessor && d->has_set && d->setter != (e->meta.has_setter ? e->meta.setter : Ant_Value_Undefined))
       return define_redefine_error(js, t->str, t->len, "cannot replace setter of a non-configurable property");
   }
 
@@ -1120,7 +1120,7 @@ static ant_value_t define_validate_existing(
   if (readonly && d->has_value && (!e->loc.obj || !same_value_values(js, js_prop_load(e->loc), d->value)))
     return js_mkerr(js, "Cannot assign to read-only property '%.*s'", (int)t->len, t->str);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline __attribute__((always_inline)) void define_set_accessor(
@@ -1342,8 +1342,8 @@ static ant_value_t reflect_define_property(ant_t *js, ant_value_t obj, ant_value
   
   if (is_err(result) && !abrupt) {
     Ant_Exception_Set(js, saved);
-    result = js_false;
-  } else if (!is_err(result)) result = js_true;
+    result = Ant_Value_False;
+  } else if (!is_err(result)) result = Ant_Value_True;
   
   GC_ROOT_RESTORE(js, mark);
   return result;
@@ -1376,18 +1376,18 @@ static ant_value_t object_define_properties_from_slots(
 static ant_value_t object_define_properties_from_data(ant_t *js, ant_value_t obj, ant_value_t props, bool *handled) {
   *handled = false;
   
-  if (vtype(props) != kTypeObject || is_proxy(props) || is_proxy(js_as_obj(obj))) return js_mkundef();
-  if (js_as_obj(obj) == props) return js_mkundef();
+  if (vtype(props) != kTypeObject || is_proxy(props) || is_proxy(js_as_obj(obj))) return Ant_Value_Undefined;
+  if (js_as_obj(obj) == props) return Ant_Value_Undefined;
   ant_object_t *ptr = js_obj_ptr(props);
   
-  if (!ptr || !ptr->shape || ptr->flags.is_exotic || ant_object_extra_count(ptr) != 0) return js_mkundef();
-  if (ant_shape_may_have_index_keys(ptr->shape)) return js_mkundef();
+  if (!ptr || !ptr->shape || ptr->flags.is_exotic || ant_object_extra_count(ptr) != 0) return Ant_Value_Undefined;
+  if (ant_shape_may_have_index_keys(ptr->shape)) return Ant_Value_Undefined;
 
   uint32_t count = ant_shape_count(ptr->shape);
   for (uint32_t i = 0; i < count; i++) {
     const ant_shape_prop_t *prop = ant_shape_prop_at(ptr->shape, i);
-    if (!prop || i >= ptr->prop_count) return js_mkundef();
-    if (prop->has_getter || prop->has_setter) return js_mkundef();
+    if (!prop || i >= ptr->prop_count) return Ant_Value_Undefined;
+    if (prop->has_getter || prop->has_setter) return Ant_Value_Undefined;
   }
 
   define_desc_raw_t stack_raws[32];
@@ -1396,7 +1396,7 @@ static ant_value_t object_define_properties_from_data(ant_t *js, ant_value_t obj
   if (!raws) return js_mkerr(js, "oom");
   if (raws == stack_raws) memset(stack_raws, 0, count * sizeof(*raws));
 
-  ant_value_t result = js_mkundef();
+  ant_value_t result = Ant_Value_Undefined;
   bool target_is_descriptor = false;
   
   for (uint32_t i = 0; i < count; i++) {
@@ -1451,7 +1451,7 @@ ant_value_t object_define_properties(ant_t *js, ant_value_t obj, ant_value_t pro
     return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert undefined or null to object");
 
   if (pt == kTypeString) {
-    props = builtin_Object(js, &props, 1, js_mkundef(), js_mkundef(), js_mkundef());
+    props = builtin_Object(js, &props, 1, Ant_Value_Undefined, Ant_Value_Undefined, Ant_Value_Undefined);
     if (is_err(props)) return props;
   } else if (pt == kTypeBuiltin) props = js_cfunc_promote(js, props);
   else if (!is_object_type(props)) return obj;
@@ -1525,11 +1525,11 @@ static ant_value_t descriptor_template(ant_t *js, bool accessor) {
   GC_ROOT_SAVE(mark, js);
   GC_ROOT_PIN(js, template);
   
-  ant_value_t first = mkprop_interned(js, template, accessor ? js->intern.get : js->intern.value, js_mkundef(), 0);
-  ant_value_t second = mkprop_interned(js, template, accessor ? js->intern.set : js->intern.writable, accessor ? js_mkundef() : js_false, 0);
+  ant_value_t first = mkprop_interned(js, template, accessor ? js->intern.get : js->intern.value, Ant_Value_Undefined, 0);
+  ant_value_t second = mkprop_interned(js, template, accessor ? js->intern.set : js->intern.writable, accessor ? Ant_Value_Undefined : Ant_Value_False, 0);
   
-  ant_value_t third = mkprop_interned(js, template, js->intern.enumerable, js_false, 0);
-  ant_value_t fourth = mkprop_interned(js, template, js->intern.configurable, js_false, 0);
+  ant_value_t third = mkprop_interned(js, template, js->intern.enumerable, Ant_Value_False, 0);
+  ant_value_t fourth = mkprop_interned(js, template, js->intern.configurable, Ant_Value_False, 0);
   
   GC_ROOT_RESTORE(js, mark);
 
@@ -1579,5 +1579,5 @@ ant_value_t js_from_accessor_descriptor(ant_t *js, ant_value_t getter, ant_value
 
 ant_value_t js_get_own_property_descriptor(ant_t *js, ant_value_t obj, ant_value_t key) {
   ant_value_t args[2] = { obj, key };
-  return builtin_object_getOwnPropertyDescriptor(js, args, 2, js_mkundef(), js_mkundef(), js_mkundef());
+  return builtin_object_getOwnPropertyDescriptor(js, args, 2, Ant_Value_Undefined, Ant_Value_Undefined, Ant_Value_Undefined);
 }

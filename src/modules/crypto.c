@@ -195,7 +195,7 @@ static ant_value_t crypto_algorithm_member(ant_t *js, ant_value_t object, const 
       vtype(js_get_proto(js, js->sym.object_proto)) != kTypeNull)
     return js_get(js, object, interned_name);
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t crypto_subtle_get_algorithm_name(ant_t *js, ant_value_t algorithm) {
@@ -414,7 +414,7 @@ static ant_value_t crypto_get_input_bytes(
     *out_bytes = bytes;
     *out_len = len;
     *owned = NULL;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   string_val = js_tostring_val(js, value);
@@ -459,7 +459,7 @@ static ant_value_t crypto_get_input_bytes(
   *out_bytes = bytes;
   *out_len = len;
   *owned = buf;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static const EVP_MD *crypto_digest_from_name(const char *algo, size_t algo_len) {
@@ -522,7 +522,7 @@ static ant_value_t crypto_read_key_length(
   if (vtype(value) == kTypeUndefined) {
     *present = false;
     if (required) return js_mkerr_typed(js, JS_ERR_TYPE, "Algorithm.length is required");
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (is_object_type(value) || vtype(value) == kTypeBuiltin)
@@ -540,7 +540,7 @@ static ant_value_t crypto_read_key_length(
   *present = true;
   *result = (uint32_t)number;
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t crypto_get_hmac_digest(
@@ -569,7 +569,7 @@ static ant_value_t crypto_get_hmac_digest(
   if (!md) return crypto_dom_exception_error(js, "Unsupported HMAC hash algorithm", "NotSupportedError");
 
   *result = md;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static bool crypto_algorithm_is(ant_t *js, ant_value_t algorithm, const char *expected) {
@@ -608,7 +608,7 @@ static ant_value_t crypto_require_hash_state(
   ant_hash_state_t *state = crypto_get_hash_state(value);
   if (!state) return js_mkerr(js, "Invalid Hash state");
   *out_state = state;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t crypto_digest_result(
@@ -620,7 +620,7 @@ static ant_value_t crypto_digest_result(
   const char *enc = js_getstr(js, encoding_val, &enc_len);
   if (!enc) return crypto_make_buffer(js, digest, digest_len);
 
-  ant_value_t result = js_mkundef();
+  ant_value_t result = Ant_Value_Undefined;
   if (buffer_bytes_to_string(js, digest, digest_len, enc, enc_len, &result)) return result;
 
   return crypto_make_buffer(js, digest, digest_len);
@@ -904,7 +904,7 @@ static ant_value_t crypto_subtle_call(
   ant_value_t promise = js_mkpromise(js);
   if (is_err(promise)) return promise;
   GC_ROOT_PIN(js, promise);
-  ant_value_t result = impl(js, args, nargs, js_mkundef(), call_this, call_func);
+  ant_value_t result = impl(js, args, nargs, Ant_Value_Undefined, call_this, call_func);
   if (is_err(result) || Ant_Exception_Pending(js)) {
     ant_value_t reason = js_take_thrown(js, result);
     js_reject_promise(js, promise, reason);
@@ -992,14 +992,14 @@ static ant_value_t crypto_read_key_usages(ant_t *js, ant_value_t input, uint8_t 
   if (!is_object_type(input))
     return js_mkerr_typed(js, JS_ERR_TYPE, "keyUsages must be an iterable sequence");
   *mask = 0;
-  if (crypto_read_dense_key_usages(js, input, mask)) return js_mkundef();
+  if (crypto_read_dense_key_usages(js, input, mask)) return Ant_Value_Undefined;
   // TODO: align js_iter with WebCrypto sequence semantics (getters, cached next,
   // TypeError validation, and preserving conversion exceptions during IteratorClose).
   bool iterated = js_iter(js, input, crypto_read_key_usage, mask);
   if (Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
   if (!iterated)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Failed to iterate keyUsages");
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t crypto_check_key_usages(
@@ -1020,7 +1020,7 @@ static ant_value_t crypto_check_key_usages(
   }
   return (usages & ~allowed)
     ? crypto_dom_exception_error(js, "Unsupported key usage for algorithm", "SyntaxError")
-    : js_mkundef();
+    : Ant_Value_Undefined;
 }
 
 static ant_value_t crypto_require_nonempty_secret_usages(
@@ -1030,7 +1030,7 @@ static ant_value_t crypto_require_nonempty_secret_usages(
     ? crypto_dom_exception_error(
         js, "Usages cannot be empty when creating a secret key", "SyntaxError"
       )
-    : js_mkundef();
+    : Ant_Value_Undefined;
 }
 
 static ant_value_t crypto_get_key_algorithm_kind(
@@ -1044,15 +1044,15 @@ static ant_value_t crypto_get_key_algorithm_kind(
   const char *value = js_getstr(js, name_value, &len);
   if (value && len == 7 && strncasecmp(value, "AES-GCM", 7) == 0) {
     *kind = CRYPTO_KEY_AES_GCM;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
   if (value && len == 4 && strncasecmp(value, "HMAC", 4) == 0) {
     *kind = CRYPTO_KEY_HMAC;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
   if (value && len == 6 && strncasecmp(value, "PBKDF2", 6) == 0) {
     *kind = CRYPTO_KEY_PBKDF2;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
   return crypto_dom_exception_error(js, "Unsupported key algorithm", "NotSupportedError");
 }
@@ -1066,7 +1066,7 @@ static ant_value_t crypto_read_key_format(ant_t *js, ant_value_t value, bool *ra
   if (*raw || (len == 3 && memcmp(format, "jwk", 3) == 0) ||
       (len == 4 && memcmp(format, "spki", 4) == 0) ||
       (len == 5 && memcmp(format, "pkcs8", 5) == 0))
-    return js_mkundef();
+    return Ant_Value_Undefined;
   return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid CryptoKey format");
 }
 
@@ -1079,9 +1079,9 @@ static ant_value_t crypto_new_key_record(ant_t *js, unsigned index) {
     GC_ROOT_PIN(js, seed);
     if (index == 0) {
       mkprop(js, seed, Ant_String_FromLiteral(js, "type"), Ant_String_FromLiteral(js, "secret"), ANT_PROP_ATTR_ENUMERABLE);
-      mkprop(js, seed, Ant_String_FromLiteral(js, "extractable"), js_false, ANT_PROP_ATTR_ENUMERABLE);
-      mkprop(js, seed, Ant_String_FromLiteral(js, "algorithm"), js_mkundef(), ANT_PROP_ATTR_ENUMERABLE);
-      mkprop(js, seed, Ant_String_FromLiteral(js, "usages"), js_mkundef(), ANT_PROP_ATTR_ENUMERABLE);
+      mkprop(js, seed, Ant_String_FromLiteral(js, "extractable"), Ant_Value_False, ANT_PROP_ATTR_ENUMERABLE);
+      mkprop(js, seed, Ant_String_FromLiteral(js, "algorithm"), Ant_Value_Undefined, ANT_PROP_ATTR_ENUMERABLE);
+      mkprop(js, seed, Ant_String_FromLiteral(js, "usages"), Ant_Value_Undefined, ANT_PROP_ATTR_ENUMERABLE);
       js_set_tostringtag(js, seed, Ant_String_FromLiteral(js, "CryptoKey"));
     } else {
       static const char *const hashes[] = { "SHA-1", "SHA-256", "SHA-384", "SHA-512" };
@@ -1093,7 +1093,7 @@ static ant_value_t crypto_new_key_record(ant_t *js, unsigned index) {
       if (index == CRYPTO_KEY_AES_GCM || index == CRYPTO_KEY_HMAC)
         js_mkprop_fast(js, seed, "length", 6, Ant_Value_FromNumber(0));
       if (index == CRYPTO_KEY_HMAC)
-        js_mkprop_fast(js, seed, "hash", 4, js_mkundef());
+        js_mkprop_fast(js, seed, "hash", 4, Ant_Value_Undefined);
     }
     GC_ROOT_RESTORE(js, mark);
     if (Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
@@ -1112,7 +1112,7 @@ static inline void crypto_key_record_set(ant_t *js, ant_value_t obj, uint32_t sl
 static ant_value_t crypto_make_key_algorithm(
   ant_t *js, ant_crypto_key_kind_t kind, const EVP_MD *md, uint32_t key_bits
 ) {
-  ant_value_t algorithm = crypto_new_key_record(js, (unsigned)kind), hash = js_mkundef();
+  ant_value_t algorithm = crypto_new_key_record(js, (unsigned)kind), hash = Ant_Value_Undefined;
   if (is_err(algorithm)) return algorithm;
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, algorithm);
@@ -1156,7 +1156,7 @@ static ant_value_t crypto_make_key_object(
     key->key[key->key_len - 1] &= (uint8_t)(0xffu << (8 - bits % 8));
 
   GC_ROOT_SAVE(root_mark, js);
-  ant_value_t algorithm = js_mkundef(), usages = js_mkundef(), obj = js_mkundef();
+  ant_value_t algorithm = Ant_Value_Undefined, usages = Ant_Value_Undefined, obj = Ant_Value_Undefined;
   GC_ROOT_PIN(js, algorithm);
   GC_ROOT_PIN(js, usages);
   GC_ROOT_PIN(js, obj);
@@ -1202,7 +1202,7 @@ static ant_value_t crypto_authorize_key(
     return js_mkerr_typed(js, JS_ERR_TYPE, "Operation requires a CryptoKey");
   if ((*key)->kind != kind || !((*key)->usages & usage))
     return crypto_dom_exception_error(js, "CryptoKey does not permit this operation", "InvalidAccessError");
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t crypto_subtle_import_key_impl(ant_params_t) {
@@ -1452,7 +1452,7 @@ static ant_value_t crypto_subtle_sign_impl(ant_params_t) {
   ant_crypto_key_t *key = NULL;
   ant_value_t error = crypto_authorize_key(js, args[1], CRYPTO_KEY_HMAC, CRYPTO_KEY_USAGE_SIGN, &key);
   if (is_err(error)) return error;
-  return crypto_hmac_once(js, key, args[2], js_mkundef(), true);
+  return crypto_hmac_once(js, key, args[2], Ant_Value_Undefined, true);
 }
 
 static ant_value_t js_crypto_subtle_sign(ant_params_t) {
@@ -1475,13 +1475,13 @@ static ant_value_t crypto_subtle_verify_impl(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "signature must be an ArrayBuffer, TypedArray, DataView, or Buffer");
   }
 
-  ant_value_t expected = crypto_hmac_once(js, key, args[3], js_mkundef(), false);
+  ant_value_t expected = crypto_hmac_once(js, key, args[3], Ant_Value_Undefined, false);
   if (is_err(expected)) return expected;
 
   const uint8_t *expected_bytes = NULL;
   size_t expected_len = 0;
-  if (!buffer_source_get_bytes(js, expected, &expected_bytes, &expected_len)) return js_false;
-  if (sig_len != expected_len) return js_false;
+  if (!buffer_source_get_bytes(js, expected, &expected_bytes, &expected_len)) return Ant_Value_False;
+  if (sig_len != expected_len) return Ant_Value_False;
   return js_bool(CRYPTO_memcmp(sig, expected_bytes, sig_len) == 0);
 }
 
@@ -1635,7 +1635,7 @@ static ant_value_t js_hash_update(ant_params_t) {
   if (state->finalized) return js_mkerr(js, "Hash digest already called");
   if (nargs < 1) return js_mkerr(js, "Hash.update requires data");
 
-  ant_value_t encoding = (nargs >= 2) ? args[1] : js_mkundef();
+  ant_value_t encoding = (nargs >= 2) ? args[1] : Ant_Value_Undefined;
   err = crypto_get_input_bytes(js, args[0], encoding, &bytes, &len, &owned);
   if (is_err(err)) goto cleanup;
 
@@ -1666,7 +1666,7 @@ static ant_value_t js_hash_digest(ant_params_t) {
   EVP_MD_CTX_free(state->ctx);
   state->ctx = NULL;
 
-  return crypto_digest_result(js, state->digest, state->digest_len, nargs >= 1 ? args[0] : js_mkundef());
+  return crypto_digest_result(js, state->digest, state->digest_len, nargs >= 1 ? args[0] : Ant_Value_Undefined);
 }
 
 static ant_value_t js_crypto_create_hash(ant_params_t) {
@@ -1719,7 +1719,7 @@ static ant_value_t crypto_require_hmac_state(
   ant_hmac_state_t *state = crypto_get_hmac_state(value);
   if (!state) return js_mkerr(js, "Invalid Hmac state");
   *out_state = state;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_hmac_update(ant_params_t) {
@@ -1733,7 +1733,7 @@ static ant_value_t js_hmac_update(ant_params_t) {
   if (state->finalized) return js_mkerr(js, "Hmac digest already called");
   if (nargs < 1) return js_mkerr(js, "Hmac.update requires data");
 
-  ant_value_t encoding = (nargs >= 2) ? args[1] : js_mkundef();
+  ant_value_t encoding = (nargs >= 2) ? args[1] : Ant_Value_Undefined;
   err = crypto_get_input_bytes(js, args[0], encoding, &bytes, &len, &owned);
   if (is_err(err)) goto cleanup;
 
@@ -1763,7 +1763,7 @@ static ant_value_t js_hmac_digest(ant_params_t) {
   HMAC_CTX_free(state->ctx);
   state->ctx = NULL;
 
-  return crypto_digest_result(js, state->digest, state->digest_len, nargs >= 1 ? args[0] : js_mkundef());
+  return crypto_digest_result(js, state->digest, state->digest_len, nargs >= 1 ? args[0] : Ant_Value_Undefined);
 }
 
 static ant_value_t js_crypto_create_hmac(ant_params_t) {
@@ -1779,7 +1779,7 @@ static ant_value_t js_crypto_create_hmac(ant_params_t) {
   const uint8_t *key = NULL;
   size_t key_len = 0;
   uint8_t *owned = NULL;
-  ant_value_t err = crypto_get_input_bytes(js, args[1], js_mkundef(), &key, &key_len, &owned);
+  ant_value_t err = crypto_get_input_bytes(js, args[1], Ant_Value_Undefined, &key, &key_len, &owned);
   if (is_err(err)) return err;
 
   ant_hmac_state_t *state = calloc(1, sizeof(*state));
@@ -1825,7 +1825,7 @@ static ant_value_t js_crypto_hash(ant_params_t) {
   ant_value_t err;
 
   if (nargs < 2) return js_mkerr(js, "hash requires algorithm and data");
-  output_encoding = nargs >= 3 ? args[2] : js_mkundef();
+  output_encoding = nargs >= 3 ? args[2] : Ant_Value_Undefined;
 
   algo_val = js_tostring_val(js, args[0]);
   if (is_err(algo_val)) return algo_val;
@@ -1840,7 +1840,7 @@ static ant_value_t js_crypto_hash(ant_params_t) {
   free(algo_name);
   if (!md) return js_mkerr_typed(js, JS_ERR_TYPE, "Unsupported hash algorithm");
 
-  err = crypto_get_input_bytes(js, args[1], js_mkundef(), &bytes, &len, &owned);
+  err = crypto_get_input_bytes(js, args[1], Ant_Value_Undefined, &bytes, &len, &owned);
   if (is_err(err)) goto cleanup;
 
   if (EVP_Digest(bytes, len, digest, &digest_len, md, NULL) != 1) {
@@ -1866,7 +1866,7 @@ static ant_value_t crypto_require_cipher_state(
   ant_cipher_state_t *state = crypto_get_cipher_state(value);
   if (!state) return js_mkerr(js, "Invalid Cipher state");
   *out_state = state;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t crypto_cipher_bytes_result(
@@ -1886,7 +1886,7 @@ static ant_value_t js_cipher_update(ant_params_t) {
   const uint8_t *input = NULL;
   size_t input_len = 0;
   uint8_t *owned = NULL;
-  ant_value_t input_encoding = nargs >= 2 ? args[1] : js_mkundef();
+  ant_value_t input_encoding = nargs >= 2 ? args[1] : Ant_Value_Undefined;
   err = crypto_get_input_bytes(js, args[0], input_encoding, &input, &input_len, &owned);
   if (is_err(err)) return err;
 
@@ -1909,7 +1909,7 @@ static ant_value_t js_cipher_update(ant_params_t) {
     return js_mkerr(js, "Cipher update failed");
   }
 
-  ant_value_t result = crypto_cipher_bytes_result(js, out, (size_t)out_len, nargs >= 3 ? args[2] : js_mkundef());
+  ant_value_t result = crypto_cipher_bytes_result(js, out, (size_t)out_len, nargs >= 3 ? args[2] : Ant_Value_Undefined);
   free(out);
   return result;
 }
@@ -1938,7 +1938,7 @@ static ant_value_t js_cipher_final(ant_params_t) {
     EVP_CIPHER_CTX_ctrl(state->ctx, EVP_CTRL_GCM_GET_TAG, 16, state->auth_tag);
   }
 
-  return crypto_cipher_bytes_result(js, out, (size_t)out_len, nargs >= 1 ? args[0] : js_mkundef());
+  return crypto_cipher_bytes_result(js, out, (size_t)out_len, nargs >= 1 ? args[0] : Ant_Value_Undefined);
 }
 
 static ant_value_t js_cipher_set_aad(ant_params_t) {
@@ -2013,14 +2013,14 @@ static ant_value_t crypto_create_cipheriv(ant_native_params_t, bool encrypt) {
   const uint8_t *key = NULL;
   size_t key_len = 0;
   uint8_t *key_owned = NULL;
-  ant_value_t err = crypto_get_input_bytes(js, args[1], js_mkundef(), &key, &key_len, &key_owned);
+  ant_value_t err = crypto_get_input_bytes(js, args[1], Ant_Value_Undefined, &key, &key_len, &key_owned);
   if (is_err(err)) return err;
 
   const uint8_t *iv = NULL;
   size_t iv_len = 0;
   uint8_t *iv_owned = NULL;
   if (vtype(args[2]) != kTypeNull && vtype(args[2]) != kTypeUndefined) {
-    err = crypto_get_input_bytes(js, args[2], js_mkundef(), &iv, &iv_len, &iv_owned);
+    err = crypto_get_input_bytes(js, args[2], Ant_Value_Undefined, &iv, &iv_len, &iv_owned);
     if (is_err(err)) {
       if (key_owned) free(key_owned);
       return err;
@@ -2088,9 +2088,9 @@ static ant_value_t crypto_pbkdf2_result(
   const uint8_t *password = NULL, *salt = NULL;
   size_t password_len = 0, salt_len = 0;
   uint8_t *password_owned = NULL, *salt_owned = NULL;
-  ant_value_t err = crypto_get_input_bytes(js, password_val, js_mkundef(), &password, &password_len, &password_owned);
+  ant_value_t err = crypto_get_input_bytes(js, password_val, Ant_Value_Undefined, &password, &password_len, &password_owned);
   if (is_err(err)) return err;
-  err = crypto_get_input_bytes(js, salt_val, js_mkundef(), &salt, &salt_len, &salt_owned);
+  err = crypto_get_input_bytes(js, salt_val, Ant_Value_Undefined, &salt, &salt_len, &salt_owned);
   if (is_err(err)) goto cleanup_err;
 
   int iterations = (int)Ant_Value_AsNumberUnchecked(iterations_val);
@@ -2146,18 +2146,18 @@ static ant_value_t js_crypto_pbkdf2(ant_params_t) {
     return js_mkerr(js, "pbkdf2 requires a callback");
   }
   ant_value_t result = crypto_pbkdf2_result(js, args[0], args[1], args[2], args[3], args[4]);
-  ant_value_t cb_args[2] = { is_err(result) ? result : js_mknull(), is_err(result) ? js_mkundef() : result };
-  ant_value_t cb_result = Ant_Error_CallCallback(js, args[5], js_mkundef(), cb_args, 2);
-  return is_err(cb_result) ? cb_result : js_mkundef();
+  ant_value_t cb_args[2] = { is_err(result) ? result : Ant_Value_Null, is_err(result) ? Ant_Value_Undefined : result };
+  ant_value_t cb_result = Ant_Error_CallCallback(js, args[5], Ant_Value_Undefined, cb_args, 2);
+  return is_err(cb_result) ? cb_result : Ant_Value_Undefined;
 }
 
 static ant_value_t crypto_scrypt_result(ant_native_params_t, int options_index) {
   const uint8_t *password = NULL, *salt = NULL;
   size_t password_len = 0, salt_len = 0;
   uint8_t *password_owned = NULL, *salt_owned = NULL;
-  ant_value_t err = crypto_get_input_bytes(js, args[0], js_mkundef(), &password, &password_len, &password_owned);
+  ant_value_t err = crypto_get_input_bytes(js, args[0], Ant_Value_Undefined, &password, &password_len, &password_owned);
   if (is_err(err)) return err;
-  err = crypto_get_input_bytes(js, args[1], js_mkundef(), &salt, &salt_len, &salt_owned);
+  err = crypto_get_input_bytes(js, args[1], Ant_Value_Undefined, &salt, &salt_len, &salt_owned);
   if (is_err(err)) goto cleanup_err;
 
   int keylen = (int)Ant_Value_AsNumberUnchecked(args[2]);
@@ -2227,10 +2227,10 @@ static ant_value_t js_crypto_scrypt(ant_params_t) {
     return js_mkerr(js, "scrypt requires a callback");
 
   ant_value_t result = crypto_scrypt_result(js, args, nargs, callback_index == 3 ? -1 : 3);
-  ant_value_t cb_args[2] = { is_err(result) ? result : js_mknull(), is_err(result) ? js_mkundef() : result };
-  ant_value_t cb_result = Ant_Error_CallCallback(js, args[callback_index], js_mkundef(), cb_args, 2);
+  ant_value_t cb_args[2] = { is_err(result) ? result : Ant_Value_Null, is_err(result) ? Ant_Value_Undefined : result };
+  ant_value_t cb_result = Ant_Error_CallCallback(js, args[callback_index], Ant_Value_Undefined, cb_args, 2);
 
-  return is_err(cb_result) ? cb_result : js_mkundef();
+  return is_err(cb_result) ? cb_result : Ant_Value_Undefined;
 }
 
 static ant_value_t create_crypto_obj(ant_t *js) {

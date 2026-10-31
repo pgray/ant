@@ -780,7 +780,7 @@ bool jit_setup_frame(jit_compile_t *c) {
   }
   c->cached_index_key = MIR_new_func_reg(c->ctx, c->jit_func->u.func, MIR_T_I64, "cached_index_key");
   c->cached_index_value = MIR_new_func_reg(c->ctx, c->jit_func->u.func, MIR_T_I64, "cached_index_value");
-  mir_load_imm(c->ctx, c->jit_func, c->cached_index_key, js_mkundef());
+  mir_load_imm(c->ctx, c->jit_func, c->cached_index_key, Ant_Value_Undefined);
   mir_load_imm(c->ctx, c->jit_func, c->cached_index_value, 0);
   c->cached_element_object = MIR_new_func_reg(c->ctx, c->jit_func->u.func, MIR_T_I64, "cached_element_object");
   c->cached_element_key = MIR_new_func_reg(c->ctx, c->jit_func->u.func, MIR_T_I64, "cached_element_key");
@@ -1058,7 +1058,7 @@ bool jit_setup_frame(jit_compile_t *c) {
         MIR_append_insn(c->ctx, c->jit_func, MIR_new_insn(c->ctx, MIR_MOV,
             MIR_new_reg_op(c->ctx, c->param_cache[i]), slot));
         MIR_append_insn(c->ctx, c->jit_func, MIR_new_insn(c->ctx, MIR_MOV,
-            slot, MIR_new_uint_op(c->ctx, js_mkundef())));
+            slot, MIR_new_uint_op(c->ctx, Ant_Value_Undefined)));
         continue;
       }
       MIR_label_t in_range = MIR_new_label(c->ctx);

@@ -42,7 +42,7 @@ ant_value_t request_get_signal(ant_t *js, ant_value_t obj) {
   ant_value_t signal = js_get_slot(obj, SLOT_REQUEST_SIGNAL);
 
   if (vtype(signal) != kTypeUndefined) return signal;
-  signal = abort_signal_create_dependent(js, js_mkundef());
+  signal = abort_signal_create_dependent(js, Ant_Value_Undefined);
   
   if (is_err(signal)) return signal;
   ant_value_t abort_reason = js_get_slot(obj, SLOT_REQUEST_ABORT_REASON);
@@ -145,11 +145,11 @@ static ant_value_t request_create_object(ant_t *js, request_data_t *req, ant_val
   js_set_finalizer(obj, request_finalize);
 
   js_set_slot_wb(js, obj, SLOT_REQUEST_HEADERS, hdrs);
-  js_set_slot(obj, SLOT_REQUEST_ABORT_REASON, js_mkundef());
+  js_set_slot(obj, SLOT_REQUEST_ABORT_REASON, Ant_Value_Undefined);
   
   js_set_slot_wb(js, obj, SLOT_REQUEST_SIGNAL, create_signal 
-    ? abort_signal_create_dependent(js, js_mkundef()) 
-    : js_mkundef()
+    ? abort_signal_create_dependent(js, Ant_Value_Undefined) 
+    : Ant_Value_Undefined
   );
   
   return obj;
@@ -476,8 +476,8 @@ static bool extract_body(
   *out_data   = NULL;
   *out_size   = 0;
   *out_type   = NULL;
-  *out_stream = js_mkundef();
-  *err_out    = js_mkundef();
+  *out_stream = Ant_Value_Undefined;
+  *err_out    = Ant_Value_Undefined;
 
   if (vtype(body_val) == kTypeNull || vtype(body_val) == kTypeUndefined) return true;
   if (extract_buffer_source_body(js, body_val, out_data, out_size, err_out)) return true;
@@ -555,9 +555,9 @@ static ant_value_t stream_body_read(ant_params_t);
 static ant_value_t stream_body_rejected(ant_params_t) {
   ant_value_t state   = js_get_slot(call_func, SLOT_DATA);
   ant_value_t promise = js_get(js, state, "promise");
-  ant_value_t reason  = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t reason  = (nargs > 0) ? args[0] : Ant_Value_Undefined;
   js_reject_promise(js, promise, reason);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void stream_schedule_next_read(ant_t *js, ant_value_t state, ant_value_t read_fn, ant_value_t reader) {
@@ -569,7 +569,7 @@ static void stream_schedule_next_read(ant_t *js, ant_value_t state, ant_value_t 
 
 static ant_value_t stream_body_read(ant_params_t) {
   ant_value_t state   = js_get_slot(call_func, SLOT_DATA);
-  ant_value_t result  = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t result  = (nargs > 0) ? args[0] : Ant_Value_Undefined;
   ant_value_t promise = js_get(js, state, "promise");
   ant_value_t reader  = js_get(js, state, "reader");
   ant_value_t chunks  = js_get(js, state, "chunks");
@@ -578,14 +578,14 @@ static ant_value_t stream_body_read(ant_params_t) {
   ant_value_t done_val = js_get(js, result, "done");
   ant_value_t value    = js_get(js, result, "value");
 
-  if (vtype(done_val) == kTypeBool && done_val == js_true) {
+  if (vtype(done_val) == kTypeBool && done_val == Ant_Value_True) {
     size_t size = 0;
-    ant_value_t chunk_err = js_mkundef();
+    ant_value_t chunk_err = Ant_Value_Undefined;
     uint8_t *data = body_concat_uint8_chunks(js, chunks, &size, &chunk_err);
     
     if (is_err(chunk_err)) {
       js_reject_promise(js, promise, chunk_err);
-      return js_mkundef();
+      return Ant_Value_Undefined;
     }
     
     ant_value_t type_v = js_get(js, state, "type");
@@ -593,14 +593,14 @@ static ant_value_t stream_body_read(ant_params_t) {
     resolve_body_promise(js, promise, data, size, body_type, mode, true);
     free(data);
     
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (vtype(value) != kTypeUndefined && vtype(value) != kTypeNull)
     js_arr_push(js, chunks, value);
 
-  stream_schedule_next_read(js, state, js_mkundef(), reader);
-  return js_mkundef();
+  stream_schedule_next_read(js, state, Ant_Value_Undefined, reader);
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t consume_body_from_stream(
@@ -608,7 +608,7 @@ static ant_value_t consume_body_from_stream(
   ant_value_t promise, int mode,
   const char *body_type
 ) {
-  ant_value_t reader = rs_reader_create(js, stream, js_mkundef());
+  ant_value_t reader = rs_reader_create(js, stream, Ant_Value_Undefined);
 
   if (is_err(reader)) {
     js_reject_promise(js, promise, reader);
@@ -620,9 +620,9 @@ static ant_value_t consume_body_from_stream(
   js_set(js, state, "reader",  reader);
   js_set(js, state, "chunks",  js_mkarr(js));
   js_set(js, state, "mode",    Ant_Value_FromNumber(mode));
-  js_set(js, state, "type",    body_type ? js_mkstr(js, body_type, strlen(body_type)) : js_mkundef());
+  js_set(js, state, "type",    body_type ? js_mkstr(js, body_type, strlen(body_type)) : Ant_Value_Undefined);
 
-  stream_schedule_next_read(js, state, js_mkundef(), reader);
+  stream_schedule_next_read(js, state, Ant_Value_Undefined, reader);
   return promise;
 }
 
@@ -696,7 +696,7 @@ static ant_value_t request_set_extracted_body(
     if (body_type && body_type[0] &&
         !headers_data_append_if_missing(headers_get_data(headers), "content-type", body_type))
       return Ant_Error_CreateOutOfMemory(js);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (req->keepalive) {
@@ -712,7 +712,7 @@ static ant_value_t request_set_extracted_body(
   if (body_type && body_type[0] &&
       !headers_data_append_if_missing(headers_get_data(headers), "content-type", body_type))
     return Ant_Error_CreateOutOfMemory(js);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void request_clear_body(ant_t *js, ant_value_t req_obj, request_data_t *req) {
@@ -723,7 +723,7 @@ static void request_clear_body(ant_t *js, ant_value_t req_obj, request_data_t *r
   req->body_type = NULL;
   req->body_is_stream = false;
   req->has_body = false;
-  js_set_slot_wb(js, req_obj, SLOT_REQUEST_BODY_STREAM, js_mkundef());
+  js_set_slot_wb(js, req_obj, SLOT_REQUEST_BODY_STREAM, Ant_Value_Undefined);
 }
 
 static ant_value_t request_copy_source_body(ant_t *js, ant_value_t req_obj, ant_value_t input, request_data_t *req, request_data_t *src) {
@@ -745,10 +745,10 @@ static ant_value_t request_copy_source_body(ant_t *js, ant_value_t req_obj, ant_
     req->body_type = src->body_type ? strdup(src->body_type) : NULL;
     req->body_is_stream = false;
     req->has_body = true;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
-  if (!rs_is_stream(src_stream)) return js_mkundef();
+  if (!rs_is_stream(src_stream)) return Ant_Value_Undefined;
   ant_value_t branches = readable_stream_tee(js, src_stream);
   
   if (is_err(branches)) return branches;
@@ -761,14 +761,14 @@ static ant_value_t request_copy_source_body(ant_t *js, ant_value_t req_obj, ant_
   req->body_is_stream = true;
   req->has_body = true;
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 #define REQ_GETTER_START(name)                                                    \
   static ant_value_t js_req_get_##name(ant_params_t) { \
     ant_value_t this = call_this;                                            \
     request_data_t *d = request_get_data(this);                                  \
-    if (!d) return js_mkundef();
+    if (!d) return Ant_Value_Undefined;
 
 #define REQ_GETTER_END }
 
@@ -861,7 +861,7 @@ REQ_GETTER_END
 static ant_value_t req_body_pull(ant_params_t) {
   ant_value_t req_obj = js_get_slot(call_func, SLOT_DATA);
   request_data_t *d = request_get_data(req_obj);
-  ant_value_t ctrl = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t ctrl = (nargs > 0) ? args[0] : Ant_Value_Undefined;
 
   if (d && d->body_data && d->body_size > 0) {
     ArrayBufferData *ab = create_array_buffer_data(js, d->body_size);
@@ -876,16 +876,16 @@ static ant_value_t req_body_pull(ant_params_t) {
   }
   
   rs_controller_close(js, ctrl);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 REQ_GETTER_START(body)
-  if (!d->has_body) return js_mknull();
+  if (!d->has_body) return Ant_Value_Null;
   ant_value_t stored_stream = js_get_slot(this, SLOT_REQUEST_BODY_STREAM);
   if (rs_is_stream(stored_stream)) return stored_stream;
-  if (d->body_used) return js_mknull();
+  if (d->body_used) return Ant_Value_Null;
   ant_value_t pull = js_heavy_mkfun(js, req_body_pull, this);
-  ant_value_t stream = rs_create_stream(js, pull, js_mkundef(), 1.0);
+  ant_value_t stream = rs_create_stream(js, pull, Ant_Value_Undefined, 1.0);
   if (!is_err(stream)) js_set_slot_wb(js, this, SLOT_REQUEST_BODY_STREAM, stream);
   return stream;
 REQ_GETTER_END
@@ -936,21 +936,21 @@ static ant_value_t request_inspect(ant_params_t) {
   ant_value_t out = Ant_Object_CreateBare(js);
   ant_value_t err = 0;
 
-  if (!request_inspect_set(js, out, "method", js_req_get_method(js, NULL, 0, js_mkundef(), call_this, call_func), &err)) return err;
-  if (!request_inspect_set(js, out, "url", js_req_get_url(js, NULL, 0, js_mkundef(), call_this, call_func), &err)) return err;
-  if (!request_inspect_set(js, out, "headers", js_req_get_headers(js, NULL, 0, js_mkundef(), call_this, call_func), &err)) return err;
-  if (!request_inspect_set(js, out, "destination", js_req_get_destination(js, NULL, 0, js_mkundef(), call_this, call_func), &err)) return err;
-  if (!request_inspect_set(js, out, "referrer", js_req_get_referrer(js, NULL, 0, js_mkundef(), call_this, call_func), &err)) return err;
-  if (!request_inspect_set(js, out, "referrerPolicy", js_req_get_referrer_policy(js, NULL, 0, js_mkundef(), call_this, call_func), &err)) return err;
-  if (!request_inspect_set(js, out, "mode", js_req_get_mode(js, NULL, 0, js_mkundef(), call_this, call_func), &err)) return err;
-  if (!request_inspect_set(js, out, "credentials", js_req_get_credentials(js, NULL, 0, js_mkundef(), call_this, call_func), &err)) return err;
-  if (!request_inspect_set(js, out, "cache", js_req_get_cache(js, NULL, 0, js_mkundef(), call_this, call_func), &err)) return err;
-  if (!request_inspect_set(js, out, "redirect", js_req_get_redirect(js, NULL, 0, js_mkundef(), call_this, call_func), &err)) return err;
-  if (!request_inspect_set(js, out, "integrity", js_req_get_integrity(js, NULL, 0, js_mkundef(), call_this, call_func), &err)) return err;
-  if (!request_inspect_set(js, out, "keepalive", js_req_get_keepalive(js, NULL, 0, js_mkundef(), call_this, call_func), &err)) return err;
-  if (!request_inspect_set(js, out, "isReloadNavigation", js_req_get_is_reload_navigation(js, NULL, 0, js_mkundef(), call_this, call_func), &err)) return err;
-  if (!request_inspect_set(js, out, "isHistoryNavigation", js_req_get_is_history_navigation(js, NULL, 0, js_mkundef(), call_this, call_func), &err)) return err;
-  if (!request_inspect_set(js, out, "signal", js_req_get_signal(js, NULL, 0, js_mkundef(), call_this, call_func), &err)) return err;
+  if (!request_inspect_set(js, out, "method", js_req_get_method(js, NULL, 0, Ant_Value_Undefined, call_this, call_func), &err)) return err;
+  if (!request_inspect_set(js, out, "url", js_req_get_url(js, NULL, 0, Ant_Value_Undefined, call_this, call_func), &err)) return err;
+  if (!request_inspect_set(js, out, "headers", js_req_get_headers(js, NULL, 0, Ant_Value_Undefined, call_this, call_func), &err)) return err;
+  if (!request_inspect_set(js, out, "destination", js_req_get_destination(js, NULL, 0, Ant_Value_Undefined, call_this, call_func), &err)) return err;
+  if (!request_inspect_set(js, out, "referrer", js_req_get_referrer(js, NULL, 0, Ant_Value_Undefined, call_this, call_func), &err)) return err;
+  if (!request_inspect_set(js, out, "referrerPolicy", js_req_get_referrer_policy(js, NULL, 0, Ant_Value_Undefined, call_this, call_func), &err)) return err;
+  if (!request_inspect_set(js, out, "mode", js_req_get_mode(js, NULL, 0, Ant_Value_Undefined, call_this, call_func), &err)) return err;
+  if (!request_inspect_set(js, out, "credentials", js_req_get_credentials(js, NULL, 0, Ant_Value_Undefined, call_this, call_func), &err)) return err;
+  if (!request_inspect_set(js, out, "cache", js_req_get_cache(js, NULL, 0, Ant_Value_Undefined, call_this, call_func), &err)) return err;
+  if (!request_inspect_set(js, out, "redirect", js_req_get_redirect(js, NULL, 0, Ant_Value_Undefined, call_this, call_func), &err)) return err;
+  if (!request_inspect_set(js, out, "integrity", js_req_get_integrity(js, NULL, 0, Ant_Value_Undefined, call_this, call_func), &err)) return err;
+  if (!request_inspect_set(js, out, "keepalive", js_req_get_keepalive(js, NULL, 0, Ant_Value_Undefined, call_this, call_func), &err)) return err;
+  if (!request_inspect_set(js, out, "isReloadNavigation", js_req_get_is_reload_navigation(js, NULL, 0, Ant_Value_Undefined, call_this, call_func), &err)) return err;
+  if (!request_inspect_set(js, out, "isHistoryNavigation", js_req_get_is_history_navigation(js, NULL, 0, Ant_Value_Undefined, call_this, call_func), &err)) return err;
+  if (!request_inspect_set(js, out, "signal", js_req_get_signal(js, NULL, 0, Ant_Value_Undefined, call_this, call_func), &err)) return err;
 
   return request_inspect_finish(js, call_this, out);
 }
@@ -987,7 +987,7 @@ static ant_value_t js_request_clone(ant_params_t) {
   js_set_finalizer(obj, request_finalize);
   
   js_set_slot_wb(js, obj, SLOT_REQUEST_HEADERS, new_headers);
-  js_set_slot(obj, SLOT_REQUEST_ABORT_REASON, js_mkundef());
+  js_set_slot(obj, SLOT_REQUEST_ABORT_REASON, Ant_Value_Undefined);
   js_set_slot_wb(js, obj, SLOT_REQUEST_SIGNAL,  new_signal);
 
   ant_value_t src_stream = js_get_slot(call_this, SLOT_REQUEST_BODY_STREAM);
@@ -1023,7 +1023,7 @@ static ant_value_t request_new_from_input(
 
   *out_req = NULL;
   *out_src = NULL;
-  *out_input_signal = js_mkundef();
+  *out_input_signal = Ant_Value_Undefined;
 
   if (
     vtype(input) == kTypeObject &&
@@ -1067,13 +1067,13 @@ static ant_value_t request_new_from_input(
 
   *out_req = req;
   *out_src = src;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t request_apply_init_options(
   ant_t *js, ant_value_t init, request_data_t *req, ant_value_t *input_signal
 ) {
-  ant_value_t err = js_mkundef();
+  ant_value_t err = Ant_Value_Undefined;
   ant_value_t win = js_get(js, init, "window");
   
   const char *ref = NULL;
@@ -1193,16 +1193,16 @@ static ant_value_t request_apply_init_options(
   }
 
   ant_value_t sig_val = js_get(js, init, "signal");
-  if (vtype(sig_val) == kTypeUndefined) return js_mkundef();
+  if (vtype(sig_val) == kTypeUndefined) return Ant_Value_Undefined;
   
   if (vtype(sig_val) == kTypeNull) {
-    *input_signal = js_mkundef();
-    return js_mkundef();
+    *input_signal = Ant_Value_Undefined;
+    return Ant_Value_Undefined;
   }
   
   if (abort_signal_is_signal(sig_val)) {
     *input_signal = sig_val;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   return js_mkerr_typed(js, JS_ERR_TYPE, "Failed to construct 'Request': signal must be an AbortSignal");
@@ -1230,7 +1230,7 @@ static ant_value_t request_parse_duplex(ant_t *js, ant_value_t init, bool *out_d
   const char *duplex_str = NULL;
 
   *out_duplex_provided = vtype(duplex_val) != kTypeUndefined;
-  if (!*out_duplex_provided) return js_mkundef();
+  if (!*out_duplex_provided) return Ant_Value_Undefined;
 
   if (vtype(duplex_str_v) != kTypeString) {
     duplex_str_v = js_tostring_val(js, duplex_str_v);
@@ -1238,7 +1238,7 @@ static ant_value_t request_parse_duplex(ant_t *js, ant_value_t init, bool *out_d
   }
 
   duplex_str = js_getstr(js, duplex_str_v, NULL);
-  if (duplex_str && strcmp(duplex_str, "half") == 0) return js_mkundef();
+  if (duplex_str && strcmp(duplex_str, "half") == 0) return Ant_Value_Undefined;
 
   return js_mkerr_typed(js, JS_ERR_TYPE,
     "Failed to construct 'Request': duplex must be 'half'");
@@ -1262,15 +1262,15 @@ static ant_value_t request_apply_ctor_body(
       "Failed to construct 'Request': Request with GET/HEAD method cannot have body");
     }
 
-    if (vtype(body_val) == kTypeUndefined) return js_mkundef();
+    if (vtype(body_val) == kTypeUndefined) return Ant_Value_Undefined;
     if (vtype(body_val) == kTypeNull) {
       request_clear_body(js, req_obj, req);
-      return js_mkundef();
+      return Ant_Value_Undefined;
     }
 
     request_data_t *init_req = request_get_data(init);
-    ant_value_t body_err = js_mkundef();
-    ant_value_t body_stream = js_mkundef();
+    ant_value_t body_err = Ant_Value_Undefined;
+    ant_value_t body_stream = Ant_Value_Undefined;
     
     uint8_t *bd = NULL;
     size_t bs = 0;
@@ -1291,12 +1291,12 @@ static ant_value_t request_apply_ctor_body(
     );
   }
 
-  if (!src) return js_mkundef();
+  if (!src) return Ant_Value_Undefined;
   return request_copy_source_body(js, req_obj, input, req, src);
 }
 
 static ant_value_t js_request_ctor(ant_params_t) {
-  ant_value_t init = (nargs >= 2 && vtype(args[1]) != kTypeUndefined) ? args[1] : js_mkundef();
+  ant_value_t init = (nargs >= 2 && vtype(args[1]) != kTypeUndefined) ? args[1] : Ant_Value_Undefined;
 
   if (vtype(call_new_target) == kTypeUndefined)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Request constructor requires 'new'");
@@ -1311,8 +1311,8 @@ static ant_value_t js_request_ctor(ant_params_t) {
   request_data_t *req = NULL;
   request_data_t *src = NULL;
   
-  ant_value_t input_signal = js_mkundef();
-  ant_value_t step = js_mkundef();
+  ant_value_t input_signal = Ant_Value_Undefined;
+  ant_value_t step = Ant_Value_Undefined;
   ant_value_t signal = 0;
   ant_value_t headers = 0;
   
@@ -1346,7 +1346,7 @@ static ant_value_t js_request_ctor(ant_params_t) {
   js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_REQUEST));
   js_set_native(obj, req, REQUEST_NATIVE_TAG);
   js_set_finalizer(obj, request_finalize);
-  js_set_slot(obj, SLOT_REQUEST_ABORT_REASON, js_mkundef());
+  js_set_slot(obj, SLOT_REQUEST_ABORT_REASON, Ant_Value_Undefined);
 
   signal = abort_signal_create_dependent(js, input_signal);
   if (is_err(signal)) { request_clear_and_free(obj, req); return signal; }
@@ -1389,8 +1389,8 @@ ant_value_t request_create_from_input_init(ant_t *js, ant_value_t input, ant_val
   request_data_t *req = NULL;
   request_data_t *src = NULL;
   
-  ant_value_t input_signal = js_mkundef();
-  ant_value_t step = js_mkundef();
+  ant_value_t input_signal = Ant_Value_Undefined;
+  ant_value_t step = Ant_Value_Undefined;
   ant_value_t obj = 0;
   ant_value_t signal = 0;
   ant_value_t headers = 0;
@@ -1419,7 +1419,7 @@ ant_value_t request_create_from_input_init(ant_t *js, ant_value_t input, ant_val
   js_set_slot(obj, SLOT_BRAND, Ant_Value_FromNumber(BRAND_REQUEST));
   js_set_native(obj, req, REQUEST_NATIVE_TAG);
   js_set_finalizer(obj, request_finalize);
-  js_set_slot(obj, SLOT_REQUEST_ABORT_REASON, js_mkundef());
+  js_set_slot(obj, SLOT_REQUEST_ABORT_REASON, Ant_Value_Undefined);
 
   signal = abort_signal_create_dependent(js, input_signal);
   if (is_err(signal)) { request_clear_and_free(obj, req); return signal; }

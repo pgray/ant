@@ -49,15 +49,15 @@ static ant_value_t dns_get_servers(ant_params_t) {
 }
 
 static ant_value_t dns_set_servers(ant_params_t) {
-  return dns_channel_set_servers(js, dns_this_channel(js, call_this), nargs > 0 ? args[0] : js_mkundef());
+  return dns_channel_set_servers(js, dns_this_channel(js, call_this), nargs > 0 ? args[0] : Ant_Value_Undefined);
 }
 
 static ant_value_t dns_set_default_result_order(ant_params_t) {
   dns_order_t order;
-  ant_value_t r = dns_parse_result_order(js, nargs > 0 ? args[0] : js_mkundef(), &order);
+  ant_value_t r = dns_parse_result_order(js, nargs > 0 ? args[0] : Ant_Value_Undefined, &order);
   if (is_err(r)) return r;
   js->dns_result_order = (uint8_t)order;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t dns_get_default_result_order(ant_params_t) {
@@ -68,12 +68,12 @@ static ant_value_t dns_get_default_result_order(ant_params_t) {
 static ant_value_t dns_resolver_cancel(ant_params_t) {
   dns_channel_t *channel = dns_this_channel(js, call_this);
   if (channel && channel->ares) ares_cancel(channel->ares);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t dns_resolver_set_local_address(ant_params_t) {
   dns_channel_t *channel = dns_this_channel(js, call_this);
-  if (!channel || !channel->ares) return js_mkundef();
+  if (!channel || !channel->ares) return Ant_Value_Undefined;
 
   for (int i = 0; i < 2 && i < nargs; i++) {
     if (vtype(args[i]) == kTypeUndefined) continue;
@@ -96,7 +96,7 @@ static ant_value_t dns_resolver_set_local_address(ant_params_t) {
     }
   }
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void dns_resolver_finalize(ant_t *js, ant_object_t *obj) {
@@ -111,8 +111,8 @@ static void dns_resolver_finalize(ant_t *js, ant_object_t *obj) {
 
 static ant_value_t dns_resolver_option(ant_t *js, ant_value_t options, const char *name, int min, int fallback, int *out) {
   *out = fallback;
-  ant_value_t value = is_object_type(options) ? js_get(js, options, name) : js_mkundef();
-  if (vtype(value) == kTypeUndefined) return js_mkundef();
+  ant_value_t value = is_object_type(options) ? js_get(js, options, name) : Ant_Value_Undefined;
+  if (vtype(value) == kTypeUndefined) return Ant_Value_Undefined;
 
   char label[32];
   snprintf(label, sizeof(label), "options.%s", name);
@@ -126,14 +126,14 @@ static ant_value_t dns_resolver_option(ant_t *js, ant_value_t options, const cha
   }
 
   *out = (int)number;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t dns_resolver_construct(ant_native_params_t, ant_value_t new_target, ant_value_t fallback_proto) {
   if (!is_object_type(new_target))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Class constructor Resolver cannot be invoked without 'new'");
 
-  ant_value_t options = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t options = nargs > 0 ? args[0] : Ant_Value_Undefined;
   int timeout = -1, tries = 4;
   ant_value_t r = dns_resolver_option(js, options, "timeout", -1, -1, &timeout);
   

@@ -66,7 +66,7 @@ static __attribute__((noinline, cold)) ant_value_t sv_sandbox_global_delete(
 }
 
 static inline ant_value_t sv_global_delete(ant_t *js, const char *interned, uint32_t len) {
-  if (sv_global_lexical(js, interned)) return js_false;
+  if (sv_global_lexical(js, interned)) return Ant_Value_False;
   if (sv_global_sandboxed(js)) return sv_sandbox_global_delete(js, interned, len);
   return js_delete_prop(js, js->global, interned, len);
 }
@@ -80,7 +80,7 @@ static inline bool sv_env_try_get_interned(
   while (is_object_type(current)) {
     if (current == js->global) {
       if (sv_global_sandboxed(js)) {
-        ant_value_t value = js_mkundef();
+        ant_value_t value = Ant_Value_Undefined;
         bool found = sv_sandbox_global_lookup(js, interned, len, &value);
         if (found && out) *out = value;
         return found;
@@ -116,12 +116,12 @@ static inline bool sv_env_try_get_interned(
 static inline ant_value_t sv_env_get(
   ant_t *js, ant_value_t env, const char *str, uint32_t len
 ) {
-  if (!str) return js_mkundef();
+  if (!str) return Ant_Value_Undefined;
 
   const char *interned = intern_string(js, str, len);
-  if (!interned) return js_mkundef();
+  if (!interned) return Ant_Value_Undefined;
 
-  ant_value_t val = js_mkundef();
+  ant_value_t val = Ant_Value_Undefined;
   (void)sv_env_try_get_interned(js, env, interned, len, &val);
   return val;
 }
@@ -153,7 +153,7 @@ static inline ant_value_t sv_env_delete(
     ant_value_t current = env; is_object_type(current) &&
     current != js->global; current = js_get_proto(js, current)
   ) {
-    if (sv_eval_env_has_binding(current, str, len)) return js_false;
+    if (sv_eval_env_has_binding(current, str, len)) return Ant_Value_False;
     if (lkp_interned(current, str).obj) return js_delete_prop(js, current, str, len);
   }
   
@@ -250,7 +250,7 @@ static inline bool sv_global_ic_try_fill_unshadowed(
 static __attribute__((noinline)) ant_value_t sv_global_get_interned_miss(
   ant_t *js, const char *interned, sv_ic_entry_t *ic
 ) {
-  ant_value_t out = js_mkundef();
+  ant_value_t out = Ant_Value_Undefined;
   ant_value_t target = js->global;
 
   if (sv_global_sandboxed(js)) {
@@ -274,7 +274,7 @@ static __attribute__((noinline)) ant_value_t sv_global_get_interned_miss(
 static inline ant_value_t sv_global_get_interned_ic(
   ant_t *js, const char *interned, sv_func_t *func, uint8_t *ip
 ) {
-  ant_value_t out = js_mkundef();
+  ant_value_t out = Ant_Value_Undefined;
   sv_ic_entry_t *ic = sv_global_ic_slot_for_ip(func, ip);
   if (sv_global_ic_try_get_hit(js, js->global, ic, interned, &out)) return out;
   return sv_global_get_interned_miss(js, interned, ic);
@@ -285,7 +285,7 @@ static inline ant_value_t sv_eval_global_get_interned_ic(
   const char *interned, uint32_t len,
   sv_func_t *func, uint8_t *ip, bool *found
 ) {
-  ant_value_t out = js_mkundef();
+  ant_value_t out = Ant_Value_Undefined;
   sv_ic_entry_t *ic = sv_global_ic_slot_for_ip(func, ip);
   ant_value_t target = env;
 
@@ -308,7 +308,7 @@ static __attribute__((noinline)) ant_value_t sv_global_undefined_check(ant_t *js
     !lkp_interned(js->global, a->str).obj && !sv_global_lexical(js, a->str) &&
     !(sv_global_sandboxed(js) && sv_sandbox_has(js, a->str, a->len))
   ) return js_mkerr_typed(js, JS_ERR_REFERENCE, "'%.*s' is not defined", (int)a->len, a->str);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_global_require_defined(ant_t *js, sv_atom_t *a, ant_value_t val) {

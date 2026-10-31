@@ -350,11 +350,11 @@ static bool json_prepare_object(
 static ant_value_t yyjson_to_jsval(
   ant_t *js, yyjson_val *val, gc_temp_root_scope_t *roots, ant_shape_t *expected
 ) {
-  if (!val) return js_mkundef();
+  if (!val) return Ant_Value_Undefined;
   if (__builtin_expect(sv_check_c_stack_overflow(js), 0)) return Ant_Error_CreateStackOverflow(js);
   
   switch (yyjson_get_type(val)) {
-  case YYJSON_TYPE_NULL: return js_mknull();
+  case YYJSON_TYPE_NULL: return Ant_Value_Null;
   case YYJSON_TYPE_BOOL: return js_bool(yyjson_get_bool(val));
   
   case YYJSON_TYPE_STR: {
@@ -446,7 +446,7 @@ static ant_value_t yyjson_to_jsval(
     return obj;
   }
   
-  default: return js_mkundef(); }
+  default: return Ant_Value_Undefined; }
 }
 
 typedef struct {
@@ -710,7 +710,7 @@ static ant_value_t json_apply_tojson(
   bool bigint = vtype(val) == kTypeBigInt;
   if (!bigint && !is_special_object(val)) return val;
 
-  ant_value_t toJSON = js_mkundef();
+  ant_value_t toJSON = Ant_Value_Undefined;
   bool needs_generic = bigint || is_proxy(val);
   ant_prop_loc_t found = ANT_PROP_LOC_NONE;
 
@@ -743,7 +743,7 @@ static ant_value_t json_apply_tojson(
     ant_value_t generic = js_get(js, val, "toJSON");
     if (is_err(generic)) {
       json_capture_error(ctx, generic);
-      return js_mkundef();
+      return Ant_Value_Undefined;
     }
     toJSON = generic;
   }
@@ -752,23 +752,23 @@ static ant_value_t json_apply_tojson(
   ant_value_t key_arg = js_mkstr(js, key, strlen(key));
   if (is_err(key_arg)) {
     json_capture_error(ctx, key_arg);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
   
-  if (!json_ctx_pin_value(ctx, key_arg)) return js_mkundef();
+  if (!json_ctx_pin_value(ctx, key_arg)) return Ant_Value_Undefined;
   ant_value_t args[1] = { key_arg };
   
   ant_value_t transformed = sv_vm_call(
     js->vm, js,
     toJSON, val,
-    args, 1, NULL, js_mkundef()
+    args, 1, NULL, Ant_Value_Undefined
   );
   
   if (is_err(transformed)) {
     json_capture_error(ctx, transformed);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
-  if (!json_ctx_pin_value(ctx, transformed)) return js_mkundef();
+  if (!json_ctx_pin_value(ctx, transformed)) return Ant_Value_Undefined;
 
   return transformed;
 }
@@ -783,22 +783,22 @@ static ant_value_t json_apply_replacer(
   ant_value_t key_arg = js_mkstr(js, key, strlen(key));
   if (is_err(key_arg)) {
     json_capture_error(ctx, key_arg);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
-  if (!json_ctx_pin_value(ctx, key_arg)) return js_mkundef();
+  if (!json_ctx_pin_value(ctx, key_arg)) return Ant_Value_Undefined;
   ant_value_t args[2] = { key_arg, val };
   
   ant_value_t transformed = sv_vm_call(
     js->vm, js, 
     ctx->replacer_func, ctx->holder, 
-    args, 2, NULL, js_mkundef()
+    args, 2, NULL, Ant_Value_Undefined
   );
   
   if (is_err(transformed)) {
     json_capture_error(ctx, transformed);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
-  if (!json_ctx_pin_value(ctx, transformed)) return js_mkundef();
+  if (!json_ctx_pin_value(ctx, transformed)) return Ant_Value_Undefined;
 
   return transformed;
 }
@@ -806,7 +806,7 @@ static ant_value_t json_apply_replacer(
 static inline ant_value_t json_create_root_holder(ant_t *js, ant_value_t value, json_cycle_ctx *ctx) {
   ant_value_t holder = Ant_Object_CreateBare(js);
   if (is_err(holder)) return holder;
-  if (!json_ctx_pin_value(ctx, holder)) return js_mkundef();
+  if (!json_ctx_pin_value(ctx, holder)) return Ant_Value_Undefined;
   js_set(js, holder, "", value);
   return holder;
 }
@@ -1044,7 +1044,7 @@ static json_write_t json_write_impl(
   switch (vtype(val)) {
     case kTypeNull: return json_out_write(out, "null", 4) ? JSON_W_OK : JSON_W_ABORT;
     case kTypeBool:
-      return json_out_write(out, val == js_true ? "true" : "false", val == js_true ? 4 : 5)
+      return json_out_write(out, val == Ant_Value_True ? "true" : "false", val == Ant_Value_True ? 4 : 5)
         ? JSON_W_OK : JSON_W_ABORT;
 
     case kTypeUndefined:
@@ -1070,7 +1070,7 @@ static json_write_t json_write_impl(
     switch (vtype(prim)) {
       case kTypeNumber:  return json_out_number(out, Ant_Value_AsNumberUnchecked(prim)) ? JSON_W_OK : JSON_W_ABORT;
       case kTypeString:  return json_out_quoted(ctx->js, out, prim) ? JSON_W_OK : JSON_W_ABORT;
-      case kTypeBool: return json_out_write(out, prim == js_true ? "true" : "false", prim == js_true ? 4 : 5) ? JSON_W_OK : JSON_W_ABORT;
+      case kTypeBool: return json_out_write(out, prim == Ant_Value_True ? "true" : "false", prim == Ant_Value_True ? 4 : 5) ? JSON_W_OK : JSON_W_ABORT;
 
       case kTypeBigInt:
         json_capture_error(ctx, js_mkerr_typed(ctx->js, JS_ERR_TYPE, "Do not know how to serialize a BigInt"));
@@ -1122,7 +1122,7 @@ static ant_value_t apply_reviver_call(
   
   ant_value_t result = sv_vm_call(
     js->vm, js, reviver, holder,
-    call_args, 2, NULL, js_mkundef()
+    call_args, 2, NULL, Ant_Value_Undefined
   );
   
   if (!is_err(result) && !json_temp_pin(roots, result)) return json_parse_oom(js);
@@ -1154,7 +1154,7 @@ static ant_value_t apply_reviver_to_array(
     js_setprop(js, value, key_val, new_elem);
   }
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t apply_reviver_to_object(
@@ -1163,7 +1163,7 @@ static ant_value_t apply_reviver_to_object(
   ant_value_t keys = json_snapshot_keys(js, value);
   if (is_err(keys)) return keys;
   
-  if (vtype(keys) != kTypeArray) return js_mkundef();
+  if (vtype(keys) != kTypeArray) return Ant_Value_Undefined;
   if (!json_temp_pin(roots, keys)) return json_parse_oom(js);
 
   ant_offset_t key_count = js_arr_len(js, keys);
@@ -1181,7 +1181,7 @@ static ant_value_t apply_reviver_to_object(
     else js_set(js, value, key, new_val);
   }
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t apply_reviver(
@@ -1191,7 +1191,7 @@ static ant_value_t apply_reviver(
   ant_value_t val = js_get(js, holder, key);
   if (is_err(val)) return val;
 
-  ant_value_t walked = js_mkundef();
+  ant_value_t walked = Ant_Value_Undefined;
   if (is_array_value(val)) walked = apply_reviver_to_array(js, val, reviver, roots);
   else if (vtype(val) == kTypeObject) walked = apply_reviver_to_object(js, val, reviver, roots);
   if (is_err(walked)) return walked;
@@ -1200,7 +1200,7 @@ static ant_value_t apply_reviver(
 }
 
 ant_value_t js_json_parse(ant_params_t) {
-  ant_value_t text = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t text = nargs > 0 ? args[0] : Ant_Value_Undefined;
   if (vtype(text) != kTypeString) {
     if (vtype(text) == kTypeSymbol)
       return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert a Symbol value to a string");
@@ -1255,7 +1255,7 @@ ant_value_t js_json_parse(ant_params_t) {
 
 ant_value_t json_parse_value(ant_t *js, ant_value_t value) {
   ant_value_t args[1] = { value };
-  return js_json_parse(js, args, 1, js_mkundef(), js_mkundef(), js_mkundef());
+  return js_json_parse(js, args, 1, Ant_Value_Undefined, Ant_Value_Undefined, Ant_Value_Undefined);
 }
 
 static bool json_set_replacer(ant_t *js, json_cycle_ctx *ctx, ant_value_t replacer, ant_value_t *error_out) {
@@ -1353,13 +1353,13 @@ ant_value_t js_json_stringify(ant_params_t) {
   
   json_cycle_ctx ctx = {
     .js = js,
-    .replacer_func = js_mkundef(),
-    .replacer_arr = js_mkundef(),
-    .error = js_mkundef(),
-    .holder = js_mkundef(),
+    .replacer_func = Ant_Value_Undefined,
+    .replacer_arr = Ant_Value_Undefined,
+    .error = Ant_Value_Undefined,
+    .holder = Ant_Value_Undefined,
   };
   
-  ant_value_t root_holder = js_mkundef();
+  ant_value_t root_holder = Ant_Value_Undefined;
   if (nargs < 1) return js_mkerr(js, "JSON.stringify() requires at least 1 argument");
   
   ctx.tojson_key = intern_string(js, "toJSON", 6);
@@ -1434,7 +1434,7 @@ ant_value_t js_json_stringify(ant_params_t) {
   }
 
   if (root == JSON_W_SKIP) {
-    result = js_mkundef();
+    result = Ant_Value_Undefined;
     goto cleanup;
   }
 
@@ -1449,7 +1449,7 @@ cleanup:
 
 ant_value_t json_stringify_value(ant_t *js, ant_value_t value) {
   ant_value_t args[1] = { value };
-  return js_json_stringify(js, args, 1, js_mkundef(), js_mkundef(), js_mkundef());
+  return js_json_stringify(js, args, 1, Ant_Value_Undefined, Ant_Value_Undefined, Ant_Value_Undefined);
 }
 
 void init_json_module(ant_t *js) {

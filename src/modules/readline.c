@@ -473,17 +473,17 @@ static void rl_remove_listener(ant_t *js, rl_interface_t *iface, const char *eve
 }
 
 static ant_value_t rl_async_iter_state(ant_t *js, ant_value_t iterator) {
-  ant_value_t state = is_object_type(iterator) ? js_get_slot(iterator, SLOT_DATA) : js_mkundef();
-  return is_object_type(state) ? state : js_mkundef();
+  ant_value_t state = is_object_type(iterator) ? js_get_slot(iterator, SLOT_DATA) : Ant_Value_Undefined;
+  return is_object_type(state) ? state : Ant_Value_Undefined;
 }
 
 static ant_value_t rl_async_iter_queue(ant_t *js, ant_value_t state, const char *queue_key) {
-  ant_value_t queue = is_object_type(state) ? js_get(js, state, queue_key) : js_mkundef();
-  return vtype(queue) == kTypeArray ? queue : js_mkundef();
+  ant_value_t queue = is_object_type(state) ? js_get(js, state, queue_key) : Ant_Value_Undefined;
+  return vtype(queue) == kTypeArray ? queue : Ant_Value_Undefined;
 }
 
 static ant_offset_t rl_async_iter_queue_head(ant_t *js, ant_value_t state, const char *head_key) {
-  ant_value_t head = is_object_type(state) ? js_get(js, state, head_key) : js_mkundef();
+  ant_value_t head = is_object_type(state) ? js_get(js, state, head_key) : Ant_Value_Undefined;
   return vtype(head) == kTypeNumber ? (ant_offset_t)Ant_Value_AsNumberUnchecked(head) : 0;
 }
 
@@ -514,7 +514,7 @@ static void process_line(ant_t *js, rl_interface_t *iface) {
   
   if (vtype(iface->pending_question_promise) == kTypePromise) {
     js_resolve_promise(js, iface->pending_question_promise, line_val);
-    iface->pending_question_promise = js_mkundef();
+    iface->pending_question_promise = Ant_Value_Undefined;
   }
   
   iface->line_buffer[0] = '\0';
@@ -634,10 +634,10 @@ static rl_interface_t *get_interface(ant_t *js, ant_value_t this_obj) {
 static ant_value_t rl_interface_close(ant_params_t) {
   rl_interface_t *iface = get_interface(js, call_this);
   
-  if (!iface || iface->closed) return js_mkundef();
+  if (!iface || iface->closed) return Ant_Value_Undefined;
   rl_close_interface(js, iface);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t rl_interface_pause(ant_params_t) {
@@ -669,7 +669,7 @@ static ant_value_t rl_interface_resume(ant_params_t) {
 static ant_value_t rl_interface_prompt(ant_params_t) {
   rl_interface_t *iface = get_interface(js, call_this);
   
-  if (!iface || iface->closed) return js_mkundef();
+  if (!iface || iface->closed) return Ant_Value_Undefined;
   
   if (iface->paused) {
     iface->paused = false;
@@ -691,14 +691,14 @@ static ant_value_t rl_interface_prompt(ant_params_t) {
   }
   
   start_reading(iface);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t rl_interface_set_prompt(ant_params_t) {
   rl_interface_t *iface = get_interface(js, call_this);
   
   if (!iface) return js_mkerr(js, "Invalid Interface");
-  if (nargs < 1) return js_mkundef();
+  if (nargs < 1) return Ant_Value_Undefined;
   
   char *new_prompt = js_getstr(js, args[0], NULL);
   if (new_prompt) {
@@ -706,7 +706,7 @@ static ant_value_t rl_interface_set_prompt(ant_params_t) {
     iface->prompt = strdup(new_prompt);
   }
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t rl_interface_get_prompt(ant_params_t) {
@@ -815,7 +815,7 @@ l_k:
 static ant_value_t rl_interface_write(ant_params_t) {
   rl_interface_t *iface = get_interface(js, call_this);
   
-  if (!iface || iface->closed) return js_mkundef();
+  if (!iface || iface->closed) return Ant_Value_Undefined;
   
   if (iface->paused) {
     iface->paused = false;
@@ -836,17 +836,17 @@ static ant_value_t rl_interface_write(ant_params_t) {
     
     if (name) {
       process_key_sequence(iface, name, ctrl, meta, shift);
-      return js_mkundef();
+      return Ant_Value_Undefined;
     }
   }
   
   if (nargs < 1 || vtype(args[0]) == kTypeNull || vtype(args[0]) == kTypeUndefined) {
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
   
   size_t len;
   char *data = js_getstr(js, args[0], &len);
-  if (!data) return js_mkundef();
+  if (!data) return Ant_Value_Undefined;
   
   for (size_t i = 0; i < len && iface->line_len < MAX_LINE_LENGTH - 1; i++) {
     char c = data[i];
@@ -863,13 +863,13 @@ static ant_value_t rl_interface_write(ant_params_t) {
     }
   }
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t rl_interface_line_getter(ant_params_t) {
   rl_interface_t *iface = get_interface(js, call_this);
   
-  if (!iface) return js_mkundef();
+  if (!iface) return Ant_Value_Undefined;
   return js_mkstr(js, iface->line_buffer, strlen(iface->line_buffer));
 }
 
@@ -883,7 +883,7 @@ static ant_value_t rl_interface_cursor_getter(ant_params_t) {
 static ant_value_t rl_interface_question_callback(ant_params_t) {
   rl_interface_t *iface = get_interface(js, call_this);
   
-  if (!iface || iface->closed) return js_mkundef();
+  if (!iface || iface->closed) return Ant_Value_Undefined;
   if (nargs < 2) return js_mkerr(js, "question requires query and callback");
   
   size_t query_len;
@@ -899,7 +899,7 @@ static ant_value_t rl_interface_question_callback(ant_params_t) {
   write_output(iface, rl_render_prompt(iface));
   if (!rl_add_listener(js, iface, "line", args[1], true)) return js_mkerr(js, "listener must be a function");
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t rl_interface_question_promise(ant_params_t) {
@@ -959,13 +959,13 @@ static ant_value_t rl_interface_get_cursor_pos(ant_params_t) {
 static ant_value_t rl_interface_closed_getter(ant_params_t) {
   rl_interface_t *iface = get_interface(js, call_this);
   
-  if (!iface) return js_true;
+  if (!iface) return Ant_Value_True;
   return js_bool(iface->closed);
 }
 
 static ant_value_t rl_clear_line(ant_params_t) {
   int dir = 0;
-  if (!tty_ctrl_parse_clear_line_dir(args, nargs, 1, &dir)) return js_false;
+  if (!tty_ctrl_parse_clear_line_dir(args, nargs, 1, &dir)) return Ant_Value_False;
 
   size_t seq_len = 0;
   const char *seq = tty_ctrl_clear_line_seq(dir, &seq_len);
@@ -980,7 +980,7 @@ static ant_value_t rl_clear_screen_down(ant_params_t) {
 
 static ant_value_t rl_cursor_to(ant_params_t) {
   tty_ctrl_cursor_to_args_t parsed;
-  if (!tty_ctrl_parse_cursor_to_args(args, nargs, 1, 2, &parsed)) return js_false;
+  if (!tty_ctrl_parse_cursor_to_args(args, nargs, 1, 2, &parsed)) return Ant_Value_False;
 
   char seq[64];
   size_t seq_len = 0;
@@ -989,7 +989,7 @@ static ant_value_t rl_cursor_to(ant_params_t) {
     parsed.x, parsed.has_y, parsed.y,
     &seq_len
   );
-  if (!ok) return js_false;
+  if (!ok) return Ant_Value_False;
 
   return tty_ctrl_bool_result(js, tty_ctrl_write_stream(stdout, seq, seq_len, true));
 }
@@ -997,7 +997,7 @@ static ant_value_t rl_cursor_to(ant_params_t) {
 static ant_value_t rl_move_cursor(ant_params_t) {
   int dx = 0;
   int dy = 0;
-  if (!tty_ctrl_parse_move_cursor_args(args, nargs, 1, 2, &dx, &dy)) return js_false;
+  if (!tty_ctrl_parse_move_cursor_args(args, nargs, 1, 2, &dx, &dy)) return Ant_Value_False;
 
   bool ok = true;
   if (dx != 0) {
@@ -1014,7 +1014,7 @@ static ant_value_t rl_move_cursor(ant_params_t) {
     if (ok) ok = tty_ctrl_write_stream(stdout, seq_y, len_y, false);
   }
 
-  if (!ok) return js_false;
+  if (!ok) return Ant_Value_False;
   return tty_ctrl_bool_result(js, fflush(stdout) == 0);
 }
 
@@ -1026,7 +1026,7 @@ static ant_value_t rl_emit_keypress_events(ant_params_t) {
     }
   }
   process_enable_keypress_events(js);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 bool has_active_readline_interfaces(ant_t *js) {
@@ -1068,9 +1068,9 @@ static ant_value_t rl_async_iter_queue_shift(ant_t *js, ant_value_t state, const
   ant_value_t queue = rl_async_iter_queue(js, state, queue_key);
   ant_offset_t head = rl_async_iter_queue_head(js, state, head_key);
   ant_offset_t len = vtype(queue) == kTypeArray ? js_arr_len(js, queue) : 0;
-  ant_value_t value = js_mkundef();
+  ant_value_t value = Ant_Value_Undefined;
 
-  if (vtype(queue) != kTypeArray || head >= len) return js_mkundef();
+  if (vtype(queue) != kTypeArray || head >= len) return Ant_Value_Undefined;
   value = js_arr_get(js, queue, head);
   rl_async_iter_set_queue_head(js, state, head_key, head + 1);
   rl_async_iter_compact_queue(js, state, queue_key, head_key);
@@ -1079,7 +1079,7 @@ static ant_value_t rl_async_iter_queue_shift(ant_t *js, ant_value_t state, const
 }
 
 static void rl_async_iter_cleanup(ant_t *js, ant_value_t state) {
-  ant_value_t iface_obj = is_object_type(state) ? js_get(js, state, "iface") : js_mkundef();
+  ant_value_t iface_obj = is_object_type(state) ? js_get(js, state, "iface") : Ant_Value_Undefined;
   rl_interface_t *iface = get_interface(js, iface_obj);
   if (!iface) return;
 
@@ -1090,36 +1090,36 @@ static void rl_async_iter_cleanup(ant_t *js, ant_value_t state) {
 static void rl_async_iter_finish(ant_t *js, ant_value_t state) {
   if (!is_object_type(state)) return;
 
-  js_set(js, state, "done", js_true);
+  js_set(js, state, "done", Ant_Value_True);
   rl_async_iter_cleanup(js, state);
 
   for (;;) {
     ant_value_t pending = rl_async_iter_queue_shift(js, state, "pending", "pendingHead");
     if (vtype(pending) != kTypePromise) break;
-    js_resolve_promise(js, pending, js_iter_result(js, false, js_mkundef()));
+    js_resolve_promise(js, pending, js_iter_result(js, false, Ant_Value_Undefined));
   }
 }
 
 static ant_value_t rl_async_iter_on_line(ant_params_t) {
   ant_value_t state = rl_async_iter_state(js, call_func);
-  ant_value_t line = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t line = nargs > 0 ? args[0] : Ant_Value_Undefined;
   ant_value_t pending = 0;
 
-  if (!is_object_type(state)) return js_mkundef();
-  if (js_truthy(js, js_get(js, state, "done"))) return js_mkundef();
+  if (!is_object_type(state)) return Ant_Value_Undefined;
+  if (js_truthy(js, js_get(js, state, "done"))) return Ant_Value_Undefined;
 
   pending = rl_async_iter_queue_shift(js, state, "pending", "pendingHead");
   if (vtype(pending) == kTypePromise) {
     js_resolve_promise(js, pending, js_iter_result(js, true, line));
   } else rl_async_iter_queue_push(js, state, "buffer", line);
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t rl_async_iter_on_close(ant_params_t) {
   ant_value_t state = rl_async_iter_state(js, call_func);
   rl_async_iter_finish(js, state);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t rl_async_iter_next(ant_params_t) {
@@ -1128,7 +1128,7 @@ static ant_value_t rl_async_iter_next(ant_params_t) {
   ant_value_t value = 0;
 
   if (!is_object_type(state)) {
-    js_resolve_promise(js, promise, js_iter_result(js, false, js_mkundef()));
+    js_resolve_promise(js, promise, js_iter_result(js, false, Ant_Value_Undefined));
     return promise;
   }
 
@@ -1139,7 +1139,7 @@ static ant_value_t rl_async_iter_next(ant_params_t) {
   }
 
   if (js_truthy(js, js_get(js, state, "done"))) {
-    js_resolve_promise(js, promise, js_iter_result(js, false, js_mkundef()));
+    js_resolve_promise(js, promise, js_iter_result(js, false, Ant_Value_Undefined));
     return promise;
   }
 
@@ -1152,7 +1152,7 @@ static ant_value_t rl_async_iter_return(ant_params_t) {
   ant_value_t promise = js_mkpromise(js);
 
   if (!is_object_type(state)) {
-    js_resolve_promise(js, promise, js_iter_result(js, false, js_mkundef()));
+    js_resolve_promise(js, promise, js_iter_result(js, false, Ant_Value_Undefined));
     return promise;
   }
 
@@ -1164,7 +1164,7 @@ static ant_value_t rl_async_iter_return(ant_params_t) {
     else rl_async_iter_finish(js, state);
   }
 
-  js_resolve_promise(js, promise, js_iter_result(js, false, js_mkundef()));
+  js_resolve_promise(js, promise, js_iter_result(js, false, Ant_Value_Undefined));
   return promise;
 }
 
@@ -1271,11 +1271,11 @@ static ant_value_t rl_create_interface(ant_params_t) {
   iface->paused = false;
   iface->closed = false;
   iface->reading = false;
-  iface->pending_question_promise = js_mkundef();
+  iface->pending_question_promise = Ant_Value_Undefined;
   iface->escape_state = 0;
   iface->escape_len = 0;
   iface->last_render_rows = 1;
-  iface->js_obj = js_mkundef();
+  iface->js_obj = Ant_Value_Undefined;
 #ifndef _WIN32
   iface->raw_mode = false;
 #endif
@@ -1284,7 +1284,7 @@ static ant_value_t rl_create_interface(ant_params_t) {
   iface->output_stream = js_get(js, options, "output");
   
   ant_value_t terminal_val = js_get(js, options, "terminal");
-  iface->terminal = terminal_val == js_true || vtype(terminal_val) == kTypeUndefined;
+  iface->terminal = terminal_val == Ant_Value_True || vtype(terminal_val) == kTypeUndefined;
   iface->should_echo = is_special_object(iface->output_stream);
   
   ant_value_t history_size_val = js_get(js, options, "historySize");
@@ -1313,7 +1313,7 @@ static ant_value_t rl_create_interface(ant_params_t) {
   
   ant_value_t completer_val = js_get(js, options, "completer");
   int ctype = vtype(completer_val);
-  iface->completer = (ctype == kTypeFunction || ctype == kTypeBuiltin) ? completer_val : js_mkundef();
+  iface->completer = (ctype == kTypeFunction || ctype == kTypeBuiltin) ? completer_val : Ant_Value_Undefined;
   
   ant_value_t history_val = js_get(js, options, "history");
   if (is_special_object(history_val)) {
@@ -1351,7 +1351,7 @@ static ant_value_t rl_create_interface(ant_params_t) {
 }
 
 static ant_value_t rl_create_interface_promises(ant_params_t) {
-  ant_value_t iface_obj = rl_create_interface(js, args, nargs, js_mkundef(), call_this, call_func);
+  ant_value_t iface_obj = rl_create_interface(js, args, nargs, Ant_Value_Undefined, call_this, call_func);
   if (vtype(iface_obj) == kTypeError) return iface_obj;
   js_set(js, iface_obj, "question", Ant_Function_Create(rl_interface_question_promise));
   

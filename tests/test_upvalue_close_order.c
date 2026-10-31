@@ -62,7 +62,7 @@ static void activation_order(void) {
   ant_value_t slots[64] = {0};
   ant_value_t saved[2] = {0};
   sv_frame_t frames[4] = {0};
-  sv_frame_t saved_frame = {.bp = saved, .lp = saved + 1, .arguments_obj = js_mkundef()};
+  sv_frame_t saved_frame = {.bp = saved, .lp = saved + 1, .arguments_obj = Ant_Value_Undefined};
   sv_upvalue_t outer = {.location = slots + 17};
   sv_upvalue_t native = {.location = slots + 60, .next = &outer};
   sv_upvalue_t a = {.location = saved};

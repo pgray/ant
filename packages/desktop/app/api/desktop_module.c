@@ -30,7 +30,7 @@ ant_value_t DesktopLibrary(ant_t *js) {
   state->js = js;
   state->ready = true;
   state->window_objects = Ant_Object_CreateBare(js);
-  state->application_menu = js_mkundef();
+  state->application_menu = Ant_Value_Undefined;
 
   ant_value_t app = Ant_Object_CreateBare(js);
   state->app = app;
@@ -71,7 +71,7 @@ ant_value_t DesktopLibrary(ant_t *js) {
   js_set(js, bindings, "handlers", state->ipc_handlers);
   js_set(js, bindings, "listeners", state->ipc_listeners);
   js_set(js, bindings, "reply", Ant_Function_Create(DesktopNativeIpcReply));
-  ant_value_t bridge = ant_desktop_call_function(js, bridge_factory, js_mkundef(), &bindings, 1);
+  ant_value_t bridge = ant_desktop_call_function(js, bridge_factory, Ant_Value_Undefined, &bindings, 1);
   if (is_err(bridge)) { return js_mkerr(js, "desktop IPC bridge initialization failed: %s", js_str(js, bridge)); }
   state->encode = js_get(js, bridge, "encode");
   state->dispatch = js_get(js, bridge, "dispatch");

@@ -789,7 +789,7 @@ static ant_value_t process_plan_make_result(
   js_set(js, result, "exitCode", Ant_Value_FromNumber((double)exit_code));
   const char *signal_name = process_signal_name(signal);
   js_set(js, result, "signalCode", signal_name
-    ? js_mkstr(js, signal_name, strlen(signal_name)) : js_mknull());
+    ? js_mkstr(js, signal_name, strlen(signal_name)) : Ant_Value_Null);
   js_set(js, result, "exited", js_bool(exited));
   GC_ROOT_RESTORE(js, root_mark);
   return result;

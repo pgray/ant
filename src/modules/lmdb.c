@@ -392,7 +392,7 @@ static ant_value_t lmdb_open(ant_params_t) {
     return js_mkerr(js, "lmdb.open path cannot be empty");
   }
 
-  ant_value_t options = nargs > 1 ? args[1] : js_mkundef();
+  ant_value_t options = nargs > 1 ? args[1] : Ant_Value_Undefined;
 
   bool read_only = option_bool(js, options, "readOnly", false);
   bool no_subdir = option_bool(js, options, "noSubdir", false);
@@ -474,7 +474,7 @@ static ant_value_t lmdb_env_open_db(ant_params_t) {
 
   const char *name = NULL;
   size_t name_len = 0;
-  ant_value_t options = js_mkundef();
+  ant_value_t options = Ant_Value_Undefined;
 
   if (nargs > 0 && vtype(args[0]) == kTypeString) {
     name = js_getstr(js, args[0], &name_len);
@@ -542,7 +542,7 @@ static ant_value_t lmdb_env_begin_txn(ant_params_t) {
   lmdb_env_handle_t *env = get_env_handle(js, call_this, true);
   if (!env) return js_mkerr(js, "Invalid or closed LMDB env");
 
-  ant_value_t options = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t options = nargs > 0 ? args[0] : Ant_Value_Undefined;
   bool read_only = option_bool(js, options, "readOnly", env->read_only);
 
   if (env->read_only && !read_only) {
@@ -580,7 +580,7 @@ static ant_value_t lmdb_env_close_method(ant_params_t) {
 
   env_handle_close(js, env);
   unregister_env_ref_by_obj(js, call_this);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t lmdb_env_sync_method(ant_params_t) {
@@ -592,7 +592,7 @@ static ant_value_t lmdb_env_sync_method(ant_params_t) {
 
   int rc = mdb_env_sync(env->env, force ? 1 : 0);
   if (rc != 0) return js_mkerr(js, "lmdb_env_sync failed: %s", mdb_strerror(rc));
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t lmdb_env_stat_method(ant_params_t) {
@@ -654,7 +654,7 @@ static ant_value_t lmdb_txn_get_impl(ant_native_params_t, ant_value_t call_this,
 
   MDB_val value;
   int rc = mdb_get(txn->txn, db->dbi, &key, &value);
-  if (rc == MDB_NOTFOUND) return js_mkundef();
+  if (rc == MDB_NOTFOUND) return Ant_Value_Undefined;
   if (rc != 0) return js_mkerr(js, "lmdb_get failed: %s", mdb_strerror(rc));
 
   return mdb_val_to_js(js, &value, as_string);
@@ -693,7 +693,7 @@ static ant_value_t lmdb_txn_put(ant_params_t) {
   if (!js_to_mdb_val(js, args[1], &key)) return js_mkerr(js, "LMDB key must be string, ArrayBuffer, or TypedArray");
   if (!js_to_mdb_val(js, args[2], &value)) return js_mkerr(js, "LMDB value must be string, ArrayBuffer, or TypedArray");
 
-  ant_value_t options = nargs > 3 ? args[3] : js_mkundef();
+  ant_value_t options = nargs > 3 ? args[3] : Ant_Value_Undefined;
   unsigned int flags = 0;
   if (option_bool(js, options, "noOverwrite", false)) flags |= MDB_NOOVERWRITE;
   if (option_bool(js, options, "noDupData", false)) flags |= MDB_NODUPDATA;
@@ -701,9 +701,9 @@ static ant_value_t lmdb_txn_put(ant_params_t) {
   if (option_bool(js, options, "appendDup", false)) flags |= MDB_APPENDDUP;
 
   int rc = mdb_put(txn->txn, db->dbi, &key, &value, flags);
-  if (rc == MDB_KEYEXIST) return js_false;
+  if (rc == MDB_KEYEXIST) return Ant_Value_False;
   if (rc != 0) return js_mkerr(js, "lmdb_put failed: %s", mdb_strerror(rc));
-  return js_true;
+  return Ant_Value_True;
 }
 
 static ant_value_t lmdb_txn_del(ant_params_t) {
@@ -728,9 +728,9 @@ static ant_value_t lmdb_txn_del(ant_params_t) {
   }
 
   int rc = mdb_del(txn->txn, db->dbi, &key, value_ptr);
-  if (rc == MDB_NOTFOUND) return js_false;
+  if (rc == MDB_NOTFOUND) return Ant_Value_False;
   if (rc != 0) return js_mkerr(js, "lmdb_del failed: %s", mdb_strerror(rc));
-  return js_true;
+  return Ant_Value_True;
 }
 
 static ant_value_t lmdb_txn_commit(ant_params_t) {
@@ -746,7 +746,7 @@ static ant_value_t lmdb_txn_commit(ant_params_t) {
   unregister_txn_ref_by_obj(js, call_this);
 
   if (rc != 0) return js_mkerr(js, "lmdb_txn_commit failed: %s", mdb_strerror(rc));
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t lmdb_txn_abort(ant_params_t) {
@@ -754,7 +754,7 @@ static ant_value_t lmdb_txn_abort(ant_params_t) {
   if (!txn) return js_mkerr(js, "Invalid LMDB transaction");
   if (txn->closed || !txn->txn) {
     unregister_txn_ref_by_obj(js, call_this);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   mdb_txn_abort(txn->txn);
@@ -762,7 +762,7 @@ static ant_value_t lmdb_txn_abort(ant_params_t) {
   txn->closed = true;
   if (txn->env) list_remove_txn(txn->env, txn);
   unregister_txn_ref_by_obj(js, call_this);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t lmdb_db_get_impl(ant_native_params_t, ant_value_t call_this, bool as_string) {
@@ -784,7 +784,7 @@ static ant_value_t lmdb_db_get_impl(ant_native_params_t, ant_value_t call_this, 
   rc = mdb_get(txn, db->dbi, &key, &value);
   if (rc == MDB_NOTFOUND) {
     mdb_txn_abort(txn);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
   if (rc != 0) {
     mdb_txn_abort(txn);
@@ -830,7 +830,7 @@ static ant_value_t lmdb_db_put(ant_params_t) {
     return js_mkerr(js, "LMDB key/value must be string, ArrayBuffer, or TypedArray");
   }
 
-  ant_value_t options = nargs > 2 ? args[2] : js_mkundef();
+  ant_value_t options = nargs > 2 ? args[2] : Ant_Value_Undefined;
   unsigned int flags = 0;
   if (option_bool(js, options, "noOverwrite", false)) flags |= MDB_NOOVERWRITE;
   if (option_bool(js, options, "noDupData", false)) flags |= MDB_NODUPDATA;
@@ -840,7 +840,7 @@ static ant_value_t lmdb_db_put(ant_params_t) {
   rc = mdb_put(txn, db->dbi, &key, &value, flags);
   if (rc == MDB_KEYEXIST) {
     mdb_txn_abort(txn);
-    return js_false;
+    return Ant_Value_False;
   }
   if (rc != 0) {
     mdb_txn_abort(txn);
@@ -849,7 +849,7 @@ static ant_value_t lmdb_db_put(ant_params_t) {
 
   rc = mdb_txn_commit(txn);
   if (rc != 0) return js_mkerr(js, "lmdb_txn_commit failed: %s", mdb_strerror(rc));
-  return js_true;
+  return Ant_Value_True;
 }
 
 static ant_value_t lmdb_db_del(ant_params_t) {
@@ -881,7 +881,7 @@ static ant_value_t lmdb_db_del(ant_params_t) {
   rc = mdb_del(txn, db->dbi, &key, value_ptr);
   if (rc == MDB_NOTFOUND) {
     mdb_txn_abort(txn);
-    return js_false;
+    return Ant_Value_False;
   }
   if (rc != 0) {
     mdb_txn_abort(txn);
@@ -890,7 +890,7 @@ static ant_value_t lmdb_db_del(ant_params_t) {
 
   rc = mdb_txn_commit(txn);
   if (rc != 0) return js_mkerr(js, "lmdb_txn_commit failed: %s", mdb_strerror(rc));
-  return js_true;
+  return Ant_Value_True;
 }
 
 static ant_value_t lmdb_db_clear(ant_params_t) {
@@ -910,7 +910,7 @@ static ant_value_t lmdb_db_clear(ant_params_t) {
 
   rc = mdb_txn_commit(txn);
   if (rc != 0) return js_mkerr(js, "lmdb_txn_commit failed: %s", mdb_strerror(rc));
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t lmdb_db_drop(ant_params_t) {
@@ -943,7 +943,7 @@ static ant_value_t lmdb_db_drop(ant_params_t) {
     if (db->env) list_remove_db(db->env, db);
     unregister_db_ref_by_obj(js, call_this);
   }
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t lmdb_db_close(ant_params_t) {
@@ -953,7 +953,7 @@ static ant_value_t lmdb_db_close(ant_params_t) {
   if (!db) return js_mkerr(js, "Invalid LMDB database handle");
   if (db->closed) {
     unregister_db_ref_by_obj(js, call_this);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (db->env && !db->env->closed) {
@@ -963,7 +963,7 @@ static ant_value_t lmdb_db_close(ant_params_t) {
 
   db->closed = true;
   unregister_db_ref_by_obj(js, call_this);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t lmdb_strerror_fn(ant_params_t) {

@@ -208,7 +208,7 @@ static void lp_assign_slice(lp_state_t *st, int field, lp_slice_t s) {
 
 static ant_value_t lp_current(lp_state_t *st, int field, const char *name) {
   if (st->assigned & (1u << field)) return st->values[field];
-  if (!is_object_type(st->target)) return js_mkundef();
+  if (!is_object_type(st->target)) return Ant_Value_Undefined;
   return js_get(st->js, st->target, name);
 }
 
@@ -235,7 +235,7 @@ static lp_slice_t lp_string_slice(ant_t *js, ant_value_t value) {
 
 static ant_value_t lp_null_proto_object(ant_t *js) {
   ant_value_t obj = Ant_Object_CreateBare(js);
-  js_set_proto_init(obj, js_mknull());
+  js_set_proto_init(obj, Ant_Value_Null);
   return obj;
 }
 
@@ -313,7 +313,7 @@ static ant_value_t lp_parse_simple(lp_state_t *st, lp_slice_t rest, size_t pathn
     lp_assign_slice(st, LP_QUERY, lp_sub(rest, pathname_end + 1, rest.len));
     if (parse_query) flags |= LP_FLAG_PARSE_QUERY;
   } else if (parse_query) {
-    lp_assign(st, LP_SEARCH, js_mknull());
+    lp_assign(st, LP_SEARCH, Ant_Value_Null);
     lp_assign(st, LP_QUERY, lp_null_proto_object(st->js));
   }
 
@@ -435,7 +435,7 @@ static ant_value_t lp_parse_host(lp_state_t *st, lp_slice_t *rest_io) {
   }
 
   *rest_io = rest;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t lp_parse(lp_state_t *st, ant_value_t input, bool parse_query, bool slashes_denote_host) {
@@ -490,7 +490,7 @@ static ant_value_t lp_parse(lp_state_t *st, ant_value_t input, bool parse_query,
     slashes = rest.len >= 2 && rest.ptr[0] == '/' && rest.ptr[1] == '/';
     if (slashes && !lp_is_hostless(lower_proto)) {
       rest = lp_sub(rest, 2, rest.len);
-      lp_assign(st, LP_SLASHES, js_true);
+      lp_assign(st, LP_SLASHES, Ant_Value_True);
     }
   }
 
@@ -528,7 +528,7 @@ static ant_value_t lp_parse(lp_state_t *st, ant_value_t input, bool parse_query,
     lp_assign_slice(st, LP_QUERY, lp_sub(rest, (size_t)question_idx + 1, search_end));
     if (parse_query) flags |= LP_FLAG_PARSE_QUERY;
   } else if (parse_query) {
-    lp_assign(st, LP_SEARCH, js_mknull());
+    lp_assign(st, LP_SEARCH, Ant_Value_Null);
     lp_assign(st, LP_QUERY, lp_null_proto_object(js));
   }
 
@@ -557,11 +557,11 @@ static ant_value_t lp_parse(lp_state_t *st, ant_value_t input, bool parse_query,
 }
 
 static ant_value_t builtin_legacy_url_parse(ant_params_t) {
-  ant_value_t input = nargs > 1 ? args[1] : js_mkundef();
+  ant_value_t input = nargs > 1 ? args[1] : Ant_Value_Undefined;
   if (vtype(input) != kTypeString) return js_mkerr_typed(js, JS_ERR_TYPE, "url must be a string");
 
-  lp_state_t st = { .js = js, .target = nargs > 0 ? args[0] : js_mkundef(), .hostname_truthy = -1 };
-  for (int i = 0; i < LP_FIELD_COUNT; i++) st.values[i] = js_mkundef();
+  lp_state_t st = { .js = js, .target = nargs > 0 ? args[0] : Ant_Value_Undefined, .hostname_truthy = -1 };
+  for (int i = 0; i < LP_FIELD_COUNT; i++) st.values[i] = Ant_Value_Undefined;
 
   ant_value_t result = lp_parse(&st, input, nargs > 2 && js_truthy(js, args[2]), nargs > 3 && js_truthy(js, args[3]));
   for (size_t i = 0; i < sizeof(st.bufs) / sizeof(st.bufs[0]); i++) free(st.bufs[i].buf);

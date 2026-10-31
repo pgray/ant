@@ -182,7 +182,7 @@ static void sandbox_guest_deliver_message(sandbox_guest_port_t *port, const void
   if (!is_callable(handler)) return;
 
   ant_value_t args[1] = { message };
-  sv_vm_call(js->vm, js, handler, port->obj, args, 1, NULL, js_mkundef());
+  sv_vm_call(js->vm, js, handler, port->obj, args, 1, NULL, Ant_Value_Undefined);
   js_maybe_drain_microtasks_after_async_settle(js);
 }
 
@@ -264,7 +264,7 @@ static ant_value_t sandbox_guest_send(ant_params_t) {
   const char *payload = js_getstr(js, encoded, &len);
   if (!payload || !ant_sandbox_transport_send_frame(ANT_SANDBOX_FRAME_MESSAGE, payload, len))
     return js_mkerr(js, "failed to send sandbox message");
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t sandbox_guest_on(ant_params_t) {
@@ -280,14 +280,14 @@ static ant_value_t sandbox_guest_on(ant_params_t) {
 static ant_value_t sandbox_guest_close(ant_params_t) {
   (void)js; (void)args; (void)nargs;
   sandbox_guest_port_close(&g_guest_port);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t sandbox_guest_parent_port(ant_t *js) {
-  if (!ant_sandbox_is_guest_process()) return js_mkundef();
+  if (!ant_sandbox_is_guest_process()) return Ant_Value_Undefined;
   ant_t *owner = NULL;
   
-  if (!atomic_compare_exchange_strong(&g_guest_port_owner, &owner, js) && owner != js) return js_mkundef();
+  if (!atomic_compare_exchange_strong(&g_guest_port_owner, &owner, js) && owner != js) return Ant_Value_Undefined;
   if (g_guest_port.js == js && is_object_type(g_guest_port.obj)) return g_guest_port.obj;
 
   memset(&g_guest_port, 0, sizeof(g_guest_port));
@@ -296,7 +296,7 @@ static ant_value_t sandbox_guest_parent_port(ant_t *js) {
   js_set(js, g_guest_port.obj, "send", Ant_Function_CreateWithArity(sandbox_guest_send, 1));
   js_set(js, g_guest_port.obj, "on", Ant_Function_CreateWithArity(sandbox_guest_on, 2));
   js_set(js, g_guest_port.obj, "close", Ant_Function_Create(sandbox_guest_close));
-  js_set(js, g_guest_port.obj, "onmessage", js_mkundef());
+  js_set(js, g_guest_port.obj, "onmessage", Ant_Value_Undefined);
 
 #ifndef _WIN32
   int fd = ant_sandbox_transport_fd();
@@ -466,7 +466,7 @@ static ant_value_t sandbox_allow_host_value(ant_t *js, sandbox_state_t *state, a
 
   if (ant_sandbox_launch_allow_host(&state->launch, ports, error, sizeof(error)) != 0)
     return js_mkerr_typed(js, JS_ERR_TYPE, "%s", error[0] ? error : "invalid allowHost option");
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t sandbox_apply_network_options(ant_t *js, sandbox_state_t *state, ant_value_t opts) {
@@ -487,7 +487,7 @@ static ant_value_t sandbox_apply_network_options(ant_t *js, sandbox_state_t *sta
   ant_value_t allow_lan = js_get(js, opts, "allowLan");
   if (vtype(allow_lan) != kTypeUndefined && vtype(allow_lan) != kTypeNull)
     state->launch.allow_lan = js_truthy(js, allow_lan);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t sandbox_apply_string_list_option(
@@ -496,17 +496,17 @@ static ant_value_t sandbox_apply_string_list_option(
   void *udata, const char *type_name
 ) {
   ant_value_t value = js_get(js, opts, key);
-  ant_value_t error = js_mkundef();
+  ant_value_t error = Ant_Value_Undefined;
   
   int rc = sandbox_for_each_string(js, value, type_name, cb, udata, &error);
-  if (rc == 0) return js_mkundef();
+  if (rc == 0) return Ant_Value_Undefined;
   if (vtype(error) != kTypeUndefined) return error;
   
   return js_mkerr_typed(js, JS_ERR_TYPE, "invalid %s option", key);
 }
 
 static ant_value_t sandbox_apply_options(ant_t *js, sandbox_state_t *state, ant_value_t opts) {
-  if (vtype(opts) == kTypeUndefined || vtype(opts) == kTypeNull) return js_mkundef();
+  if (vtype(opts) == kTypeUndefined || vtype(opts) == kTypeNull) return Ant_Value_Undefined;
 
   if (vtype(opts) == kTypeString) {
     sandbox_mount_parse_t mount_ctx = { .state = state, .readonly = true };
@@ -516,7 +516,7 @@ static ant_value_t sandbox_apply_options(ant_t *js, sandbox_state_t *state, ant_
     int rc = sandbox_add_mount_option(js, opts_str, &mount_ctx);
     if (rc != 0) return js_mkerr_typed(js, JS_ERR_TYPE, "%s", mount_ctx.error[0] ? mount_ctx.error : "invalid mount option");
     
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (!is_object_type(opts)) return js_mkerr_typed(js, JS_ERR_TYPE, "Sandbox options must be an object");
@@ -656,7 +656,7 @@ static ant_value_t sandbox_apply_options(ant_t *js, sandbox_state_t *state, ant_
     } else return js_mkerr_typed(js, JS_ERR_TYPE, "color must be 'auto', 'force', 'strip', or 'preserve'");
   }
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t sandbox_ctor(ant_params_t) {
@@ -669,9 +669,9 @@ static ant_value_t sandbox_ctor(ant_params_t) {
   sandbox_state_t *state = calloc(1, sizeof(*state));
   if (!state) return Ant_Error_CreateOutOfMemory(js);
   state->js = js;
-  state->self = js_mkundef();
-  state->run_promise = js_mkundef();
-  state->close_promise = js_mkundef();
+  state->self = Ant_Value_Undefined;
+  state->run_promise = Ant_Value_Undefined;
+  state->close_promise = Ant_Value_Undefined;
   if (pthread_mutex_init(&state->mutex, NULL) != 0) {
     free(state);
     return js_mkerr(js, "failed to initialize Sandbox");
@@ -691,7 +691,7 @@ static ant_value_t sandbox_ctor(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "%s", err[0] ? err : "Failed to resolve sandbox assets");
   }
 
-  ant_value_t result = sandbox_apply_options(js, state, nargs > 0 ? args[0] : js_mkundef());
+  ant_value_t result = sandbox_apply_options(js, state, nargs > 0 ? args[0] : Ant_Value_Undefined);
   if (is_err(result)) {
     sandbox_state_destroy(state);
     return result;
@@ -761,7 +761,7 @@ static bool sandbox_capture_frame(uint8_t type, const void *payload, size_t payl
   if (!capture || !capture->js) return false;
 
   if (type == ANT_SANDBOX_FRAME_RESULT) {
-    ant_value_t result = js_mkundef();
+    ant_value_t result = Ant_Value_Undefined;
     if (ant_sandbox_decode_result_value(capture->js, payload, payload_len, &result)) {
       capture->result = result;
       capture->has_result = true;
@@ -902,8 +902,8 @@ static ant_value_t sandbox_execute_request(
 
   sandbox_frame_capture_t capture = {
     .js = js,
-    .result = js_mkundef(),
-    .error = js_mkundef(),
+    .result = Ant_Value_Undefined,
+    .error = Ant_Value_Undefined,
   };
 
   ant_sandbox_vm_request_t vm_request = {
@@ -932,7 +932,7 @@ static ant_value_t sandbox_execute_request(
   else if (rc != 0)
     js_reject_promise(js, promise, sandbox_vm_result_error(js, &vm_result, rc));
   else if (expect_result)
-    js_resolve_promise(js, promise, capture.has_result ? capture.result : js_mkundef());
+    js_resolve_promise(js, promise, capture.has_result ? capture.result : Ant_Value_Undefined);
   else js_resolve_promise(js, promise, Ant_Value_FromNumber(0));
     
   GC_ROOT_RESTORE(js, root_mark);
@@ -955,7 +955,7 @@ static void sandbox_host_deliver_message(sandbox_state_t *state, const char *pay
     sandbox_message_waiter_t *waiter = *link;
     bool matches = waiter->type == NULL;
     if (waiter->type) {
-      ant_value_t type = is_object_type(message) ? js_get(js, message, "type") : js_mkundef();
+      ant_value_t type = is_object_type(message) ? js_get(js, message, "type") : Ant_Value_Undefined;
       if (vtype(type) == kTypeString) {
         const char *value = js_getstr(js, type, NULL);
         matches = value && strcmp(value, waiter->type) == 0;
@@ -980,7 +980,7 @@ static void sandbox_host_deliver_message(sandbox_state_t *state, const char *pay
   if (!is_callable(handler)) handler = js_get(js, state->self, "_messageHandler");
   if (!is_callable(handler)) return;
   ant_value_t args[1] = { message };
-  sv_vm_call(js->vm, js, handler, state->self, args, 1, NULL, js_mkundef());
+  sv_vm_call(js->vm, js, handler, state->self, args, 1, NULL, Ant_Value_Undefined);
 }
 
 static void sandbox_finish_waiters(sandbox_state_t *state) {
@@ -994,7 +994,7 @@ static void sandbox_finish_waiters(sandbox_state_t *state) {
     sandbox_message_waiter_t *next = waiter->next;
 
     if (waiter->iterator)
-      js_resolve_promise(js, waiter->promise, js_iter_result(js, false, js_mkundef()));
+      js_resolve_promise(js, waiter->promise, js_iter_result(js, false, Ant_Value_Undefined));
     else
       js_reject_promise(js, waiter->promise, Ant_Error_Create(js, JS_ERR_TYPE, "Sandbox message channel closed"));
 
@@ -1090,7 +1090,7 @@ static void sandbox_async_cb(uv_async_t *handle) {
       js_reject_promise(js, state->run_promise, sandbox_vm_result_error(js, &state->run_result, state->run_rc));
     else js_resolve_promise(js, state->run_promise, Ant_Value_FromNumber(0));
     state->has_run_promise = false;
-    state->run_promise = js_mkundef();
+    state->run_promise = Ant_Value_Undefined;
   }
 
   if (state->close_requested) {
@@ -1112,10 +1112,10 @@ static void sandbox_async_cb(uv_async_t *handle) {
     state->session = NULL;
     ant_sandbox_launch_options_cleanup(&state->launch);
     if (state->has_close_promise) {
-      if (close_rc == 0) js_resolve_promise(js, state->close_promise, js_mkundef());
+      if (close_rc == 0) js_resolve_promise(js, state->close_promise, Ant_Value_Undefined);
       else js_reject_promise(js, state->close_promise, sandbox_vm_result_error(js, &close_result, close_rc));
       state->has_close_promise = false;
-      state->close_promise = js_mkundef();
+      state->close_promise = Ant_Value_Undefined;
     }
   }
 
@@ -1125,7 +1125,7 @@ static void sandbox_async_cb(uv_async_t *handle) {
 }
 
 static ant_value_t sandbox_run(ant_params_t) {
-  ant_value_t state_error = js_mkundef();
+  ant_value_t state_error = Ant_Value_Undefined;
   sandbox_state_t *state = sandbox_require_open_state(js, call_this, &state_error);
   
   if (!state) return sandbox_rejected(js, state_error);
@@ -1231,7 +1231,7 @@ static ant_value_t sandbox_run(ant_params_t) {
 }
 
 static ant_value_t sandbox_eval(ant_params_t) {
-  ant_value_t state_error = js_mkundef();
+  ant_value_t state_error = Ant_Value_Undefined;
   sandbox_state_t *state = sandbox_require_open_state(js, call_this, &state_error);
   
   if (!state) return sandbox_rejected(js, state_error);
@@ -1254,7 +1254,7 @@ static ant_value_t sandbox_close(ant_params_t) {
   ant_value_t promise = js_mkpromise(js);
   
   if (!state || state->closed) {
-    js_resolve_promise(js, promise, js_mkundef());
+    js_resolve_promise(js, promise, Ant_Value_Undefined);
     return promise;
   }
 
@@ -1281,7 +1281,7 @@ static ant_value_t sandbox_close(ant_params_t) {
   if (!state->session) {
     sandbox_finish_waiters(state);
     ant_sandbox_launch_options_cleanup(&state->launch);
-    js_resolve_promise(js, promise, js_mkundef());
+    js_resolve_promise(js, promise, Ant_Value_Undefined);
     return promise;
   }
 
@@ -1316,7 +1316,7 @@ static ant_value_t sandbox_close(ant_params_t) {
   sandbox_finish_waiters(state);
   ant_sandbox_launch_options_cleanup(&state->launch);
 
-  if (rc == 0) js_resolve_promise(js, promise, js_mkundef());
+  if (rc == 0) js_resolve_promise(js, promise, Ant_Value_Undefined);
   else js_reject_promise(js, promise, sandbox_vm_result_error(js, &vm_result, rc));
   
   return promise;
@@ -1339,7 +1339,7 @@ static ant_value_t sandbox_send(ant_params_t) {
   int rc = ant_sandbox_vm_session_send(state->session, frame, frame_len);
   free(frame);
   if (rc != 0) return js_mkerr(js, "failed to send sandbox message");
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t sandbox_wait_for_message(
@@ -1348,7 +1348,7 @@ static ant_value_t sandbox_wait_for_message(
   ant_value_t promise = js_mkpromise(js);
   if (!state || state->closed) {
     if (iterator)
-      js_resolve_promise(js, promise, js_iter_result(js, false, js_mkundef()));
+      js_resolve_promise(js, promise, js_iter_result(js, false, Ant_Value_Undefined));
     else js_reject_promise(
       js, promise,
       Ant_Error_Create(js, JS_ERR_TYPE, "Sandbox message channel is closed")
@@ -1357,7 +1357,7 @@ static ant_value_t sandbox_wait_for_message(
   }
   if (!state->running) {
     if (iterator)
-      js_resolve_promise(js, promise, js_iter_result(js, false, js_mkundef()));
+      js_resolve_promise(js, promise, js_iter_result(js, false, Ant_Value_Undefined));
     else
       js_reject_promise(js, promise, js_mkerr_typed(js, JS_ERR_TYPE, "Sandbox message channel requires a running entry"));
     return promise;
@@ -1445,7 +1445,7 @@ static ant_value_t sandbox_terminate(ant_params_t) {
   ant_value_t promise = js_mkpromise(js);
   
   if (!state || state->closed) {
-    js_resolve_promise(js, promise, js_mkundef());
+    js_resolve_promise(js, promise, Ant_Value_Undefined);
     return promise;
   }
 
@@ -1466,7 +1466,7 @@ static ant_value_t sandbox_terminate(ant_params_t) {
 
   sandbox_finish_waiters(state);
 
-  if (rc == 0) js_resolve_promise(js, promise, js_mkundef()); else {
+  if (rc == 0) js_resolve_promise(js, promise, Ant_Value_Undefined); else {
     ant_sandbox_vm_result_t result = {
       .kind = rc == -ENOSYS ? ANT_SANDBOX_VM_RESULT_BACKEND_UNAVAILABLE : ANT_SANDBOX_VM_RESULT_CANCELED,
       .code = rc,

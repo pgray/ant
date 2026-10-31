@@ -42,11 +42,11 @@ static void tds_state_finalize(ant_t *js, ant_object_t *obj) {
 }
 
 static ant_value_t codec_transform_controller(ant_args_t) {
-  return (nargs > 1) ? args[1] : js_mkundef();
+  return (nargs > 1) ? args[1] : Ant_Value_Undefined;
 }
 
 static ant_value_t codec_flush_controller(ant_args_t) {
-  return (nargs > 0) ? args[0] : js_mkundef();
+  return (nargs > 0) ? args[0] : Ant_Value_Undefined;
 }
 
 static ant_value_t tes_transform(ant_params_t) {
@@ -54,7 +54,7 @@ static ant_value_t tes_transform(ant_params_t) {
   
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid TextEncoderStream");
   ant_value_t ctrl_obj = codec_transform_controller(args, nargs);
-  ant_value_t chunk = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t chunk = (nargs > 0) ? args[0] : Ant_Value_Undefined;
   
   size_t str_len = 0;
   const char *str = NULL;
@@ -71,7 +71,7 @@ static ant_value_t tes_transform(ant_params_t) {
   const uint8_t *s = (const uint8_t *)str;
   size_t total = st->pending_len + str_len;
 
-  if (total == 0) return js_mkundef();
+  if (total == 0) return Ant_Value_Undefined;
 
   uint8_t *buf = malloc(total);
   if (!buf) return Ant_Error_CreateOutOfMemory(js);
@@ -97,7 +97,7 @@ static ant_value_t tes_transform(ant_params_t) {
 
   if (out_len == 0) {
     free(buf);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   uint8_t *out = malloc(out_len * 4 / 3 + 4);
@@ -153,7 +153,7 @@ static ant_value_t tes_flush(ant_params_t) {
     return ts_ctrl_enqueue(js, ctrl_obj, result);
   }
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_tes_get_encoding(ant_params_t) {
@@ -191,7 +191,7 @@ static ant_value_t js_tes_ctor(ant_params_t) {
   js_set(js, transformer, "transform", transform_fn);
   js_set(js, transformer, "flush", flush_fn);
 
-  ant_value_t ts_obj = ts_create(js, transformer, js_mkundef(), js_mkundef(), js_mkundef());
+  ant_value_t ts_obj = ts_create(js, transformer, Ant_Value_Undefined, Ant_Value_Undefined, Ant_Value_Undefined);
   if (is_err(ts_obj)) { 
     free(st); 
     return ts_obj; 
@@ -210,7 +210,7 @@ static ant_value_t tds_transform(ant_params_t) {
   if (!st) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid TextDecoderStream");
   ant_value_t ctrl_obj = codec_transform_controller(args, nargs);
 
-  ant_value_t chunk = (nargs > 0) ? args[0] : js_mkundef();
+  ant_value_t chunk = (nargs > 0) ? args[0] : Ant_Value_Undefined;
   const uint8_t *input = NULL;
   size_t input_len = 0;
 
@@ -228,7 +228,7 @@ static ant_value_t tds_transform(ant_params_t) {
     return ts_ctrl_enqueue(js, ctrl_obj, result);
   }
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t tds_flush(ant_params_t) {
@@ -248,7 +248,7 @@ static ant_value_t tds_flush(ant_params_t) {
     return ts_ctrl_enqueue(js, ctrl_obj, result);
   }
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_tds_get_encoding(ant_params_t) {
@@ -265,12 +265,12 @@ static ant_value_t js_tds_get_encoding(ant_params_t) {
 
 static ant_value_t js_tds_get_fatal(ant_params_t) {
   td_state_t *st = (td_state_t *)js_get_native(call_this, TDS_NATIVE_TAG);
-  return (st && st->fatal) ? js_true : js_false;
+  return (st && st->fatal) ? Ant_Value_True : Ant_Value_False;
 }
 
 static ant_value_t js_tds_get_ignore_bom(ant_params_t) {
   td_state_t *st = (td_state_t *)js_get_native(call_this, TDS_NATIVE_TAG);
-  return (st && st->ignore_bom) ? js_true : js_false;
+  return (st && st->ignore_bom) ? Ant_Value_True : Ant_Value_False;
 }
 
 static ant_value_t js_tds_get_readable(ant_params_t) {
@@ -362,7 +362,7 @@ static ant_value_t js_tds_ctor(ant_params_t) {
   js_set(js, transformer, "transform", transform_fn);
   js_set(js, transformer, "flush", flush_fn);
 
-  ant_value_t ts_obj = ts_create(js, transformer, js_mkundef(), js_mkundef(), js_mkundef());
+  ant_value_t ts_obj = ts_create(js, transformer, Ant_Value_Undefined, Ant_Value_Undefined, Ant_Value_Undefined);
   if (is_err(ts_obj)) { 
     free(st); 
     return ts_obj; 

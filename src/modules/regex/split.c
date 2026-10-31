@@ -45,7 +45,7 @@ static ant_value_t regexp_split_fast(ant_t *js, const regexp_fast_t *fast, ant_v
     for (uint32_t i = 1; i < ovcount; i++) {
       PCRE2_SIZE capture_start = ovector[2 * i];
       ant_value_t capture = capture_start == PCRE2_UNSET
-        ? js_mkundef()
+        ? Ant_Value_Undefined
         : js_mkstr_byte_range(js, str_ptr, capture_start, ovector[2 * i + 1] - capture_start);
       if (is_err(capture)) { result = capture; goto done; }
       js_arr_push(js, result, capture);
@@ -64,17 +64,17 @@ done:
   regex_match_scope_end(&scope);
   if (fast->obj && !is_err(result)) {
     str_off = regexp_vstr(js, str, &str_len);
-    regexp_fast_set_last_index(js, js_mkundef(), fast, (double)byte_offset_to_utf16((const char *)(uintptr_t)str_off, last_index));
+    regexp_fast_set_last_index(js, Ant_Value_Undefined, fast, (double)byte_offset_to_utf16((const char *)(uintptr_t)str_off, last_index));
   }
   return result;
 }
 
 ant_value_t regexp_split_limit(ant_t *js, ant_value_t limit, uint32_t *out) {
   *out = UINT32_MAX;
-  if (vtype(limit) == kTypeUndefined) return js_mkundef();
+  if (vtype(limit) == kTypeUndefined) return Ant_Value_Undefined;
   if (vtype(limit) == kTypeNumber) {
     *out = js_to_uint32(Ant_Value_AsNumberUnchecked(limit));
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
   ant_value_t primitive = limit;
   if (is_object_type(limit) || vtype(limit) == kTypeBuiltin) {
@@ -84,7 +84,7 @@ ant_value_t regexp_split_limit(ant_t *js, ant_value_t limit, uint32_t *out) {
   if (vtype(primitive) == kTypeBigInt || vtype(primitive) == kTypeSymbol)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert value to a number");
   *out = js_to_uint32(js_to_number(js, primitive));
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 bool regexp_split_try_fast(ant_t *js, ant_value_t rx, ant_value_t str, ant_value_t limit, ant_value_t *out) {
@@ -108,7 +108,7 @@ ant_value_t builtin_regexp_symbol_split(ant_params_t) {
   if (is_err(str)) return str;
 
   ant_value_t fast_split;
-  if (regexp_split_try_fast(js, call_this, str, nargs >= 2 ? args[1] : js_mkundef(), &fast_split)) return fast_split;
+  if (regexp_split_try_fast(js, call_this, str, nargs >= 2 ? args[1] : Ant_Value_Undefined, &fast_split)) return fast_split;
 
   ant_value_t C = regexp_species_ctor(js, call_this, "RegExp.prototype[@@split]");
   if (is_err(C)) return C;
@@ -147,7 +147,7 @@ ant_value_t builtin_regexp_symbol_split(ant_params_t) {
   ant_offset_t lengthA = 0;
 
   uint32_t lim;
-  ant_value_t lim_status = regexp_split_limit(js, nargs >= 2 ? args[1] : js_mkundef(), &lim);
+  ant_value_t lim_status = regexp_split_limit(js, nargs >= 2 ? args[1] : Ant_Value_Undefined, &lim);
   if (is_err(lim_status)) return lim_status;
   if (lim == 0) return mkval(kTypeArray, vdata(A));
 

@@ -32,10 +32,10 @@ static inline int sv_literal_constant_at(sv_func_t *func, const uint8_t *ip, ant
     }
     
     case OP_CONST_I8: *value = Ant_Value_FromNumber((double)(int8_t)ip[1]); break;
-    case OP_TRUE: *value = js_true; break;
-    case OP_FALSE: *value = js_false; break;
-    case OP_NULL: *value = js_mknull(); break;
-    case OP_UNDEF: *value = js_mkundef(); break;
+    case OP_TRUE: *value = Ant_Value_True; break;
+    case OP_FALSE: *value = Ant_Value_False; break;
+    case OP_NULL: *value = Ant_Value_Null; break;
+    case OP_UNDEF: *value = Ant_Value_Undefined; break;
     default: return 0;
   }
   
@@ -56,11 +56,11 @@ static inline void sv_op_null(sv_vm_t *vm) {
 }
 
 static inline void sv_op_true(sv_vm_t *vm) {
-  vm->stack[vm->sp++] = js_true;
+  vm->stack[vm->sp++] = Ant_Value_True;
 }
 
 static inline void sv_op_false(sv_vm_t *vm) {
-  vm->stack[vm->sp++] = js_false;
+  vm->stack[vm->sp++] = Ant_Value_False;
 }
 
 static inline void sv_op_this(sv_vm_t *vm, sv_frame_t *frame) {

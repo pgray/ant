@@ -11,14 +11,14 @@ ant_value_t DesktopAppReady(ant_params_t) {
   if (!is_object_type(ready_promise)) {
     ready_promise = js_mkpromise(js);
     js_set_slot_wb(js, state->app, SLOT_DATA, ready_promise);
-    if (state->ready) js_resolve_promise(js, ready_promise, js_mkundef());
+    if (state->ready) js_resolve_promise(js, ready_promise, Ant_Value_Undefined);
   }
   return ready_promise;
 }
 
 ant_value_t DesktopAppQuit(ant_params_t) {
   ant_desktop_platform_quit();
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t DesktopAppGetPath(ant_params_t) {

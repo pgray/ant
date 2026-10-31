@@ -1060,13 +1060,13 @@ static inline ant_value_t js_func_data(ant_value_t func) {
 }
 
 static inline ant_value_t sv_closure_heap_value(ant_t *js, sv_closure_t *closure) {
-  return fixed_arena_owns(&js->closure_arena, closure) ? mkref(kTypeFunction, closure) : js_mkundef();
+  return fixed_arena_owns(&js->closure_arena, closure) ? mkref(kTypeFunction, closure) : Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_closure_eval_env(const sv_closure_t *closure) {
-  if (!closure || !(closure->call_flags & SV_CALL_HAS_EVAL_ENV) || !is_object_type(closure->func_obj)) return js_mkundef();
+  if (!closure || !(closure->call_flags & SV_CALL_HAS_EVAL_ENV) || !is_object_type(closure->func_obj)) return Ant_Value_Undefined;
   ant_value_t env = js_get_slot(closure->func_obj, SLOT_EVAL_ENV);
-  return is_object_type(env) ? env : js_mkundef();
+  return is_object_type(env) ? env : Ant_Value_Undefined;
 }
 
 static inline ant_value_t js_as_obj(ant_value_t v) {
@@ -1353,12 +1353,12 @@ static inline bool sv_is_strict_context(ant_t *js) {
 
 static inline ant_value_t sv_vm_get_new_target(const sv_vm_t *vm) {
   if (vm && vm->fp >= 0) return vm->frames[vm->fp].new_target;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_vm_get_super_val(const sv_vm_t *vm) {
   if (vm && vm->fp >= 0) return vm->frames[vm->fp].super_val;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline int sv_frame_arg_slots(const sv_frame_t *frame) {
@@ -1368,7 +1368,7 @@ static inline int sv_frame_arg_slots(const sv_frame_t *frame) {
 
 static inline ant_value_t sv_frame_get_arg_value(const sv_frame_t *frame, uint16_t idx) {
   int arg_slots = sv_frame_arg_slots(frame);
-  if (!frame || !frame->bp || (int)idx >= arg_slots) return js_mkundef();
+  if (!frame || !frame->bp || (int)idx >= arg_slots) return Ant_Value_Undefined;
   return frame->bp[idx];
 }
 

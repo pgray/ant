@@ -56,7 +56,7 @@ static bool inspector_safe_get_prop(
     if (!ptr) return false;
     if (is_proxy(current)) return false;
 
-    ant_value_t value = js_mkundef();
+    ant_value_t value = Ant_Value_Undefined;
     if (js_try_get_own_data_prop(js, current, key, key_len, &value)) {
       *out = value;
       return true;
@@ -109,7 +109,7 @@ bool inspector_eval_safe_member_expr(ant_t *js, const char *expr, size_t expr_le
       if (strcmp(key, "globalThis") == 0 || strcmp(key, "this") == 0) cur = js_glob(js);
       else if (!inspector_safe_get_binding(js, key, len, &cur)) return false;
     } else {
-      ant_value_t next = js_mkundef();
+      ant_value_t next = Ant_Value_Undefined;
       if (!inspector_safe_get_prop(js, cur, key, len, &next)) return false;
       cur = next;
     }
@@ -335,10 +335,10 @@ static bool inspector_safe_eval_ast(ant_t *js, sv_ast_t *node, ant_value_t *out)
       *out = js_bool(node->num != 0);
       return true;
     case N_NULL:
-      *out = js_mknull();
+      *out = Ant_Value_Null;
       return true;
     case N_UNDEF:
-      *out = js_mkundef();
+      *out = Ant_Value_Undefined;
       return true;
     case N_THIS:
     case N_GLOBAL_THIS:
@@ -348,7 +348,7 @@ static bool inspector_safe_eval_ast(ant_t *js, sv_ast_t *node, ant_value_t *out)
       if (!node->str || memchr(node->str, '\0', node->len)) return false;
       return inspector_safe_get_binding(js, node->str, node->len, out);
     case N_UNARY: {
-      ant_value_t value = js_mkundef();
+      ant_value_t value = Ant_Value_Undefined;
       if (!inspector_safe_eval_ast(js, node->right, &value)) return false;
       if (is_object_type(value)) return false;
       switch (node->op) {
@@ -360,14 +360,14 @@ static bool inspector_safe_eval_ast(ant_t *js, sv_ast_t *node, ant_value_t *out)
       }
     }
     case N_TYPEOF: {
-      ant_value_t value = js_mkundef();
+      ant_value_t value = Ant_Value_Undefined;
       if (!inspector_safe_eval_ast(js, node->right, &value)) return false;
       const char *type_name = typestr(vtype(value));
       *out = js_mkstr(js, type_name, strlen(type_name));
       return !is_err(*out);
     }
     case N_BINARY: {
-      ant_value_t left = js_mkundef();
+      ant_value_t left = Ant_Value_Undefined;
       if (!inspector_safe_eval_ast(js, node->left, &left)) return false;
 
       switch (node->op) {
@@ -393,7 +393,7 @@ static bool inspector_safe_eval_ast(ant_t *js, sv_ast_t *node, ant_value_t *out)
           break;
       }
 
-      ant_value_t right = js_mkundef();
+      ant_value_t right = Ant_Value_Undefined;
       if (!inspector_safe_eval_ast(js, node->right, &right)) return false;
 
       switch (node->op) {
@@ -429,7 +429,7 @@ static bool inspector_safe_eval_ast(ant_t *js, sv_ast_t *node, ant_value_t *out)
       }
     }
     case N_TERNARY: {
-      ant_value_t cond = js_mkundef();
+      ant_value_t cond = Ant_Value_Undefined;
       if (!inspector_safe_eval_ast(js, node->cond, &cond)) return false;
       return inspector_safe_eval_ast(js, js_truthy(js, cond) ? node->left : node->right, out);
     }
@@ -438,11 +438,11 @@ static bool inspector_safe_eval_ast(ant_t *js, sv_ast_t *node, ant_value_t *out)
       return inspector_safe_eval_ast(js, node->right, out);
     case N_MEMBER:
     case N_OPTIONAL: {
-      ant_value_t obj = js_mkundef();
+      ant_value_t obj = Ant_Value_Undefined;
       if (!node->left || !node->right || !inspector_safe_eval_ast(js, node->left, &obj))
         return false;
       if (node->type == N_OPTIONAL && (vtype(obj) == kTypeNull || vtype(obj) == kTypeUndefined)) {
-        *out = js_mkundef();
+        *out = Ant_Value_Undefined;
         return true;
       }
       if (vtype(obj) == kTypeNull || vtype(obj) == kTypeUndefined) return false;
@@ -451,7 +451,7 @@ static bool inspector_safe_eval_ast(ant_t *js, sv_ast_t *node, ant_value_t *out)
       const char *key = NULL;
       size_t key_len = 0;
       if (node->flags & 1) {
-        ant_value_t key_value = js_mkundef();
+        ant_value_t key_value = Ant_Value_Undefined;
         if (!inspector_safe_eval_ast(js, node->right, &key_value)) return false;
         if (!inspector_value_to_key(js, key_value, key_buf, sizeof(key_buf), &key, &key_len))
           return false;
@@ -467,7 +467,7 @@ static bool inspector_safe_eval_ast(ant_t *js, sv_ast_t *node, ant_value_t *out)
 
       for (int i = 0; i < node->args.count; i++) {
         sv_ast_t *elem = node->args.items[i];
-        ant_value_t value = js_mkundef();
+        ant_value_t value = Ant_Value_Undefined;
         if (elem && elem->type == N_SPREAD) return false;
         if (elem && elem->type != N_EMPTY && !inspector_safe_eval_ast(js, elem, &value))
           return false;
@@ -492,7 +492,7 @@ static bool inspector_safe_eval_ast(ant_t *js, sv_ast_t *node, ant_value_t *out)
         const char *key = NULL;
         size_t key_len = 0;
         if (prop->flags & FN_COMPUTED) {
-          ant_value_t key_value = js_mkundef();
+          ant_value_t key_value = Ant_Value_Undefined;
           if (!inspector_safe_eval_ast(js, prop->left, &key_value)) return false;
           if (!inspector_value_to_key(js, key_value, key_buf, sizeof(key_buf), &key, &key_len))
             return false;
@@ -500,7 +500,7 @@ static bool inspector_safe_eval_ast(ant_t *js, sv_ast_t *node, ant_value_t *out)
           return false;
         }
 
-        ant_value_t value = js_mkundef();
+        ant_value_t value = Ant_Value_Undefined;
         if (!inspector_safe_eval_ast(js, prop->right, &value)) return false;
         if (is_err(js_mkprop_fast(js, obj, key, key_len, value))) return false;
       }

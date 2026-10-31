@@ -43,7 +43,7 @@ ant_value_t ant_capture_primordials(ant_t *js) {
   if (is_err(call)) return call;
   js->primordial_values[ANT_PRIMORDIAL_CALL] = call;
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t primordial_library(ant_t *js) {
@@ -53,11 +53,11 @@ ant_value_t primordial_library(ant_t *js) {
   ant_value_t result = Ant_Object_CreateBare(js);
   
   GC_ROOT_PIN(js, result);
-  ant_value_t captured = js_mkundef();
+  ant_value_t captured = Ant_Value_Undefined;
   
   GC_ROOT_PIN(js, captured);
   if (is_err(result)) goto done;
-  js_set_proto_init(result, js_mknull());
+  js_set_proto_init(result, Ant_Value_Null);
 
   for (size_t i = 0; i < ANT_PRIMORDIAL_EXPORT_COUNT; i++) {
     captured = js->primordial_values[i];
@@ -82,7 +82,7 @@ ant_value_t primordial_library(ant_t *js) {
     }
   }
 
-  captured = builtin_object_freeze(js, &result, 1, js_mkundef(), js_mkundef(), js_mkundef());
+  captured = builtin_object_freeze(js, &result, 1, Ant_Value_Undefined, Ant_Value_Undefined, Ant_Value_Undefined);
   if (is_err(captured)) { result = captured; goto done; }
   js->primordials = result;
 done:

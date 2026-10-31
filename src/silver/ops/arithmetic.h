@@ -215,7 +215,7 @@ static __attribute__((noinline)) ant_value_t sv_op_post_update_slow(sv_vm_t *vm,
   vm->stack[vm->sp - 1] = old;
   vm->stack[vm->sp++] = next;
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline __attribute__((always_inline)) ant_value_t sv_op_post_update(sv_vm_t *vm, ant_t *js, bool increment) {
@@ -223,7 +223,7 @@ static inline __attribute__((always_inline)) ant_value_t sv_op_post_update(sv_vm
   if (vtype(old) != kTypeNumber) return sv_op_post_update_slow(vm, js, increment);
   double number = Ant_Value_AsNumberUnchecked(old);
   vm->stack[vm->sp++] = Ant_Value_FromNumber(increment ? number + 1.0 : number - 1.0);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static __attribute__((noinline)) ant_value_t sv_op_update_local_slow(ant_value_t *slot, ant_t *js, bool increment) {
@@ -239,7 +239,7 @@ static __attribute__((noinline)) ant_value_t sv_op_update_local_slow(ant_value_t
   if (vtype(old) != kTypeBigInt) {
     double number = js_to_number(js, old);
     *slot = Ant_Value_FromNumber(increment ? number + 1.0 : number - 1.0);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
   
   GC_ROOT_SAVE(mark, js);
@@ -258,7 +258,7 @@ static __attribute__((noinline)) ant_value_t sv_op_update_local_slow(ant_value_t
   if (is_err(next)) return next;
   *slot = next;
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_op_update_local(
@@ -280,7 +280,7 @@ static inline ant_value_t sv_op_update_local(
   }
   
   sv_tfb_record_local(func, (int)idx, *slot);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_op_add_local(sv_vm_t *vm, ant_value_t *lp, ant_t *js, sv_func_t *func, uint8_t *ip) {

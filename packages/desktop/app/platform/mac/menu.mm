@@ -19,7 +19,7 @@ ant_value_t DesktopMenuAppend(ant_params_t) {
   }
   js_arr_push(js, template_value, args[0]);
   RefreshApplicationMenu(js, menu);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t DesktopMenuInsert(ant_params_t) {
@@ -40,7 +40,7 @@ ant_value_t DesktopMenuInsert(ant_params_t) {
   js_set(js, menu, "_template", replacement);
   js_set(js, menu, "items", replacement);
   RefreshApplicationMenu(js, menu);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t DesktopMenuBuildFromTemplate(ant_params_t) {
@@ -62,7 +62,7 @@ ant_value_t DesktopGetApplicationMenu(ant_params_t) {
   (void)args;
   (void)nargs;
   ant_desktop_state_t *state = ant_desktop_state_from(js_getthis(js));
-  return state ? state->application_menu : js_mkundef();
+  return state ? state->application_menu : Ant_Value_Undefined;
 }
 
 ant_value_t DesktopSetApplicationMenu(ant_params_t) {
@@ -70,9 +70,9 @@ ant_value_t DesktopSetApplicationMenu(ant_params_t) {
   if (!state) return js_mkerr(js, "invalid application menu receiver");
   if (nargs < 1 || vtype(args[0]) == kTypeNull || vtype(args[0]) == kTypeUndefined) {
     NSApp.mainMenu = nil;
-    state->application_menu = js_mkundef();
-    js_set_slot_wb(js, state->app, SLOT_AUX, js_mkundef());
-    return js_mkundef();
+    state->application_menu = Ant_Value_Undefined;
+    js_set_slot_wb(js, state->app, SLOT_AUX, Ant_Value_Undefined);
+    return Ant_Value_Undefined;
   }
   ant_value_t template_value = is_array_value(args[0]) ? args[0] : js_get(js, args[0], "_template");
   if (!is_array_value(template_value)) {
@@ -82,7 +82,7 @@ ant_value_t DesktopSetApplicationMenu(ant_params_t) {
   NSApp.mainMenu = BuildNativeMenu(js, template_value, @"");
   state->application_menu = args[0];
   js_set_slot_wb(js, state->app, SLOT_AUX, args[0]);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t DesktopMenuItemCtor(ant_params_t) {

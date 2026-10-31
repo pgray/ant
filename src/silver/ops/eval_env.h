@@ -157,7 +157,7 @@ static inline bool sv_eval_env_try_get(
     sv_eval_env_find_binding(state, name, len);
     
   if (!binding) return false;
-  if (!sv_eval_binding_load(state, binding, out)) *out = js_mkundef();
+  if (!sv_eval_binding_load(state, binding, out)) *out = Ant_Value_Undefined;
   
   else if (is_empty_slot(*out)) *out = js_mkerr_typed(
     js, JS_ERR_REFERENCE,
@@ -248,7 +248,7 @@ static inline ant_value_t sv_eval_init_variable_env(sv_vm_t *vm, ant_t *js, sv_f
     free(state);
     env = js_mkerr(js, "failed to create eval variable environment");
   } else {
-    state->arguments_obj = js_mkundef();
+    state->arguments_obj = Ant_Value_Undefined;
     state->is_variable = true;
     frame->eval_env = env;
     if (!frame->func->is_arrow) {
@@ -343,7 +343,7 @@ static inline ant_value_t sv_eval_declare_vars(
   ant_t *js, sv_func_t *func, ant_value_t env, bool configurable
 ) {
   sv_func_metadata_t *metadata = sv_func_metadata(func);
-  if (!metadata || !metadata->eval_var_count) return js_mkundef();
+  if (!metadata || !metadata->eval_var_count) return Ant_Value_Undefined;
   ant_value_t target = env;
   while (is_object_type(target) && target != js->global) {
     sv_eval_env_state_t *state = sv_eval_env_state(target);
@@ -364,7 +364,7 @@ static inline ant_value_t sv_eval_declare_vars(
   GC_ROOT_SAVE(mark, js);
   GC_ROOT_PIN(js, env);
   GC_ROOT_PIN(js, target);
-  ant_value_t result = js_mkundef();
+  ant_value_t result = Ant_Value_Undefined;
   
   bool sandboxed = global && sv_global_sandboxed(js);
   ant_value_t holder = sandboxed ? js->global_sandbox : target;
@@ -377,7 +377,7 @@ static inline ant_value_t sv_eval_declare_vars(
       (sandboxed && sv_sandbox_has(js, name->str, name->len));
     
     if (exists) continue;
-    result = setprop_interned(js, holder, name->str, name->len, js_mkundef());
+    result = setprop_interned(js, holder, name->str, name->len, Ant_Value_Undefined);
     
     if (is_err(result)) break;
     if (!configurable && !sandboxed) js_set_descriptor(js, target, name->str, name->len, JS_DESC_W | JS_DESC_E);
@@ -394,7 +394,7 @@ static inline ant_value_t sv_eval_store_function(
   GC_ROOT_PIN(js, env);
   GC_ROOT_PIN(js, value);
 
-  ant_value_t result = js_mkundef();
+  ant_value_t result = Ant_Value_Undefined;
   for (ant_value_t current = env; is_object_type(current); current = js_get_proto(js, current)) {
     sv_eval_env_state_t *state = sv_eval_env_state(current);
     if (current == js->global && sv_global_lexical(js, name)) break;
@@ -426,7 +426,7 @@ static inline bool sv_global_has_restricted_prop(ant_t *js, const char *interned
 
 static inline ant_value_t sv_global_declare(ant_t *js, sv_func_t *func) {
   sv_func_metadata_t *metadata = sv_func_metadata(func);
-  if (!metadata) return js_mkundef();
+  if (!metadata) return Ant_Value_Undefined;
 
   for (uint32_t i = 0; i < metadata->global_lexical_count; i++) {
     sv_eval_decl_t *decl = &metadata->global_lexicals[i];
@@ -473,7 +473,7 @@ static inline ant_value_t sv_global_declare(ant_t *js, sv_func_t *func) {
   }
 
   ant_ic_epoch_bump(js);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 #endif

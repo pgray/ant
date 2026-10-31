@@ -301,7 +301,7 @@ ant_value_t sv_invoke_builtin_in_realm(
 static ant_value_t realm_console_task_run(ant_params_t) {
   if (nargs < 1 || !is_callable(args[0]))
     return js_mkerr_typed(js, JS_ERR_TYPE, "task.run requires a function");
-  return sv_vm_call(js->vm, js, args[0], js_mkundef(), NULL, 0, NULL, js_mkundef());
+  return sv_vm_call(js->vm, js, args[0], Ant_Value_Undefined, NULL, 0, NULL, Ant_Value_Undefined);
 }
 
 static ant_value_t realm_console_create_task(ant_params_t) {
@@ -351,7 +351,7 @@ void ant_realm_install_console(ant_t *js) {
 }
 
 static ant_value_t realm_handle_anchor(ant_params_t) {
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_realm_t *realm_from_handle(ant_t *js, ant_value_t handle) {
@@ -410,11 +410,11 @@ ant_value_t realm_internal_library(ant_t *js) {
 void realm_init_core(ant_t *js) {
   js->global = mkobj(js, 0);
   js->global_this = js->global;
-  js->global_sandbox = js_mkundef();
+  js->global_sandbox = Ant_Value_Undefined;
 
   ant_value_t glob = js->global;
   ant_value_t object_proto = Ant_Object_CreateBare(js);
-  set_proto(js, object_proto, js_mknull());
+  set_proto(js, object_proto, Ant_Value_Null);
   
   js_object_init_prototype(js, object_proto);
   
@@ -476,8 +476,8 @@ void realm_init_core(ant_t *js) {
   ant_value_t number_ctor_obj = mkobj(js, 0);
   set_proto(js, number_ctor_obj, function_proto);
   
-  ant_value_t number_parse_int = js_mkundef();
-  ant_value_t number_parse_float = js_mkundef();
+  ant_value_t number_parse_int = Ant_Value_Undefined;
+  ant_value_t number_parse_float = Ant_Value_Undefined;
   js_number_init_constructor(js, number_ctor_obj, number_proto, &number_parse_int, &number_parse_float);
   ant_value_t number_ctor_func = js_obj_to_func(js, number_ctor_obj);
   js_set_global_builtin(js, "Number", number_ctor_func);
@@ -521,7 +521,7 @@ void realm_init_core(ant_t *js) {
   js_set_descriptor(js, glob, "NaN", 3, 0);
   js_setprop(js, glob, js_mkstr(js, "Infinity", 8), Ant_Value_FromNumber(ANT_INFINITY));
   js_set_descriptor(js, glob, "Infinity", 8, 0);
-  js_setprop(js, glob, js_mkstr(js, "undefined", 9), js_mkundef());
+  js_setprop(js, glob, js_mkstr(js, "undefined", 9), Ant_Value_Undefined);
   js_set_descriptor(js, glob, "undefined", 9, 0);
   
   ant_value_t import_obj = mkobj(js, 0);
@@ -570,22 +570,22 @@ void init_intrinsic_symbols(ant_t *js) {
   GC_ROOT_SAVE(mark, js);
   GC_ROOT_PIN(js, unscopables);
   
-  js_set(js, unscopables, "at", js_true);
-  js_set(js, unscopables, "copyWithin", js_true);
-  js_set(js, unscopables, "entries", js_true);
-  js_set(js, unscopables, "fill", js_true);
-  js_set(js, unscopables, "find", js_true);
-  js_set(js, unscopables, "findIndex", js_true);
-  js_set(js, unscopables, "findLast", js_true);
-  js_set(js, unscopables, "findLastIndex", js_true);
-  js_set(js, unscopables, "flat", js_true);
-  js_set(js, unscopables, "flatMap", js_true);
-  js_set(js, unscopables, "includes", js_true);
-  js_set(js, unscopables, "keys", js_true);
-  js_set(js, unscopables, "toReversed", js_true);
-  js_set(js, unscopables, "toSorted", js_true);
-  js_set(js, unscopables, "toSpliced", js_true);
-  js_set(js, unscopables, "values", js_true);
+  js_set(js, unscopables, "at", Ant_Value_True);
+  js_set(js, unscopables, "copyWithin", Ant_Value_True);
+  js_set(js, unscopables, "entries", Ant_Value_True);
+  js_set(js, unscopables, "fill", Ant_Value_True);
+  js_set(js, unscopables, "find", Ant_Value_True);
+  js_set(js, unscopables, "findIndex", Ant_Value_True);
+  js_set(js, unscopables, "findLast", Ant_Value_True);
+  js_set(js, unscopables, "findLastIndex", Ant_Value_True);
+  js_set(js, unscopables, "flat", Ant_Value_True);
+  js_set(js, unscopables, "flatMap", Ant_Value_True);
+  js_set(js, unscopables, "includes", Ant_Value_True);
+  js_set(js, unscopables, "keys", Ant_Value_True);
+  js_set(js, unscopables, "toReversed", Ant_Value_True);
+  js_set(js, unscopables, "toSorted", Ant_Value_True);
+  js_set(js, unscopables, "toSpliced", Ant_Value_True);
+  js_set(js, unscopables, "values", Ant_Value_True);
   
   mkprop(js, js->sym.array_proto, js->sym.unscopables_sym, unscopables, ANT_PROP_ATTR_CONFIGURABLE);
   GC_ROOT_RESTORE(js, mark);

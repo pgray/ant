@@ -235,14 +235,14 @@ static void eld_finalize(ant_t *js, ant_object_t *obj) {
 
 static ant_value_t eld_this(ant_t *js, ant_value_t call_this, perf_eld_monitor_t **out) {
   *out = eld_monitor(call_this);
-  return *out ? js_mkundef() : js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
+  return *out ? Ant_Value_Undefined : js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
 }
 
 static ant_value_t js_eld_enable(ant_params_t) {
   perf_eld_monitor_t *m;
   ant_value_t err = eld_this(js, call_this, &m);
   if (is_err(err)) return err;
-  if (m->enabled || m->closing || js->destroying) return js_false;
+  if (m->enabled || m->closing || js->destroying) return Ant_Value_False;
 
   if (!m->timer_open) {
     if (uv_timer_init(js->loop, &m->timer) != 0) return js_mkerr(js, "failed to start event loop delay monitor");
@@ -255,18 +255,18 @@ static ant_value_t js_eld_enable(ant_params_t) {
   m->prev = 0;
   m->enabled = true;
   uv_timer_start(&m->timer, eld_tick, m->resolution_ms, m->resolution_ms);
-  return js_true;
+  return Ant_Value_True;
 }
 
 static ant_value_t js_eld_disable(ant_params_t) {
   perf_eld_monitor_t *m;
   ant_value_t err = eld_this(js, call_this, &m);
   if (is_err(err)) return err;
-  if (!m->enabled) return js_false;
+  if (!m->enabled) return Ant_Value_False;
 
   m->enabled = false;
   uv_timer_stop(&m->timer);
-  return js_true;
+  return Ant_Value_True;
 }
 
 static ant_value_t js_eld_reset(ant_params_t) {
@@ -275,7 +275,7 @@ static ant_value_t js_eld_reset(ant_params_t) {
   if (is_err(err)) return err;
   hist_reset(&m->hist);
   m->prev = 0;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t eld_read_percentile(ant_t *js, ant_value_t arg, double *out) {
@@ -288,7 +288,7 @@ static ant_value_t eld_read_percentile(ant_t *js, ant_value_t arg, double *out) 
     return js_mkerr_code(js, JS_ERR_RANGE, "ERR_OUT_OF_RANGE", msg);
   }
   *out = p;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_eld_percentile(ant_params_t) {
@@ -296,7 +296,7 @@ static ant_value_t js_eld_percentile(ant_params_t) {
   ant_value_t err = eld_this(js, call_this, &m);
   if (is_err(err)) return err;
   double p = 0;
-  err = eld_read_percentile(js, nargs > 0 ? args[0] : js_mkundef(), &p);
+  err = eld_read_percentile(js, nargs > 0 ? args[0] : Ant_Value_Undefined, &p);
   if (is_err(err)) return err;
   return Ant_Value_FromNumber((double)hist_percentile(&m->hist, p));
 }
@@ -306,7 +306,7 @@ static ant_value_t js_eld_percentile_bigint(ant_params_t) {
   ant_value_t err = eld_this(js, call_this, &m);
   if (is_err(err)) return err;
   double p = 0;
-  err = eld_read_percentile(js, nargs > 0 ? args[0] : js_mkundef(), &p);
+  err = eld_read_percentile(js, nargs > 0 ? args[0] : Ant_Value_Undefined, &p);
   if (is_err(err)) return err;
   return bigint_from_uint64(js, hist_percentile(&m->hist, p));
 }
@@ -393,13 +393,13 @@ static ant_value_t eld_histogram_proto(ant_t *js) {
 
 static ant_value_t eld_read_resolution(ant_t *js, ant_value_t options, uint64_t *out) {
   *out = 10;
-  if (vtype(options) == kTypeUndefined) return js_mkundef();
+  if (vtype(options) == kTypeUndefined) return Ant_Value_Undefined;
   if (!is_object_type(options))
     return js_mkerr_code(js, JS_ERR_TYPE, "ERR_INVALID_ARG_TYPE", "The \"options\" argument must be of type object");
 
   ant_value_t value = js_get(js, options, "resolution");
   if (is_err(value)) return value;
-  if (vtype(value) == kTypeUndefined) return js_mkundef();
+  if (vtype(value) == kTypeUndefined) return Ant_Value_Undefined;
   if (vtype(value) != kTypeNumber)
     return js_mkerr_code(js, JS_ERR_TYPE, "ERR_INVALID_ARG_TYPE", "The \"options.resolution\" property must be of type number");
 
@@ -412,12 +412,12 @@ static ant_value_t eld_read_resolution(ant_t *js, ant_value_t options, uint64_t 
     return js_mkerr_code(js, JS_ERR_RANGE, "ERR_OUT_OF_RANGE", msg);
   }
   *out = (uint64_t)resolution;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_monitor_event_loop_delay(ant_params_t) {
   uint64_t resolution = 10;
-  ant_value_t err = eld_read_resolution(js, nargs > 0 ? args[0] : js_mkundef(), &resolution);
+  ant_value_t err = eld_read_resolution(js, nargs > 0 ? args[0] : Ant_Value_Undefined, &resolution);
   if (is_err(err)) return err;
 
   perf_eld_monitor_t *m = calloc(1, sizeof(*m));

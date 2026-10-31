@@ -13,13 +13,13 @@ static ant_value_t async_hooks_call_with_tail_args(
   ant_t *js, ant_value_t fn, ant_value_t this_arg, ant_args_t, int start_idx
 ) {
   int call_nargs = nargs - start_idx;
-  if (call_nargs <= 0) return sv_vm_call(js->vm, js, fn, this_arg, NULL, 0, NULL, js_mkundef());
+  if (call_nargs <= 0) return sv_vm_call(js->vm, js, fn, this_arg, NULL, 0, NULL, Ant_Value_Undefined);
 
   ant_value_t *call_args = (ant_value_t *)malloc((size_t)call_nargs * sizeof(ant_value_t));
   if (!call_args) return Ant_Error_CreateOutOfMemory(js);
 
   for (int i = 0; i < call_nargs; i++) call_args[i] = args[start_idx + i];
-  ant_value_t result = sv_vm_call(js->vm, js, fn, this_arg, call_args, call_nargs, NULL, js_mkundef());
+  ant_value_t result = sv_vm_call(js->vm, js, fn, this_arg, call_args, call_nargs, NULL, Ant_Value_Undefined);
   free(call_args);
   return result;
 }
@@ -35,7 +35,7 @@ static ant_value_t async_local_storage_run(ant_params_t) {
 
   ant_value_t prev = js_get_slot(call_this, SLOT_DATA);
   js_set_slot_wb(js, call_this, SLOT_DATA, args[0]);
-  ant_value_t result = async_hooks_call_with_tail_args(js, args[1], js_mkundef(), args, nargs, 2);
+  ant_value_t result = async_hooks_call_with_tail_args(js, args[1], Ant_Value_Undefined, args, nargs, 2);
   js_set_slot_wb(js, call_this, SLOT_DATA, prev);
   return result;
 }
@@ -50,8 +50,8 @@ static ant_value_t async_local_storage_exit(ant_params_t) {
   }
 
   ant_value_t prev = js_get_slot(call_this, SLOT_DATA);
-  js_set_slot_wb(js, call_this, SLOT_DATA, js_mkundef());
-  ant_value_t result = async_hooks_call_with_tail_args(js, args[0], js_mkundef(), args, nargs, 1);
+  js_set_slot_wb(js, call_this, SLOT_DATA, Ant_Value_Undefined);
+  ant_value_t result = async_hooks_call_with_tail_args(js, args[0], Ant_Value_Undefined, args, nargs, 1);
   js_set_slot_wb(js, call_this, SLOT_DATA, prev);
   return result;
 }
@@ -60,25 +60,25 @@ static ant_value_t async_local_storage_enterWith(ant_params_t) {
   if (!is_object_type(call_this)) {
     return js_mkerr(js, "AsyncLocalStorage.enterWith() requires an AsyncLocalStorage instance");
   }
-  js_set_slot_wb(js, call_this, SLOT_DATA, nargs > 0 ? args[0] : js_mkundef());
-  return js_mkundef();
+  js_set_slot_wb(js, call_this, SLOT_DATA, nargs > 0 ? args[0] : Ant_Value_Undefined);
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t async_local_storage_getStore(ant_params_t) {
-  if (!is_object_type(call_this)) return js_mkundef();
+  if (!is_object_type(call_this)) return Ant_Value_Undefined;
   return js_get_slot(call_this, SLOT_DATA);
 }
 
 static ant_value_t async_local_storage_disable(ant_params_t) {
-  if (is_object_type(call_this)) js_set_slot_wb(js, call_this, SLOT_DATA, js_mkundef());
-  return js_mkundef();
+  if (is_object_type(call_this)) js_set_slot_wb(js, call_this, SLOT_DATA, Ant_Value_Undefined);
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t async_resource_runInAsyncScope(ant_params_t) {
   if (nargs < 1 || !is_callable(args[0])) {
     return js_mkerr(js, "AsyncResource.runInAsyncScope(fn[, thisArg, ...args]) requires a function");
   }
-  ant_value_t this_arg = nargs > 1 ? args[1] : js_mkundef();
+  ant_value_t this_arg = nargs > 1 ? args[1] : Ant_Value_Undefined;
   return async_hooks_call_with_tail_args(js, args[0], this_arg, args, nargs, 2);
 }
 

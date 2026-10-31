@@ -48,7 +48,7 @@ static inline ant_value_t sv_setup_function_prototype_with_parent(
   );
   
   if (is_err(set_proto)) return set_proto;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_get_current_closure_module_ctx(ant_t *js, ant_value_t parent_func) {
@@ -100,13 +100,13 @@ static inline void sv_init_closure_function_object(
   }
 
   if (child->is_async && child->is_generator) {
-    js_set_slot(func_obj, SLOT_ASYNC, js_true);
+    js_set_slot(func_obj, SLOT_ASYNC, Ant_Value_True);
     ant_value_t async_generator_proto = js_get_slot(js->global, SLOT_ASYNC_GENERATOR_PROTO);
     if (is_object_type(async_generator_proto)) js_set_proto_init(func_obj, async_generator_proto);
   }
   
   else if (child->is_async) {
-    js_set_slot(func_obj, SLOT_ASYNC, js_true);
+    js_set_slot(func_obj, SLOT_ASYNC, Ant_Value_True);
     ant_value_t async_proto = js_get_slot(js->global, SLOT_ASYNC_PROTO);
     if (is_object_type(async_proto)) js_set_proto_init(func_obj, async_proto);
   }
@@ -142,7 +142,7 @@ static inline ant_value_t sv_op_get_upval(
   }
   
   vm->stack[vm->sp++] = val;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline void sv_op_get_upval_val(sv_vm_t *vm, sv_frame_t *frame, uint8_t *ip) {
@@ -158,7 +158,7 @@ static inline ant_value_t sv_op_put_upval(sv_vm_t *vm, sv_frame_t *frame, uint8_
   ant_value_t val = vm->stack[--vm->sp];
   sv_upvalue_store(vm->js, uv, val);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_op_set_upval(sv_vm_t *vm, sv_frame_t *frame, uint8_t *ip) {
@@ -169,17 +169,17 @@ static inline ant_value_t sv_op_set_upval(sv_vm_t *vm, sv_frame_t *frame, uint8_
   ant_value_t val = vm->stack[vm->sp - 1];
   sv_upvalue_store(vm->js, uv, val);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_op_close_upval(sv_vm_t *vm, sv_frame_t *frame, uint8_t *ip) {
   uint16_t idx = sv_get_u16(ip + 1);
   ant_value_t *slot = sv_frame_slot_ptr(frame, idx);
   
-  if (!slot) return js_mkundef();
+  if (!slot) return Ant_Value_Undefined;
   sv_close_upvalues_from_slot(vm, slot);
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline sv_upvalue_t *sv_capture_upvalue(sv_vm_t *vm, ant_value_t *slot) {
@@ -204,9 +204,9 @@ static inline sv_closure_t *sv_closure_init(
   else child->has_closure = true;
   
   closure->func = child;
-  closure->bound_this = child->is_arrow ? this_val : js_mkundef();
+  closure->bound_this = child->is_arrow ? this_val : Ant_Value_Undefined;
   closure->bound_argc = 0;
-  closure->super_val = js_mkundef();
+  closure->super_val = Ant_Value_Undefined;
   closure->call_flags = child->is_arrow ? SV_CALL_IS_ARROW : 0;
 
   if (child->upvalue_count > 0) closure->upvalues = child->upvalue_count <= SV_CLOSURE_INLINE_UPVALS
@@ -249,7 +249,7 @@ static inline ant_value_t sv_op_closure(
     sv_upval_desc_t *desc = &child->upval_descs[i];
     if (desc->is_local && desc->by_value) {
       ant_value_t *slot = sv_frame_slot_ptr(frame, desc->index);
-      closure->upvalues[i] = (sv_upvalue_t *)(uintptr_t)(slot ? *slot : js_mkundef());
+      closure->upvalues[i] = (sv_upvalue_t *)(uintptr_t)(slot ? *slot : Ant_Value_Undefined);
     } else if (desc->is_local) {
       ant_value_t *slot = sv_frame_slot_ptr(frame, desc->index);
       if (!slot) slot = frame->bp;
@@ -275,7 +275,7 @@ static inline ant_value_t sv_op_closure(
   );
   
   GC_ROOT_RESTORE(js, mark);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_op_closure_args(

@@ -69,7 +69,7 @@ static ant_value_t builtin_resolveFilename(ant_params_t) {
 }
 
 static ant_value_t builtin_module_isBuiltin(ant_params_t) {
-  if (nargs < 1 || vtype(args[0]) != kTypeString) return js_false;
+  if (nargs < 1 || vtype(args[0]) != kTypeString) return Ant_Value_False;
 
   size_t name_len = 0;
   const char *name = js_getstr(js, args[0], &name_len);
@@ -78,7 +78,7 @@ static ant_value_t builtin_module_isBuiltin(ant_params_t) {
 
 static ant_value_t builtin_module_deregisterHooks(ant_params_t) {
   ant_value_t hook = js_get_slot(call_func, SLOT_DATA);
-  if (vtype(hook) == kTypeUndefined || vtype(js->modules.hooks) != kTypeArray) return js_mkundef();
+  if (vtype(hook) == kTypeUndefined || vtype(js->modules.hooks) != kTypeArray) return Ant_Value_Undefined;
 
   GC_ROOT_SAVE(root_mark, js);
   ant_value_t remaining = js_mkarr(js);
@@ -97,10 +97,10 @@ static ant_value_t builtin_module_deregisterHooks(ant_params_t) {
   }
 
   js->modules.hooks = remaining;
-  js_set_slot(call_func, SLOT_DATA, js_mkundef());
+  js_set_slot(call_func, SLOT_DATA, Ant_Value_Undefined);
 
   GC_ROOT_RESTORE(js, root_mark);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static bool hook_member_invalid(ant_value_t fn) {
@@ -139,7 +139,7 @@ static ant_value_t builtin_module_registerHooks(ant_params_t) {
 }
 
 static ant_value_t builtin_module_node_module_paths(ant_params_t) {
-  ant_value_t from = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t from = nargs > 0 ? args[0] : Ant_Value_Undefined;
   if (vtype(from) != kTypeString) return Ant_Error_CreateInvalidArgType(js, "paths[0]", "of type string", from);
   
   const char *directory = js_getstr(js, from, NULL);
@@ -191,7 +191,7 @@ static ant_value_t builtin_module_constructor(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Module id must be a string");
   if (!is_object_type(call_this)) return js_mkerr_typed(js, JS_ERR_TYPE, "Module requires an object receiver");
   const char *id = nargs && vtype(args[0]) == kTypeString ? js_getstr(js, args[0], NULL) : "";
-  return esm_init_cjs_module(js, call_this, id, nargs > 1 ? args[1] : js_mkundef());
+  return esm_init_cjs_module(js, call_this, id, nargs > 1 ? args[1] : Ant_Value_Undefined);
 }
 
 ant_value_t module_library(ant_t *js) {
@@ -208,7 +208,7 @@ ant_value_t module_library(ant_t *js) {
   GC_ROOT_RESTORE(js, root_mark);
   
   js_set(js, lib, "_cache", cache);
-  js->modules.cjs.cache = js_mkundef();
+  js->modules.cjs.cache = Ant_Value_Undefined;
   js_set(js, lib, "Module", lib);
   js_set(js, proto, "require", Ant_Function_CreateWithArity(esm_cjs_require_module, 1));
 

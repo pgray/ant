@@ -260,7 +260,7 @@ void cleanup_atomics_module(ant_t *js) {
     removed->next = NULL;
     removed->prev = NULL;
     removed->js = NULL;
-    removed->promise = js_mkundef();
+    removed->promise = Ant_Value_Undefined;
     async_waiter_release_buffer(removed);
     async_waiter_close_handles(removed);
     removed = next;
@@ -357,30 +357,30 @@ static inline __attribute__((always_inline)) ant_value_t atomics_dispatch(
     #define ATOMICS_CASE_FLOAT(name, ctype, load)
     #define ATOMICS_CASE_BIGINT(name, ctype, load) case TYPED_ARRAY_##name: { \
       ctype result = atomics_apply_##name(ptr, index, op, operand, swap);    \
-      return op == ATOMICS_STORE ? js_mkundef() : load(js, result);          \
+      return op == ATOMICS_STORE ? Ant_Value_Undefined : load(js, result);          \
     }
     #define BUFFER_TYPED_ARRAY(name, ctor, ctype, kind, load, store) ATOMICS_CASE_##kind(name, ctype, load)
     #include "buffer/typed_arrays.h"
     #undef ATOMICS_CASE_INT
     #undef ATOMICS_CASE_FLOAT
     #undef ATOMICS_CASE_BIGINT
-    default: return js_mkundef();
+    default: return Ant_Value_Undefined;
   }
 }
 
 static ant_value_t atomics_validate(ant_native_params_t, TypedArrayData **out, size_t *index) {
-  TypedArrayData *ta = buffer_get_typedarray_data(nargs > 0 ? args[0] : js_mkundef());
+  TypedArrayData *ta = buffer_get_typedarray_data(nargs > 0 ? args[0] : Ant_Value_Undefined);
   
   if (!ta) return js_mkerr_typed(js, JS_ERR_TYPE, "Argument is not a typed array");
   if (!atomics_kind(ta->type)) return js_mkerr_typed(js, JS_ERR_TYPE, "Atomics operations require an integer typed array");
   if (!Ant_Buffer_ViewIsLive(ta)) return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot perform Atomics operation on a detached ArrayBuffer");
 
-  ant_value_t result = js_to_index_fast(js, nargs > 1 ? args[1] : js_mkundef(), index);
+  ant_value_t result = js_to_index_fast(js, nargs > 1 ? args[1] : Ant_Value_Undefined, index);
   if (is_err(result)) return result;
   if (*index >= ta->length) return js_mkerr_typed(js, JS_ERR_RANGE, "Invalid atomic access index");
 
   *out = ta;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t atomics_coerce(ant_t *js, const TypedArrayData *ta, ant_value_t value, uint64_t *bits) {
@@ -413,7 +413,7 @@ static ant_value_t atomics_bytes(ant_t *js, const TypedArrayData *ta, size_t ind
   if (!Ant_Buffer_GetViewBytes(ta, out, &byte_length))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot perform Atomics operation on a detached ArrayBuffer");
   if (index >= ta->length) return js_mkerr_typed(js, JS_ERR_RANGE, "Invalid atomic access index");
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static __attribute__((noinline, cold)) 
@@ -428,12 +428,12 @@ ant_value_t atomics_run_slow(ant_native_params_t, atomics_op_t op, int arity) {
   if (is_err(value)) return value;
 
   if (arity > 2) {
-    value = atomics_coerce(js, ta, nargs > 2 ? args[2] : js_mkundef(), &operand);
+    value = atomics_coerce(js, ta, nargs > 2 ? args[2] : Ant_Value_Undefined, &operand);
     if (is_err(value)) return value;
   }
 
   if (arity > 3) {
-    ant_value_t replacement = atomics_coerce(js, ta, nargs > 3 ? args[3] : js_mkundef(), &swap);
+    ant_value_t replacement = atomics_coerce(js, ta, nargs > 3 ? args[3] : Ant_Value_Undefined, &swap);
     if (is_err(replacement)) return replacement;
   }
 
@@ -654,13 +654,13 @@ static ant_value_t js_atomics_waitAsync(ant_params_t) {
   
   ant_value_t result_obj = Ant_Object_CreateBare(js);
   if (current_value != expected_value) {
-    js_set(js, result_obj, "async", js_false);
+    js_set(js, result_obj, "async", Ant_Value_False);
     js_set(js, result_obj, "value", js_mkstr(js, "not-equal", 9));
     return result_obj;
   }
   
   if (timeout_ms == 0) {
-    js_set(js, result_obj, "async", js_false);
+    js_set(js, result_obj, "async", Ant_Value_False);
     js_set(js, result_obj, "value", js_mkstr(js, "timed-out", 9));
     return result_obj;
   }
@@ -708,7 +708,7 @@ static ant_value_t js_atomics_waitAsync(ant_params_t) {
   pthread_mutex_unlock(&async_waiters_lock);
   if (changed) async_waiter_queue_settle(entry, ASYNC_WAIT_SETTLE_OK, false);
 
-  js_set(js, result_obj, "async", js_true);
+  js_set(js, result_obj, "async", Ant_Value_True);
   js_set(js, result_obj, "value", promise);
 
   return result_obj;
@@ -722,7 +722,7 @@ static ant_value_t js_atomics_pause(ant_params_t) {
   __asm__ __volatile__("yield");
 #endif
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 void init_atomics_module(ant_t *js) {

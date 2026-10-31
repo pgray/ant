@@ -162,8 +162,8 @@ ant_value_t jit_helper_str_append_local(
     .bp = args,
     .lp = locals,
     .argc = argc,
-    .arguments_obj = js_mkundef(),
-    .eval_env = js_mkundef(),
+    .arguments_obj = Ant_Value_Undefined,
+    .eval_env = Ant_Value_Undefined,
   };
 
   return sv_string_builder_append_slot(vm, js, &frame, func, slot_idx, rhs);
@@ -183,8 +183,8 @@ ant_value_t jit_helper_str_append_local_snapshot(
     .bp = args,
     .lp = locals,
     .argc = argc,
-    .arguments_obj = js_mkundef(),
-    .eval_env = js_mkundef(),
+    .arguments_obj = Ant_Value_Undefined,
+    .eval_env = Ant_Value_Undefined,
   };
 
   return sv_string_builder_append_snapshot_slot(vm, js, &frame, func, slot_idx, lhs, rhs);
@@ -203,13 +203,13 @@ ant_value_t jit_helper_str_flush_local(
     .bp = args,
     .lp = locals,
     .argc = argc,
-    .arguments_obj = js_mkundef(),
-    .eval_env = js_mkundef(),
+    .arguments_obj = Ant_Value_Undefined,
+    .eval_env = Ant_Value_Undefined,
   };
 
   ant_value_t flush = sv_string_builder_flush_slot(vm, js, &frame, slot_idx);
   if (is_err(flush)) return flush;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline bool jit_rel_plain(ant_value_t v) {
@@ -236,7 +236,7 @@ ant_value_t jit_helper_call(
   ant_value_t func, ant_value_t this_val,
   ant_value_t *args, int argc
 ) {
-  return sv_vm_call(vm, js, func, this_val, args, argc, NULL, js_mkundef());
+  return sv_vm_call(vm, js, func, this_val, args, argc, NULL, Ant_Value_Undefined);
 }
 
 ant_value_t jit_helper_call_awaited(
@@ -249,7 +249,7 @@ ant_value_t jit_helper_call_awaited(
     sv_func_t *fn = closure->func;
     
     if (fn && fn->is_async && !fn->is_generator && !(closure->call_flags & SV_CALL_HAS_BOUND_ARGS)) {
-      if (__builtin_expect(js->destroying, 0)) return js_mkundef();
+      if (__builtin_expect(js->destroying, 0)) return Ant_Value_Undefined;
       if (js_interrupt_pending(js)) return js_interrupt_raise(js);
       if (sv_check_c_stack_overflow(js)) return Ant_Error_CreateStackOverflow(js);
       if (sv_closure_has_lexical_this(closure)) this_val = closure->bound_this;
@@ -257,7 +257,7 @@ ant_value_t jit_helper_call_awaited(
     }
   }
   
-  return sv_vm_call(vm, js, func, this_val, args, argc, NULL, js_mkundef());
+  return sv_vm_call(vm, js, func, this_val, args, argc, NULL, Ant_Value_Undefined);
 }
 
 ant_value_t jit_helper_native_finish(ant_t *js, ant_value_t result) {
@@ -277,7 +277,7 @@ ant_value_t jit_helper_call_method(
   ant_value_t super_this = call_this;
   ant_value_t result = sv_vm_call(
     vm, js, func, call_this, args, argc,
-    is_super_call ? &super_this : NULL, is_super_call ? new_target : js_mkundef()
+    is_super_call ? &super_this : NULL, is_super_call ? new_target : Ant_Value_Undefined
   );
 
   if (out_this) {
@@ -310,7 +310,7 @@ static ant_value_t jit_call_prepared(
   
   ant_value_t result = sv_vm_call(
     vm, js, func, this_val, call->args, 
-    call->argc, NULL, js_mkundef()
+    call->argc, NULL, Ant_Value_Undefined
   );
   
   sv_call_args_release(call);
@@ -379,8 +379,8 @@ ant_value_t jit_helper_forward_arguments(
   if (sv_check_c_stack_overflow(js)) return Ant_Error_CreateStackOverflow(js);
   
   sv_call_ctx_t call = {
-    .this_val = receiver, .super_val = js_mkundef(),
-    .new_target = js_mkundef(), .args = args, .argc = argc,
+    .this_val = receiver, .super_val = Ant_Value_Undefined,
+    .new_target = Ant_Value_Undefined, .args = args, .argc = argc,
   };
   
   return sv_call_resolve_closure(vm, js, closure, target, &call, NULL);
@@ -454,7 +454,7 @@ ant_value_t jit_helper_special_obj(sv_vm_t *vm, ant_t *js, uint32_t which) {
   if (which == SV_SPECIAL_NEW_TARGET) return sv_vm_get_new_target(vm);
   if (which == SV_SPECIAL_SUPER) return sv_vm_get_super_val(vm);
   if (which == SV_SPECIAL_MODULE_IMPORT) return js_get_module_import_binding(js);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t jit_helper_strict_arguments(
@@ -466,12 +466,12 @@ ant_value_t jit_helper_strict_arguments(
   sv_frame_t frame = {
     .bp = args,
     .argc = argc,
-    .arguments_obj = js_mkundef(),
-    .eval_env = js_mkundef(),
+    .arguments_obj = Ant_Value_Undefined,
+    .eval_env = Ant_Value_Undefined,
   };
   
   ant_value_t result = js_create_arguments_object(
-    js, vm, js_mkundef(), 
+    js, vm, Ant_Value_Undefined, 
     &frame, argc, 0, true
   );
     
@@ -566,7 +566,7 @@ ant_value_t jit_helper_iter_next(
   sv_vm_t *vm, ant_t *js,
   ant_value_t *iter_buf, int hint
 ) {
-  ant_value_t value = js_mkundef();
+  ant_value_t value = Ant_Value_Undefined;
   bool done = false;
   
   ant_value_t status =
@@ -574,7 +574,7 @@ ant_value_t jit_helper_iter_next(
   if (is_err(status)) return status;
 
   iter_buf[3] = value;
-  iter_buf[4] = done ? js_true : js_false;
+  iter_buf[4] = done ? Ant_Value_True : Ant_Value_False;
   
   return status;
 }
@@ -583,12 +583,12 @@ ant_value_t jit_helper_destructure_next(
   sv_vm_t *vm, ant_t *js,
   ant_value_t *iter_buf
 ) {
-  ant_value_t value = js_mkundef();
+  ant_value_t value = Ant_Value_Undefined;
   bool done = false;
   ant_value_t status = jit_iter_advance_from_buf(vm, js, iter_buf, &value, &done);
   if (is_err(status)) return status;
 
-  iter_buf[3] = done ? js_mkundef() : value;
+  iter_buf[3] = done ? Ant_Value_Undefined : value;
   return status;
 }
 
@@ -603,7 +603,7 @@ ant_value_t jit_helper_destructure_rest(
   GC_ROOT_PIN(js, rest);
 
   for (;;) {
-    ant_value_t value = js_mkundef();
+    ant_value_t value = Ant_Value_Undefined;
     bool done = false;
     
     ant_value_t status = jit_iter_advance_from_buf(vm, js, iter_buf, &value, &done);
@@ -673,7 +673,7 @@ ant_value_t jit_helper_call_is_proto(
     return sv_isproto_ic_eval(js, call_this, arg, func, ip);
   }
   ant_value_t args[1] = { arg };
-  return sv_vm_call(vm, js, call_func, call_this, args, 1, NULL, js_mkundef());
+  return sv_vm_call(vm, js, call_func, call_this, args, 1, NULL, Ant_Value_Undefined);
 }
 
 ant_value_t jit_helper_call_char_code_at(
@@ -690,7 +690,7 @@ ant_value_t jit_helper_call_array_includes(
 ) {
   if (js_is_array_includes_builtin(call_func))
     return js_array_includes_call(js, call_this, args, argc);
-  return sv_vm_call(vm, js, call_func, call_this, args, argc, NULL, js_mkundef());
+  return sv_vm_call(vm, js, call_func, call_this, args, argc, NULL, Ant_Value_Undefined);
 }
 
 ant_value_t jit_helper_call_string_intrinsic(
@@ -854,7 +854,7 @@ ant_value_t sv_op_call_map_template(
   }
 
   ant_value_t args[1] = { key };
-  result = sv_vm_call(vm, js, call_func, call_this, args, 1, NULL, js_mkundef());
+  result = sv_vm_call(vm, js, call_func, call_this, args, 1, NULL, Ant_Value_Undefined);
   GC_ROOT_RESTORE(js, root_mark);
   
   return result;
@@ -905,7 +905,7 @@ ant_value_t jit_helper_regexp_exec_truthy(
 
   ant_value_t args[1] = { arg };
   ant_value_t raw = sv_vm_call(
-    vm, js, call_func, call_this, args, 1, NULL, js_mkundef());
+    vm, js, call_func, call_this, args, 1, NULL, Ant_Value_Undefined);
   if (is_err(raw)) return raw;
   
   return js_bool(js_truthy(js, raw));
@@ -1032,7 +1032,7 @@ ant_value_t jit_helper_get_field_inline(
   uint8_t *ip = NULL;
   
   if (func && bc_off >= 0 && bc_off < func->code_len) ip = func->code + bc_off;
-  ant_value_t out = js_mkundef();
+  ant_value_t out = Ant_Value_Undefined;
   
   if (sv_try_prop_get_field_ic_no_effect(js, obj, atom, func, ip, &out)) return out;
   if (sv_try_get_data_prop_no_effect_interned(js, obj, atom->str, atom->len, &out)) return out;
@@ -1063,7 +1063,7 @@ ant_value_t jit_helper_export(
 
 static inline sv_upvalue_t *jit_make_undef_upvalue(ant_t *js) {
   sv_upvalue_t *uv = js_upvalue_alloc(js);
-  uv->closed = js_mkundef();
+  uv->closed = Ant_Value_Undefined;
   uv->location = &uv->closed;
   return uv;
 }
@@ -1163,7 +1163,7 @@ ant_value_t jit_helper_closure(
     int idx = (int)desc->index - slot_base;
     bool in_slots = slots && idx >= 0 && idx < slot_count;
     if (desc->by_value) {
-      closure->upvalues[i] = (sv_upvalue_t *)(uintptr_t)(in_slots ? slots[idx] : js_mkundef());
+      closure->upvalues[i] = (sv_upvalue_t *)(uintptr_t)(in_slots ? slots[idx] : Ant_Value_Undefined);
       continue;
     }
 
@@ -1464,7 +1464,7 @@ ant_value_t jit_helper_get_length_inline(ant_t *js, ant_value_t obj) {
   if (js_is_array(obj)) return Ant_Value_FromNumber((double)(uint32_t)js_arr_len(js, obj));
   if (vtype(obj) == kTypeString) return Ant_Value_FromNumber((double)str_utf16_len(js, obj));
 
-  ant_value_t out = js_mkundef();
+  ant_value_t out = Ant_Value_Undefined;
   if (js->intern.length &&
       sv_try_get_data_prop_no_effect_interned(js, obj, js->intern.length, 6, &out))
     return out;
@@ -1528,7 +1528,7 @@ static ant_value_t jit_get_elem_value(ant_t *js, ant_value_t obj, ant_value_t ke
   uint32_t idx;
   if (vtype(obj) == kTypeArray && sv_number_key_index(key, &idx)) return js_arr_get(js, obj, idx);
   
-  ant_value_t str_elem = js_mkundef();
+  ant_value_t str_elem = Ant_Value_Undefined;
   if (sv_try_index_get(js, obj, key, &str_elem)) return str_elem;
   
   return sv_getprop_by_key(js, obj, key);
@@ -1776,7 +1776,7 @@ ant_value_t jit_helper_get_elem2(sv_vm_t *vm, ant_t *js, ant_value_t obj, ant_va
   uint32_t idx;
   if (vtype(obj) == kTypeArray && sv_number_key_index(key, &idx)) return js_arr_get(js, obj, idx);
   
-  ant_value_t str_elem = js_mkundef();
+  ant_value_t str_elem = Ant_Value_Undefined;
   if (sv_try_index_get(js, obj, key, &str_elem)) return str_elem;
   
   return sv_getprop_by_key(js, obj, key);
@@ -1795,7 +1795,7 @@ ant_value_t jit_helper_get_elem_inline(ant_t *js, ant_value_t obj, ant_value_t k
     return is_empty_slot(value) ? SV_JIT_BAILOUT : value;
   }
 
-  ant_value_t str_elem = js_mkundef();
+  ant_value_t str_elem = Ant_Value_Undefined;
   if (sv_try_index_get(js, obj, key, &str_elem)) return str_elem;
 
   ant_value_t key_str;
@@ -1819,14 +1819,14 @@ ant_value_t jit_helper_get_elem_inline(ant_t *js, ant_value_t obj, ant_value_t k
   ant_offset_t key_off = vstr(js, key_str, &key_len);
   
   const char *key_ptr = (const char *)(uintptr_t)key_off;
-  ant_value_t out = js_mkundef();
+  ant_value_t out = Ant_Value_Undefined;
   
   return sv_try_get_data_prop_no_effect(js, obj, key_ptr, (size_t)key_len, &out) ? out : SV_JIT_BAILOUT;
 }
 
 ant_value_t jit_helper_set_proto(sv_vm_t *vm, ant_t *js, ant_value_t obj, ant_value_t proto) {
   js_set_literal_proto(js, obj, proto);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 #define JIT_BITWISE_HELPERS(X) \
@@ -1859,7 +1859,7 @@ ant_value_t jit_helper_ge(sv_vm_t *vm, ant_t *js, ant_value_t l, ant_value_t r) 
 }
 
 static ant_value_t jit_delete(ant_t *js, ant_value_t obj, ant_value_t key) {
-  ant_value_t key_str = js_mkundef();
+  ant_value_t key_str = Ant_Value_Undefined;
 
   if (vtype(key) == kTypeSymbol)
     return js_delete_sym_prop(js, obj, key);
@@ -1927,7 +1927,7 @@ ant_value_t jit_helper_new(
   if (func_obj ? !func_obj->flags.is_constructor : !js_is_constructor(func))
     return js_mkerr_typed(js, JS_ERR_TYPE, "not a constructor");
 
-  ant_value_t proto = js_mkundef();
+  ant_value_t proto = Ant_Value_Undefined;
   if (vtype(func) == kTypeFunction || vtype(func) == kTypeBuiltin) {
     proto = sv_prepare_construct_meta(js, func, new_target, &effective_new_target);
     if (is_err(proto)) return proto;
@@ -1935,7 +1935,7 @@ ant_value_t jit_helper_new(
 
   ant_value_t obj = js_mkobj_with_proto_slots(
     js, is_object_type(proto) ? proto : 
-    js_mkundef(), sv_construct_slots_of(func)
+    Ant_Value_Undefined, sv_construct_slots_of(func)
   );
   
   ant_value_t ctor_this = obj;
@@ -1948,7 +1948,7 @@ ant_value_t jit_helper_new(
     if (sv_check_c_stack_overflow(js)) return Ant_Error_CreateStackOverflow(js);
     
     sv_call_ctx_t call = {
-      .this_val = obj, .super_val = js_mkundef(),
+      .this_val = obj, .super_val = Ant_Value_Undefined,
       .new_target = effective_new_target, .args = args, .argc = argc,
     };
     

@@ -43,7 +43,7 @@ ant_value_t ant_library_namespace(ant_t *js, const ant_library_entry_t *lib) {
   ant_value_t ns = esm_value_namespace(js, exports, default_value);
   if (is_err(ns)) return ns;
 
-  js_set_slot(ns, SLOT_MODULE_LOADING, js_mkundef());
+  js_set_slot(ns, SLOT_MODULE_LOADING, Ant_Value_Undefined);
   js_set_slot_wb(js, ns, SLOT_MODULE_CTX, js_get_slot(exports, SLOT_MODULE_CTX));
 
   cache->esm_ns = ns;

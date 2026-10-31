@@ -20,7 +20,7 @@ static void collect_binding_names(ant_t *js, sv_ast_t *pat, ant_value_t ns) {
   return;
 
   l_ident:
-    setprop_cstr(js, ns, pat->str, pat->len, js_mkundef());
+    setprop_cstr(js, ns, pat->str, pat->len, Ant_Value_Undefined);
     return;
   l_left:
     collect_binding_names(js, pat->left, ns);
@@ -45,7 +45,7 @@ static void collect_spec_names(ant_t *js, sv_ast_list_t *specs, ant_value_t ns) 
 for (int i = 0; i < specs->count; i++) {
   sv_ast_t *spec = specs->items[i];
   if (spec && spec->type == N_IMPORT_SPEC && spec->right && spec->right->type == N_IDENT)
-    setprop_cstr(js, ns, spec->right->str, spec->right->len, js_mkundef());
+    setprop_cstr(js, ns, spec->right->str, spec->right->len, Ant_Value_Undefined);
 }}
 
 static void predeclare_decl(ant_t *js, sv_ast_t *decl, ant_value_t ns) {
@@ -68,7 +68,7 @@ static void predeclare_decl(ant_t *js, sv_ast_t *decl, ant_value_t ns) {
     return;
   l_named:
     if (decl->str && decl->len > 0)
-      setprop_cstr(js, ns, decl->str, decl->len, js_mkundef());
+      setprop_cstr(js, ns, decl->str, decl->len, Ant_Value_Undefined);
     return;
 }
 
@@ -80,7 +80,7 @@ void esm_predeclare_exports(ant_t *js, sv_ast_t *program, ant_value_t ns) {
   if (!stmt || stmt->type != N_EXPORT) continue;
   uint32_t f = stmt->flags;
   
-  if (f & EX_DEFAULT) setprop_cstr(js, ns, "default", 7, js_mkundef());
+  if (f & EX_DEFAULT) setprop_cstr(js, ns, "default", 7, Ant_Value_Undefined);
   else if ((f & EX_DECL) && stmt->left) predeclare_decl(js, stmt->left, ns);
   else if ((f & EX_NAMED) || ((f & EX_STAR) && (f & EX_NAMESPACE))) collect_spec_names(js, &stmt->args, ns);
 }}

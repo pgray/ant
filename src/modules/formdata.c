@@ -210,7 +210,7 @@ static ant_value_t extract_file_entry(
   size_t idx = (size_t)js_arr_len(js, values_arr);
   js_arr_push(js, values_arr, stored_val);
 
-  return fd_append_file(d, name, idx) ? js_mkundef() : Ant_Error_CreateOutOfMemory(js);
+  return fd_append_file(d, name, idx) ? Ant_Value_Undefined : Ant_Error_CreateOutOfMemory(js);
 }
 
 ant_value_t formdata_append_string(ant_t *js, ant_value_t fd, ant_value_t name_v, ant_value_t value_v) {
@@ -226,7 +226,7 @@ ant_value_t formdata_append_string(ant_t *js, ant_value_t fd, ant_value_t name_v
   }
   
   return fd_append_str(d, name, js_getstr(js, value_v, NULL)) 
-    ? js_mkundef() 
+    ? Ant_Value_Undefined 
     : Ant_Error_CreateOutOfMemory(js);
 }
 
@@ -250,13 +250,13 @@ static ant_value_t js_formdata_append(ant_params_t) {
 
   ant_value_t val = args[1];
   if (is_object_type(val) && blob_get_data(val)) {
-    ant_value_t fname = (nargs >= 3) ? args[2] : js_mkundef();
+    ant_value_t fname = (nargs >= 3) ? args[2] : Ant_Value_Undefined;
     ant_value_t values_arr = get_fd_values(call_this);
     return extract_file_entry(js, d, values_arr, name, val, fname, false);
   }
 
   if (vtype(val) != kTypeString) { val = js_tostring_val(js, val); if (is_err(val)) return val; }
-  return fd_append_str(d, name, js_getstr(js, val, NULL)) ? js_mkundef() : Ant_Error_CreateOutOfMemory(js);
+  return fd_append_str(d, name, js_getstr(js, val, NULL)) ? Ant_Value_Undefined : Ant_Error_CreateOutOfMemory(js);
 }
 
 static ant_value_t js_formdata_set(ant_params_t) {
@@ -270,20 +270,20 @@ static ant_value_t js_formdata_set(ant_params_t) {
 
   ant_value_t val = args[1];
   if (is_object_type(val) && blob_get_data(val)) {
-    ant_value_t fname = (nargs >= 3) ? args[2] : js_mkundef();
+    ant_value_t fname = (nargs >= 3) ? args[2] : Ant_Value_Undefined;
     ant_value_t values_arr = get_fd_values(call_this);
     return extract_file_entry(js, d, values_arr, name, val, fname, true);
   }
 
   if (vtype(val) != kTypeString) { val = js_tostring_val(js, val); if (is_err(val)) return val; }
   fd_delete_name(d, name);
-  return fd_append_str(d, name, js_getstr(js, val, NULL)) ? js_mkundef() : Ant_Error_CreateOutOfMemory(js);
+  return fd_append_str(d, name, js_getstr(js, val, NULL)) ? Ant_Value_Undefined : Ant_Error_CreateOutOfMemory(js);
 }
 
 static ant_value_t js_formdata_get(ant_params_t) {
-  if (nargs < 1) return js_mknull();
+  if (nargs < 1) return Ant_Value_Null;
   fd_data_t *d = get_fd_data(call_this);
-  if (!d) return js_mknull();
+  if (!d) return Ant_Value_Null;
 
   ant_value_t name_v = args[0];
   const char *name = resolve_name(js, &name_v);
@@ -294,7 +294,7 @@ static ant_value_t js_formdata_get(ant_params_t) {
     if (strcmp(e->name, name) == 0)
       return entry_to_js_value(js, values_arr, e);
   }
-  return js_mknull();
+  return Ant_Value_Null;
 }
 
 static ant_value_t js_formdata_get_all(ant_params_t) {
@@ -318,41 +318,41 @@ static ant_value_t js_formdata_get_all(ant_params_t) {
 }
 
 static ant_value_t js_formdata_has(ant_params_t) {
-  if (nargs < 1) return js_false;
+  if (nargs < 1) return Ant_Value_False;
   fd_data_t *d = get_fd_data(call_this);
-  if (!d) return js_false;
+  if (!d) return Ant_Value_False;
 
   ant_value_t name_v = args[0];
   const char *name = resolve_name(js, &name_v);
   if (!name) return name_v;
 
   for (fd_entry_t *e = d->head; e; e = e->next) {
-    if (strcmp(e->name, name) == 0) return js_true;
+    if (strcmp(e->name, name) == 0) return Ant_Value_True;
   }
-  return js_false;
+  return Ant_Value_False;
 }
 
 static ant_value_t js_formdata_delete(ant_params_t) {
-  if (nargs < 1) return js_mkundef();
+  if (nargs < 1) return Ant_Value_Undefined;
   fd_data_t *d = get_fd_data(call_this);
-  if (!d) return js_mkundef();
+  if (!d) return Ant_Value_Undefined;
 
   ant_value_t name_v = args[0];
   const char *name = resolve_name(js, &name_v);
   if (!name) return name_v;
 
   fd_delete_name(d, name);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_formdata_foreach(ant_params_t) {
   if (nargs < 1 || !is_callable(args[0]))
     return js_mkerr_typed(js, JS_ERR_TYPE, "FormData.forEach requires a function");
   fd_data_t *d = get_fd_data(call_this);
-  if (!d) return js_mkundef();
+  if (!d) return Ant_Value_Undefined;
 
   ant_value_t fn = args[0];
-  ant_value_t this_arg = (nargs >= 2) ? args[1] : js_mkundef();
+  ant_value_t this_arg = (nargs >= 2) ? args[1] : Ant_Value_Undefined;
   ant_value_t values_arr = get_fd_values(call_this);
 
   for (fd_entry_t *e = d->head; e; e = e->next) {
@@ -360,18 +360,18 @@ static ant_value_t js_formdata_foreach(ant_params_t) {
     if (is_err(val)) return val;
     ant_value_t name = js_mkstr(js, e->name, strlen(e->name));
     ant_value_t cb_args[3] = { val, name, call_this };
-    ant_value_t r = sv_vm_call(js->vm, js, fn, this_arg, cb_args, 3, NULL, js_mkundef());
+    ant_value_t r = sv_vm_call(js->vm, js, fn, this_arg, cb_args, 3, NULL, Ant_Value_Undefined);
     if (is_err(r)) return r;
   }
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t formdata_iter_next(ant_params_t) {
   fd_iter_t *st = (fd_iter_t *)js_get_native(call_this, FORMDATA_ITER_NATIVE_TAG);
-  if (!st) return js_iter_result(js, false, js_mkundef());
+  if (!st) return js_iter_result(js, false, Ant_Value_Undefined);
   ant_value_t fd_obj = js_get_slot(call_this, SLOT_DATA);
   fd_data_t *d = get_fd_data(fd_obj);
-  if (!d) return js_iter_result(js, false, js_mkundef());
+  if (!d) return js_iter_result(js, false, Ant_Value_Undefined);
 
   ant_value_t values_arr = get_fd_values(fd_obj);
 
@@ -399,7 +399,7 @@ static ant_value_t formdata_iter_next(ant_params_t) {
     return js_iter_result(js, true, out);
   }}
 
-  return js_iter_result(js, false, js_mkundef());
+  return js_iter_result(js, false, Ant_Value_Undefined);
 }
 
 static void formdata_iter_finalize(ant_t *js, ant_object_t *obj) {

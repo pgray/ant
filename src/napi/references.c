@@ -19,7 +19,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_create_reference(
   ref->env = nenv;
   ref->value = value;
   ref->refcount = initial_refcount;
-  ref->ref_val = (initial_refcount > 0) ? (ant_value_t)value : js_mkundef();
+  ref->ref_val = (initial_refcount > 0) ? (ant_value_t)value : Ant_Value_Undefined;
 
   ref->prev = NULL;
   ref->next = nenv->refs;
@@ -42,7 +42,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_delete_reference(
   else if (nenv->refs == r) nenv->refs = r->next;
   if (r->next) r->next->prev = r->prev;
 
-  r->ref_val = js_mkundef();
+  r->ref_val = Ant_Value_Undefined;
   free(r);
   return napi_set_last((napi_env)env, napi_ok, NULL);
 }
@@ -81,7 +81,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_reference_unref(
   if (r->refcount == 0) return napi_set_last(env, napi_invalid_arg, "reference count already zero");
 
   r->refcount--;
-  if (r->refcount == 0) r->ref_val = js_mkundef();
+  if (r->refcount == 0) r->ref_val = Ant_Value_Undefined;
   if (result) *result = r->refcount;
 
   return napi_set_last(env, napi_ok, NULL);
@@ -144,7 +144,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_open_escapable_handle_scope(
   scope->gc_root_mark = gc_root_scope(nenv->js);
   scope->handle_slots_mark = nenv->handle_slots_len;
   scope->escaped = false;
-  scope->escaped_val = js_mkundef();
+  scope->escaped_val = Ant_Value_Undefined;
   nenv->open_handle_scopes++;
   *result = (napi_escapable_handle_scope)scope;
   return napi_set_last(env, napi_ok, NULL);

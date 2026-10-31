@@ -24,19 +24,19 @@ static int b_calls;
 static ant_value_t on_a(ant_params_t) {
   assert(js == a);
   a_calls++;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t on_b(ant_params_t) {
   assert(js == b);
   b_calls++;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void schedule(ant_t *js, const char *name, ant_value_t callback, int delay) {
   ant_value_t args[] = { callback, Ant_Value_FromNumber(delay) };
   ant_value_t fn = js_get(js, js_glob(js), name);
-  ant_value_t result = sv_vm_call(js->vm, js, fn, js_mkundef(), args, 2, NULL, js_mkundef());
+  ant_value_t result = sv_vm_call(js->vm, js, fn, Ant_Value_Undefined, args, 2, NULL, Ant_Value_Undefined);
   assert(!is_err(result));
 }
 

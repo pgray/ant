@@ -35,7 +35,7 @@ void mir_emit_truthy_branch(
   MIR_label_t string = MIR_new_label(ctx);
   MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_BEQ,
       MIR_new_label_op(ctx, truthy), MIR_new_reg_op(ctx, value),
-      MIR_new_uint_op(ctx, js_true)));
+      MIR_new_uint_op(ctx, Ant_Value_True)));
   MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_SUB,
       MIR_new_reg_op(ctx, scratch), MIR_new_reg_op(ctx, value),
       MIR_new_uint_op(ctx, mkval(kTypeUndefined, 0))));
@@ -1128,10 +1128,10 @@ void mir_emit_primitive_type_test(
     MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_AND, MIR_new_reg_op(ctx, scratch), MIR_new_reg_op(ctx, scratch), MIR_new_uint_op(ctx, ANT_OBJECT_FLAG_CALLABLE)));
     MIR_append_insn(ctx, fn, MIR_new_insn(ctx, object ? MIR_BNE : MIR_BEQ, MIR_new_label_op(ctx, no), MIR_new_reg_op(ctx, scratch), MIR_new_uint_op(ctx, 0)));
     MIR_append_insn(ctx, fn, yes);
-    MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_MOV, MIR_new_reg_op(ctx, value), MIR_new_uint_op(ctx, js_true)));
+    MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_MOV, MIR_new_reg_op(ctx, value), MIR_new_uint_op(ctx, Ant_Value_True)));
     MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, done)));
     MIR_append_insn(ctx, fn, no);
-    MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_MOV, MIR_new_reg_op(ctx, value), MIR_new_uint_op(ctx, js_false)));
+    MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_MOV, MIR_new_reg_op(ctx, value), MIR_new_uint_op(ctx, Ant_Value_False)));
     MIR_append_insn(ctx, fn, done);
     return;
   }
@@ -1141,7 +1141,7 @@ void mir_emit_primitive_type_test(
     MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_URSH, MIR_new_reg_op(ctx, scratch), MIR_new_reg_op(ctx, value), MIR_new_uint_op(ctx, NANBOX_TYPE_SHIFT)));
     MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_EQ, MIR_new_reg_op(ctx, scratch), MIR_new_reg_op(ctx, scratch), MIR_new_uint_op(ctx, (NANBOX_PREFIX >> NANBOX_TYPE_SHIFT) | type)));
   }
-  MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_OR, MIR_new_reg_op(ctx, value), MIR_new_reg_op(ctx, scratch), MIR_new_uint_op(ctx, js_false)));
+  MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_OR, MIR_new_reg_op(ctx, value), MIR_new_reg_op(ctx, scratch), MIR_new_uint_op(ctx, Ant_Value_False)));
 }
 
 static void mir_emit_char_code_at_core(
@@ -1800,7 +1800,7 @@ void mir_emit_numeric_equality(
   MIR_append_insn(ctx, fn,
                   MIR_new_insn(ctx, MIR_OR,
                                MIR_new_reg_op(ctx, result),
-                               MIR_new_uint_op(ctx, js_false),
+                               MIR_new_uint_op(ctx, Ant_Value_False),
                                MIR_new_reg_op(ctx, scratch)));
 }
 
@@ -1980,11 +1980,11 @@ void mir_emit_const_string_equality(
   }
 
   MIR_append_insn(ctx, fn, equal);
-  mir_load_imm(ctx, fn, result, invert ? js_false : js_true);
+  mir_load_imm(ctx, fn, result, invert ? Ant_Value_False : Ant_Value_True);
   MIR_append_insn(ctx, fn,
                   MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, done)));
   MIR_append_insn(ctx, fn, not_equal);
-  mir_load_imm(ctx, fn, result, invert ? js_true : js_false);
+  mir_load_imm(ctx, fn, result, invert ? Ant_Value_True : Ant_Value_False);
   MIR_append_insn(ctx, fn,
                   MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, done)));
 }
@@ -2031,7 +2031,7 @@ void mir_emit_strict_tagged_equality(
                                                (NANBOX_PREFIX >> NANBOX_TYPE_SHIFT) | (uint64_t)kTypeBigInt)));
 
   MIR_append_insn(ctx, fn, not_equal);
-  mir_load_imm(ctx, fn, result, invert ? js_true : js_false);
+  mir_load_imm(ctx, fn, result, invert ? Ant_Value_True : Ant_Value_False);
   MIR_append_insn(ctx, fn,
                   MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, done)));
 
@@ -2046,7 +2046,7 @@ void mir_emit_strict_tagged_equality(
   mir_emit_string_equality(ctx, fn, left, right, scratch, inline_long_strings, equal, not_equal, slow);
 
   MIR_append_insn(ctx, fn, equal);
-  mir_load_imm(ctx, fn, result, invert ? js_false : js_true);
+  mir_load_imm(ctx, fn, result, invert ? Ant_Value_False : Ant_Value_True);
   MIR_append_insn(ctx, fn,
                   MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, done)));
 }

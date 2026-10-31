@@ -373,7 +373,7 @@ static inline uint8_t regexp_flags_mask(
 static inline ant_value_t regexp_static_empty(ant_t *js) {
   return js->builtins.regexp_empty_string
     ? js->builtins.regexp_empty_string
-    : js_mkundef();
+    : Ant_Value_Undefined;
 }
 
 static inline void regexp_statics_clear_materialized(ant_t *js) {
@@ -549,9 +549,9 @@ static __attribute__((always_inline)) inline ant_value_t regexp_fast_set_last_in
 ) {
   if (fast->obj) {
     ant_object_prop_set_unchecked(fast->obj, fast->li_slot, Ant_Value_FromNumber(value));
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
-  if (vtype(rx) == kTypeUndefined) return js_mkundef();
+  if (vtype(rx) == kTypeUndefined) return Ant_Value_Undefined;
   return regexp_set_lastindex(js, fast->compiled, rx, Ant_Value_FromNumber(value));
 }
 
@@ -569,7 +569,7 @@ static __attribute__((always_inline)) inline ant_value_t regexp_exec_run(
   if (uses_last_index || !truthy_only) utf16_pos_init(&pos, str_ptr, str_len);
   if (uses_last_index && !regexp_pos_last_index(&pos, last_index, flags, &start)) {
     ant_value_t stored = regexp_fast_set_last_index(js, regexp, fast, 0);
-    return is_err(stored) ? stored : js_mknull();
+    return is_err(stored) ? stored : Ant_Value_Null;
   }
 
   regex_match_scope_t scope = {0};
@@ -581,9 +581,9 @@ static __attribute__((always_inline)) inline ant_value_t regexp_exec_run(
   );
   if (rc < 0) {
     regex_match_scope_end(&scope);
-    if (!uses_last_index) return js_mknull();
+    if (!uses_last_index) return Ant_Value_Null;
     ant_value_t stored = regexp_fast_set_last_index(js, regexp, fast, 0);
-    return is_err(stored) ? stored : js_mknull();
+    return is_err(stored) ? stored : Ant_Value_Null;
   }
 
   update_regexp_statics(js, str_arg, ovector, ovcount);
@@ -599,7 +599,7 @@ static __attribute__((always_inline)) inline ant_value_t regexp_exec_run(
 
   if (truthy_only) {
     regex_match_scope_end(&scope);
-    return js_true;
+    return Ant_Value_True;
   }
 
   ant_value_t result = regexp_exec_result(js, regexp, compiled, str_arg, &pos, index, ovector, ovcount);
@@ -632,7 +632,7 @@ static __attribute__((always_inline)) inline void regexp_fast_scan_begin(
   if (scan->global || !scan->sticky) return;
   utf16_pos_init(&scan->pos, scan->str_ptr, str_len);
   if (regexp_pos_last_index(&scan->pos, regexp_fast_last_index(fast), fast->flags, &scan->offset)) return;
-  regexp_fast_set_last_index(js, js_mkundef(), fast, 0);
+  regexp_fast_set_last_index(js, Ant_Value_Undefined, fast, 0);
   scan->done = true;
 }
 
@@ -665,9 +665,9 @@ static __attribute__((always_inline)) inline int regexp_fast_scan_next(
 
 static __attribute__((always_inline)) inline void regexp_fast_scan_end(ant_t *js, regexp_fast_scan_t *scan) {
   regex_match_scope_end(&scan->scope);
-  if (scan->global) regexp_fast_set_last_index(js, js_mkundef(), scan->fast, 0);
+  if (scan->global) regexp_fast_set_last_index(js, Ant_Value_Undefined, scan->fast, 0);
   else if (scan->sticky) regexp_fast_set_last_index(
-    js, js_mkundef(), scan->fast,
+    js, Ant_Value_Undefined, scan->fast,
     scan->count ? (double)utf16_pos_units(&scan->pos, scan->last_end) : 0
   );
 }

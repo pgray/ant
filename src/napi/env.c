@@ -325,7 +325,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_get_and_clear_last_exception(
     : Ant_Exception_Peek(nenv->js);
 
   *result = NAPI_RETURN(nenv, Ant_Exception_Value(nenv->js, exception));
-  nenv->exception = js_mkundef();
+  nenv->exception = Ant_Value_Undefined;
   js_take_thrown(nenv->js, exception);
 
   return napi_set_last(env, napi_ok, NULL);

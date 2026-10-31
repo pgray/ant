@@ -35,7 +35,7 @@ static ant_value_t worker_make_readable(ant_t *js, ant_value_t read) {
   ant_value_t obj = Ant_Object_CreateBare(js);
   if (is_err(obj)) return obj;
   js_set_proto_init(obj, stream_readable_prototype(js));
-  stream_init_readable_object(js, obj, js_mkundef());
+  stream_init_readable_object(js, obj, Ant_Value_Undefined);
   js_set(js, obj, "_read", read);
   return obj;
 }
@@ -58,14 +58,14 @@ void worker_stdio_child_wake(ant_t *js, ant_worker_t *w) {
     ant_value_t chunk = worker_stdio_bytes(js, e->bytes, e->len);
     free(e);
     if (is_err(chunk)) js_take_thrown(js, chunk);
-    else stream_readable_push(js, stream, chunk, js_mkundef());
+    else stream_readable_push(js, stream, chunk, Ant_Value_Undefined);
   }
 
   if (ended) {
     w->child_stdin_done = true;
     if (w->child_stdin_reading) uv_unref((uv_handle_t *)&w->child_async);
     w->child_stdin_reading = false;
-    stream_readable_push(js, stream, js_mknull(), js_mkundef());
+    stream_readable_push(js, stream, Ant_Value_Null, Ant_Value_Undefined);
   }
 
   GC_ROOT_RESTORE(js, mark);
@@ -74,10 +74,10 @@ void worker_stdio_child_wake(ant_t *js, ant_worker_t *w) {
 
 static ant_value_t worker_stdin_read(ant_params_t) {
   ant_worker_t *w = js->worker;
-  if (!w || w->child_stdin_done || w->child_stdin_reading || !w->child_async_open) return js_mkundef();
+  if (!w || w->child_stdin_done || w->child_stdin_reading || !w->child_async_open) return Ant_Value_Undefined;
   w->child_stdin_reading = true;
   uv_ref((uv_handle_t *)&w->child_async);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 void worker_stdio_child_init(ant_t *js, ant_worker_t *w) {
@@ -93,7 +93,7 @@ void worker_stdio_child_init(ant_t *js, ant_worker_t *w) {
 
 static void worker_stdin_call(ant_t *js, ant_value_t callback) {
   if (!is_callable(callback)) return;
-  ant_value_t r = sv_vm_call(js->vm, js, callback, js_mkundef(), NULL, 0, NULL, js_mkundef());
+  ant_value_t r = sv_vm_call(js->vm, js, callback, Ant_Value_Undefined, NULL, 0, NULL, Ant_Value_Undefined);
   if (is_err(r)) js_take_thrown(js, r);
 }
 
@@ -112,7 +112,7 @@ static void worker_stdin_enqueue(ant_worker_t *w, worker_event_t *e) {
 
 static ant_value_t worker_stdin_write(ant_params_t) {
   ant_worker_t *w = worker_data(js_func_data(call_func));
-  ant_value_t chunk = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t chunk = nargs > 0 ? args[0] : Ant_Value_Undefined;
   const uint8_t *bytes = NULL;
   size_t len = 0;
 
@@ -128,22 +128,22 @@ static ant_value_t worker_stdin_write(ant_params_t) {
     worker_stdin_enqueue(w, e);
   }
 
-  worker_stdin_call(js, nargs > 2 ? args[2] : js_mkundef());
-  return js_mkundef();
+  worker_stdin_call(js, nargs > 2 ? args[2] : Ant_Value_Undefined);
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t worker_stdin_final(ant_params_t) {
   ant_worker_t *w = worker_data(js_func_data(call_func));
   if (w) worker_stdin_enqueue(w, NULL);
-  worker_stdin_call(js, nargs > 0 ? args[0] : js_mkundef());
-  return js_mkundef();
+  worker_stdin_call(js, nargs > 0 ? args[0] : Ant_Value_Undefined);
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t worker_make_stdin(ant_t *js, ant_value_t worker_obj) {
   ant_value_t obj = Ant_Object_CreateBare(js);
   if (is_err(obj)) return obj;
   js_set_proto_init(obj, stream_writable_prototype(js));
-  stream_init_writable_object(js, obj, js_mkundef());
+  stream_init_writable_object(js, obj, Ant_Value_Undefined);
   js_set(js, obj, "_write", js_heavy_mkfun(js, worker_stdin_write, worker_obj));
   js_set(js, obj, "_final", js_heavy_mkfun(js, worker_stdin_final, worker_obj));
   return obj;
@@ -175,12 +175,12 @@ void worker_stdio_forward(ant_t *js, ant_worker_t *w, worker_event_t *e) {
 
   GC_ROOT_SAVE(mark, js);
   GC_ROOT_PIN(js, chunk);
-  stream_readable_push(js, stream, chunk, js_mkundef());
+  stream_readable_push(js, stream, chunk, Ant_Value_Undefined);
   GC_ROOT_RESTORE(js, mark);
   process_microtasks(js);
 }
 
 void worker_stdio_end(ant_t *js, ant_worker_t *w) {
-  if (is_object_type(w->stdout_obj)) stream_readable_push(js, w->stdout_obj, js_mknull(), js_mkundef());
-  if (is_object_type(w->stderr_obj)) stream_readable_push(js, w->stderr_obj, js_mknull(), js_mkundef());
+  if (is_object_type(w->stdout_obj)) stream_readable_push(js, w->stdout_obj, Ant_Value_Null, Ant_Value_Undefined);
+  if (is_object_type(w->stderr_obj)) stream_readable_push(js, w->stderr_obj, Ant_Value_Null, Ant_Value_Undefined);
 }

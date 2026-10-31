@@ -47,7 +47,7 @@ static inline ant_value_t sv_export_target_ns_from_closure(ant_t *js, sv_closure
   
   ant_value_t func_obj = closure && closure->func_obj
     ? closure->func_obj 
-    : js_mkundef();
+    : Ant_Value_Undefined;
   
   return sv_export_target_ns_from_func_obj(js, func_obj);
 }
@@ -83,13 +83,13 @@ static inline void sv_op_to_propkey(sv_vm_t *vm, ant_t *js) {
 
 static inline ant_value_t sv_op_to_string(sv_vm_t *vm, ant_t *js) {
   ant_value_t v = vm->stack[vm->sp - 1];
-  if (vtype(v) == kTypeString) return js_mkundef();
+  if (vtype(v) == kTypeString) return Ant_Value_Undefined;
   
   ant_value_t out = js_template_to_string(js, v);
   if (is_err(out)) return out;
   
   vm->stack[vm->sp - 1] = out;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline void sv_op_is_undef(sv_vm_t *vm) {
@@ -117,7 +117,7 @@ static inline ant_value_t sv_op_import(sv_vm_t *vm, ant_t *js, sv_func_t *func) 
   if (vtype(import_fn) == kTypeFunction || vtype(import_fn) == kTypeBuiltin) {
     ant_value_t result = sv_vm_call(
       vm, js, import_fn, js->global,
-      &vm->stack[vm->sp - 2], 2, NULL, js_mkundef()
+      &vm->stack[vm->sp - 2], 2, NULL, Ant_Value_Undefined
     );
     
     vm->sp -= 2;
@@ -213,14 +213,14 @@ static inline ant_value_t sv_import_named_value(
     if (vtype(value) != kTypeUndefined) return value;
     if (
       sv_module_namespace_has_export(js, ns, name, len) ||
-      js_get_slot(ns, SLOT_MODULE_LOADING) == js_true
+      js_get_slot(ns, SLOT_MODULE_LOADING) == Ant_Value_True
     ) return value;
     return sv_missing_named_export_error(js, ns, name, len);
   }
 
   if (
     !sv_module_namespace_has_export(js, ns, name, len) &&
-    js_get_slot(ns, SLOT_MODULE_LOADING) != js_true
+    js_get_slot(ns, SLOT_MODULE_LOADING) != Ant_Value_True
   ) return sv_missing_named_export_error(js, ns, name, len);
 
   return js_get(js, ns, name);
@@ -257,7 +257,7 @@ static inline ant_value_t sv_op_export(
   ant_value_t value = vm->stack[vm->sp - 1];
   sv_atom_t *a = &func->atoms[atom_idx];
   
-  ant_value_t ns = sv_export_target_ns(js, frame ? frame->callee : js_mkundef());
+  ant_value_t ns = sv_export_target_ns(js, frame ? frame->callee : Ant_Value_Undefined);
   ant_value_t result = sv_module_export_to_ns(js, ns, a->str, a->len, value);
   
   vm->sp--;
@@ -275,7 +275,7 @@ static inline ant_value_t sv_op_export_all(sv_vm_t *vm, ant_t *js) {
   const char *key = NULL;
   
   size_t key_len = 0;
-  ant_value_t value = js_mkundef();
+  ant_value_t value = Ant_Value_Undefined;
 
   while (js_prop_iter_next(&iter, &key, &key_len, &value)) {
     ant_value_t export_res = sv_module_export_cstr(js, key, key_len, value);
@@ -336,7 +336,7 @@ static inline ant_value_t sv_with_unscopables_value(ant_t *js, ant_value_t with_
   if (is_proxy(js_as_obj(with_obj))) return js_get_sym(js, with_obj, sym);
 
   ant_object_t *base_ptr = js_obj_ptr(js_as_obj(with_obj));
-  if (sv_with_unscopables_cached_absent(js, base_ptr)) return js_mkundef();
+  if (sv_with_unscopables_cached_absent(js, base_ptr)) return Ant_Value_Undefined;
 
   ant_offset_t sym_off = (ant_offset_t)vdata(sym);
   ant_prop_loc_t found = lkp_sym_proto(js, with_obj, sym_off);
@@ -350,14 +350,14 @@ static inline ant_value_t sv_with_unscopables_value(ant_t *js, ant_value_t with_
   if (sv_with_exotic_chain_has_sym(js, with_obj, sym_off, &saw_exotic)) return js_get_sym(js, with_obj, sym);
   if (!saw_exotic) sv_with_unscopables_remember_absent(js, base_ptr);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline bool sv_with_unscopables_blocked_fast(
   ant_t *js, ant_value_t unscopables, const sv_atom_t *a, ant_value_t *blocked
 ) {
   if (is_proxy(js_as_obj(unscopables))) return false;
-  *blocked = js_mkundef();
+  *blocked = Ant_Value_Undefined;
 
   for (ant_value_t cur = unscopables; is_object_type(cur); cur = js_get_proto(js, js_as_obj(cur))) {
     prop_meta_t meta;
@@ -415,7 +415,7 @@ static inline sv_with_fast_t sv_with_find_own(ant_object_t *ptr, const sv_atom_t
 
   *value = (uint32_t)slot < ptr->prop_count
     ? ant_object_prop_get_unchecked(ptr, (uint32_t)slot)
-    : js_mkundef();
+    : Ant_Value_Undefined;
 
   return SV_WITH_FOUND;
 }
@@ -443,11 +443,11 @@ static inline ant_value_t sv_with_lookup(
 ) {
   *taken = false;
   sv_with_fast_t fast = sv_with_find_fast(js, obj, a, value);
-  if (fast == SV_WITH_MISS) return js_mkundef();
+  if (fast == SV_WITH_MISS) return Ant_Value_Undefined;
 
   if (fast == SV_WITH_FOUND && sv_with_unscopables_cached_absent(js, js_obj_ptr(obj))) {
     *taken = true;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (fast == SV_WITH_SLOW) {
@@ -458,14 +458,14 @@ static inline ant_value_t sv_with_lookup(
   GC_ROOT_SAVE(root_mark, js);
   if (fast == SV_WITH_FOUND) GC_ROOT_PIN(js, *value);
 
-  ant_value_t error = js_mkundef();
+  ant_value_t error = Ant_Value_Undefined;
   bool abrupt = false;
   bool unscopable = sv_with_binding_is_unscopable(js, obj, a, &error, &abrupt);
   
   GC_ROOT_RESTORE(js, root_mark);
 
   if (abrupt) return error;
-  if (unscopable) return js_mkundef();
+  if (unscopable) return Ant_Value_Undefined;
 
   if (fast == SV_WITH_SLOW && want_value) {
     *value = js_getprop_fallback_len(js, obj, a->str, a->len);
@@ -473,37 +473,37 @@ static inline ant_value_t sv_with_lookup(
   }
 
   *taken = true;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_op_with_try_get(sv_vm_t *vm, ant_t *js, sv_func_t *func, uint8_t *ip, bool *taken) {
   const sv_atom_t *a = &func->atoms[sv_get_u32(ip + 1)];
   ant_value_t obj = vm->stack[vm->sp - 1];
-  ant_value_t value = js_mkundef();
+  ant_value_t value = Ant_Value_Undefined;
 
   ant_value_t checked = sv_with_lookup(js, obj, a, true, &value, taken);
   if (is_err(checked) || !*taken) return checked;
   
   vm->stack[vm->sp - 1] = value;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_op_with_try_call(sv_vm_t *vm, ant_t *js, sv_func_t *func, uint8_t *ip, bool *taken) {
   const sv_atom_t *a = &func->atoms[sv_get_u32(ip + 1)];
   ant_value_t obj = vm->stack[vm->sp - 1];
-  ant_value_t value = js_mkundef();
+  ant_value_t value = Ant_Value_Undefined;
 
   ant_value_t checked = sv_with_lookup(js, obj, a, true, &value, taken);
   if (is_err(checked)) return checked;
   
-  vm->stack[vm->sp++] = *taken ? value : js_mkundef();
-  return js_mkundef();
+  vm->stack[vm->sp++] = *taken ? value : Ant_Value_Undefined;
+  return Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_op_with_try_put(sv_vm_t *vm, ant_t *js, sv_func_t *func, uint8_t *ip, bool *taken) {
   const sv_atom_t *a = &func->atoms[sv_get_u32(ip + 1)];
   ant_value_t obj = vm->stack[vm->sp - 1];
-  ant_value_t current = js_mkundef();
+  ant_value_t current = Ant_Value_Undefined;
 
   ant_value_t checked = sv_with_lookup(js, obj, a, false, &current, taken);
   if (is_err(checked)) return checked;
@@ -514,13 +514,13 @@ static inline ant_value_t sv_op_with_try_put(sv_vm_t *vm, ant_t *js, sv_func_t *
   }
   
   vm->sp--;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline ant_value_t sv_op_with_try_del(sv_vm_t *vm, ant_t *js, sv_func_t *func, uint8_t *ip, bool *taken) {
   const sv_atom_t *a = &func->atoms[sv_get_u32(ip + 1)];
   ant_value_t obj = vm->stack[vm->sp - 1];
-  ant_value_t current = js_mkundef();
+  ant_value_t current = Ant_Value_Undefined;
 
   ant_value_t checked = sv_with_lookup(js, obj, a, false, &current, taken);
   if (is_err(checked) || !*taken) return checked;
@@ -529,7 +529,7 @@ static inline ant_value_t sv_op_with_try_del(sv_vm_t *vm, ant_t *js, sv_func_t *
   if (is_err(deleted)) return deleted;
   vm->stack[vm->sp - 1] = deleted;
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline void sv_op_special_obj(
@@ -541,10 +541,10 @@ static inline void sv_op_special_obj(
       vm->stack[vm->sp++] = js_get_module_import_binding(js);
       return;
     case SV_SPECIAL_NEW_TARGET:
-      vm->stack[vm->sp++] = frame ? frame->new_target : js_mkundef();
+      vm->stack[vm->sp++] = frame ? frame->new_target : Ant_Value_Undefined;
       return;
     case SV_SPECIAL_SUPER:
-      vm->stack[vm->sp++] = frame ? frame->super_val : js_mkundef();
+      vm->stack[vm->sp++] = frame ? frame->super_val : Ant_Value_Undefined;
       return;
     case SV_SPECIAL_ARGC:
       vm->stack[vm->sp++] = Ant_Value_FromNumber(frame ? (double)frame->argc : 0);
@@ -553,7 +553,7 @@ static inline void sv_op_special_obj(
       if (frame) break;
       [[fallthrough]];
     default:
-      vm->stack[vm->sp++] = js_mkundef();
+      vm->stack[vm->sp++] = Ant_Value_Undefined;
       return;
   }
 

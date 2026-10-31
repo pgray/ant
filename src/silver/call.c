@@ -26,7 +26,7 @@ static ant_value_t sv_call_default_ctor(
   }
 
   sv_call_cleanup(js, ctx);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline __attribute__((always_inline)) ant_value_t sv_prepare_call(
@@ -43,7 +43,7 @@ static inline __attribute__((always_inline)) ant_value_t sv_prepare_call(
 
   plan->ctx = (sv_call_ctx_t){
     .this_val = this_val,
-    .super_val = js_mkundef(),
+    .super_val = Ant_Value_Undefined,
     .new_target = new_target,
     .args = args,
     .argc = argc,
@@ -54,7 +54,7 @@ static inline __attribute__((always_inline)) ant_value_t sv_prepare_call(
 
   if (is_construct_call && vtype(func) == kTypeObject && is_proxy(func)) {
     plan->kind = SV_CALL_EXEC_PROXY_CONSTRUCT;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (is_construct_call && !js_is_constructor(func))
@@ -62,13 +62,13 @@ static inline __attribute__((always_inline)) ant_value_t sv_prepare_call(
 
   if (!is_construct_call && vtype(func) == kTypeObject && is_proxy(func)) {
     plan->kind = SV_CALL_EXEC_PROXY_APPLY;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (vtype(func) == kTypeBuiltin) {
     plan->ctx.this_val = sv_call_normalize_this(js, this_val, mode);
     if (out_this) *out_this = plan->ctx.this_val;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (vtype(func) != kTypeFunction)
@@ -88,12 +88,12 @@ static inline __attribute__((always_inline)) ant_value_t sv_prepare_call(
 
   if (closure->call_flags & SV_CALL_IS_DEFAULT_CTOR) {
     plan->kind = SV_CALL_EXEC_DEFAULT_CTOR;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (closure->func != NULL) {
     plan->kind = SV_CALL_EXEC_CLOSURE;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (
@@ -102,11 +102,11 @@ static inline __attribute__((always_inline)) ant_value_t sv_prepare_call(
     vtype(closure->bound_this) == kTypeBuiltin
   ) {
     plan->kind = SV_CALL_EXEC_UNCURRIED_NATIVE;
-    plan->ctx.this_val = plan->ctx.argc ? plan->ctx.args[0] : js_mkundef();
+    plan->ctx.this_val = plan->ctx.argc ? plan->ctx.args[0] : Ant_Value_Undefined;
     if (plan->ctx.argc) { plan->ctx.args++; plan->ctx.argc--; }
   }
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static inline __attribute__((always_inline)) ant_value_t sv_execute_call_plan(
@@ -145,7 +145,7 @@ static inline __attribute__((always_inline)) ant_value_t sv_execute_call_plan(
   case SV_CALL_EXEC_UNCURRIED_NATIVE: {
     ant_value_t result = sv_invoke_builtin(
       js, plan->closure->bound_this, plan->ctx.this_val,
-      plan->func, plan->ctx.args, plan->ctx.argc, js_mkundef()
+      plan->func, plan->ctx.args, plan->ctx.argc, Ant_Value_Undefined
     );
     sv_call_cleanup(js, &plan->ctx);
     return result;
@@ -174,13 +174,13 @@ ant_value_t sv_vm_call(
   ant_value_t this_val, ant_value_t *args, int argc,
   ant_value_t *out_this, ant_value_t new_target
 ) {
-  if (__builtin_expect(js->destroying, 0)) return js_mkundef();
+  if (__builtin_expect(js->destroying, 0)) return Ant_Value_Undefined;
   if (js_interrupt_pending(js)) return js_interrupt_raise(js);
   
   if (sv_check_c_stack_overflow(js))
     return Ant_Error_CreateStackOverflow(js);
 
-  bool is_construct_call = new_target != js_mkundef();
+  bool is_construct_call = new_target != Ant_Value_Undefined;
   sv_call_mode_t mode = is_construct_call
     ? SV_CALL_MODE_CONSTRUCT
     : SV_CALL_MODE_NORMAL;
@@ -189,7 +189,7 @@ ant_value_t sv_vm_call(
     ant_value_t native_this = sv_call_normalize_this(js, this_val, mode);
 
     if (out_this) *out_this = native_this;
-    ant_value_t native_res = sv_invoke_builtin(js, func, native_this, func, args, argc, js_mkundef());
+    ant_value_t native_res = sv_invoke_builtin(js, func, native_this, func, args, argc, Ant_Value_Undefined);
     sv_vm_maybe_checkpoint_microtasks(js);
     return native_res;
   }
@@ -230,7 +230,7 @@ ant_value_t sv_vm_call_explicit_this(
   sv_call_plan_t plan;
   ant_value_t err = sv_prepare_call(
     vm, js, func, this_val, args, argc, NULL,
-    SV_CALL_MODE_EXPLICIT_THIS, js_mkundef(), &plan
+    SV_CALL_MODE_EXPLICIT_THIS, Ant_Value_Undefined, &plan
   );
 
   if (is_err(err)) return err;

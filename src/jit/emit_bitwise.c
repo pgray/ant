@@ -12,10 +12,10 @@ void jit_emit_bitwise(jit_compile_t *c) {
       sv_asm_label_t is_true = sv_asm_new_label(a);
       sv_asm_label_t is_done = sv_asm_new_label(a);
       sv_asm_i64_beq_imm(a, is_true, rs, cmp_val);
-      mir_load_imm(c->ctx, c->jit_func, rs, js_false);
+      mir_load_imm(c->ctx, c->jit_func, rs, Ant_Value_False);
       sv_asm_jump(a, is_done);
       sv_asm_bind(a, is_true);
-      mir_load_imm(c->ctx, c->jit_func, rs, js_true);
+      mir_load_imm(c->ctx, c->jit_func, rs, Ant_Value_True);
       sv_asm_bind(a, is_done);
       vstack_clear_value_info(&c->vs, c->vs.sp - 1);
       if (c->vs.known_bool) c->vs.known_bool[c->vs.sp - 1] = 1;
@@ -29,10 +29,10 @@ void jit_emit_bitwise(jit_compile_t *c) {
       sv_asm_label_t is_done = sv_asm_new_label(a);
       sv_asm_i64_beq_imm(a, is_true, rs, mkval(kTypeUndefined, 0));
       sv_asm_i64_beq_imm(a, is_true, rs, mkval(kTypeNull, 0));
-      mir_load_imm(c->ctx, c->jit_func, rs, js_false);
+      mir_load_imm(c->ctx, c->jit_func, rs, Ant_Value_False);
       sv_asm_jump(a, is_done);
       sv_asm_bind(a, is_true);
-      mir_load_imm(c->ctx, c->jit_func, rs, js_true);
+      mir_load_imm(c->ctx, c->jit_func, rs, Ant_Value_True);
       sv_asm_bind(a, is_done);
       vstack_clear_value_info(&c->vs, c->vs.sp - 1);
       if (c->vs.known_bool) c->vs.known_bool[c->vs.sp - 1] = 1;
@@ -175,10 +175,10 @@ void jit_emit_bitwise(jit_compile_t *c) {
       sv_asm_label_t done = sv_asm_new_label(a);
       mir_emit_truthy_branch(c->ctx, c->jit_func, rs, c->r_bool, c->r_js,
           c->truthy_proto, c->imp_is_truthy, true, falsy);
-      mir_load_imm(c->ctx, c->jit_func, rs, js_false);
+      mir_load_imm(c->ctx, c->jit_func, rs, Ant_Value_False);
       sv_asm_jump(a, done);
       sv_asm_bind(a, falsy);
-      mir_load_imm(c->ctx, c->jit_func, rs, js_true);
+      mir_load_imm(c->ctx, c->jit_func, rs, Ant_Value_True);
       sv_asm_bind(a, done);
       vstack_clear_value_info(&c->vs, c->vs.sp - 1);
       if (c->vs.known_bool) c->vs.known_bool[c->vs.sp - 1] = 1;

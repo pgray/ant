@@ -178,7 +178,7 @@ static ant_value_t js_localstorage_setItem(ant_params_t) {
   storage_set_item(key, key_len, value, value_len);
   ant_mutex_unlock(&local_storage_lock);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 // localStorage.getItem(key)
@@ -193,7 +193,7 @@ static ant_value_t js_localstorage_getItem(ant_params_t) {
   char *key = js_getstr(js, args[0], &key_len);
   ant_mutex_lock(&local_storage_lock);
   char *value = storage_get_item(key, key_len);
-  ant_value_t result = value ? js_mkstr(js, value, strlen(value)) : js_mknull();
+  ant_value_t result = value ? js_mkstr(js, value, strlen(value)) : Ant_Value_Null;
   ant_mutex_unlock(&local_storage_lock);
   
   return result;
@@ -213,7 +213,7 @@ static ant_value_t js_localstorage_removeItem(ant_params_t) {
   storage_remove_item(key, key_len);
   ant_mutex_unlock(&local_storage_lock);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 // localStorage.clear()
@@ -224,7 +224,7 @@ static ant_value_t js_localstorage_clear(ant_params_t) {
   storage_clear();
   storage_save();
   ant_mutex_unlock(&local_storage_lock);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 // localStorage.key(index)
@@ -236,16 +236,16 @@ static ant_value_t js_localstorage_key(ant_params_t) {
   }
   
   if (vtype(args[0]) != kTypeNumber) {
-    return js_mknull();
+    return Ant_Value_Null;
   }
   
   double idx = Ant_Value_AsNumberUnchecked(args[0]);
-  if (idx < 0) return js_mknull();
+  if (idx < 0) return Ant_Value_Null;
   
   size_t index = (size_t)idx;
   ant_mutex_lock(&local_storage_lock);
   char *key = storage_key(index);
-  ant_value_t result = key ? js_mkstr(js, key, strlen(key)) : js_mknull();
+  ant_value_t result = key ? js_mkstr(js, key, strlen(key)) : Ant_Value_Null;
   ant_mutex_unlock(&local_storage_lock);
   
   return result;
@@ -284,7 +284,7 @@ static ant_value_t js_localstorage_setFile(ant_params_t) {
   storage_load();
   ant_mutex_unlock(&local_storage_lock);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 void init_localstorage_module(ant_t *js) {

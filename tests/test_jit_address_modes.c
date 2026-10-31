@@ -110,7 +110,7 @@ static void check_dense_read_guard(void) {
       JIT_ELEMENT_NUMERIC_READ, slow, 0, NULL);
   MIR_append_insn(ctx, function, MIR_new_ret_insn(ctx, 1, MIR_new_reg_op(ctx, value)));
   MIR_append_insn(ctx, function, slow);
-  MIR_append_insn(ctx, function, MIR_new_ret_insn(ctx, 1, MIR_new_uint_op(ctx, js_mkundef())));
+  MIR_append_insn(ctx, function, MIR_new_ret_insn(ctx, 1, MIR_new_uint_op(ctx, Ant_Value_Undefined)));
   MIR_finish_func(ctx); MIR_finish_module(ctx);
   MIR_load_module(ctx, module); MIR_link(ctx, MIR_set_gen_interface, NULL);
   ant_value_t (*read)(ant_value_t, uint64_t) =
@@ -119,20 +119,20 @@ static void check_dense_read_guard(void) {
   assert(!is_err(boxed));
   ant_object_t *array = js_obj_ptr(boxed);
   assert(array && array->flags.fast_array && array->u.array.data);
-  assert(read(boxed, 0) == js_mkundef());
+  assert(read(boxed, 0) == Ant_Value_Undefined);
   js_arr_push(js, boxed, Ant_Value_FromNumber(41));
   js_arr_push(js, boxed, Ant_Value_FromNumber(42));
-  js_arr_push(js, boxed, js_mkundef());
+  js_arr_push(js, boxed, Ant_Value_Undefined);
   assert(read(boxed, 0) == Ant_Value_FromNumber(41));
   assert(read(boxed, 1) == Ant_Value_FromNumber(42));
-  assert(read(boxed, 2) == js_mkundef());
-  assert(read(boxed, 3) == js_mkundef());
-  assert(read(boxed, UINT64_MAX) == js_mkundef());
+  assert(read(boxed, 2) == Ant_Value_Undefined);
+  assert(read(boxed, 3) == Ant_Value_Undefined);
+  assert(read(boxed, UINT64_MAX) == Ant_Value_Undefined);
   array->flags.is_exotic = 1;
-  assert(read(boxed, 0) == js_mkundef());
+  assert(read(boxed, 0) == Ant_Value_Undefined);
   array->flags.is_exotic = 0;
   array->flags.dense_length_fits = 0;
-  assert(read(boxed, 0) == js_mkundef());
+  assert(read(boxed, 0) == Ant_Value_Undefined);
   array->flags.dense_length_fits = 1;
   Ant_Destroy(js);
   MIR_gen_finish(ctx); MIR_finish(ctx);

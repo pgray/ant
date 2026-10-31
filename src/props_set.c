@@ -37,7 +37,7 @@ static ant_value_t js_setprop_array_fast(
         if (array_store_reaches_proto(js, obj, ptr, idx)) return JS_SETPROP_ARRAY_NOT_HANDLED;
         ant_value_t extensibility_error = check_object_extensibility(js, obj);
         if (is_err(extensibility_error)) return extensibility_error;
-        if (extensibility_error == js_false) return set_declined(declined, v);
+        if (extensibility_error == Ant_Value_False) return set_declined(declined, v);
       }
       dense_set(js, doff, (ant_offset_t)idx, v);
       return v;
@@ -49,7 +49,7 @@ static ant_value_t js_setprop_array_fast(
     
     ant_value_t extensibility_error = check_object_extensibility(js, obj);
     if (is_err(extensibility_error)) return extensibility_error;
-    if (extensibility_error == js_false) return set_declined(declined, v);
+    if (extensibility_error == Ant_Value_False) return set_declined(declined, v);
     
     arr_set(js, obj, (ant_offset_t)idx, v);
     return v;
@@ -60,7 +60,7 @@ static ant_value_t js_setprop_array_fast(
   
   ant_value_t extensibility_error = check_object_extensibility(js, obj);
   if (is_err(extensibility_error)) return extensibility_error;
-  if (extensibility_error == js_false) return set_declined(declined, v);
+  if (extensibility_error == Ant_Value_False) return set_declined(declined, v);
   
   ant_value_t result = mkprop(js, obj, k, v, 0);
   if (is_err(result)) return result;
@@ -73,12 +73,12 @@ static __attribute__((noinline)) bool setprop_sym_reaches_proxy(
   ant_t *js, ant_value_t obj, ant_value_t proxy, ant_value_t sym, ant_value_t v,
   bool keyed, bool *declined, ant_value_t *done, ant_value_t *next
 ) {
-  ant_value_t target = js_mkundef();
+  ant_value_t target = Ant_Value_Undefined;
   ant_value_t result = proxy_set_sym(js, proxy, sym, v, obj, &target);
   
   if (is_err(result)) *done = result;
-  else if (result == js_false) *done = proxy_set_rejected_sym(js, sym, v, declined);
-  else if (result == js_true) *done = v;
+  else if (result == Ant_Value_False) *done = proxy_set_rejected_sym(js, sym, v, declined);
+  else if (result == Ant_Value_True) *done = v;
   else if (same_object_identity(proxy, obj)) *done = setprop_impl(js, target, sym, v, keyed, declined);
   
   else {
@@ -115,7 +115,7 @@ static inline bool exotic_has_getter(const ant_object_t *ptr) {
 }
 
 ant_value_t exotic_own_get(ant_t *js, ant_value_t obj, const ant_object_t *ptr, const char *key, size_t len) {
-  return exotic_has_getter(ptr) ? ptr->exotic_ops->getter(js, obj, key, len) : js_mkundef();
+  return exotic_has_getter(ptr) ? ptr->exotic_ops->getter(js, obj, key, len) : Ant_Value_Undefined;
 }
 
 bool array_own_value(ant_t *js, ant_value_t obj, const char *key, size_t len, ant_value_t *out) {
@@ -167,7 +167,7 @@ ant_value_t setprop_impl(ant_t *js, ant_value_t obj, ant_value_t k, ant_value_t 
     
     ant_value_t proto = js_primitive_prototype(js, ot);
     if (is_object_type(proto)) {
-      ant_value_t setter = js_mkundef();
+      ant_value_t setter = Ant_Value_Undefined;
       bool has_setter = false;
       
       lkp_with_setter(js, proto, key, klen, &setter, &has_setter);
@@ -211,7 +211,7 @@ ant_value_t setprop_impl(ant_t *js, ant_value_t obj, ant_value_t k, ant_value_t 
         if (meta.has_setter) {
           ant_value_t setter = meta.setter;
           if (vtype(setter) == kTypeFunction || vtype(setter) == kTypeBuiltin) {
-            ant_value_t result = sv_vm_call(js->vm, js, setter, obj, &v, 1, NULL, js_mkundef());
+            ant_value_t result = sv_vm_call(js->vm, js, setter, obj, &v, 1, NULL, Ant_Value_Undefined);
             if (is_err(result)) return result;
             return v;
           }
@@ -245,7 +245,7 @@ ant_value_t setprop_impl(ant_t *js, ant_value_t obj, ant_value_t k, ant_value_t 
     {
       ant_value_t extensibility_error = check_object_extensibility(js, obj);
       if (is_err(extensibility_error)) return extensibility_error;
-      if (extensibility_error == js_false) return set_declined(declined, v);
+      if (extensibility_error == Ant_Value_False) return set_declined(declined, v);
     }
     
     return mkprop_symbol_attrs_impl(
@@ -300,7 +300,7 @@ ant_value_t setprop_impl(ant_t *js, ant_value_t obj, ant_value_t k, ant_value_t 
   if (is_proxy(obj)) {
     ant_value_t result = proxy_set(js, obj, key, klen, v);
     if (is_err(result)) return result;
-    return result == js_false ? proxy_set_rejected(js, key, klen, v, declined) : v;
+    return result == Ant_Value_False ? proxy_set_rejected(js, key, klen, v, declined) : v;
   }
   
   if (try_dynamic_setter(js, obj, key, klen, v))
@@ -314,7 +314,7 @@ ant_value_t setprop_impl(ant_t *js, ant_value_t obj, ant_value_t k, ant_value_t 
     bool desc_has_getter = false;
     bool desc_has_setter = false;
     bool desc_writable = true;
-    ant_value_t desc_setter = js_mkundef();
+    ant_value_t desc_setter = Ant_Value_Undefined;
 
     ant_value_t cur = obj;
     proto_overflow_guard_t guard;
@@ -325,7 +325,7 @@ ant_value_t setprop_impl(ant_t *js, ant_value_t obj, ant_value_t k, ant_value_t 
       if (!on_receiver && is_proxy(cur_obj)) {
         ant_value_t result = proxy_set_with_receiver(js, cur_obj, key, klen, v, obj);
         if (is_err(result)) return result;
-        return result == js_false ? proxy_set_rejected(js, key, klen, v, declined) : v;
+        return result == Ant_Value_False ? proxy_set_rejected(js, key, klen, v, declined) : v;
       }
       ant_object_t *cur_ptr = js_obj_ptr(cur_obj);
       if (!cur_ptr) break;
@@ -345,7 +345,7 @@ ant_value_t setprop_impl(ant_t *js, ant_value_t obj, ant_value_t k, ant_value_t 
         }
       }
 
-      ant_value_t exotic = !found_here && !on_receiver ? exotic_own_get(js, cur_obj, cur_ptr, key, klen) : js_mkundef();
+      ant_value_t exotic = !found_here && !on_receiver ? exotic_own_get(js, cur_obj, cur_ptr, key, klen) : Ant_Value_Undefined;
       if (exotic == T_EMPTY) return v;
       if (vtype(exotic) != kTypeUndefined) {
         found_here = true;
@@ -384,7 +384,7 @@ ant_value_t setprop_impl(ant_t *js, ant_value_t obj, ant_value_t k, ant_value_t 
       ant_value_t setter = desc_setter;
       uint8_t setter_type = vtype(setter);
       if (setter_type == kTypeFunction || setter_type == kTypeBuiltin) {
-        ant_value_t result = sv_vm_call(js->vm, js, setter, obj, &v, 1, NULL, js_mkundef());
+        ant_value_t result = sv_vm_call(js->vm, js, setter, obj, &v, 1, NULL, Ant_Value_Undefined);
         if (is_err(result)) return result;
         return v;
       }
@@ -415,7 +415,7 @@ create_new:
   {
     ant_value_t extensibility_error = check_object_extensibility(js, obj);
     if (is_err(extensibility_error)) return extensibility_error;
-    if (extensibility_error == js_false) return set_declined(declined, v);
+    if (extensibility_error == Ant_Value_False) return set_declined(declined, v);
   }
 
   const char *interned_key = intern_string(js, key, (size_t)klen);
@@ -463,7 +463,7 @@ static ant_value_t setprop_index_impl(ant_t *js, ant_value_t obj, uint32_t idx, 
         if (missing) {
           ant_value_t extensibility_error = check_object_extensibility(js, obj);
           if (is_err(extensibility_error)) return extensibility_error;
-          if (extensibility_error == js_false) return set_declined(declined, value);
+          if (extensibility_error == Ant_Value_False) return set_declined(declined, value);
         }
         dense_set(js, dense, (ant_offset_t)idx, value);
         return value;
@@ -473,7 +473,7 @@ static ant_value_t setprop_index_impl(ant_t *js, ant_value_t obj, uint32_t idx, 
       if ((uint64_t)idx < density_limit) {
         ant_value_t extensibility_error = check_object_extensibility(js, obj);
         if (is_err(extensibility_error)) return extensibility_error;
-        if (extensibility_error == js_false) return set_declined(declined, value);
+        if (extensibility_error == Ant_Value_False) return set_declined(declined, value);
         arr_set(js, obj, (ant_offset_t)idx, value);
         return value;
       }
@@ -542,7 +542,7 @@ ant_value_t js_setprop_throw(ant_t *js, ant_value_t obj, ant_value_t key, bool i
 }
 
 ant_value_t js_setprop_index_throw(ant_t *js, ant_value_t obj, uint32_t idx, ant_value_t value) {
-  return js_setprop_throw(js, obj, js_mkundef(), true, idx, value);
+  return js_setprop_throw(js, obj, Ant_Value_Undefined, true, idx, value);
 }
 
 ant_value_t setprop_cstr(ant_t *js, ant_value_t obj, const char *key, size_t len, ant_value_t v) {
@@ -581,7 +581,7 @@ static inline bool descriptor_is_accessor(ant_t *js, ant_value_t desc) {
 
 static ant_value_t own_property_descriptor(ant_t *js, ant_value_t obj, ant_value_t key) {
   ant_value_t args[2] = { obj, key };
-  return builtin_object_getOwnPropertyDescriptor(js, args, 2, js_mkundef(), js_mkundef(), js_mkundef());
+  return builtin_object_getOwnPropertyDescriptor(js, args, 2, Ant_Value_Undefined, Ant_Value_Undefined, Ant_Value_Undefined);
 }
 
 static inline ant_value_t set_receiver_write_target(ant_t *js, ant_value_t receiver) {
@@ -594,13 +594,13 @@ static ant_value_t set_receiver_own_target(ant_t *js, ant_value_t receiver) {
     if (!is_proxy(obj)) return obj;
     
     ant_proxy_state_t *data = get_proxy_data(obj);
-    if (!data || data->revoked || data->host || !is_object_type(data->handler)) return js_mkundef();
+    if (!data || data->revoked || data->host || !is_object_type(data->handler)) return Ant_Value_Undefined;
     
     if (data->plain_handler_epoch != js->ic.epoch) {
       if (
         !chain_lacks_plain_keys(data->handler, 
         js->intern.get_own_property_descriptor, js->intern.define_property)
-      ) return js_mkundef();
+      ) return Ant_Value_Undefined;
       
       for (ant_value_t cur = data->handler; is_object_type(cur);) {
         ant_object_t *ptr = js_obj_ptr(js_as_obj(cur));
@@ -614,7 +614,7 @@ static ant_value_t set_receiver_own_target(ant_t *js, ant_value_t receiver) {
     receiver = data->target;
   }
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t set_with_receiver_fast(ant_t *js, ant_value_t target, ant_value_t key, ant_value_t value, ant_value_t receiver) {
@@ -647,17 +647,17 @@ static ant_value_t set_with_receiver_fast(ant_t *js, ant_value_t target, ant_val
     if (!prop || (uint32_t)slot >= holder->prop_count) return T_EMPTY;
     
     if (prop->has_getter || prop->has_setter) {
-      if (!prop->has_setter || !is_callable(prop->setter)) return js_false;
-      ant_value_t called = sv_vm_call(js->vm, js, prop->setter, receiver, &value, 1, NULL, js_mkundef());
-      return is_err(called) ? called : js_true;
+      if (!prop->has_setter || !is_callable(prop->setter)) return Ant_Value_False;
+      ant_value_t called = sv_vm_call(js->vm, js, prop->setter, receiver, &value, 1, NULL, Ant_Value_Undefined);
+      return is_err(called) ? called : Ant_Value_True;
     }
     
-    if (!(ant_shape_get_attrs(holder->shape, (uint32_t)slot) & ANT_PROP_ATTR_WRITABLE)) return js_false;
+    if (!(ant_shape_get_attrs(holder->shape, (uint32_t)slot) & ANT_PROP_ATTR_WRITABLE)) return Ant_Value_False;
   }
   
   ant_value_t write = set_receiver_write_target(js, receiver);
   if (is_err(write)) return write;
-  if (!is_object_type(write)) return js_false;
+  if (!is_object_type(write)) return Ant_Value_False;
   ant_value_t own = set_receiver_own_target(js, write);
   ant_object_t *own_ptr = is_object_type(own) ? js_obj_ptr(own) : NULL;
   if (!is_plain_set_target(own_ptr)) return T_EMPTY;
@@ -665,27 +665,27 @@ static ant_value_t set_with_receiver_fast(ant_t *js, ant_value_t target, ant_val
   int32_t own_slot = interned ? ant_shape_lookup_interned(own_ptr->shape, interned) : -1;
   if (own_slot >= 0) {
     if ((uint32_t)own_slot >= own_ptr->prop_count) return T_EMPTY;
-    if (!own_writable_data_slot(own_ptr, own_slot)) return js_false;
+    if (!own_writable_data_slot(own_ptr, own_slot)) return Ant_Value_False;
     store_own_data_slot(js, own_ptr, (uint32_t)own_slot, interned, value);
-    return js_true;
+    return Ant_Value_True;
   }
   
-  if (!own_ptr->flags.extensible) return js_false;
+  if (!own_ptr->flags.extensible) return Ant_Value_False;
   const char *added_key = interned ? interned : intern_string(js, key_str, key_len);
   if (!added_key) return js_mkerr(js, "oom");
   
   ant_value_t added = mkprop_interned_exact(js, own, added_key, value, 0);
-  return is_err(added) ? added : js_true;
+  return is_err(added) ? added : Ant_Value_True;
 }
 
 static ant_value_t set_with_receiver(ant_t *js, ant_value_t target, ant_value_t key, ant_value_t value, ant_value_t receiver) {
   ant_value_t cur = target;
-  ant_value_t desc = js_mkundef();
+  ant_value_t desc = Ant_Value_Undefined;
   
   for (int depth = 0; depth < MAX_PROTO_CHAIN_DEPTH; depth++) {
     ant_value_t obj = js_as_obj(cur);
     if (is_proxy(obj) && vtype(key) == kTypeSymbol) {
-      ant_value_t proxy_target = js_mkundef();
+      ant_value_t proxy_target = Ant_Value_Undefined;
       ant_value_t result = proxy_set_sym(js, obj, key, value, receiver, &proxy_target);
       if (vtype(result) != kTypeUndefined) return result;
       cur = proxy_target;
@@ -702,7 +702,7 @@ static ant_value_t set_with_receiver(ant_t *js, ant_value_t target, ant_value_t 
       size_t key_len = 0;
       const char *key_str = js_getstr(js, key, &key_len);
       ant_object_t *ptr = js_obj_ptr(obj);
-      if (key_str && ptr && exotic_own_get(js, obj, ptr, key_str, key_len) == T_EMPTY) return js_true;
+      if (key_str && ptr && exotic_own_get(js, obj, ptr, key_str, key_len) == T_EMPTY) return Ant_Value_True;
     }
     
     desc = own_property_descriptor(js, cur, key);
@@ -716,23 +716,23 @@ static ant_value_t set_with_receiver(ant_t *js, ant_value_t target, ant_value_t 
   if (is_err(desc)) return desc;
   if (descriptor_is_accessor(js, desc)) {
     ant_value_t setter = js_get(js, desc, "set");
-    if (!is_callable(setter)) return js_false;
+    if (!is_callable(setter)) return Ant_Value_False;
     
-    ant_value_t called = sv_vm_call(js->vm, js, setter, receiver, &value, 1, NULL, js_mkundef());
-    return is_err(called) ? called : js_true;
+    ant_value_t called = sv_vm_call(js->vm, js, setter, receiver, &value, 1, NULL, Ant_Value_Undefined);
+    return is_err(called) ? called : Ant_Value_True;
   }
   
-  if (vtype(desc) != kTypeUndefined && !descriptor_bool_value(js, desc, "writable", 8, false)) return js_false;
+  if (vtype(desc) != kTypeUndefined && !descriptor_bool_value(js, desc, "writable", 8, false)) return Ant_Value_False;
   ant_value_t write = set_receiver_write_target(js, receiver);
   if (is_err(write)) return write;
-  if (!is_object_type(write)) return js_false;
+  if (!is_object_type(write)) return Ant_Value_False;
   
   ant_value_t existing = own_property_descriptor(js, write, key);
   if (is_err(existing)) return existing;
   
   bool fresh = vtype(existing) == kTypeUndefined;
   if (!fresh && (descriptor_is_accessor(js, existing) || !descriptor_bool_value(js, existing, "writable", 8, false)))
-    return js_false;
+    return Ant_Value_False;
   
   ant_value_t update = Ant_Object_CreateBare(js);
   if (is_err(update)) return update;
@@ -742,9 +742,9 @@ static ant_value_t set_with_receiver(ant_t *js, ant_value_t target, ant_value_t 
   
   js_set(js, update, "value", value);
   if (fresh) {
-    js_set(js, update, "writable", js_true);
-    js_set(js, update, "enumerable", js_true);
-    js_set(js, update, "configurable", js_true);
+    js_set(js, update, "writable", Ant_Value_True);
+    js_set(js, update, "enumerable", Ant_Value_True);
+    js_set(js, update, "configurable", Ant_Value_True);
   }
   
   GC_ROOT_PIN(js, write);
@@ -847,7 +847,7 @@ void js_merge_obj(ant_t *js, ant_value_t dst, ant_value_t src) {
     if (!prop || prop->type != ANT_SHAPE_KEY_STRING) continue;
 
     const char *key = prop->key.interned;
-    ant_value_t val = (i < src_obj->prop_count) ? ant_object_prop_get_unchecked(src_obj, i) : js_mkundef();
+    ant_value_t val = (i < src_obj->prop_count) ? ant_object_prop_get_unchecked(src_obj, i) : Ant_Value_Undefined;
     js_setprop(js, dst, js_mkstr(js, key, intern_length(key)), val);
   }
 }

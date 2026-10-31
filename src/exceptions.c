@@ -10,11 +10,11 @@
 #include "silver/stack_trace.h"
 
 bool Ant_Exception_Pending(ant_t *js) {
-  return js && js->exception != js_mkundef();
+  return js && js->exception != Ant_Value_Undefined;
 }
 
 ant_value_t Ant_Exception_Peek(ant_t *js) {
-  return Ant_Exception_Pending(js) ? js->exception : js_mkundef();
+  return Ant_Exception_Pending(js) ? js->exception : Ant_Value_Undefined;
 }
 
 ant_value_t Ant_Exception_Current(ant_t *js) {
@@ -23,16 +23,16 @@ ant_value_t Ant_Exception_Current(ant_t *js) {
 }
 
 void Ant_Exception_Set(ant_t *js, ant_value_t completion) {
-  js->exception = is_err(completion) ? completion : js_mkundef();
+  js->exception = is_err(completion) ? completion : Ant_Value_Undefined;
 }
 
 void Ant_Exception_Clear(ant_t *js) {
-  js->exception = js_mkundef();
+  js->exception = Ant_Value_Undefined;
 }
 
 static ant_object_t *exception_record(ant_t *js, ant_value_t completion) {
   if (!is_err(completion)) return NULL;
-  if (!vdata(completion)) completion = js ? js->exception_oom : js_mkundef();
+  if (!vdata(completion)) completion = js ? js->exception_oom : Ant_Value_Undefined;
   if (!is_err(completion) || vdata(completion) < 2) return NULL;
   ant_object_t *record = js_obj_ptr(js_as_obj(completion));
   return record && record->type_tag == kTypeError ? record : NULL;
@@ -40,12 +40,12 @@ static ant_object_t *exception_record(ant_t *js, ant_value_t completion) {
 
 ant_value_t Ant_Exception_Value(ant_t *js, ant_value_t completion) {
   ant_object_t *record = exception_record(js, completion);
-  return record ? record->u.exception.value : is_err(completion) ? js_mkundef() : completion;
+  return record ? record->u.exception.value : is_err(completion) ? Ant_Value_Undefined : completion;
 }
 
 ant_value_t Ant_Exception_Stack(ant_t *js, ant_value_t completion) {
   ant_object_t *record = exception_record(js, completion);
-  if (!record) return js_mkundef();
+  if (!record) return Ant_Value_Undefined;
   
   ant_value_t stack = record->u.exception.stack;
   ant_value_t value = record->u.exception.value;
@@ -67,7 +67,7 @@ ant_value_t Ant_Exception_Stack(ant_t *js, ant_value_t completion) {
   stack = lazy_record
     ? js_error_record_throw_text(js, value, stack)
     : js_error_stack_value(js, value);
-  if (vtype(stack) != kTypeString) stack = js_mkundef();
+  if (vtype(stack) != kTypeString) stack = Ant_Value_Undefined;
   
   if (lazy_record) {
     record->u.exception.stack = stack;
@@ -100,7 +100,7 @@ ant_value_t Ant_Error_ConsumeMarker(ant_t *js, ant_value_t value) {
 
 ant_value_t Ant_Error_CallCallback(ant_t *js, ant_value_t callback, ant_value_t this_value, ant_args_t) {
   if (nargs < 1 || !is_err(args[0]))
-    return sv_vm_call(js->vm, js, callback, this_value, args, nargs, NULL, js_mkundef());
+    return sv_vm_call(js->vm, js, callback, this_value, args, nargs, NULL, Ant_Value_Undefined);
 
   ant_value_t inline_args[8];
   ant_value_t *call_args = nargs <= 8 ? inline_args : malloc((size_t)nargs * sizeof(*call_args));
@@ -114,7 +114,7 @@ ant_value_t Ant_Error_CallCallback(ant_t *js, ant_value_t callback, ant_value_t 
   for (int i = 0; i < nargs; i++) GC_ROOT_PIN(js, call_args[i]);
 
   call_args[0] = Ant_Error_ConsumeMarker(js, call_args[0]);
-  ant_value_t result = sv_vm_call(js->vm, js, callback, this_value, call_args, nargs, NULL, js_mkundef());
+  ant_value_t result = sv_vm_call(js->vm, js, callback, this_value, call_args, nargs, NULL, Ant_Value_Undefined);
 
   GC_ROOT_RESTORE(js, root_mark);
   if (call_args != inline_args) free(call_args);
@@ -126,18 +126,18 @@ bool print_uncaught_throw(ant_t *js) {
   if (!Ant_Exception_Pending(js)) return false;
   
   if (js_termination_pending(js)) {
-    js_take_thrown(js, js_mkundef());
+    js_take_thrown(js, Ant_Value_Undefined);
     return true;
   }
   
   print_error_value(js, Ant_Exception_Value(js, Ant_Exception_Peek(js)), Ant_Exception_Stack(js, Ant_Exception_Peek(js)), NULL);
-  js_take_thrown(js, js_mkundef());
+  js_take_thrown(js, Ant_Value_Undefined);
   
   return true;
 }
 
 bool print_unhandled_promise_rejection(ant_t *js, ant_value_t value) {
-  print_error_value(js, value, js_mkundef(), "Uncaught (in promise) ");
+  print_error_value(js, value, Ant_Value_Undefined, "Uncaught (in promise) ");
   return true;
 }
 

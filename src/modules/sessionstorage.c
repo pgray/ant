@@ -98,7 +98,7 @@ static ant_value_t js_sessionstorage_setItem(ant_params_t) {
   storage_set_item(key, key_len, value, value_len);
   ant_mutex_unlock(&session_storage_lock);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 // sessionStorage.getItem(key)
@@ -112,7 +112,7 @@ static ant_value_t js_sessionstorage_getItem(ant_params_t) {
   ant_mutex_lock(&session_storage_lock);
   
   char *value = storage_get_item(key, key_len);
-  ant_value_t result = value ? js_mkstr(js, value, strlen(value)) : js_mknull();
+  ant_value_t result = value ? js_mkstr(js, value, strlen(value)) : Ant_Value_Null;
   ant_mutex_unlock(&session_storage_lock);
   
   return result;
@@ -131,7 +131,7 @@ static ant_value_t js_sessionstorage_removeItem(ant_params_t) {
   storage_remove_item(key, key_len);
   ant_mutex_unlock(&session_storage_lock);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 // sessionStorage.clear()
@@ -139,7 +139,7 @@ static ant_value_t js_sessionstorage_clear(ant_params_t) {
   ant_mutex_lock(&session_storage_lock);
   storage_clear();
   ant_mutex_unlock(&session_storage_lock);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 // sessionStorage.key(index)
@@ -149,17 +149,17 @@ static ant_value_t js_sessionstorage_key(ant_params_t) {
   }
   
   if (vtype(args[0]) != kTypeNumber) {
-    return js_mknull();
+    return Ant_Value_Null;
   }
   
   double idx = Ant_Value_AsNumberUnchecked(args[0]);
-  if (idx < 0) return js_mknull();
+  if (idx < 0) return Ant_Value_Null;
   
   size_t index = (size_t)idx;
   ant_mutex_lock(&session_storage_lock);
   
   char *key = storage_key(index);
-  ant_value_t result = key ? js_mkstr(js, key, strlen(key)) : js_mknull();
+  ant_value_t result = key ? js_mkstr(js, key, strlen(key)) : Ant_Value_Null;
   ant_mutex_unlock(&session_storage_lock);
   
   return result;

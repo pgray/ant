@@ -46,7 +46,7 @@ ant_value_t sv_generic_step(sv_vm_t *vm, sv_frame_t *frame, uint8_t *ip, uint32_
   sv_func_t *func = frame->func;
   
   ant_value_t *lp = frame->lp;
-  ant_value_t sv_err = js_mkundef();
+  ant_value_t sv_err = Ant_Value_Undefined;
   
   vm->sp = (int)(lp - vm->stack) + func->max_locals + (int)depth;
   frame->ip = ip;

@@ -119,7 +119,7 @@ static ant_value_t isolate_make_handle(ant_t *js, ant_guest_t *g, isolate_handle
 static ant_value_t isolate_callback_id(ant_t *js, ant_guest_t *g, ant_value_t fn, uint32_t *out) {
   for (uint32_t i = 0; i < g->callback_count; i++) if (g->callbacks[i] == fn) {
     *out = i;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (g->callback_count == g->callback_cap) {
@@ -133,7 +133,7 @@ static ant_value_t isolate_callback_id(ant_t *js, ant_guest_t *g, ant_value_t fn
   *out = g->callback_count;
   g->callbacks[g->callback_count++] = fn;
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static bool isolate_is_callback(ant_t *js, ant_value_t value) {
@@ -143,14 +143,14 @@ static bool isolate_is_callback(ant_t *js, ant_value_t value) {
 
 ant_value_t guest_encode(ant_t *js, ant_guest_t *g, ant_value_t value, guest_value_t *out) {
   *out = (guest_value_t){ .kind = GUEST_VALUE_UNDEFINED };
-  if (vtype(value) == kTypeUndefined) return js_mkundef();
+  if (vtype(value) == kTypeUndefined) return Ant_Value_Undefined;
 
   isolate_handle_t *ref = isolate_handle(value, HANDLE_REFERENCE);
   if (ref) {
     if (ref->g != g) return js_mkerr_typed(js, JS_ERR_TYPE, "Reference belongs to a different isolate");
     if (ref->released) return js_mkerr_typed(js, JS_ERR_TYPE, "Reference has been released");
     *out = (guest_value_t){ .kind = GUEST_VALUE_REF, .id = ref->id };
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (isolate_is_callback(js, value)) {
@@ -158,22 +158,22 @@ ant_value_t guest_encode(ant_t *js, ant_guest_t *g, ant_value_t value, guest_val
     ant_value_t r = isolate_callback_id(js, g, js_get_slot(value, SLOT_DATA), &id);
     if (is_err(r)) return r;
     *out = (guest_value_t){ .kind = GUEST_VALUE_CALLBACK, .id = id };
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (is_object_type(value) && js_get_proto(js, value) == js->builtins.isolate_copy_proto) {
     ant_wire_t *copied = js_get_native(value, ISOLATE_COPY_TAG);
     if (!copied) return js_mkerr_typed(js, JS_ERR_TYPE, "ExternalCopy has been released");
     *out = (guest_value_t){ .kind = GUEST_VALUE_WIRE, .wire = ant_wire_retain(copied) };
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   ant_wire_t *wire = NULL;
-  ant_value_t r = ant_wire_serialize(js, value, js_mkundef(), js_mkundef(), &wire);
+  ant_value_t r = ant_wire_serialize(js, value, Ant_Value_Undefined, Ant_Value_Undefined, &wire);
   if (is_err(r)) return r;
   *out = (guest_value_t){ .kind = GUEST_VALUE_WIRE, .wire = wire };
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t guest_decode_host(ant_t *js, ant_guest_t *g, guest_value_t *v) {
@@ -184,7 +184,7 @@ ant_value_t guest_decode_host(ant_t *js, ant_guest_t *g, guest_value_t *v) {
     if (!is_err(ref)) v->kind = GUEST_VALUE_UNDEFINED;
     return ref;
   }
-  default: return js_mkundef();
+  default: return Ant_Value_Undefined;
   }
 }
 
@@ -193,7 +193,7 @@ ant_value_t guest_host_error(ant_t *js, guest_call_t *call) {
     return js_take_thrown(js, js_mkerr_code(js, JS_ERR_GENERIC, "ERR_ISOLATE_DISPOSED", "Isolate is disposed"));
   if (call->status == GUEST_STATUS_OOM)
     return js_take_thrown(js, js_mkerr_code(js, JS_ERR_RANGE, "ERR_ISOLATE_OUT_OF_MEMORY", "Isolate was disposed because it exceeded its memory limit"));
-  ant_value_t error = call->result.kind == GUEST_VALUE_WIRE ? ant_wire_deserialize(js, call->result.wire, NULL) : js_mkundef();
+  ant_value_t error = call->result.kind == GUEST_VALUE_WIRE ? ant_wire_deserialize(js, call->result.wire, NULL) : Ant_Value_Undefined;
   return is_err(error) ? js_take_thrown(js, error) : error;
 }
 
@@ -269,7 +269,7 @@ ant_value_t guest_finish_host(ant_t *js, ant_guest_t *g, guest_call_t *call) {
   GC_ROOT_RESTORE(js, mark);
   if (g->oom) isolate_dispose(g);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void isolate_host_call_done(ant_t *js, ant_guest_t *g, guest_host_call_t *call) {
@@ -288,7 +288,7 @@ static void isolate_host_call_error(ant_t *js, guest_host_call_t *call, ant_valu
     js_take_thrown(js, r);
     ant_value_t text = js_tostring_val(js, error);
     if (is_err(text)) text = js_take_thrown(js, text);
-    r = ant_wire_serialize(js, text, js_mkundef(), js_mkundef(), &wire);
+    r = ant_wire_serialize(js, text, Ant_Value_Undefined, Ant_Value_Undefined, &wire);
     if (is_err(r)) js_take_thrown(js, r);
   }
 
@@ -304,7 +304,7 @@ static void isolate_host_call_value(ant_t *js, guest_host_call_t *call, ant_valu
   }
 
   ant_wire_t *wire = NULL;
-  ant_value_t r = ant_wire_serialize(js, value, js_mkundef(), js_mkundef(), &wire);
+  ant_value_t r = ant_wire_serialize(js, value, Ant_Value_Undefined, Ant_Value_Undefined, &wire);
   if (is_err(r)) {
     isolate_host_call_error(js, call, r);
     return;
@@ -331,17 +331,17 @@ static ant_value_t isolate_host_settled(ant_t *js, ant_value_t call_func, guest_
     isolate_host_call_done(js, g, call);
   } else guest_host_call_free(call);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t isolate_host_fulfilled(ant_params_t) {
   guest_host_call_t *call = js_get_native(call_func, ISOLATE_AWAIT_TAG);
-  return call ? isolate_host_settled(js, call_func, call, nargs ? args[0] : js_mkundef(), true) : js_mkundef();
+  return call ? isolate_host_settled(js, call_func, call, nargs ? args[0] : Ant_Value_Undefined, true) : Ant_Value_Undefined;
 }
 
 static ant_value_t isolate_host_rejected(ant_params_t) {
   guest_host_call_t *call = js_get_native(call_func, ISOLATE_AWAIT_TAG);
-  return call ? isolate_host_settled(js, call_func, call, nargs ? args[0] : js_mkundef(), false) : js_mkundef();
+  return call ? isolate_host_settled(js, call_func, call, nargs ? args[0] : Ant_Value_Undefined, false) : Ant_Value_Undefined;
 }
 
 static bool isolate_host_await(ant_t *js, ant_guest_t *g, guest_host_call_t *call, ant_value_t promise) {
@@ -381,7 +381,7 @@ void guest_host_run_callback(ant_t *js, ant_guest_t *g, guest_host_call_t *call)
   GC_ROOT_SAVE(mark, js);
   ant_value_t fn = g->callbacks[call->callback];
   ant_value_t *argv = call->argc ? calloc(call->argc, sizeof(*argv)) : NULL;
-  ant_value_t result = call->argc && !argv ? Ant_Error_CreateOutOfMemory(js) : js_mkundef();
+  ant_value_t result = call->argc && !argv ? Ant_Error_CreateOutOfMemory(js) : Ant_Value_Undefined;
 
   for (uint32_t i = 0; i < call->argc && !is_err(result); i++) {
     argv[i] = guest_decode_host(js, g, &call->args[i]);
@@ -389,7 +389,7 @@ void guest_host_run_callback(ant_t *js, ant_guest_t *g, guest_host_call_t *call)
     else GC_ROOT_PIN(js, argv[i]);
   }
 
-  if (!is_err(result)) result = sv_vm_call(js->vm, js, fn, js_mkundef(), argv, (int)call->argc, NULL, js_mkundef());
+  if (!is_err(result)) result = sv_vm_call(js->vm, js, fn, Ant_Value_Undefined, argv, (int)call->argc, NULL, Ant_Value_Undefined);
   free(argv);
 
   bool waiting = false;
@@ -406,7 +406,7 @@ void guest_host_run_callback(ant_t *js, ant_guest_t *g, guest_host_call_t *call)
 
 static ant_value_t isolate_submit(ant_t *js, ant_guest_t *g, guest_call_t *call, bool sync) {
   call->sync = sync;
-  call->promise = sync ? js_mkundef() : js_mkpromise(js);
+  call->promise = sync ? Ant_Value_Undefined : js_mkpromise(js);
 
   if (g->disposed) {
     call->status = GUEST_STATUS_DISPOSED;
@@ -436,7 +436,7 @@ static ant_value_t isolate_submit(ant_t *js, ant_guest_t *g, guest_call_t *call,
 
 static ant_value_t isolate_read_options(ant_t *js, ant_value_t options, isolate_options_t *out) {
   *out = (isolate_options_t){ 0 };
-  if (vtype(options) == kTypeUndefined || vtype(options) == kTypeNull) return js_mkundef();
+  if (vtype(options) == kTypeUndefined || vtype(options) == kTypeNull) return Ant_Value_Undefined;
   if (!is_object_type(options)) return Ant_Error_CreateInvalidArgType(js, "options", "of type object", options);
 
   ant_value_t timeout = js_get(js, options, "timeout");
@@ -457,15 +457,15 @@ static ant_value_t isolate_read_options(ant_t *js, ant_value_t options, isolate_
     out->filename = strndup(text, len);
   }
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static guest_call_t *isolate_call_new(ant_t *js, guest_op_t op, const isolate_options_t *opts) {
   guest_call_t *call = calloc(1, sizeof(*call));
   if (!call) return NULL;
   call->op = op;
-  call->promise = js_mkundef();
-  call->owner = js_mkundef();
+  call->promise = Ant_Value_Undefined;
+  call->owner = Ant_Value_Undefined;
   if (opts) {
     call->timeout_ms = opts->timeout_ms;
     call->want_ref = opts->want_ref;
@@ -485,7 +485,7 @@ static ant_value_t isolate_call_text(ant_t *js, guest_call_t *call, ant_value_t 
   memcpy(call->text, src, len);
   call->text[len] = '\0';
   call->text_len = len;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t isolate_call_args(ant_t *js, ant_guest_t *g, guest_call_t *call, ant_value_t *values, uint32_t count) {
@@ -496,7 +496,7 @@ static ant_value_t isolate_call_args(ant_t *js, ant_guest_t *g, guest_call_t *ca
     ant_value_t r = guest_encode(js, g, values[i], &call->args[i]);
     if (is_err(r)) return r;
   }
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t isolate_fail(guest_call_t *call, ant_value_t error) {
@@ -515,12 +515,12 @@ static ant_value_t isolate_compile(ant_native_params_t, ant_value_t call_this, b
   if (!g) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
 
   isolate_options_t opts;
-  ant_value_t r = isolate_read_options(js, nargs > 1 ? args[1] : js_mkundef(), &opts);
+  ant_value_t r = isolate_read_options(js, nargs > 1 ? args[1] : Ant_Value_Undefined, &opts);
   if (is_err(r)) return r;
 
   guest_call_t *call = isolate_call_new(js, GUEST_OP_COMPILE, &opts);
   if (!call) return Ant_Error_CreateOutOfMemory(js);
-  r = isolate_call_text(js, call, nargs > 0 ? args[0] : js_mkundef());
+  r = isolate_call_text(js, call, nargs > 0 ? args[0] : Ant_Value_Undefined);
 
   return is_err(r) ? isolate_fail(call, r) : isolate_submit(js, g, call, sync);
 }
@@ -554,14 +554,14 @@ static ant_value_t isolate_property(ant_t *js, ant_value_t call_this, guest_op_t
   if (!ref) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
 
   isolate_options_t opts;
-  ant_value_t r = isolate_read_options(js, op == GUEST_OP_GET && nargs > 1 ? args[1] : js_mkundef(), &opts);
+  ant_value_t r = isolate_read_options(js, op == GUEST_OP_GET && nargs > 1 ? args[1] : Ant_Value_Undefined, &opts);
   if (is_err(r)) return r;
 
   guest_call_t *call = isolate_call_new(js, op, &opts);
   if (!call) return Ant_Error_CreateOutOfMemory(js);
   call->target = ref->id;
 
-  ant_value_t values[2] = { nargs > 0 ? args[0] : js_mkundef(), nargs > 1 ? args[1] : js_mkundef() };
+  ant_value_t values[2] = { nargs > 0 ? args[0] : Ant_Value_Undefined, nargs > 1 ? args[1] : Ant_Value_Undefined };
   r = isolate_call_args(js, ref->g, call, values, op == GUEST_OP_SET ? 2 : 1);
 
   return is_err(r) ? isolate_fail(call, r) : isolate_submit(js, ref->g, call, sync);
@@ -572,17 +572,17 @@ static ant_value_t isolate_apply(ant_native_params_t, ant_value_t call_this, boo
   if (!ref) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
 
   isolate_options_t opts;
-  ant_value_t r = isolate_read_options(js, nargs > 2 ? args[2] : js_mkundef(), &opts);
+  ant_value_t r = isolate_read_options(js, nargs > 2 ? args[2] : Ant_Value_Undefined, &opts);
   if (is_err(r)) return r;
 
-  ant_value_t list = nargs > 1 ? args[1] : js_mkundef();
+  ant_value_t list = nargs > 1 ? args[1] : Ant_Value_Undefined;
   if (vtype(list) != kTypeUndefined && vtype(list) != kTypeArray)
     return Ant_Error_CreateInvalidArgType(js, "arguments", "an instance of Array", list);
   uint32_t count = vtype(list) == kTypeArray ? (uint32_t)js_arr_len(js, list) : 0;
 
   ant_value_t *values = calloc((size_t)count + 1, sizeof(*values));
   if (!values) return Ant_Error_CreateOutOfMemory(js);
-  values[0] = nargs > 0 ? args[0] : js_mkundef();
+  values[0] = nargs > 0 ? args[0] : Ant_Value_Undefined;
   for (uint32_t i = 0; i < count; i++) values[i + 1] = js_arr_get(js, list, i);
 
   guest_call_t *call = isolate_call_new(js, GUEST_OP_APPLY, &opts);
@@ -615,11 +615,11 @@ static ant_value_t isolate_copy_op(ant_t *js, ant_value_t call_this, bool sync) 
 #define COMPILE_SCRIPT(sync) return isolate_compile(js, args, nargs, call_this, sync)
 #define HEAP_STATS(sync) return isolate_simple(js, isolate_this(js, call_this), GUEST_OP_HEAP, sync)
 #define SCRIPT_RUN(sync) return isolate_run(js, GUEST_OP_RUN, isolate_handle(call_this, HANDLE_SCRIPT), \
-  isolate_handle(nargs > 0 ? args[0] : js_mkundef(), HANDLE_CONTEXT), js_mkundef(), nargs > 1 ? args[1] : js_mkundef(), sync, false)
+  isolate_handle(nargs > 0 ? args[0] : Ant_Value_Undefined, HANDLE_CONTEXT), Ant_Value_Undefined, nargs > 1 ? args[1] : Ant_Value_Undefined, sync, false)
 #define CONTEXT_EVAL(sync) { isolate_handle_t *c = isolate_handle(call_this, HANDLE_CONTEXT); \
-  return isolate_run(js, GUEST_OP_EVAL, c, c, nargs > 0 ? args[0] : js_mkundef(), nargs > 1 ? args[1] : js_mkundef(), sync, false); }
+  return isolate_run(js, GUEST_OP_EVAL, c, c, nargs > 0 ? args[0] : Ant_Value_Undefined, nargs > 1 ? args[1] : Ant_Value_Undefined, sync, false); }
 #define CONTEXT_EVAL_REF(sync) { isolate_handle_t *c = isolate_handle(call_this, HANDLE_CONTEXT); \
-  return isolate_run(js, GUEST_OP_EVAL, c, c, nargs > 0 ? args[0] : js_mkundef(), nargs > 1 ? args[1] : js_mkundef(), sync, true); }
+  return isolate_run(js, GUEST_OP_EVAL, c, c, nargs > 0 ? args[0] : Ant_Value_Undefined, nargs > 1 ? args[1] : Ant_Value_Undefined, sync, true); }
 #define REF_GET(sync) return isolate_property(js, call_this, GUEST_OP_GET, args, nargs, sync)
 #define REF_SET(sync) return isolate_property(js, call_this, GUEST_OP_SET, args, nargs, sync)
 #define REF_APPLY(sync) return isolate_apply(js, args, nargs, call_this, sync)
@@ -656,7 +656,7 @@ static void isolate_dispose(ant_guest_t *g) {
     guest_finish_host(js, g, call);
   }
 
-  g->obj = js_mkundef();
+  g->obj = Ant_Value_Undefined;
   Ant_List_Remove(g);
 }
 
@@ -664,7 +664,7 @@ static ant_value_t js_isolate_dispose(ant_params_t) {
   ant_guest_t *g = isolate_this(js, call_this);
   if (!g) return js_mkerr_typed(js, JS_ERR_TYPE, "Illegal invocation");
   isolate_dispose(g);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_isolate_is_disposed(ant_params_t) {
@@ -725,7 +725,7 @@ static ant_value_t isolate_parse(ant_t *js, ant_value_t options, ant_guest_t *g)
   }
 
   g->arena_bytes = (size_t)(memory * 1024 * 1024);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_isolate_ctor(ant_params_t) {
@@ -743,7 +743,7 @@ static ant_value_t js_isolate_ctor(ant_params_t) {
   g->host = js;
   g->obj = call_this;
 
-  ant_value_t r = isolate_parse(js, nargs > 0 ? args[0] : js_mkundef(), g);
+  ant_value_t r = isolate_parse(js, nargs > 0 ? args[0] : Ant_Value_Undefined, g);
   if (is_err(r)) {
     guest_release(g);
     return r;
@@ -751,13 +751,13 @@ static ant_value_t js_isolate_ctor(ant_params_t) {
 
   js_set_native(call_this, g, ISOLATE_NATIVE_TAG);
   js_set_finalizer(call_this, isolate_finalize);
-  js_set_slot(call_this, SLOT_DATA, js_mkundef());
+  js_set_slot(call_this, SLOT_DATA, Ant_Value_Undefined);
   Ant_List_Insert(&js->guests, g);
 
   r = g->mode == GUEST_THREAD_OWN ? guest_own_start(js, g) : guest_current_start(js, g);
   if (is_err(r)) {
     g->disposed = true;
-    g->obj = js_mkundef();
+    g->obj = Ant_Value_Undefined;
     Ant_List_Remove(g);
     return r;
   }
@@ -771,12 +771,12 @@ static ant_value_t js_handle_release(ant_params_t) {
     h->released = true;
     isolate_queue_release(h->g, h->kind, h->id);
   }
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_reference_typeof(ant_params_t) {
   isolate_handle_t *ref = isolate_handle(call_this, HANDLE_REFERENCE);
-  if (!ref) return js_mkundef();
+  if (!ref) return Ant_Value_Undefined;
   const char *name = ref->type < sizeof(guest_type_names) / sizeof(*guest_type_names) ? guest_type_names[ref->type] : "object";
   if (ref->type == 1) name = "object";
   return js_mkstr(js, name, strlen(name));
@@ -789,7 +789,7 @@ static ant_value_t js_handle_ctor(ant_params_t) {
 static ant_value_t js_callback_ctor(ant_params_t) {
   if (vtype(call_new_target) == kTypeUndefined)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Class constructor Callback cannot be invoked without 'new'");
-  if (nargs < 1 || !is_callable(args[0])) return Ant_Error_CreateInvalidArgType(js, "fn", "of type function", nargs ? args[0] : js_mkundef());
+  if (nargs < 1 || !is_callable(args[0])) return Ant_Error_CreateInvalidArgType(js, "fn", "of type function", nargs ? args[0] : Ant_Value_Undefined);
   js_set_proto_init(call_this, js->builtins.isolate_callback_proto);
   js_set_slot(call_this, SLOT_DATA, args[0]);
   return call_this;
@@ -805,7 +805,7 @@ static void isolate_copy_finalize(ant_t *js, ant_object_t *obj) {
 
 static ant_value_t isolate_copy_init(ant_t *js, ant_value_t self, ant_value_t value) {
   ant_wire_t *wire = NULL;
-  ant_value_t r = ant_wire_serialize(js, value, js_mkundef(), js_mkundef(), &wire);
+  ant_value_t r = ant_wire_serialize(js, value, Ant_Value_Undefined, Ant_Value_Undefined, &wire);
   if (is_err(r)) return r;
   js_set_proto_init(self, js->builtins.isolate_copy_proto);
   js_set_native(self, wire, ISOLATE_COPY_TAG);
@@ -816,12 +816,12 @@ static ant_value_t isolate_copy_init(ant_t *js, ant_value_t self, ant_value_t va
 static ant_value_t js_copy_ctor(ant_params_t) {
   if (vtype(call_new_target) == kTypeUndefined)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Class constructor ExternalCopy cannot be invoked without 'new'");
-  return isolate_copy_init(js, call_this, nargs ? args[0] : js_mkundef());
+  return isolate_copy_init(js, call_this, nargs ? args[0] : Ant_Value_Undefined);
 }
 
 static ant_value_t js_copy_fn(ant_params_t) {
   ant_value_t self = Ant_Object_CreateBare(js);
-  return is_err(self) ? self : isolate_copy_init(js, self, nargs ? args[0] : js_mkundef());
+  return is_err(self) ? self : isolate_copy_init(js, self, nargs ? args[0] : Ant_Value_Undefined);
 }
 
 static ant_wire_t *isolate_copy_this(ant_t *js, ant_value_t call_this) {
@@ -847,7 +847,7 @@ static ant_value_t js_copy_copy_into(ant_params_t) {
 
 static ant_value_t js_copy_release(ant_params_t) {
   if (isolate_copy_this(js, call_this)) isolate_copy_finalize(js, js_obj_ptr(call_this));
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t isolate_proto_new(ant_t *js, const char *tag) {

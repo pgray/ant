@@ -162,7 +162,7 @@ static ant_process_state_t *process_state(ant_t *js) {
 
   ps->sandbox_tty_rows = 24;
   ps->sandbox_tty_cols = 80;
-  ps->cached_cwd = js_mkundef();
+  ps->cached_cwd = Ant_Value_Undefined;
   ps->stdin_state.refed = true;
 
   js->process_state = ps;
@@ -361,13 +361,13 @@ bool process_report_uncaught_exception(ant_t *js) {
   if (!js || !Ant_Exception_Pending(js)) return false;
 
   if (js_termination_pending(js)) {
-    js_take_thrown(js, js_mkundef());
+    js_take_thrown(js, Ant_Value_Undefined);
     return false;
   }
 
   GC_ROOT_SAVE(root_mark, js);
   ant_value_t stack = Ant_Exception_Stack(js, Ant_Exception_Peek(js));
-  ant_value_t reason = js_take_thrown(js, js_mkundef());
+  ant_value_t reason = js_take_thrown(js, Ant_Value_Undefined);
   
   GC_ROOT_PIN(js, reason);
   GC_ROOT_PIN(js, stack);
@@ -380,7 +380,7 @@ bool process_report_uncaught_exception(ant_t *js) {
     emit_process_event(js, "uncaughtException", event_args, 2);
 
     if (Ant_Exception_Pending(js)) {
-      ant_value_t thrown = js_take_thrown(js, js_mkundef());
+      ant_value_t thrown = js_take_thrown(js, Ant_Value_Undefined);
       if (js->worker) ant_worker_report_uncaught(js, thrown);
       else if (ant_watch_supervises(js)) ant_watch_exit(js);
       else if (!js->uncaught_nonfatal) exit(7);
@@ -418,7 +418,7 @@ bool process_report_unhandled_rejection(ant_t *js, ant_value_t promise, ant_valu
     emit_process_event(js, "uncaughtException", event_args, 2);
     
     if (Ant_Exception_Pending(js)) {
-      ant_value_t thrown = js_take_thrown(js, js_mkundef());
+      ant_value_t thrown = js_take_thrown(js, Ant_Value_Undefined);
       if (js->worker) ant_worker_report_uncaught(js, thrown);
       else if (ant_watch_supervises(js)) ant_watch_exit(js);
       else if (!js->uncaught_nonfatal) exit(7);
@@ -542,7 +542,7 @@ static void emit_keypress_event(
   if (name) {
     js_set(js, key_obj, "name", js_mkstr(js, name, strlen(name)));
   } else {
-    js_set(js, key_obj, "name", js_mkundef());
+    js_set(js, key_obj, "name", Ant_Value_Undefined);
   }
 
   js_set(js, key_obj, "ctrl", js_bool(ctrl));
@@ -740,7 +740,7 @@ static ant_value_t process_exec_path(ant_t *js) {
     return js_mkstr(js, path, strlen(path));
   if (js->runtime.argc > 0) 
     return js_mkstr(js, js->runtime.argv[0], strlen(js->runtime.argv[0]));
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 void process_refresh_sandbox_argv(ant_t *js) {
@@ -884,7 +884,7 @@ static void stdin_finish(ant_t *js, ant_value_t error) {
   stdin_update_reading(js);
   if (ps->stdin_byte_eof) ps->stdin_byte_eof(js);
 
-  if (is_undefined(error)) stream_readable_push(js, ps->stdin_obj, js_mknull(), js_mkundef());
+  if (is_undefined(error)) stream_readable_push(js, ps->stdin_obj, Ant_Value_Null, Ant_Value_Undefined);
   else stream_destroy(js, ps->stdin_obj, error);
 
   GC_ROOT_RESTORE(js, root_mark);
@@ -911,10 +911,10 @@ static void stdin_deliver(ant_t *js, const char *base, size_t len) {
 
     GC_ROOT_SAVE(root_mark, js);
     GC_ROOT_PIN(js, chunk);
-    ant_value_t pushed = stream_readable_push(js, ps->stdin_obj, chunk, js_mkundef());
+    ant_value_t pushed = stream_readable_push(js, ps->stdin_obj, chunk, Ant_Value_Undefined);
     
     if (is_err(pushed)) js_take_thrown(js, pushed);
-    else if (pushed == js_false) st->read_requested = false;
+    else if (pushed == Ant_Value_False) st->read_requested = false;
     GC_ROOT_RESTORE(js, root_mark);
   }
 
@@ -937,7 +937,7 @@ static void stdin_handle_read(ant_t *js, const char *base, ssize_t nread) {
   if (nread > 0) {
     stdin_deliver(js, base, (size_t)nread);
     stdin_update_reading(js);
-  } else if (nread == UV_EOF) stdin_finish(js, js_mkundef());
+  } else if (nread == UV_EOF) stdin_finish(js, Ant_Value_Undefined);
   else if (nread < 0) stdin_finish(js, stdin_uv_error(js, (int)nread, "read"));
 }
 
@@ -1001,7 +1001,7 @@ void stdin_update_reading(ant_t *js) {
   }
 
   if (!stdin_open(js, ps)) {
-    stdin_finish(js, js_mkundef());
+    stdin_finish(js, Ant_Value_Undefined);
     return;
   }
 
@@ -1139,13 +1139,13 @@ static ant_value_t js_stdin__read(ant_params_t) {
   ps->stdin_state.read_requested = true;
   ps->stdin_state.paused = false;
   stdin_update_reading(js);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_stdin__destroy(ant_params_t) {
   ant_process_state_t *ps = process_state(js);
-  ant_value_t error = nargs > 0 ? args[0] : js_mknull();
-  ant_value_t callback = nargs > 1 ? args[1] : js_mkundef();
+  ant_value_t error = nargs > 0 ? args[0] : Ant_Value_Null;
+  ant_value_t callback = nargs > 1 ? args[1] : Ant_Value_Undefined;
 
   if (ps) {
     ps->stdin_state.eof = true;
@@ -1154,22 +1154,22 @@ static ant_value_t js_stdin__destroy(ant_params_t) {
     stdin_close(ps);
   }
 
-  if (is_callable(callback)) sv_call_value(js, callback, js_mkundef(), &error, 1);
-  return js_mkundef();
+  if (is_callable(callback)) sv_call_value(js, callback, Ant_Value_Undefined, &error, 1);
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t stdin_onpause_tick(ant_params_t) {
   ant_process_state_t *ps = process_state(js);
-  if (!ps || js_get(js, ps->stdin_obj, "readableFlowing") != js_false) return js_mkundef();
+  if (!ps || js_get(js, ps->stdin_obj, "readableFlowing") != Ant_Value_False) return Ant_Value_Undefined;
 
   ant_value_t state = js_get(js, ps->stdin_obj, "_readableState");
-  if (is_object_type(state)) js_set(js, state, "reading", js_false);
+  if (is_object_type(state)) js_set(js, state, "reading", Ant_Value_False);
 
   ps->stdin_state.paused = true;
   ps->stdin_state.read_requested = false;
   stdin_update_reading(js);
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t stdin_set_paused(ant_t *js, bool paused) {
@@ -1213,7 +1213,7 @@ static ant_value_t js_stdin_unref(ant_params_t) {
 }
 
 static ant_value_t process_write_stream(ant_native_params_t, FILE *stream, int fd) {
-  if (nargs < 1) return js_false;
+  if (nargs < 1) return Ant_Value_False;
 
   size_t len = 0;
   const char *data = NULL;
@@ -1224,7 +1224,7 @@ static ant_value_t process_write_stream(ant_native_params_t, FILE *stream, int f
   if (buffer_source_get_bytes(js, args[0], &bytes, &len)) data = (const char *)bytes;
   else if ((data = js_getstr(js, args[0], &len)) && (utf8 = wtf8_str_to_utf8_dup(data, &len))) data = utf8;
 
-  if (!data) return js_false;
+  if (!data) return Ant_Value_False;
   bool ok;
   
   if (!ant_output_has_writer() && uv_guess_handle(fd) == UV_TTY) ok = tty_ctrl_write_fd(fd, data, len);
@@ -1454,12 +1454,12 @@ static ant_value_t process_kill(ant_params_t) {
     return js_mkerr_props(js, JS_ERR_GENERIC, props, "kill %s", code);
   }
   
-  return js_true;
+  return Ant_Value_True;
 }
 
 static ant_value_t process_abort(ant_params_t) {
   abort();
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t process_chdir(ant_params_t) {
@@ -1472,7 +1472,7 @@ static ant_value_t process_chdir(ant_params_t) {
   int result = uv_chdir(dir);
   if (result != 0) return js_mkerr(js, "ENOENT: no such file or directory, chdir");
   atomic_fetch_add_explicit(&process_cwd_epoch, 1, memory_order_release);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t process_umask(ant_params_t) {
@@ -1545,7 +1545,7 @@ static ant_value_t process_setuid(ant_params_t) {
   }
   
   if (setuid(uid) != 0) return js_mkerr(js, "setuid failed");
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t process_setgid(ant_params_t) {
@@ -1564,7 +1564,7 @@ static ant_value_t process_setgid(ant_params_t) {
   }
   
   if (setgid(gid) != 0) return js_mkerr(js, "setgid failed");
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t process_seteuid(ant_params_t) {
@@ -1583,7 +1583,7 @@ static ant_value_t process_seteuid(ant_params_t) {
   }
   
   if (seteuid(uid) != 0) return js_mkerr(js, "seteuid failed");
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t process_setegid(ant_params_t) {
@@ -1602,7 +1602,7 @@ static ant_value_t process_setegid(ant_params_t) {
   }
   
   if (setegid(gid) != 0) return js_mkerr(js, "setegid failed");
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t process_setgroups(ant_params_t) {
@@ -1638,7 +1638,7 @@ static ant_value_t process_setgroups(ant_params_t) {
     return js_mkerr(js, "setgroups failed");
   }
   free(groups);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t process_initgroups(ant_params_t) {
@@ -1660,7 +1660,7 @@ static ant_value_t process_initgroups(ant_params_t) {
   }
   
   if (initgroups(user, gid) != 0) return js_mkerr(js, "initgroups failed");
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 #endif
 
@@ -1756,22 +1756,22 @@ char **process_private_env_snapshot(ant_t *js) {
 }
 
 static ant_value_t env_get(ant_t *js, ant_value_t target, const char *key, size_t key_len) {
-  if (!env_name_ok(key, key_len)) return js_mkundef();
+  if (!env_name_ok(key, key_len)) return Ant_Value_Undefined;
 
   env_entry_t **table = private_env(js);
   if (table) {
     env_entry_t *entry = NULL;
     HASH_FIND(hh, *table, key, key_len, entry);
-    return entry ? js_mkstr_wtf8_lossy(js, entry->value, strlen(entry->value)) : js_mkundef();
+    return entry ? js_mkstr_wtf8_lossy(js, entry->value, strlen(entry->value)) : Ant_Value_Undefined;
   }
   
   CSTR_BUF(buf, 256);
   char *key_str = CSTR_INIT(buf, key, key_len);
-  if (!key_str) return js_mkundef();
+  if (!key_str) return Ant_Value_Undefined;
   
   ant_mutex_lock(&env_lock);
   char *value = getenv(key_str);
-  ant_value_t result = value ? js_mkstr_wtf8_lossy(js, value, strlen(value)) : js_mkundef();
+  ant_value_t result = value ? js_mkstr_wtf8_lossy(js, value, strlen(value)) : Ant_Value_Undefined;
   
   ant_mutex_unlock(&env_lock);
   cstr_free(&buf);
@@ -1790,10 +1790,10 @@ static ant_value_t env_set(ant_t *js, ant_value_t target, const char *key, size_
   const char *val_str = js_getstr(js, str_val, &val_len);
   
   if (!val_str) return Ant_Error_CreateOutOfMemory(js);
-  if (!env_name_ok(key, key_len)) return js_true;
+  if (!env_name_ok(key, key_len)) return Ant_Value_True;
 
   env_entry_t **table = private_env(js);
-  if (table) return private_env_put(table, key, key_len, val_str, val_len) ? js_true : Ant_Error_CreateOutOfMemory(js);
+  if (table) return private_env_put(table, key, key_len, val_str, val_len) ? Ant_Value_True : Ant_Error_CreateOutOfMemory(js);
   
   CSTR_BUF(buf, 256);
   char *key_str = CSTR_INIT(buf, key, key_len);
@@ -1806,11 +1806,11 @@ static ant_value_t env_set(ant_t *js, ant_value_t target, const char *key, size_
   ant_mutex_unlock(&env_lock);
   
   cstr_free(&buf);
-  return stored ? js_true : Ant_Error_CreateOutOfMemory(js);
+  return stored ? Ant_Value_True : Ant_Error_CreateOutOfMemory(js);
 }
 
 static ant_value_t env_del(ant_t *js, ant_value_t target, const char *key, size_t key_len) {
-  if (!env_name_ok(key, key_len)) return js_true;
+  if (!env_name_ok(key, key_len)) return Ant_Value_True;
 
   env_entry_t **table = private_env(js);
   if (table) {
@@ -1822,7 +1822,7 @@ static ant_value_t env_del(ant_t *js, ant_value_t target, const char *key, size_
       free(entry->value);
       free(entry);
     }
-    return js_true;
+    return Ant_Value_True;
   }
   
   CSTR_BUF(buf, 256);
@@ -1834,7 +1834,7 @@ static ant_value_t env_del(ant_t *js, ant_value_t target, const char *key, size_
   ant_mutex_unlock(&env_lock);
   cstr_free(&buf);
   
-  return js_true;
+  return Ant_Value_True;
 }
 
 static void load_dotenv_file(void) {
@@ -1891,7 +1891,7 @@ static void load_dotenv_file(void) {
 static ant_value_t process_set_exit_code(ant_t *js, ant_process_state_t *ps, ant_value_t code) {
   if (vtype(code) == kTypeUndefined || vtype(code) == kTypeNull) {
     ps->has_exit_code = false;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   size_t len = 0;
@@ -1920,18 +1920,18 @@ static ant_value_t process_set_exit_code(ant_t *js, ant_process_state_t *ps, ant
   ps->exit_code = (int32_t)(uint32_t)(int64_t)n;
   ps->has_exit_code = true;
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t process_exit_code_getter(ant_params_t) {
   ant_process_state_t *ps = process_state(js);
-  return ps && ps->has_exit_code ? Ant_Value_FromNumber(ps->exit_code) : js_mkundef();
+  return ps && ps->has_exit_code ? Ant_Value_FromNumber(ps->exit_code) : Ant_Value_Undefined;
 }
 
 static ant_value_t process_exit_code_setter(ant_params_t) {
   ant_process_state_t *ps = process_state(js);
-  if (!ps) return js_mkundef();
-  return process_set_exit_code(js, ps, nargs > 0 ? args[0] : js_mkundef());
+  if (!ps) return Ant_Value_Undefined;
+  return process_set_exit_code(js, ps, nargs > 0 ? args[0] : Ant_Value_Undefined);
 }
 
 int process_exit_code(ant_t *js) {
@@ -1950,7 +1950,7 @@ int process_run_exit_handlers(ant_t *js, int status) {
 
   if (ps->exiting || !is_object_type(ps->process_obj)) return process_exit_code(js);
   ps->exiting = true;
-  js_set(js, ps->process_obj, "_exiting", js_true);
+  js_set(js, ps->process_obj, "_exiting", Ant_Value_True);
 
   ant_value_t code = Ant_Value_FromNumber(process_exit_code(js));
   emit_process_event(js, "exit", &code, 1);
@@ -1987,7 +1987,7 @@ static ant_value_t process_exit(ant_params_t) {
   }
   
   process_exit_with(js, EXIT_SUCCESS);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 typedef struct {
@@ -2153,7 +2153,7 @@ static ant_value_t process_cwd(ant_params_t) {
 
 static bool process_is_error_object(ant_value_t value) {
   if (is_err(value)) return true;
-  return is_object_type(value) && js_get_slot(value, SLOT_ERROR_BRAND) == js_true;
+  return is_object_type(value) && js_get_slot(value, SLOT_ERROR_BRAND) == Ant_Value_True;
 }
 
 static void process_get_warning_options(
@@ -2178,7 +2178,7 @@ static ant_value_t process_make_warning_object(
 ) {
   ant_value_t warning_obj = Ant_Object_CreateBare(js);
   js_set_proto_init(warning_obj, js->builtins.error_protos[JS_ERR_GENERIC]);
-  js_set_slot(warning_obj, SLOT_ERROR_BRAND, js_true);
+  js_set_slot(warning_obj, SLOT_ERROR_BRAND, Ant_Value_True);
   js_set(js, warning_obj, "name", js_mkstr(js, type, strlen(type)));
   js_set(js, warning_obj, "message", js_mkstr(js, msg.ptr, msg.len));
 
@@ -2190,7 +2190,7 @@ static ant_value_t process_make_warning_object(
 }
 
 static ant_value_t process_emit_warning(ant_params_t) {
-  if (nargs < 1) return js_mkundef();
+  if (nargs < 1) return Ant_Value_Undefined;
 
   ant_value_t warning = args[0];
   const char *type = "Warning";
@@ -2238,7 +2238,7 @@ static ant_value_t process_emit_warning(ant_params_t) {
   emit_process_event(js, "warning", &warning_event_arg, 1);
   if (msg.needs_free) free((void *)msg.ptr);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 
@@ -2252,7 +2252,7 @@ static ant_value_t process_next_tick(ant_params_t) {
   if (nargs <= 1) queue_next_tick(js, cb);
   else queue_next_tick_with_args(js, cb, args + 1, nargs - 1);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static bool process_event_key_is(
@@ -2305,18 +2305,18 @@ static void process_listener_change(
 }
 
 static ant_value_t process_get_builtin_module(ant_params_t) {
-  ant_value_t id = nargs > 0 ? args[0] : js_mkundef();
+  ant_value_t id = nargs > 0 ? args[0] : Ant_Value_Undefined;
   if (vtype(id) != kTypeString) 
     return Ant_Error_CreateInvalidArgType(js, "id", "of type string", id);
 
   size_t len = 0;
   const char *name = js_getstr(js, id, &len);
-  if (!name) return js_mkundef();
+  if (!name) return Ant_Value_Undefined;
 
   bool found = false;
   ant_value_t ns = js_esm_load_node_builtin(js, name, len, &found);
   
-  return found ? esm_require_unwrap(js, ns) : js_mkundef();
+  return found ? esm_require_unwrap(js, ns) : Ant_Value_Undefined;
 }
 
 static void process_set_methods(ant_t *js, ant_value_t obj, bool include_event_methods) {
@@ -2334,11 +2334,11 @@ static void process_set_methods(ant_t *js, ant_value_t obj, bool include_event_m
   js_set(js, obj, "getBuiltinModule", Ant_Function_CreateWithArity(process_get_builtin_module, 1));
   js_set(js, obj, "dlopen", Ant_Function_Create(napi_process_dlopen_js));
 
-  ant_value_t mem_usage_fn = Ant_Function_CreateWithData(js, process_memory_usage, "memoryUsage", 0, js_mkundef());
+  ant_value_t mem_usage_fn = Ant_Function_CreateWithData(js, process_memory_usage, "memoryUsage", 0, Ant_Value_Undefined);
   js_set(js, mem_usage_fn, "rss", Ant_Function_Create(process_memory_usage_rss));
   js_set(js, obj, "memoryUsage", mem_usage_fn);
 
-  ant_value_t hrtime_fn = Ant_Function_CreateWithData(js, process_hrtime, "hrtime", 1, js_mkundef());
+  ant_value_t hrtime_fn = Ant_Function_CreateWithData(js, process_hrtime, "hrtime", 1, Ant_Value_Undefined);
   js_set(js, hrtime_fn, "bigint", Ant_Function_Create(process_hrtime_bigint));
   js_set(js, obj, "hrtime", hrtime_fn);
 
@@ -2394,7 +2394,7 @@ void init_process_module(ant_t *js) {
   
   process_set_methods(js, process_obj, false);
   js_set(js, process_obj, "binding", Ant_Function_CreateWithArity(process_binding, 1));
-  js_set(js, process_obj, "_exiting", js_false);
+  js_set(js, process_obj, "_exiting", Ant_Value_False);
   
   js_set_accessor_desc(
     js, process_obj, "exitCode", 8,
@@ -2431,7 +2431,7 @@ void init_process_module(ant_t *js) {
   js_set(js, process_obj, "ppid", Ant_Value_FromNumber((double)getppid()));
 
   ant_value_t features_obj = Ant_Object_Create(js);
-  js_set(js, features_obj, "uv", js_true);
+  js_set(js, features_obj, "uv", Ant_Value_True);
   process_set_string(js, features_obj, "tls", "BoringSSL");
   process_set_string(js, features_obj, "typescript", "transform");
   js_set(js, process_obj, "features", features_obj);
@@ -2502,7 +2502,7 @@ void init_process_module(ant_t *js) {
   js_set(js, stdin_proto, "unref", Ant_Function_Create(js_stdin_unref));
   js_set_tostringtag(js, stdin_proto, js_mkstr(js, "ReadStream", 10));
   
-  ant_value_t stdin_obj = stream_construct_readable(js, stdin_proto, js_mkundef(), js_mkundef());
+  ant_value_t stdin_obj = stream_construct_readable(js, stdin_proto, Ant_Value_Undefined, Ant_Value_Undefined);
   ps->stdin_obj = stdin_obj;
   eventemitter_set_listener_change_hook(js, stdin_obj, process_listener_change, ps);
   js_set(js, stdin_obj, "isTTY", js_bool(stdin_is_tty()));

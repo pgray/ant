@@ -562,7 +562,7 @@ static ant_value_t js_websocket_get_binary_type(ant_params_t) {
 static ant_value_t js_websocket_set_binary_type(ant_params_t) {
   websocket_state_t *ws = websocket_data(call_this);
   if (!ws) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid WebSocket");
-  if (nargs < 1) return js_mkundef();
+  if (nargs < 1) return Ant_Value_Undefined;
   
   ant_value_t str = js_tostring_val(js, args[0]);
   if (is_err(str)) return str;
@@ -571,12 +571,12 @@ static ant_value_t js_websocket_set_binary_type(ant_params_t) {
   if (value && strcmp(value, "blob") == 0) ws->binary_type_blob = true;
   else if (value && strcmp(value, "arraybuffer") == 0) ws->binary_type_blob = false;
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static bool websocket_bytes_from_value(ant_t *js, ant_value_t value, const uint8_t **bytes, size_t *len, ant_value_t *owned_str) {
   if (buffer_source_get_bytes(js, value, bytes, len)) {
-    if (owned_str) *owned_str = js_mkundef();
+    if (owned_str) *owned_str = Ant_Value_Undefined;
     return true;
   }
 
@@ -591,12 +591,12 @@ static ant_value_t js_websocket_send(ant_params_t) {
   websocket_state_t *ws = websocket_data(call_this);
   const uint8_t *bytes = NULL;
   size_t len = 0;
-  ant_value_t keepalive = js_mkundef();
+  ant_value_t keepalive = Ant_Value_Undefined;
   bool binary = false;
 
   if (!ws) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid WebSocket");
   if (ws->ready_state != WS_OPEN) return js_mkerr_typed(js, JS_ERR_TYPE, "WebSocket is not open");
-  if (nargs < 1) return js_mkundef();
+  if (nargs < 1) return Ant_Value_Undefined;
   binary = buffer_source_get_bytes(js, args[0], &bytes, &len);
   if (!binary && !websocket_bytes_from_value(js, args[0], &bytes, &len, &keepalive))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid WebSocket message");
@@ -605,7 +605,7 @@ static ant_value_t js_websocket_send(ant_params_t) {
     int rc = websocket_client_write_frame(ws, binary ? ANT_WS_OPCODE_BINARY : ANT_WS_OPCODE_TEXT, bytes, len);
     if (rc != 0) return js_mkerr_typed(js, JS_ERR_TYPE, "%s", uv_strerror(rc));
     ant_inspector_websocket_frame_sent(ws->inspector_request_id, bytes, len, binary);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (ws->server_conn) {
@@ -633,7 +633,7 @@ static ant_value_t js_websocket_send(ant_params_t) {
       return js_mkerr_typed(js, JS_ERR_TYPE, "%s", uv_strerror(rc));
     }
   }
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t js_websocket_close(ant_params_t) {
@@ -642,7 +642,7 @@ static ant_value_t js_websocket_close(ant_params_t) {
   const char *reason = NULL;
 
   if (!ws) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid WebSocket");
-  if (ws->ready_state == WS_CLOSED || ws->ready_state == WS_CLOSING) return js_mkundef();
+  if (ws->ready_state == WS_CLOSED || ws->ready_state == WS_CLOSING) return Ant_Value_Undefined;
   if (nargs > 1 && vtype(args[1]) != kTypeUndefined && vtype(args[1]) != kTypeNull) {
     ant_value_t reason_val = js_tostring_val(js, args[1]);
     if (is_err(reason_val)) return reason_val;
@@ -659,7 +659,7 @@ static ant_value_t js_websocket_close(ant_params_t) {
     if (frame) ant_conn_write(ws->server_conn, (char *)frame, frame_len, NULL, NULL);
     ant_conn_shutdown(ws->server_conn);
   }
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t websocket_event_ctor_init(
@@ -676,13 +676,13 @@ static ant_value_t websocket_event_init_field(
   ant_t *js, ant_value_t event, ant_value_t init, const char *key,
   unsigned int index, ant_value_t fallback, ant_value_t (*convert)(ant_t *, ant_value_t)
 ) {
-  ant_value_t value = is_object_type(init) ? js_get(js, init, key) : js_mkundef();
+  ant_value_t value = is_object_type(init) ? js_get(js, init, key) : Ant_Value_Undefined;
   if (is_err(value)) return value;
   if (vtype(value) == kTypeUndefined) value = fallback;
   else if (convert) value = convert(js, value);
   if (is_err(value)) return value;
   Ant_Event_SetField(js, event, index, value);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t websocket_to_bool(ant_t *js, ant_value_t value) {
@@ -701,14 +701,14 @@ static ant_value_t js_message_event_ctor(ant_params_t) {
   ant_value_t event = websocket_event_ctor_init(js, args, nargs, call_new_target, js->builtins.message_event_proto, ANT_EVENT_MESSAGE, "message");
   if (is_err(event)) return event;
   
-  ant_value_t init = nargs > 1 ? args[1] : js_mkundef();
+  ant_value_t init = nargs > 1 ? args[1] : Ant_Value_Undefined;
   ant_value_t empty = js_mkstr(js, "", 0);
   ant_value_t r;
   
-  if (is_err(r = websocket_event_init_field(js, event, init, "data", ANT_EVENT_FIELD_MESSAGE_data, js_mknull(), NULL))) return r;
+  if (is_err(r = websocket_event_init_field(js, event, init, "data", ANT_EVENT_FIELD_MESSAGE_data, Ant_Value_Null, NULL))) return r;
   if (is_err(r = websocket_event_init_field(js, event, init, "origin", ANT_EVENT_FIELD_MESSAGE_origin, empty, js_tostring_val))) return r;
   if (is_err(r = websocket_event_init_field(js, event, init, "lastEventId", ANT_EVENT_FIELD_MESSAGE_lastEventId, empty, js_tostring_val))) return r;
-  if (is_err(r = websocket_event_init_field(js, event, init, "source", ANT_EVENT_FIELD_MESSAGE_source, js_mknull(), NULL))) return r;
+  if (is_err(r = websocket_event_init_field(js, event, init, "source", ANT_EVENT_FIELD_MESSAGE_source, Ant_Value_Null, NULL))) return r;
   if (is_err(r = websocket_event_init_field(js, event, init, "ports", ANT_EVENT_FIELD_MESSAGE_ports, js_mkarr(js), NULL))) return r;
   
   return event;
@@ -721,10 +721,10 @@ static ant_value_t js_close_event_ctor(ant_params_t) {
   ant_value_t event = websocket_event_ctor_init(js, args, nargs, call_new_target, js->builtins.close_event_proto, ANT_EVENT_CLOSE, "close");
   if (is_err(event)) return event;
   
-  ant_value_t init = nargs > 1 ? args[1] : js_mkundef();
+  ant_value_t init = nargs > 1 ? args[1] : Ant_Value_Undefined;
   ant_value_t r;
   
-  if (is_err(r = websocket_event_init_field(js, event, init, "wasClean", ANT_EVENT_FIELD_CLOSE_wasClean, js_false, websocket_to_bool))) return r;
+  if (is_err(r = websocket_event_init_field(js, event, init, "wasClean", ANT_EVENT_FIELD_CLOSE_wasClean, Ant_Value_False, websocket_to_bool))) return r;
   if (is_err(r = websocket_event_init_field(js, event, init, "code", ANT_EVENT_FIELD_CLOSE_code, Ant_Value_FromNumber(0), websocket_to_number))) return r;
   if (is_err(r = websocket_event_init_field(js, event, init, "reason", ANT_EVENT_FIELD_CLOSE_reason, js_mkstr(js, "", 0), js_tostring_val))) return r;
   

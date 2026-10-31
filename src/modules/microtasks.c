@@ -115,7 +115,7 @@ void queue_microtask(ant_t *js, ant_value_t callback) {
   if (entry == NULL) return;
   
   entry->callback = callback;
-  entry->u.promise = js_mkundef();
+  entry->u.promise = Ant_Value_Undefined;
   entry->next = NULL;
   entry->argc = 0;
   
@@ -129,7 +129,7 @@ void queue_microtask_with_args(ant_t *js, ant_value_t callback, ant_args_t) {
   if (entry == NULL) return;
   
   entry->callback = callback;
-  entry->u.promise = js_mkundef();
+  entry->u.promise = Ant_Value_Undefined;
   entry->next = NULL;
   entry->argc = (uint8_t)nargs;
   
@@ -211,7 +211,7 @@ void queue_next_tick(ant_t *js, ant_value_t callback) {
   if (entry == NULL) return;
 
   entry->callback = callback;
-  entry->u.promise = js_mkundef();
+  entry->u.promise = Ant_Value_Undefined;
   entry->next = NULL;
   entry->argc = 0;
 
@@ -225,7 +225,7 @@ void queue_next_tick_with_args(ant_t *js, ant_value_t callback, ant_args_t) {
   if (entry == NULL) return;
 
   entry->callback = callback;
-  entry->u.promise = js_mkundef();
+  entry->u.promise = Ant_Value_Undefined;
   entry->next = NULL;
   entry->argc = (uint8_t)nargs;
 
@@ -242,7 +242,7 @@ void queue_promise_trigger(ant_t *js, ant_value_t promise) {
     return;
   }
   
-  entry->callback = js_mkundef();
+  entry->callback = Ant_Value_Undefined;
   entry->u.promise = promise;
   entry->next = NULL;
   entry->kind = MT_PROMISE_TRIGGER;
@@ -328,7 +328,7 @@ static inline void process_microtask_entry(ant_t *js, microtask_entry_t *entry) 
     return;
   }
 
-  ant_value_t this_val = js_mkundef();
+  ant_value_t this_val = Ant_Value_Undefined;
   GC_ROOT_SAVE(root_mark, js);
   
   ant_value_t callback = entry->callback;
@@ -336,7 +336,7 @@ static inline void process_microtask_entry(ant_t *js, microtask_entry_t *entry) 
   GC_ROOT_PIN(js, this_val);
 
   for (uint8_t i = 0; i < entry->argc; i++) GC_ROOT_PIN(js, entry->argv[i]);
-  sv_vm_call(js->vm, js, callback, this_val, entry->argv, entry->argc, NULL, js_mkundef());
+  sv_vm_call(js->vm, js, callback, this_val, entry->argv, entry->argc, NULL, Ant_Value_Undefined);
 
   GC_ROOT_RESTORE(js, root_mark);
   process_report_uncaught_exception_if_pending(js);

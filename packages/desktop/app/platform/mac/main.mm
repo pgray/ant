@@ -55,7 +55,7 @@ static const char *RuntimeErrorDetail(ant_t *js, ant_value_t error) {
   if (vtype(detail) != kTypeString) {
     detail = Ant_Exception_Value(js, error);
     if (vtype(detail) == kTypeObject) {
-      ant_value_t message = js_mkundef();
+      ant_value_t message = Ant_Value_Undefined;
       if (js_try_get_own_data_prop(js, detail, "message", 7, &message) &&
           vtype(message) == kTypeString) detail = message;
     }

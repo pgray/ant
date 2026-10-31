@@ -55,20 +55,20 @@ static ant_value_t regexp_static_value(ant_t *js, size_t idx) {
 }
 
 static ant_value_t regexp_static_store(ant_t *js, size_t idx, ant_value_t value) {
-  if (idx != REGEXP_STATIC_INDEX_INPUT) return js_mkundef();
+  if (idx != REGEXP_STATIC_INDEX_INPUT) return Ant_Value_Undefined;
   ant_value_t input = js_template_to_string(js, value);
   if (is_err(input)) return input;
 
   js->mutable_roots.regexp_static_values[idx] = input;
   js->regexp.static_materialized_mask |= (uint16_t)(1u << idx);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 #define REGEXP_STATIC(id, name, alias) \
   ant_value_t regexp_static_get_##id(ant_params_t) { \
     return regexp_static_value(js, REGEXP_STATIC_INDEX_##id); \
   } \
   ant_value_t regexp_static_set_##id(ant_params_t) { \
-    return regexp_static_store(js, REGEXP_STATIC_INDEX_##id, nargs > 0 ? args[0] : js_mkundef()); \
+    return regexp_static_store(js, REGEXP_STATIC_INDEX_##id, nargs > 0 ? args[0] : Ant_Value_Undefined); \
   }
 #include "modules/regex_statics.h"
 

@@ -47,7 +47,7 @@ static bool wasm_parse_table_descriptor(ant_t *js, ant_value_t descriptor, wasm_
 
   limits->min = initial;
   limits->max = maximum;
-  *err = js_mkundef();
+  *err = Ant_Value_Undefined;
   return true;
 }
 
@@ -114,7 +114,7 @@ ant_value_t js_wasm_table_get(ant_params_t) {
 
   ref = wasm_table_get(handle->as.table, index);
 
-  if (!ref) return js_mknull();
+  if (!ref) return Ant_Value_Null;
   func = wasm_ref_as_func(ref);
   
   if (func) {
@@ -126,7 +126,7 @@ ant_value_t js_wasm_table_get(ant_params_t) {
   }
   
   wasm_ref_delete(ref);
-  return js_mknull();
+  return Ant_Value_Null;
 }
 
 ant_value_t js_wasm_table_set(ant_params_t) {
@@ -150,7 +150,7 @@ ant_value_t js_wasm_table_set(ant_params_t) {
       return err;
     entries = js_get(js, call_this, "__wasmTableEntries");
     wasm_table_entry_set(js, entries, index, args[1]);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (!(vtype(args[1]) == kTypeNull || vtype(args[1]) == kTypeUndefined)) {
@@ -178,9 +178,9 @@ ant_value_t js_wasm_table_set(ant_params_t) {
 
   ant_value_t entries = js_get(js, call_this, "__wasmTableEntries");
   if (is_object_type(entries))
-    wasm_table_entry_set(js, entries, index, vtype(args[1]) == kTypeUndefined ? js_mknull() : args[1]);
+    wasm_table_entry_set(js, entries, index, vtype(args[1]) == kTypeUndefined ? Ant_Value_Null : args[1]);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t js_wasm_table_grow(ant_params_t) {
@@ -198,7 +198,7 @@ ant_value_t js_wasm_table_grow(ant_params_t) {
   if (!handle->standalone_table)
     return js_mkerr_typed(js, JS_ERR_TYPE, "The current WAMR backend does not support host-side table.grow");
 
-  init = nargs > 1 ? args[1] : js_mknull();
+  init = nargs > 1 ? args[1] : Ant_Value_Null;
   if (!wasm_table_value_ok(js, handle->standalone_table_element, init, &err))
     return err;
 
@@ -227,7 +227,7 @@ ant_value_t js_wasm_table_grow(ant_params_t) {
     if (is_object_type(entries)) {
       for (uint32_t i = old_size; i < old_size + delta; i++)
         wasm_table_entry_set(js, entries, i,
-                             vtype(init) == kTypeUndefined ? js_mknull() : init);
+                             vtype(init) == kTypeUndefined ? Ant_Value_Null : init);
     }
     handle->standalone_table_size = wasm_table_size(handle->as.table);
     return Ant_Value_FromNumber((double)old_size);
@@ -264,7 +264,7 @@ ant_value_t js_wasm_table_ctor(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Table constructor requires 'new'");
   if (!ensure_wasm_engine())
     return js_mkerr(js, "Failed to initialize WebAssembly engine");
-  if (!wasm_parse_table_descriptor(js, nargs > 0 ? args[0] : js_mkundef(), &limits, &element, &err))
+  if (!wasm_parse_table_descriptor(js, nargs > 0 ? args[0] : Ant_Value_Undefined, &limits, &element, &err))
     return err;
 
   store = wasm_store_new(g_wasm_engine);
@@ -282,7 +282,7 @@ ant_value_t js_wasm_table_ctor(ant_params_t) {
 
   result = wasm_wrap_extern_object(
     js, WASM_EXTERN_WRAP_TABLE, js->builtins.wasm_table_proto, BRAND_WASM_TABLE,
-    store, true, table, js_mkundef()
+    store, true, table, Ant_Value_Undefined
   );
   if (vtype(result) == kTypeObject) {
     ant_value_t entries = Ant_Object_CreateBare(js);
@@ -299,7 +299,7 @@ ant_value_t js_wasm_table_ctor(ant_params_t) {
     handle->standalone_table_element = element;
     handle->standalone_table_size = limits.min;
     handle->standalone_table_max_size = limits.max;
-    for (uint32_t i = 0; i < limits.min; i++) wasm_table_entry_set(js, entries, i, js_mknull());
+    for (uint32_t i = 0; i < limits.min; i++) wasm_table_entry_set(js, entries, i, Ant_Value_Null);
     js_set(js, result, "__wasmTableEntries", entries);
     js_set_descriptor(js, result, "__wasmTableEntries", 18, 0);
     js_set_finalizer(result, wasm_extern_finalize);

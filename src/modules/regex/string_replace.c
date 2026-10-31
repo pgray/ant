@@ -44,7 +44,7 @@ static inline ant_value_t emit_str_replacement(
       ? js_mkstr(js, str_ptr + pos, (size_t)match_len)
       : js_mkstr_byte_range(js, str_ptr, pos, match_len);
     ant_value_t cb_args[3] = { matched, Ant_Value_FromNumber((double)position), str };
-    ant_value_t r = sv_vm_call(js->vm, js, replacement, js_mkundef(), cb_args, 3, NULL, js_mkundef());
+    ant_value_t r = sv_vm_call(js->vm, js, replacement, Ant_Value_Undefined, cb_args, 3, NULL, Ant_Value_Undefined);
     
     if (vtype(r) == kTypeError) return r;
     ant_value_t r_str = js_tostring_val(js, r);
@@ -55,7 +55,7 @@ static inline ant_value_t emit_str_replacement(
     if (!str_buf_append(buf, buf_len, buf_cap, (const char *)(uintptr_t)roff, rlen)) return js_mkerr(js, "oom");
   } else if (!str_buf_append(buf, buf_len, buf_cap, repl_ptr, repl_len)) return js_mkerr(js, "oom");
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static __attribute__((noinline, cold)) ant_value_t string_replace_split_pairs(
@@ -69,7 +69,7 @@ static __attribute__((noinline, cold)) ant_value_t string_replace_split_pairs(
   char *needle = view ? wtf8_split_pairs_dup(search_ptr, (size_t)search_len, &needle_len) : NULL;
   size_t cap = view_len + (size_t)repl_len + 256, len = 0;
   char *buf = needle ? malloc(cap) : NULL;
-  ant_value_t result = js_mkundef();
+  ant_value_t result = Ant_Value_Undefined;
   if (!buf) goto oom;
 
   size_t pos = 0, position = 0;
@@ -118,7 +118,7 @@ static ant_value_t string_replace_impl(ant_native_params_t, ant_value_t call_thi
     if (regexp_fast_get(js, args[0], REGEXP_FAST_PRISTINE, &fast)) {
       if (replace_all && !(fast.flags & REGEXP_FLAG_GLOBAL))
         return js_mkerr_typed(js, JS_ERR_TYPE, "String.prototype.replaceAll called with a non-global RegExp");
-      return regexp_symbol_replace_impl(js, args[0], str, nargs > 1 ? args[1] : js_mkundef(), &fast);
+      return regexp_symbol_replace_impl(js, args[0], str, nargs > 1 ? args[1] : Ant_Value_Undefined, &fast);
     }
     if (replace_all) {
       ant_value_t global_val = regexp_read_flag(js, args[0], REGEXP_FLAG_INDEX_GLOBAL);
@@ -126,7 +126,7 @@ static ant_value_t string_replace_impl(ant_native_params_t, ant_value_t call_thi
     }
     
     bool called = false;
-    ant_value_t replacement_arg = nargs > 1 ? args[1] : js_mkundef();
+    ant_value_t replacement_arg = nargs > 1 ? args[1] : Ant_Value_Undefined;
     ant_value_t call_args[2] = { str, replacement_arg };
     
     ant_value_t result = maybe_call_symbol_method(js, args[0], js->sym.replace_sym, args[0], call_args, 2, &called);
@@ -144,7 +144,7 @@ static ant_value_t string_replace_impl(ant_native_params_t, ant_value_t call_thi
   
   ant_value_t search = js_tostring_val(js, args[0]);
   if (is_err(search)) return search;
-  ant_value_t replacement = nargs > 1 ? args[1] : js_mkundef();
+  ant_value_t replacement = nargs > 1 ? args[1] : Ant_Value_Undefined;
 
   bool is_func = is_callable(replacement);
   ant_offset_t repl_len = 0;

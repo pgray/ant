@@ -25,7 +25,7 @@ static ant_value_t builtin_boolean_toString(ant_params_t) {
 }
 
 void js_boolean_init_prototype(ant_t *js, ant_value_t boolean_proto) {
-  set_slot(boolean_proto, SLOT_PRIMITIVE, js_false);
+  set_slot(boolean_proto, SLOT_PRIMITIVE, Ant_Value_False);
   defmethod(js, boolean_proto, "valueOf", 7, Ant_Function_Create(builtin_boolean_valueOf));
   defmethod(js, boolean_proto, "toString", 8, Ant_Function_Create(builtin_boolean_toString));
 }

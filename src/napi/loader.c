@@ -80,7 +80,7 @@ static ant_value_t napi_dlopen_common(ant_t *js, ant_value_t module_obj, const c
     js_set(js, module_obj, "exports", exports);
   }
 
-  ant_value_t ret = js_mkundef();
+  ant_value_t ret = Ant_Value_Undefined;
   if (reg_fn) ret = (ant_value_t)reg_fn(env, (napi_value)exports);
   else if (module && module->nm_register_func) {
     ret = (ant_value_t)module->nm_register_func(env, (napi_value)exports);
@@ -91,13 +91,13 @@ static ant_value_t napi_dlopen_common(ant_t *js, ant_value_t module_obj, const c
     ant_value_t ex = is_err(nenv->exception)
       ? nenv->exception
       : Ant_Exception_Current(js);
-    nenv->exception = js_mkundef();
+    nenv->exception = Ant_Value_Undefined;
     return js_throw(js, ex);
   }
 
   if (is_object_type(ret)) exports = ret;
   js_set(js, module_obj, "exports", exports);
-  js_set(js, module_obj, "loaded", js_true);
+  js_set(js, module_obj, "loaded", Ant_Value_True);
 
   return exports;
 }
@@ -118,7 +118,7 @@ ant_value_t napi_process_dlopen_js(ant_params_t) {
 
   ant_value_t loaded = napi_dlopen_common(js, args[0], path, flags);
   if (is_err(loaded)) return loaded;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t napi_load_native_module(ant_t *js, const char *module_path, ant_value_t ns, ant_value_t module_obj) {
@@ -138,11 +138,11 @@ ant_value_t napi_load_native_module(ant_t *js, const char *module_path, ant_valu
   }
 
   ant_value_t process_obj = js_get(js, js_glob(js), "process");
-  ant_value_t dlopen_fn = is_object_type(process_obj) ? js_get(js, process_obj, "dlopen") : js_mkundef();
+  ant_value_t dlopen_fn = is_object_type(process_obj) ? js_get(js, process_obj, "dlopen") : Ant_Value_Undefined;
 
   if (is_callable(dlopen_fn)) {
     ant_value_t argv[2] = {module_obj, js_mkstr(js, module_path, strlen(module_path))};
-    ant_value_t dl_res = sv_vm_call(js->vm, js, dlopen_fn, process_obj, argv, 2, NULL, js_mkundef());
+    ant_value_t dl_res = sv_vm_call(js->vm, js, dlopen_fn, process_obj, argv, 2, NULL, Ant_Value_Undefined);
     if (is_err(dl_res) || Ant_Exception_Pending(js)) {
       result = is_err(dl_res) ? dl_res : Ant_Exception_Current(js);
       goto cleanup;
@@ -155,7 +155,7 @@ ant_value_t napi_load_native_module(ant_t *js, const char *module_path, ant_valu
     }
   }
 
-  js_set(js, module_obj, "loaded", js_true);
+  js_set(js, module_obj, "loaded", Ant_Value_True);
   ant_value_t exports_val = js_get(js, module_obj, "exports");
   result = exports_val;
   if (!is_object_type(ns)) goto cleanup;
@@ -167,7 +167,7 @@ ant_value_t napi_load_native_module(ant_t *js, const char *module_path, ant_valu
   ant_iter_t iter = js_prop_iter_begin(js, exports_val);
   const char *key = NULL;
   size_t key_len = 0;
-  ant_value_t value = js_mkundef();
+  ant_value_t value = Ant_Value_Undefined;
 
   while (js_prop_iter_next(&iter, &key, &key_len, &value)) {
     if (key_len == 7 && memcmp(key, "default", 7) == 0) continue;

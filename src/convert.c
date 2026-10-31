@@ -320,7 +320,7 @@ static bool js_try_exotic_to_primitive(
   
   const char *hint_str = hint == 1 ? "string" : (hint == 2 ? "number" : "default");
   ant_value_t hint_arg = js_mkstr(js, hint_str, strlen(hint_str));
-  ant_value_t result = sv_vm_call(js->vm, js, tp_fn, value, &hint_arg, 1, NULL, js_mkundef());
+  ant_value_t result = sv_vm_call(js->vm, js, tp_fn, value, &hint_arg, 1, NULL, Ant_Value_Undefined);
 
   *out_result = (is_err(result) || is_primitive(result))
     ? result

@@ -44,7 +44,7 @@ static void jit_emit_dense_array_next(jit_compile_t *c, MIR_label_t done) {
       MIR_new_reg_op(ctx, value)));
   MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_MOV,
       MIR_new_mem_op(ctx, MIR_JSVAL, 4 * sizeof(ant_value_t), c->r_iter_buf, 0, 1),
-      MIR_new_uint_op(ctx, js_false)));
+      MIR_new_uint_op(ctx, Ant_Value_False)));
   MIR_append_insn(ctx, fn, MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, done)));
   MIR_append_insn(ctx, fn, slow);
 }

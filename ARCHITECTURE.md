@@ -63,7 +63,7 @@ of VM definitions do not create an include cycle. See the completed
 
 Constructor context belongs to an invocation. JS frames and JIT invocation
 arguments carry `new.target`; native callbacks receive it explicitly through
-`ant_params_t`. Ordinary internal calls pass `js_mkundef()`, helpers delegating
+`ant_params_t`. Ordinary internal calls pass `Ant_Value_Undefined`, helpers delegating
 the same construction preserve its target, and separate constructions use
 their own target. Native constructors link a C-stack frame to root the target
 across GC and re-entry. Direct eval receives the lexical target explicitly.

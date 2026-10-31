@@ -20,7 +20,7 @@ ant_value_t js_wasm_global_value_setter(ant_params_t) {
 
   if (!handle || !handle->as.global)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Expected a WebAssembly.Global");
-  if (nargs < 1) return js_mkundef();
+  if (nargs < 1) return Ant_Value_Undefined;
 
   type = wasm_global_type(handle->as.global);
   if (!type) return js_mkerr(js, "Failed to inspect WebAssembly.Global");
@@ -39,11 +39,11 @@ ant_value_t js_wasm_global_value_setter(ant_params_t) {
   if (handle->use_cached_value) handle->cached_value = value;
   wasm_globaltype_delete(type);
   
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t js_wasm_global_value_of(ant_params_t) {
-  return js_wasm_global_value_getter(js, NULL, 0, js_mkundef(), call_this, call_func);
+  return js_wasm_global_value_getter(js, NULL, 0, Ant_Value_Undefined, call_this, call_func);
 }
 
 ant_value_t js_wasm_global_ctor(ant_params_t) {
@@ -98,7 +98,7 @@ ant_value_t js_wasm_global_ctor(ant_params_t) {
 
   result = wasm_wrap_extern_object(
     js, WASM_EXTERN_WRAP_GLOBAL, js->builtins.wasm_global_proto, BRAND_WASM_GLOBAL,
-    store, true, global, js_mkundef()
+    store, true, global, Ant_Value_Undefined
   );
   
   if (vtype(result) == kTypeObject) {

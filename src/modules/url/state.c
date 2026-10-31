@@ -364,7 +364,7 @@ ant_value_t url_apply_setter(
   free(href);
   if (!url || !ada_is_valid(url)) {
     if (url) ada_free(url);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   char *value_utf8 = wtf8_to_utf8_dup(value_str, &value_len);
@@ -380,5 +380,5 @@ ant_value_t url_apply_setter(
   }
   
   ada_free(url);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }

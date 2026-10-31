@@ -375,7 +375,7 @@ next_part:
 
   {
     ant_value_t r = 0;
-    ant_value_t hdr_err = js_mkundef();
+    ant_value_t hdr_err = Ant_Value_Undefined;
     const uint8_t *hdr_end = find_bytes(
       p, (size_t)(end - p), (const uint8_t *)"\r\n\r\n", 4
     );

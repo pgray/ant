@@ -52,15 +52,15 @@ static ant_value_t dns_parse_family(ant_t *js, ant_value_t value, const char *na
   if (vtype(value) == kTypeString) {
     size_t len = 0;
     const char *text = js_getstr(js, value, &len);
-    if (len == 4 && memcmp(text, "IPv4", 4) == 0) { *out = 4; return js_mkundef(); }
-    if (len == 4 && memcmp(text, "IPv6", 4) == 0) { *out = 6; return js_mkundef(); }
+    if (len == 4 && memcmp(text, "IPv4", 4) == 0) { *out = 4; return Ant_Value_Undefined; }
+    if (len == 4 && memcmp(text, "IPv6", 4) == 0) { *out = 6; return Ant_Value_Undefined; }
   }
 
   double family = vtype(value) == kTypeNumber ? Ant_Value_AsNumberUnchecked(value) : -1;
   if (family != 0 && family != 4 && family != 6) return Ant_Error_CreateInvalidArgValue(js, name, "0, 4, 6", value);
 
   *out = (int)family;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t dns_parse_order(ant_t *js, ant_value_t value, const char *name, dns_order_t *out) {
@@ -75,7 +75,7 @@ static ant_value_t dns_parse_order(ant_t *js, ant_value_t value, const char *nam
   for (size_t i = 0; text && i < countof(orders); i++) {
     if (strlen(orders[i].text) != len || memcmp(orders[i].text, text, len) != 0) continue;
     *out = orders[i].order;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   return Ant_Error_CreateInvalidArgValue(js, name, "'verbatim', 'ipv4first', 'ipv6first'", value);
@@ -86,7 +86,7 @@ ant_value_t dns_parse_result_order(ant_t *js, ant_value_t value, dns_order_t *ou
 }
 
 static ant_value_t dns_parse_lookup_object(ant_t *js, ant_value_t options, dns_lookup_options_t *out) {
-  if (!is_object_type(options)) return js_mkundef();
+  if (!is_object_type(options)) return Ant_Value_Undefined;
   ant_value_t r;
 
   ant_value_t hints = js_get(js, options, "hints");
@@ -104,25 +104,25 @@ static ant_value_t dns_parse_lookup_object(ant_t *js, ant_value_t options, dns_l
   ant_value_t all = js_get(js, options, "all");
   if (vtype(all) != kTypeUndefined && vtype(all) != kTypeNull) {
     if (vtype(all) != kTypeBool) return dns_invalid_type(js, "options.all", "of type boolean", all);
-    out->all = all == js_true;
+    out->all = all == Ant_Value_True;
   }
 
   ant_value_t verbatim = js_get(js, options, "verbatim");
   if (vtype(verbatim) != kTypeUndefined && vtype(verbatim) != kTypeNull) {
     if (vtype(verbatim) != kTypeBool) return dns_invalid_type(js, "options.verbatim", "of type boolean", verbatim);
-    out->order = verbatim == js_true ? DNS_ORDER_VERBATIM : DNS_ORDER_IPV4_FIRST;
+    out->order = verbatim == Ant_Value_True ? DNS_ORDER_VERBATIM : DNS_ORDER_IPV4_FIRST;
   }
 
   ant_value_t order = js_get(js, options, "order");
   if (vtype(order) != kTypeUndefined && vtype(order) != kTypeNull)
     if (is_err(r = dns_parse_order(js, order, "options.order", &out->order))) return r;
 
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static ant_value_t dns_address_object(ant_t *js, const char *address, int family) {
   ant_value_t obj = Ant_Object_Create(js);
-  js_set(js, obj, "address", address ? js_mkstr(js, address, strlen(address)) : js_mknull());
+  js_set(js, obj, "address", address ? js_mkstr(js, address, strlen(address)) : Ant_Value_Null);
   js_set(js, obj, "family", Ant_Value_FromNumber(family));
   return obj;
 }
@@ -135,7 +135,7 @@ static void dns_lookup_finish(dns_request_t *req, const char *address, int famil
   if (req->all) {
     dns_request_resolve(req, list, &list, 1);
   } else {
-    ant_value_t args[2] = { address ? js_mkstr(js, address, strlen(address)) : js_mknull(), Ant_Value_FromNumber(family) };
+    ant_value_t args[2] = { address ? js_mkstr(js, address, strlen(address)) : Ant_Value_Null, Ant_Value_FromNumber(family) };
     GC_ROOT_PIN(js, args[0]);
     ant_value_t value = dns_address_object(js, address, family);
     dns_request_resolve(req, value, args, 2);
@@ -199,10 +199,10 @@ static void dns_getaddrinfo_cb(uv_getaddrinfo_t *uvreq, int status, struct addri
 }
 
 ant_value_t dns_lookup_impl(ant_native_params_t, bool promises) {
-  ant_value_t hostname = nargs > 0 ? args[0] : js_mkundef();
-  ant_value_t options = nargs > 1 ? args[1] : js_mkundef();
+  ant_value_t hostname = nargs > 0 ? args[0] : Ant_Value_Undefined;
+  ant_value_t options = nargs > 1 ? args[1] : Ant_Value_Undefined;
   
-  ant_value_t callback = promises ? js_mkundef() : nargs > 2 ? args[2] : js_mkundef();
+  ant_value_t callback = promises ? Ant_Value_Undefined : nargs > 2 ? args[2] : Ant_Value_Undefined;
   dns_lookup_options_t opts = { .order = (dns_order_t)js->dns_result_order };
   ant_value_t r;
 
@@ -229,7 +229,7 @@ ant_value_t dns_lookup_impl(ant_native_params_t, bool promises) {
   req->all = opts.all;
   req->order = opts.order;
 
-  ant_value_t result = vtype(req->promise) == kTypePromise ? req->promise : js_mkundef();
+  ant_value_t result = vtype(req->promise) == kTypePromise ? req->promise : Ant_Value_Undefined;
   GC_ROOT_SAVE(mark, js);
   GC_ROOT_PIN(js, result);
 
@@ -282,7 +282,7 @@ static ant_value_t dns_parse_port(ant_t *js, ant_value_t value, int *out) {
   }
 
   *out = (int)port;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 static void dns_getnameinfo_cb(uv_getnameinfo_t *uvreq, int status, const char *hostname, const char *service) {
@@ -322,7 +322,7 @@ ant_value_t dns_lookup_service_impl(ant_native_params_t, bool promises) {
   );
 
   ant_value_t address = args[0];
-  ant_value_t callback = promises ? js_mkundef() : args[2];
+  ant_value_t callback = promises ? Ant_Value_Undefined : args[2];
   if (vtype(address) != kTypeString) return Ant_Error_CreateInvalidArgType(js, "address", "of type string", address);
 
   const char *text = js_getstr(js, address, NULL);
@@ -343,7 +343,7 @@ ant_value_t dns_lookup_service_impl(ant_native_params_t, bool promises) {
   dns_request_t *req = dns_request_new(js, DNS_REQ_LOOKUP_SERVICE, callback, address);
   if (!req) return Ant_Error_CreateOutOfMemory(js);
 
-  ant_value_t result = vtype(req->promise) == kTypePromise ? req->promise : js_mkundef();
+  ant_value_t result = vtype(req->promise) == kTypePromise ? req->promise : Ant_Value_Undefined;
   GC_ROOT_SAVE(mark, js);
   GC_ROOT_PIN(js, result);
 

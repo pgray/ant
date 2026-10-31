@@ -7,7 +7,7 @@
 static inline ant_value_t js_to_integer_number(ant_t *js, ant_value_t value, double *out) {
   if (__builtin_expect(vtype(value) == kTypeNumber, 1)) {
     *out = Ant_Value_AsNumberUnchecked(value);
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   ant_value_t primitive = value;
@@ -20,7 +20,7 @@ static inline ant_value_t js_to_integer_number(ant_t *js, ant_value_t value, dou
     return js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert value to an index");
 
   *out = js_to_number(js, primitive);
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t js_to_index_slow(ant_t *js, ant_value_t value, size_t *out) {
@@ -29,7 +29,7 @@ ant_value_t js_to_index_slow(ant_t *js, ant_value_t value, size_t *out) {
 
   if (isnan(number) || (number < 0.0 && number > -1.0)) {
     *out = 0;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (
@@ -38,7 +38,7 @@ ant_value_t js_to_index_slow(ant_t *js, ant_value_t value, size_t *out) {
   ) return js_mkerr_typed(js, JS_ERR_RANGE, "Index out of range");
 
   *out = (size_t)number;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }
 
 ant_value_t js_to_length_slow(ant_t *js, ant_value_t value, size_t *out) {
@@ -47,12 +47,12 @@ ant_value_t js_to_length_slow(ant_t *js, ant_value_t value, size_t *out) {
 
   if (isnan(number) || number <= 0.0) {
     *out = 0;
-    return js_mkundef();
+    return Ant_Value_Undefined;
   }
 
   if (number >= MAX_SAFE_INTEGER) number = MAX_SAFE_INTEGER;
   if (number > (double)SIZE_MAX) return js_mkerr_typed(js, JS_ERR_RANGE, "Length out of range");
 
   *out = (size_t)number;
-  return js_mkundef();
+  return Ant_Value_Undefined;
 }

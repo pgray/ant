@@ -63,6 +63,8 @@ static constexpr uint64_t NANBOX_TYPE_SHIFT = 47;
 static constexpr uint64_t NANBOX_PREFIX     = UINT64_C(0xFFF0000000000000);
 static constexpr uint64_t NANBOX_DATA_MASK  = UINT64_C(0x00007FFFFFFFFFFF);
 
+#define NANBOX_TAG(type) (NANBOX_PREFIX | ((uint64_t)(type) << NANBOX_TYPE_SHIFT))
+
 typedef enum: uint8_t {
   kTypeObject = 0,
   kTypeString,
@@ -88,11 +90,14 @@ typedef enum: uint8_t {
   kTypeSentinel = NANBOX_TYPE_MASK
 } ant_value_type_t;
 
-static constexpr ant_value_t ANT_BOOL_TAG = NANBOX_PREFIX | ((ant_value_t)kTypeBool << NANBOX_TYPE_SHIFT);
-static constexpr ant_value_t ANT_SENTINEL_TAG = NANBOX_PREFIX | ((ant_value_t)kTypeSentinel << NANBOX_TYPE_SHIFT);
+static constexpr ant_value_t ANT_BOOL_TAG = NANBOX_TAG(kTypeBool);
+static constexpr ant_value_t ANT_SENTINEL_TAG = NANBOX_TAG(kTypeSentinel);
 
-static constexpr ant_value_t js_false = ANT_BOOL_TAG;
-static constexpr ant_value_t js_true  = ANT_BOOL_TAG | 1;
+static constexpr ant_value_t Ant_Value_False = ANT_BOOL_TAG;
+static constexpr ant_value_t Ant_Value_True = ANT_BOOL_TAG | 1;
+
+static constexpr ant_value_t Ant_Value_Undefined = NANBOX_TAG(kTypeUndefined);
+static constexpr ant_value_t Ant_Value_Null = NANBOX_TAG(kTypeNull);
 
 static inline ant_value_t js_bool(bool value) {
   return ANT_BOOL_TAG | (ant_value_t)value;
@@ -115,7 +120,7 @@ static inline uint64_t vdata(ant_value_t value) {
 }
 
 static inline ant_value_t mkval(ant_value_type_t type, uint64_t payload) {
-  return NANBOX_PREFIX | ((ant_value_t)(type & NANBOX_TYPE_MASK) << NANBOX_TYPE_SHIFT) | (payload & NANBOX_DATA_MASK);
+  return NANBOX_TAG(type & NANBOX_TYPE_MASK) | (payload & NANBOX_DATA_MASK);
 }
 
 static inline ant_value_t mkref(ant_value_type_t type, const void *ptr) {
@@ -147,8 +152,5 @@ static inline ant_value_t Ant_Value_FromNumber(double number) {
     return UINT64_C(0x7FF8000000000000); // canonical NaN
   return bits.value;
 }
-
-static inline ant_value_t js_mkundef(void) { return mkval(kTypeUndefined, 0); }
-static inline ant_value_t js_mknull(void) { return mkval(kTypeNull, 0); }
 
 #endif

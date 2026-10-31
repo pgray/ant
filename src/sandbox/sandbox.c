@@ -403,7 +403,7 @@ uint8_t *ant_sandbox_build_result_payload(ant_t *js, ant_value_t value, size_t *
       break;
     case kTypeBool:
       type = ANT_SANDBOX_VALUE_BOOL;
-      bool_value = value == js_true ? 1u : 0u;
+      bool_value = value == Ant_Value_True ? 1u : 0u;
       break;
     case kTypeNumber: {
       type = ANT_SANDBOX_VALUE_NUMBER;
@@ -539,14 +539,14 @@ bool ant_sandbox_decode_result_value(
   uint8_t type = *r.p++;
   switch (type) {
     case ANT_SANDBOX_VALUE_UNDEFINED:
-      *out = js_mkundef();
+      *out = Ant_Value_Undefined;
       break;
     case ANT_SANDBOX_VALUE_NULL:
-      *out = js_mknull();
+      *out = Ant_Value_Null;
       break;
     case ANT_SANDBOX_VALUE_BOOL:
       if (r.p >= r.end) return false;
-      *out = *r.p++ ? js_true : js_false;
+      *out = *r.p++ ? Ant_Value_True : Ant_Value_False;
       break;
     case ANT_SANDBOX_VALUE_NUMBER: {
       uint64_t bits = 0;
@@ -581,7 +581,7 @@ bool ant_sandbox_decode_result_value(
 }
 
 ant_value_t ant_sandbox_decode_error_value(ant_t *js, const void *payload, size_t payload_len) {
-  if (!js) return js_mkundef();
+  if (!js) return Ant_Value_Undefined;
   if (!payload) return Ant_Error_Create(js, JS_ERR_TYPE, "malformed sandbox error frame");
 
   sandbox_frame_reader_t r = { payload, (const uint8_t *)payload + payload_len };
@@ -664,7 +664,7 @@ static bool sandbox_send_error_frame(ant_t *js, ant_value_t value, ant_value_t f
 
 static bool sandbox_send_uncaught_throw(ant_t *js) {
   if (!Ant_Exception_Pending(js)) return false;
-  sandbox_send_error_frame(js, Ant_Exception_Peek(js), js_mkundef());
+  sandbox_send_error_frame(js, Ant_Exception_Peek(js), Ant_Value_Undefined);
   Ant_Exception_Clear(js);
   return true;
 }
@@ -674,7 +674,7 @@ int ant_sandbox_eval_module(ant_t *js, const char *script, size_t len) {
   ant_value_t ns = Ant_Object_CreateBare(js);
 
   js_set_slot(ns, SLOT_BRAND, Ant_Value_FromNumber(BRAND_MODULE_NAMESPACE));
-  js_set_slot(ns, SLOT_MODULE_LOADING, js_true);
+  js_set_slot(ns, SLOT_MODULE_LOADING, Ant_Value_True);
   js_set_filename(js, tag);
 
   GC_ROOT_SAVE(root_mark, js);
@@ -687,7 +687,7 @@ int ant_sandbox_eval_module(ant_t *js, const char *script, size_t len) {
   int status;
   if (sandbox_send_uncaught_throw(js)) status = EXIT_FAILURE;
   else if (is_err(result)) {
-    sandbox_send_error_frame(js, result, js_mkundef());
+    sandbox_send_error_frame(js, result, Ant_Value_Undefined);
     status = EXIT_FAILURE;
   }
   else {

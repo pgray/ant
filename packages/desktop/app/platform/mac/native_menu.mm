@@ -10,7 +10,7 @@ NSMutableArray *g_menu_targets;
 
 @implementation AntMenuItemTarget
 - (void)invoke:(id)sender {
-  ant_value_t result = ant_desktop_call_function(self.js, self.callback, js_mkundef(), NULL, 0);
+  ant_value_t result = ant_desktop_call_function(self.js, self.callback, Ant_Value_Undefined, NULL, 0);
   if (is_err(result)) { fprintf(stderr, "menu click handler failed: %s\n", js_str(self.js, result)); }
 }
 @end
