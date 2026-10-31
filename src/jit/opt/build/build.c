@@ -2855,7 +2855,7 @@ static opt_flow_t opt_build_element(opt_builder_t *b, sv_op_t op) {
   uint8_t *feedback = sv_func_type_feedback(b->func);
   if (op != OP_GET_LENGTH && (!feedback || !feedback[b->pc])) return opt_end_with_exit(b, OPT_EXIT_NO_FEEDBACK);
   uint32_t operands = op == OP_PUT_ELEM ? 3 : op == OP_GET_ELEM ? 2 : 1;
-  if (op != OP_GET_LENGTH && (feedback[b->pc] & SV_TFB_STR) && !(feedback[b->pc] & (SV_TFB_ELEMENT_DENSE | SV_TFB_ELEM_TYPED_ARRAY)))
+  if (op != OP_GET_LENGTH && (feedback[b->pc] & SV_TFB_ELEM_NAMED_KEY) && !(feedback[b->pc] & (SV_TFB_ELEM_DENSE | SV_TFB_ELEM_TYPED_ARRAY)))
     return opt_build_access_call_with(b, false, op == OP_GET_ELEM ? (uintptr_t)opt_rt_get_elem_string : 0);
   ir_node_id_t array = opt_tagged(b, opt_peek(b, operands - 1)), index = IR_NONE;
   if (op != OP_GET_LENGTH && (feedback[b->pc] & SV_TFB_SPEC_MISMATCH) && opt_element_key_exited(b)) return opt_build_access_call(b, false);
@@ -2863,7 +2863,7 @@ static opt_flow_t opt_build_element(opt_builder_t *b, sv_op_t op) {
   ir_node_id_t value = op == OP_PUT_ELEM ? opt_tagged(b, opt_peek(b, 0)) : IR_NONE;
   bool slow_hot = !opt_may_speculate(b, OPT_EXIT_SLOW_PATH);
   bool dense = op != OP_GET_LENGTH && !sv_tfb_elem_saw_typed_array(feedback[b->pc]) && (sv_tfb_specialization_ready(feedback[b->pc])
-    || (op == OP_GET_ELEM && (feedback[b->pc] & SV_TFB_CLASS_MASK) == SV_TFB_ELEMENT_DENSE));
+    || (op == OP_GET_ELEM && (feedback[b->pc] & SV_TFB_CLASS_MASK) == SV_TFB_ELEM_DENSE));
   if (op != OP_GET_LENGTH && !slow_hot && dense && opt_may_speculate(b, OPT_EXIT_BAD_ELEMENTS)
     && opt_may_speculate(b, OPT_EXIT_OUT_OF_BOUNDS)) {
     opt_build_speculated_element(b, op, array, index, value);

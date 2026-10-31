@@ -163,12 +163,18 @@ static inline sv_tfb_class_t sv_tfb_classify(ant_value_t v) {
   return SV_TFB_OTHER;
 }
 
-// TODO: cleanup
-static constexpr uint8_t SV_TFB_LENGTH_ARRAY = SV_TFB_OTHER;
-static constexpr uint8_t SV_TFB_LENGTH_STRING = SV_TFB_STR;
-static constexpr uint8_t SV_TFB_LENGTH_OTHER = SV_TFB_NUM;
+typedef enum sv_tfb_length_class: uint8_t {
+  SV_TFB_LENGTH_OTHER  = 1u << 0,
+  SV_TFB_LENGTH_STRING = 1u << 1,
+  SV_TFB_LENGTH_ARRAY  = 1u << 3,
+} sv_tfb_length_class_t;
 
-static inline uint8_t sv_tfb_length_class(ant_value_t object) {
+static_assert(
+  ((SV_TFB_LENGTH_ARRAY | SV_TFB_LENGTH_STRING | SV_TFB_LENGTH_OTHER) & ~SV_TFB_CLASS_MASK) == 0,
+  "length feedback classes must fit in the class bits"
+);
+
+static inline sv_tfb_length_class_t sv_tfb_length_class(ant_value_t object) {
   switch (vtype(object)) {
     case kTypeArray: return SV_TFB_LENGTH_ARRAY;
     case kTypeString: return SV_TFB_LENGTH_STRING;
@@ -365,10 +371,19 @@ static inline bool sv_tfb_dense_numeric_element(ant_value_t object, ant_value_t 
   return true;
 }
 
-// TODO: cleanup
-static constexpr uint8_t SV_TFB_ELEM_TYPED_ARRAY = SV_TFB_NUM;
-static constexpr uint8_t SV_TFB_ELEMENT_DENSE = SV_TFB_BOOL;
-static constexpr uint8_t SV_TFB_ELEMENT_OTHER = SV_TFB_OTHER;
+typedef enum sv_tfb_elem_class: uint8_t {
+  SV_TFB_ELEM_TYPED_ARRAY = 1u << 0,
+  SV_TFB_ELEM_NAMED_KEY   = 1u << 1,
+  SV_TFB_ELEM_DENSE       = 1u << 2,
+  SV_TFB_ELEM_OTHER       = 1u << 3,
+  SV_TFB_ELEM_TAGGED_OLD  = SV_TFB_ELEM_OTHER,
+} sv_tfb_elem_class_t;
+
+static_assert(
+  ((SV_TFB_ELEM_TYPED_ARRAY | SV_TFB_ELEM_NAMED_KEY | SV_TFB_ELEM_DENSE | SV_TFB_ELEM_OTHER) & ~SV_TFB_CLASS_MASK) == 0,
+  "element feedback classes must fit in the class bits"
+);
+
 static constexpr uint8_t SV_TFB_ELEM_TYPE_MIXED = UINT8_MAX;
 
 static inline bool sv_tfb_elem_saw_typed_array(uint8_t feedback) {
@@ -410,7 +425,7 @@ static inline __attribute__((noinline)) void sv_tfb_record_typed_array_get(
   buffer_ta_access_t access = buffer_typedarray_inline_get(object, key, &type);
   
   if (access == BUFFER_TA_ACCESS_NONE) {
-    uint8_t neu = (uint8_t)(old | SV_TFB_ELEMENT_OTHER);
+    uint8_t neu = (uint8_t)(old | SV_TFB_ELEM_OTHER);
     if (sv_tfb_still_sampling(old)) neu = sv_tfb_add_specialization_sample(old, neu, false);
     sv_tfb_site_update(func, site, old, neu);
     return;
@@ -437,8 +452,8 @@ static inline bool sv_tfb_named_string_key(ant_value_t key) {
 }
 
 static inline uint8_t sv_tfb_note_string_key(sv_func_t *func, uint8_t *site, uint8_t old, ant_value_t key) {
-  if ((old & SV_TFB_STR) || !sv_tfb_named_string_key(key)) return old;
-  sv_tfb_site_update(func, site, old, (uint8_t)(old | SV_TFB_STR));
+  if ((old & SV_TFB_ELEM_NAMED_KEY) || !sv_tfb_named_string_key(key)) return old;
+  sv_tfb_site_update(func, site, old, (uint8_t)(old | SV_TFB_ELEM_NAMED_KEY));
   return *site;
 }
 
@@ -448,17 +463,17 @@ static inline void sv_tfb_record_get_elem(sv_func_t *func, uint8_t *ip, ant_valu
   
   uint8_t old = sv_tfb_note_string_key(func, site, *site, key);
   if (vtype(object) != kTypeArray) {
-    if (!(old & SV_TFB_ELEMENT_OTHER) || sv_tfb_still_sampling(old))
+    if (!(old & SV_TFB_ELEM_OTHER) || sv_tfb_still_sampling(old))
       sv_tfb_record_typed_array_get(func, site, old, object, key);
     return;
   }
   
-  uint8_t seen = SV_TFB_ELEMENT_DENSE | SV_TFB_ELEMENT_OTHER;
+  uint8_t seen = SV_TFB_ELEM_DENSE | SV_TFB_ELEM_OTHER;
   if ((old & seen) == seen && !sv_tfb_still_sampling(old)) return;
   
   ant_value_t element = 0;
   bool dense = sv_tfb_dense_element(object, key, &element);
-  uint8_t neu = old | (dense ? SV_TFB_ELEMENT_DENSE : SV_TFB_ELEMENT_OTHER);
+  uint8_t neu = old | (dense ? SV_TFB_ELEM_DENSE : SV_TFB_ELEM_OTHER);
   
   if (sv_tfb_still_sampling(old)) neu = sv_tfb_add_specialization_sample(old, neu, dense && vtype(element) == kTypeNumber);
   sv_tfb_site_update(func, site, old, neu);
@@ -509,12 +524,12 @@ static inline void sv_tfb_record_dense_numeric_put(
   bool tagged_old = false;
   bool matches = sv_tfb_dense_numeric_put(object, key, value, &tagged_old);
 
-  uint8_t neu = tagged_old ? (uint8_t)(old | SV_TFB_OTHER) : old;
+  uint8_t neu = tagged_old ? (uint8_t)(old | SV_TFB_ELEM_TAGGED_OLD) : old;
   sv_tfb_site_update(func, site, old, sv_tfb_add_specialization_sample(old, neu, matches));
 }
 
 static inline bool sv_tfb_put_needs_tagged_old_guard(uint8_t feedback) {
-  return (feedback & SV_TFB_OTHER) != 0;
+  return (feedback & SV_TFB_ELEM_TAGGED_OLD) != 0;
 }
 
 static inline void sv_tfb_ensure(sv_func_t *fn) {
