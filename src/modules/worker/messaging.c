@@ -11,9 +11,7 @@
 #include "list.h"
 
 #include "modules/process.h"
-#include "modules/timer.h"
 #include "modules/worker_threads.h"
-
 #include "worker_internal.h"
 
 typedef enum {

@@ -844,7 +844,7 @@ static ant_value_t js_crypto_timing_safe_equal(ant_params_t) {
   if (left_len != right_len)
     return js_mkerr_typed(js, JS_ERR_RANGE, "Input buffers must have the same byte length");
 
-  return js_bool(CRYPTO_memcmp(left, right, left_len) == 0);
+  return Ant_Value_FromBool(CRYPTO_memcmp(left, right, left_len) == 0);
 }
 
 static ant_value_t crypto_subtle_digest_impl(
@@ -1174,7 +1174,7 @@ static ant_value_t crypto_make_key_object(
   
   obj = crypto_new_key_record(js, 0);
   if (is_err(obj)) goto cleanup;
-  crypto_key_record_set(js, obj, 1, js_bool(key->extractable));
+  crypto_key_record_set(js, obj, 1, Ant_Value_FromBool(key->extractable));
   crypto_key_record_set(js, obj, 2, algorithm);
   crypto_key_record_set(js, obj, 3, usages);
   
@@ -1482,7 +1482,7 @@ static ant_value_t crypto_subtle_verify_impl(ant_params_t) {
   size_t expected_len = 0;
   if (!buffer_source_get_bytes(js, expected, &expected_bytes, &expected_len)) return Ant_Value_False;
   if (sig_len != expected_len) return Ant_Value_False;
-  return js_bool(CRYPTO_memcmp(sig, expected_bytes, sig_len) == 0);
+  return Ant_Value_FromBool(CRYPTO_memcmp(sig, expected_bytes, sig_len) == 0);
 }
 
 static ant_value_t js_crypto_subtle_verify(ant_params_t) {

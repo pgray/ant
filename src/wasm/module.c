@@ -245,7 +245,7 @@ ant_value_t js_wasm_validate(ant_params_t) {
   wasm_byte_vec_delete(&binary);
   wasm_store_delete(store);
   
-  return js_bool(ok);
+  return Ant_Value_FromBool(ok);
 }
 
 ant_value_t js_wasm_compile(ant_params_t) {

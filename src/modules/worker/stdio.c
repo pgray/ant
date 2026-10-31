@@ -12,7 +12,6 @@
 #include "modules/buffer.h"
 #include "modules/events.h"
 #include "modules/stream.h"
-#include "modules/timer.h"
 #include "worker_internal.h"
 
 bool worker_stdio_writer(FILE *stream, const void *data, size_t len, void *user) {

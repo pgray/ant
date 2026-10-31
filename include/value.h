@@ -99,7 +99,7 @@ static constexpr ant_value_t Ant_Value_True = ANT_BOOL_TAG | 1;
 static constexpr ant_value_t Ant_Value_Undefined = NANBOX_TAG(kTypeUndefined);
 static constexpr ant_value_t Ant_Value_Null = NANBOX_TAG(kTypeNull);
 
-static inline ant_value_t js_bool(bool value) {
+static inline ant_value_t Ant_Value_FromBool(bool value) {
   return ANT_BOOL_TAG | (ant_value_t)value;
 }
 

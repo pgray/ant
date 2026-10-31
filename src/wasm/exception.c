@@ -170,7 +170,7 @@ ant_value_t js_wasm_exception_is(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Receiver is not a WebAssembly.Exception");
   if (nargs < 1 || !wasm_is_tag(args[0]))
     return js_mkerr_typed(js, JS_ERR_TYPE, "WebAssembly.Exception.is(): Argument 0 must be a WebAssembly.Tag");
-  return js_bool(vdata(js_get_slot(call_this, SLOT_DATA)) == vdata(args[0]));
+  return Ant_Value_FromBool(vdata(js_get_slot(call_this, SLOT_DATA)) == vdata(args[0]));
 }
 
 ant_value_t js_wasm_exception_stack_getter(ant_params_t) {

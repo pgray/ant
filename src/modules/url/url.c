@@ -300,7 +300,7 @@ static ant_value_t url_canParse(ant_params_t) {
     base_str = js_getstr(js, base_sv, &base_len);
   }
   
-  return js_bool(url_can_parse_n(url_str, url_len, base_str, base_len));
+  return Ant_Value_FromBool(url_can_parse_n(url_str, url_len, base_str, base_len));
 }
 
 static ant_value_t url_parse(ant_params_t) {

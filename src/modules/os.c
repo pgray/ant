@@ -613,7 +613,7 @@ static ant_value_t os_networkInterfaces(ant_params_t) {
     for (pUnicast = pCurrAddresses->FirstUnicastAddress; pUnicast; pUnicast = pUnicast->Next) {
       ant_value_t entry = Ant_Object_Create(js);
       js_set(js, entry, "mac", js_mkstr(js, mac_str, strlen(mac_str)));
-      js_set(js, entry, "internal", js_bool(internal));
+      js_set(js, entry, "internal", Ant_Value_FromBool(internal));
       
       char addr_str[INET6_ADDRSTRLEN] = "";
       struct sockaddr *sa = pUnicast->Address.lpSockaddr;
@@ -713,7 +713,7 @@ static void add_iface_entry(ant_t *js, ant_value_t iface_arr, struct ifaddrs *if
   
   ant_value_t entry = Ant_Object_Create(js);
   js_set(js, entry, "mac", js_mkstr(js, "00:00:00:00:00:00", 17));
-  js_set(js, entry, "internal", js_bool(internal));
+  js_set(js, entry, "internal", Ant_Value_FromBool(internal));
   
   if (family == AF_INET) {
     struct sockaddr_in *sa = (struct sockaddr_in *)ifa->ifa_addr;

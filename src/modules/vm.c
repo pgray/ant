@@ -21,7 +21,6 @@
 
 #include "modules/vm.h"
 #include "modules/vm_interrupt.h"
-#include "modules/timer.h"
 #include "modules/buffer.h"
 #include "modules/collections.h"
 
@@ -323,7 +322,7 @@ static ant_value_t vm_create_context(ant_params_t) {
 static ant_value_t vm_is_context(ant_params_t) {
   ant_value_t object = nargs > 0 ? args[0] : Ant_Value_Undefined;
   if (!is_object_type(object)) return Ant_Error_CreateInvalidArgType(js, "object", "of type object", object);
-  return js_bool(vm_context_realm(object) != NULL);
+  return Ant_Value_FromBool(vm_context_realm(object) != NULL);
 }
 
 static vm_script_t *vm_script_state(ant_value_t script) {

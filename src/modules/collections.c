@@ -936,7 +936,7 @@ __attribute__((aligned(64))) ant_value_t collections_map_get_numeric_pair(
 ant_value_t collections_map_has(ant_t *js, ant_value_t map, ant_value_t key) {
   map_entry_t **map_ptr = get_map_from_obj(map);
   if (!map_ptr) return collection_receiver_error(js, "Map.prototype.has");
-  return js_bool(Ant_Map_Find(js, map_ptr, key) != NULL);
+  return Ant_Value_FromBool(Ant_Map_Find(js, map_ptr, key) != NULL);
 }
 
 static ant_value_t map_has(ant_params_t) {
@@ -1001,7 +1001,7 @@ static ant_value_t map_numeric_template_general(
   if (key != inline_key) free(key);
   
   return return_presence 
-    ? js_bool(entry != NULL)
+    ? Ant_Value_FromBool(entry != NULL)
     : (entry ? entry->value : Ant_Value_Undefined);
 }
 
@@ -1220,7 +1220,7 @@ static ant_value_t set_add(ant_params_t) {
 ant_value_t collections_set_has(ant_t *js, ant_value_t set, ant_value_t value) {
   set_entry_t **set_ptr = get_set_from_obj(set);
   if (!set_ptr) return collection_receiver_error(js, "Set.prototype.has");
-  return js_bool(Ant_Set_Find(js, set_ptr, value) != NULL);
+  return Ant_Value_FromBool(Ant_Set_Find(js, set_ptr, value) != NULL);
 }
 
 static ant_value_t set_has(ant_params_t) {
@@ -1646,7 +1646,7 @@ static ant_value_t set_isSubsetOf(ant_params_t) {
     bool has = false;
     result = set_record_has_entry(js, &other, entry, &has);
     if (is_err(result)) break;
-    result = js_bool(has);
+    result = Ant_Value_FromBool(has);
     if (!has) break;
   }
   collections_set_iter_close(&it);
@@ -1679,7 +1679,7 @@ static ant_value_t set_isSupersetOf(ant_params_t) {
   set_predicate_ctx_t pred = { this_set, true };
   ant_value_t result = set_record_for_each_key(js, &other, set_superset_key_cb, &pred);
   if (is_err(result)) return result;
-  return js_bool(pred.result);
+  return Ant_Value_FromBool(pred.result);
 }
 
 static set_key_status_t set_disjoint_key_cb(ant_t *js, ant_value_t value, ant_value_t *result, void *ctx) {
@@ -1707,7 +1707,7 @@ static ant_value_t set_isDisjointFrom(ant_params_t) {
       bool has = false;
       result = set_record_has_entry(js, &other, entry, &has);
       if (is_err(result)) break;
-      result = js_bool(!has);
+      result = Ant_Value_FromBool(!has);
       if (has) break;
     }
     collections_set_iter_close(&it);
@@ -1718,7 +1718,7 @@ static ant_value_t set_isDisjointFrom(ant_params_t) {
   ant_value_t result = set_record_for_each_key(js, &other, set_disjoint_key_cb, &pred);
   if (is_err(result)) return result;
   
-  return js_bool(pred.result);
+  return Ant_Value_FromBool(pred.result);
 }
 
 static ant_value_t weakmap_set(ant_params_t) {
@@ -1754,7 +1754,7 @@ static ant_value_t weakmap_has(ant_params_t) {
   ant_value_t key = collection_arg(args, nargs, 0);
   if (!can_be_held_weakly(key)) return Ant_Value_False;
   
-  return js_bool(weakmap_table_find(table, key) != NULL);
+  return Ant_Value_FromBool(weakmap_table_find(table, key) != NULL);
 }
 
 static ant_value_t weakmap_upsert(ant_params_t) {
@@ -1800,7 +1800,7 @@ static ant_value_t weakmap_delete(ant_params_t) {
   ant_value_t key = collection_arg(args, nargs, 0);
   if (!can_be_held_weakly(key)) return Ant_Value_False;
   
-  return js_bool(weakmap_table_delete(table, key));
+  return Ant_Value_FromBool(weakmap_table_delete(table, key));
 }
 
 static ant_value_t weakset_add(ant_params_t) {
@@ -1838,7 +1838,7 @@ static ant_value_t weakset_has(ant_params_t) {
   if (!can_be_held_weakly(value_obj)) return Ant_Value_False;
   weakset_entry_t *entry;
   HASH_FIND(hh, *ws_ptr, &value_obj, sizeof(ant_value_t), entry);
-  return js_bool(entry != NULL);
+  return Ant_Value_FromBool(entry != NULL);
 }
 
 static ant_value_t weakset_delete(ant_params_t) {
@@ -2005,7 +2005,7 @@ static ant_value_t finreg_unregister(ant_params_t) {
     }
   }
   
-  return js_bool(removed);
+  return Ant_Value_FromBool(removed);
 }
 
 static ant_value_t map_group_add(ant_t *js, void *ctx, ant_value_t key, ant_value_t value) {

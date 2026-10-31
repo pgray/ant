@@ -155,7 +155,7 @@ static ant_value_t temporal_plain_date_get_year_of_week(ant_params_t) {
 static ant_value_t temporal_plain_date_get_in_leap_year(ant_params_t) {
   (void)args; (void)nargs; ant_value_t err = Ant_Value_Undefined;
   PlainDate *self = temporal_plain_date_this(js, call_this, "Temporal.PlainDate.prototype.inLeapYear", &err);
-  return self ? js_bool(temporal_rs_PlainDate_in_leap_year(self)) : err;
+  return self ? Ant_Value_FromBool(temporal_rs_PlainDate_in_leap_year(self)) : err;
 }
 
 static ant_value_t temporal_plain_date_get_era(ant_params_t) {
@@ -223,7 +223,7 @@ static ant_value_t temporal_plain_date_equals(ant_params_t) {
   if (!temporal_plain_date_from_value(js, args[0], &other, &err)) return err;
   bool equal = temporal_rs_PlainDate_equals(self, other);
   temporal_rs_PlainDate_destroy(other);
-  return js_bool(equal);
+  return Ant_Value_FromBool(equal);
 }
 
 static ant_value_t temporal_plain_date_difference(

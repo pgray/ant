@@ -936,7 +936,7 @@ ant_value_t js_ws_writer_ctor(ant_params_t) {
 static ant_value_t js_ws_get_locked(ant_params_t) {
   ws_stream_t *stream = ws_get_stream(call_this);
   if (!stream) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid WritableStream");
-  return js_bool(ws_is_writer(ws_stream_writer(call_this)));
+  return Ant_Value_FromBool(ws_is_writer(ws_stream_writer(call_this)));
 }
 
 static ant_value_t js_ws_abort(ant_params_t) {

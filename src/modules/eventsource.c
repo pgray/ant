@@ -22,7 +22,6 @@
 #include "modules/events.h"
 #include "modules/eventsource.h"
 #include "modules/http.h"
-#include "modules/timer.h"
 #include "modules/url.h"
 
 typedef struct eventsource_timer_s {
@@ -405,7 +404,7 @@ static ant_value_t js_eventsource_ctor(ant_params_t) {
   ant_sse_parser_init(&es->parser);
   js_set_native(obj, es, ES_NATIVE_TAG);
   js_set(js, obj, "url", url_val);
-  js_set(js, obj, "withCredentials", js_bool(es->with_credentials));
+  js_set(js, obj, "withCredentials", Ant_Value_FromBool(es->with_credentials));
   
   eventsource_sync_state(js, es);
   Ant_List_Insert(&js->active_eventsources, es);

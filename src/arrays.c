@@ -1351,11 +1351,11 @@ ant_value_t array_method_has_index(ant_t *js, ant_value_t arr, ant_offset_t idx)
   uint8_t arr_type = vtype(arr);
   if (arr_type != kTypeArray) {
     TypedArrayData *ta = array_method_typedarray_data(arr, arr_type);
-    if (ta) return js_bool((size_t)idx < ta->length);
+    if (ta) return Ant_Value_FromBool((size_t)idx < ta->length);
     return do_in(js, Ant_Value_FromNumber((double)idx), arr);
   }
   
-  return js_bool(arr_has(js, arr, idx));
+  return Ant_Value_FromBool(arr_has(js, arr, idx));
 }
 
 static bool array_like_index_keys_absent(ant_value_t obj) {

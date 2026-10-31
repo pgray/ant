@@ -19,7 +19,6 @@
 #include "modules/buffer.h"
 #include "modules/events.h"
 #include "modules/stream.h"
-#include "modules/timer.h"
 #include "modules/zlib.h"
 
 static constexpr int ZLIB_CHUNK = 16384;

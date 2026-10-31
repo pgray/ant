@@ -2953,7 +2953,7 @@ static ant_value_t builtin_Array_isArray(ant_params_t) {
 
 static ant_value_t builtin_Array_isTemplateObject(ant_params_t) {
   if (nargs == 0) return Ant_Value_False;
-  return js_bool(vtype(args[0]) == kTypeArray && js_check_brand(args[0], BRAND_TEMPLATE_OBJECT));
+  return Ant_Value_FromBool(vtype(args[0]) == kTypeArray && js_check_brand(args[0], BRAND_TEMPLATE_OBJECT));
 }
 
 typedef struct {

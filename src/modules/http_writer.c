@@ -292,14 +292,14 @@ static ant_value_t js_http_writer_is_token(ant_params_t) {
   if (nargs < 1 || vtype(args[0]) != kTypeString) return Ant_Value_False;
   size_t len = 0;
   const char *s = js_getstr(js, args[0], &len);
-  return js_bool(s && http_writer_is_token(s, len));
+  return Ant_Value_FromBool(s && http_writer_is_token(s, len));
 }
 
 static ant_value_t js_http_writer_is_field_value(ant_params_t) {
   if (nargs < 1 || vtype(args[0]) != kTypeString) return Ant_Value_False;
   size_t len = 0;
   const char *s = js_getstr(js, args[0], &len);
-  return js_bool(s && http_writer_is_latin1_field_value(s, len));
+  return Ant_Value_FromBool(s && http_writer_is_latin1_field_value(s, len));
 }
 
 static ant_value_t http_writer_value_error(ant_t *js, ant_value_t value) {

@@ -61,10 +61,10 @@ ant_value_t is_regexp_like(ant_t *js, ant_value_t value) {
   if (vtype(match_sym) == kTypeSymbol) {
     ant_value_t match_val = js_get_sym(js, value, match_sym);
     if (is_err(match_val)) return match_val;
-    if (vtype(match_val) != kTypeUndefined) return js_bool(js_truthy(js, match_val));
+    if (vtype(match_val) != kTypeUndefined) return Ant_Value_FromBool(js_truthy(js, match_val));
   }
 
-  return js_bool(proto_chain_contains(js, value, js->builtins.regexp_proto));
+  return Ant_Value_FromBool(proto_chain_contains(js, value, js->builtins.regexp_proto));
 }
 
 ant_value_t reject_regexp_arg(ant_t *js, ant_value_t value, const char *method_name) {
@@ -486,7 +486,7 @@ static inline bool regexp_is_proto(ant_t *js, ant_value_t value) {
 }
 
 static ant_value_t regexp_flag_getter(ant_t *js, ant_value_t rx, uint8_t bit, const char *name) {
-  if (regexp_has_internal_slots(js, rx)) return js_bool((regexp_flags_mask(js, rx, NULL) & bit) != 0);
+  if (regexp_has_internal_slots(js, rx)) return Ant_Value_FromBool((regexp_flags_mask(js, rx, NULL) & bit) != 0);
   if (regexp_is_proto(js, rx)) return Ant_Value_Undefined;
   return js_mkerr_typed(js, JS_ERR_TYPE, "RegExp.prototype.%s getter called on incompatible receiver", name);
 }
@@ -550,7 +550,7 @@ static bool regexp_flags_pristine(ant_t *js, ant_value_t rx) {
 
 ant_value_t regexp_read_flag(ant_t *js, ant_value_t rx, int index) {
   const regexp_flag_info_t *flag = &regexp_flag_info[index];
-  if (regexp_flags_pristine(js, rx)) return js_bool((regexp_flags_mask(js, rx, NULL) & flag->bit) != 0);
+  if (regexp_flags_pristine(js, rx)) return Ant_Value_FromBool((regexp_flags_mask(js, rx, NULL) & flag->bit) != 0);
   return js_getprop_fallback(js, rx, flag->name);
 }
 

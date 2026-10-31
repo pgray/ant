@@ -149,7 +149,7 @@ static ant_value_t temporal_instant_equals(ant_params_t) {
   if (!temporal_instant_from_value(js, args[0], &other, &err)) return err;
   bool equal = temporal_rs_Instant_equals(self, other);
   temporal_rs_Instant_destroy(other);
-  return js_bool(equal);
+  return Ant_Value_FromBool(equal);
 }
 
 static ant_value_t temporal_instant_difference(

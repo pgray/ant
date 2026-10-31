@@ -222,7 +222,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_get_global(napi_env env, napi_value *res
 
 NAPI_EXTERN napi_status NAPI_CDECL napi_get_boolean(napi_env env, bool value, napi_value *result) {
   if (!env || !result) return napi_set_last(env, napi_invalid_arg, "invalid argument");
-  *result = (napi_value)js_bool(value);
+  *result = (napi_value)Ant_Value_FromBool(value);
   return napi_set_last(env, napi_ok, NULL);
 }
 
@@ -1159,7 +1159,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_coerce_to_bool(
   if (!nenv || !nenv->js || !result) return napi_set_last(env, napi_invalid_arg, "invalid argument");
   bool truthy = js_truthy(nenv->js, (ant_value_t)value);
   if (Ant_Exception_Pending(nenv->js)) return napi_check_pending_from_result(env, Ant_Value_Undefined);
-  *result = NAPI_RETURN(nenv, js_bool(truthy));
+  *result = NAPI_RETURN(nenv, Ant_Value_FromBool(truthy));
   return napi_set_last(env, napi_ok, NULL);
 }
 

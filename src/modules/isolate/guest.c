@@ -13,7 +13,6 @@
 #include "realm.h"
 #include "runtime.h"
 #include "silver/call.h"
-#include "modules/timer.h"
 #include "modules/vm_interrupt.h"
 #include "isolate_internal.h"
 

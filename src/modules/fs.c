@@ -889,11 +889,11 @@ static ant_value_t fs_writestream__write(ant_params_t) {
 }
 
 static ant_value_t fs_stream_get_pending(ant_params_t) {
-  return js_bool(is_null(js_get(js, call_this, "fd")));
+  return Ant_Value_FromBool(is_null(js_get(js, call_this, "fd")));
 }
 
 static ant_value_t fs_stream_get_auto_close(ant_params_t) {
-  return js_bool(stream_get_auto_destroy(call_this));
+  return Ant_Value_FromBool(stream_get_auto_destroy(call_this));
 }
 
 static ant_value_t fs_stream_set_auto_close(ant_params_t) {
@@ -962,8 +962,8 @@ static ant_value_t fs_stream_setup(ant_t *js, ant_value_t path_arg, ant_value_t 
   if (vtype(hwm) == kTypeNumber && Ant_Value_AsNumberUnchecked(hwm) >= 0) js_set(js, stream_options, "highWaterMark", hwm);
   if (vtype(encoding) == kTypeString) js_set(js, stream_options, "encoding", encoding);
   
-  js_set(js, stream_options, "autoDestroy", js_bool(is_undefined(auto_close) || js_truthy(js, auto_close)));
-  js_set(js, stream_options, "emitClose", js_bool(is_undefined(emit_close) || js_truthy(js, emit_close)));
+  js_set(js, stream_options, "autoDestroy", Ant_Value_FromBool(is_undefined(auto_close) || js_truthy(js, auto_close)));
+  js_set(js, stream_options, "emitClose", Ant_Value_FromBool(is_undefined(emit_close) || js_truthy(js, emit_close)));
 
   setup->options = options;
   setup->path = path_val;
@@ -2738,7 +2738,7 @@ static void on_mkdtemp_complete(uv_fs_t *uv_req) {
 static void on_exists_complete(uv_fs_t *uv_req) {
   GC_UV_CALLBACK();
   fs_request_t *req = (fs_request_t *)uv_req->data;
-  ant_value_t result = js_bool(uv_req->result >= 0);
+  ant_value_t result = Ant_Value_FromBool(uv_req->result >= 0);
   
   req->completed = 1;
   js_resolve_promise(fs_req_isolate(req), req->promise, result);
@@ -4072,12 +4072,12 @@ static ant_value_t builtin_fs_rm(ant_params_t) {
 static ant_value_t stat_mode_is(ant_t *js, ant_value_t call_this, mode_t type) {
   ant_value_t mode_val = js_get_slot(call_this, SLOT_DATA);
   if (vtype(mode_val) != kTypeNumber) return Ant_Value_False;
-  return js_bool(((mode_t)Ant_Value_AsNumberUnchecked(mode_val) & S_IFMT) == type);
+  return Ant_Value_FromBool(((mode_t)Ant_Value_AsNumberUnchecked(mode_val) & S_IFMT) == type);
 }
 
 static ant_value_t dirent_type_is(ant_t *js, ant_value_t call_this, uv_dirent_type_t type) {
   ant_value_t type_val = js_get_slot(call_this, SLOT_DATA);
-  return js_bool(vtype(type_val) == kTypeNumber && (int)Ant_Value_AsNumberUnchecked(type_val) == (int)type);
+  return Ant_Value_FromBool(vtype(type_val) == kTypeNumber && (int)Ant_Value_AsNumberUnchecked(type_val) == (int)type);
 }
 
 #define FS_FILE_TYPE(name, mode, dirent) \
@@ -4400,7 +4400,7 @@ static ant_value_t builtin_fs_existsSync(ant_params_t) {
   int result = stat(path_cstr, &st);
   free(path_cstr);
   
-  return js_bool(result == 0);
+  return Ant_Value_FromBool(result == 0);
 }
 
 static ant_value_t builtin_fs_exists(ant_params_t) {

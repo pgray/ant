@@ -1081,7 +1081,7 @@ RES_GETTER_START(url)
 RES_GETTER_END
 
 RES_GETTER_START(redirected)
-  return js_bool(d->url_list_size > 1);
+  return Ant_Value_FromBool(d->url_list_size > 1);
 RES_GETTER_END
 
 RES_GETTER_START(status)
@@ -1089,7 +1089,7 @@ RES_GETTER_START(status)
 RES_GETTER_END
 
 RES_GETTER_START(ok)
-  return js_bool(is_ok_status(d->status));
+  return Ant_Value_FromBool(is_ok_status(d->status));
 RES_GETTER_END
 
 RES_GETTER_START(status_text)
@@ -1115,7 +1115,7 @@ RES_GETTER_END
 RES_GETTER_START(body_used)
   ant_value_t stored_stream = js_get_slot(this, SLOT_RESPONSE_BODY_STREAM);
   bool used = d->body_used || (rs_is_stream(stored_stream) && rs_stream_disturbed(stored_stream));
-  return js_bool(used);
+  return Ant_Value_FromBool(used);
 RES_GETTER_END
 
 #undef RES_GETTER_START

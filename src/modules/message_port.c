@@ -4,20 +4,19 @@
 #include <uv.h>
 
 #include "ant.h"
+#include "list.h"
+#include "ptr.h"
+#include "sync.h"
 #include "cfunc.h"
 #include "errors.h"
 #include "internal.h"
 #include "descriptors.h"
-#include "list.h"
-#include "ptr.h"
-#include "sync.h"
 #include "silver/call.h"
 
 #include "gc/modules.h"
 #include "modules/domexception.h"
 #include "modules/events.h"
 #include "modules/message_port.h"
-#include "modules/timer.h"
 #include "modules/wire.h"
 
 typedef struct ant_port_message {
@@ -595,7 +594,7 @@ static ant_value_t js_message_port_unref(ant_params_t) {
 
 static ant_value_t js_message_port_has_ref(ant_params_t) {
   ant_port_binding_t *binding = port_binding(call_this);
-  return js_bool(binding && binding->refed && !binding->closed);
+  return Ant_Value_FromBool(binding && binding->refed && !binding->closed);
 }
 
 static ant_value_t node_target_add(ant_native_params_t, ant_value_t call_this, bool once, bool prepend) {

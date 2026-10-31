@@ -49,7 +49,7 @@ ant_value_t Ant_Iterator_CreateResult(ant_t *js, ant_value_t value, bool done) {
   if (!is_err(result)) {
     ant_object_t *obj = js_obj_ptr(result);
     ant_object_prop_set_unchecked(obj, 0, value);
-    ant_object_prop_set_unchecked(obj, 1, js_bool(done));
+    ant_object_prop_set_unchecked(obj, 1, Ant_Value_FromBool(done));
     gc_write_barrier(js, obj, value);
   }
 

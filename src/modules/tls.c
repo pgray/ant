@@ -53,7 +53,6 @@
 #include "modules/events.h"
 #include "modules/net.h"
 #include "modules/stream.h"
-#include "modules/timer.h"
 #include "silver/call.h"
 
 typedef struct ant_tls_context_wrap_s {
@@ -197,15 +196,15 @@ static void tls_socket_sync_state(ant_tls_socket_t *socket) {
   else if (socket->connecting) ready_state = "opening";
 
   js_set(js, socket->obj, "encrypted", Ant_Value_True);
-  js_set(js, socket->obj, "authorized", js_bool(socket->authorized));
+  js_set(js, socket->obj, "authorized", Ant_Value_FromBool(socket->authorized));
   js_set(js, socket->obj, "authorizationError", Ant_Value_Null);
-  js_set(js, socket->obj, "secureConnecting", js_bool(socket->connecting));
-  js_set(js, socket->obj, "connecting", js_bool(socket->connecting));
+  js_set(js, socket->obj, "secureConnecting", Ant_Value_FromBool(socket->connecting));
+  js_set(js, socket->obj, "connecting", Ant_Value_FromBool(socket->connecting));
   
   stream_set_destroyed(js, socket->obj, socket->destroyed);
   stream_set_readable(js, socket->obj, !socket->destroyed);
   
-  js_set(js, socket->obj, "writable", js_bool(!socket->destroyed));
+  js_set(js, socket->obj, "writable", Ant_Value_FromBool(!socket->destroyed));
   js_set(js, socket->obj, "writableNeedDrain", Ant_Value_False);
   js_set(js, socket->obj, "readyState", js_mkstr(js, ready_state, strlen(ready_state)));
   js_set(js, socket->obj, "timeout", Ant_Value_FromNumber((double)socket->timeout_ms));
@@ -303,7 +302,7 @@ static void tls_socket_close_cb(uv_handle_t *handle) {
   socket->closing = false;
   
   tls_socket_sync_state(socket);
-  had_error = js_bool(socket->had_error);
+  had_error = Ant_Value_FromBool(socket->had_error);
   
   eventemitter_emit_args(js, socket->obj, "close", &had_error, 1);
   tls_socket_release(socket);
@@ -958,7 +957,7 @@ fail:
 
 static ant_value_t js_tls_is_context(ant_params_t) {
   ant_tls_context_wrap_t *wrap = nargs > 0 ? tls_context_data(args[0]) : NULL;
-  return js_bool(wrap && !wrap->closed && wrap->ctx);
+  return Ant_Value_FromBool(wrap && !wrap->closed && wrap->ctx);
 }
 
 static ant_value_t js_tls_secure_context_ctor(ant_params_t) {
@@ -1213,7 +1212,7 @@ static ant_tls_server_t *tls_require_server(ant_t *js, ant_value_t this_val) {
 
 static void tls_server_sync_state(ant_tls_server_t *server) {
   if (is_object_type(server->obj))
-    js_set(server->js, server->obj, "listening", js_bool(server->listening));
+    js_set(server->js, server->obj, "listening", Ant_Value_FromBool(server->listening));
 }
 
 static void tls_server_listener_closed(uv_handle_t *handle) {

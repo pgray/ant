@@ -12,9 +12,7 @@
 #include "modules/events.h"
 #include "modules/performance.h"
 #include "modules/process.h"
-#include "modules/timer.h"
 #include "modules/worker_threads.h"
-
 #include "worker_internal.h"
 
 static void node_worker_emit(ant_t *js, ant_worker_t *w, const char *event, ant_args_t) {
@@ -185,7 +183,7 @@ static ant_value_t js_worker_unref(ant_params_t) {
 
 static ant_value_t js_worker_has_ref(ant_params_t) {
   ant_worker_t *w = worker_this(js, call_this);
-  return js_bool(w && !w->exited && w->refed);
+  return Ant_Value_FromBool(w && !w->exited && w->refed);
 }
 
 static ant_value_t js_worker_get_heap_snapshot(ant_params_t) {
@@ -205,7 +203,7 @@ static ant_value_t js_mark_as_uncloneable(ant_params_t) {
 }
 
 static ant_value_t js_is_marked_as_untransferable(ant_params_t) {
-  return js_bool(nargs > 0 && ant_wire_is_untransferable(js, args[0]));
+  return Ant_Value_FromBool(nargs > 0 && ant_wire_is_untransferable(js, args[0]));
 }
 
 static ant_value_t js_receive_message_on_port(ant_params_t) {
@@ -295,7 +293,7 @@ ant_value_t worker_threads_library(ant_t *js) {
   js_set(js, lib, "MessageChannel", js_get(js, js->global, "MessageChannel"));
   js_set(js, lib, "MessagePort", js_get(js, js->global, "MessagePort"));
   js_set(js, lib, "BroadcastChannel", js_get(js, js->global, "BroadcastChannel"));
-  js_set(js, lib, "isMainThread", js_bool(!is_worker));
+  js_set(js, lib, "isMainThread", Ant_Value_FromBool(!is_worker));
   js_set(js, lib, "SHARE_ENV", js->builtins.worker_share_env);
   js_set(js, lib, "markAsUntransferable", Ant_Function_CreateWithArity(js_mark_as_untransferable, 1));
   js_set(js, lib, "isMarkedAsUntransferable", Ant_Function_CreateWithArity(js_is_marked_as_untransferable, 1));

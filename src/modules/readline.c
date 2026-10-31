@@ -960,7 +960,7 @@ static ant_value_t rl_interface_closed_getter(ant_params_t) {
   rl_interface_t *iface = get_interface(js, call_this);
   
   if (!iface) return Ant_Value_True;
-  return js_bool(iface->closed);
+  return Ant_Value_FromBool(iface->closed);
 }
 
 static ant_value_t rl_clear_line(ant_params_t) {
@@ -1201,7 +1201,7 @@ static ant_value_t rl_interface_async_iterator(ant_params_t) {
   js_set(js, state, "bufferHead", Ant_Value_FromNumber(0));
   js_set(js, state, "pending", js_mkarr(js));
   js_set(js, state, "pendingHead", Ant_Value_FromNumber(0));
-  js_set(js, state, "done", js_bool(iface->closed));
+  js_set(js, state, "done", Ant_Value_FromBool(iface->closed));
 
   if (!iface->closed) {
     on_line = js_heavy_mkfun(js, rl_async_iter_on_line, state);
@@ -1344,7 +1344,7 @@ static ant_value_t rl_create_interface(ant_params_t) {
   iface->js_obj = obj;
   
   js_set(js, obj, "_rl_id", Ant_Value_FromNumber((double)iface->id));
-  js_set(js, obj, "terminal", js_bool(iface->terminal));
+  js_set(js, obj, "terminal", Ant_Value_FromBool(iface->terminal));
 
   start_reading(iface);
   return obj;

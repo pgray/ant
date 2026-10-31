@@ -91,7 +91,7 @@ static ant_value_t reflect_delete_property(ant_params_t) {
   if (!key_str) return Ant_Value_False;
   
   ant_value_t del_result = js_delete_prop_ordinary(js, target, key_str, strlen(key_str));
-  return is_err(del_result) ? del_result : js_bool(js_truthy(js, del_result));
+  return is_err(del_result) ? del_result : Ant_Value_FromBool(js_truthy(js, del_result));
 }
 
 static ant_value_t reflect_own_keys(ant_params_t) {
@@ -230,7 +230,7 @@ static ant_value_t reflect_is_extensible(ant_params_t) {
   if (!obj) return Ant_Value_False;
   if (obj->flags.frozen || obj->flags.sealed) return Ant_Value_False;
   
-  return js_bool(obj->flags.extensible);
+  return Ant_Value_FromBool(obj->flags.extensible);
 }
 
 static ant_value_t reflect_prevent_extensions(ant_params_t) {

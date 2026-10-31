@@ -808,7 +808,7 @@ static ant_value_t js_arraybuffer_resizable_getter(ant_params_t) {
   ArrayBufferData *data = buffer_get_arraybuffer_data(call_this);
   if (!data || data->is_shared)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Method get ArrayBuffer.prototype.resizable called on incompatible receiver");
-  return js_bool(data->resizable);
+  return Ant_Value_FromBool(data->resizable);
 }
 
 static ant_value_t buffer_max_length(ant_t *js, ant_value_t call_this, bool shared, const char *name) {
@@ -831,7 +831,7 @@ static ant_value_t js_sharedarraybuffer_growable_getter(ant_params_t) {
   ArrayBufferData *data = buffer_get_arraybuffer_data(call_this);
   if (!data || !data->is_shared)
     return js_mkerr_typed(js, JS_ERR_TYPE, "Method get SharedArrayBuffer.prototype.growable called on incompatible receiver");
-  return js_bool(data->resizable);
+  return Ant_Value_FromBool(data->resizable);
 }
 
 static ant_value_t js_sharedarraybuffer_grow(ant_params_t) {
@@ -861,7 +861,7 @@ static ant_value_t js_arraybuffer_detached_getter(ant_params_t) {
   ArrayBufferData *data = buffer_get_arraybuffer_data(call_this);
   if (!data) return Ant_Value_False;
   
-  return js_bool(data->is_detached);
+  return Ant_Value_FromBool(data->is_detached);
 }
 
 static ant_value_t js_arraybuffer_byteLength_getter(ant_params_t) {
@@ -966,7 +966,7 @@ static ant_value_t js_dataview_byteOffset_getter(ant_params_t) {
 // ArrayBuffer.isView(value)
 static ant_value_t js_arraybuffer_isView(ant_params_t) {
   if (nargs < 1) return Ant_Value_False;
-  return js_bool(buffer_is_dataview(args[0]) || buffer_get_typedarray_data(args[0]) != NULL);
+  return Ant_Value_FromBool(buffer_is_dataview(args[0]) || buffer_get_typedarray_data(args[0]) != NULL);
 }
 
 static ant_value_t buffer_unwrap_bigint(ant_value_t value) {
@@ -3447,7 +3447,7 @@ static ant_value_t typedarray_search(ant_native_params_t, ant_value_t call_this,
     js, ta_data->type, data, start, end, reverse, search, includes
   ) : -1;
 
-  if (includes) return js_bool(found >= 0);
+  if (includes) return Ant_Value_FromBool(found >= 0);
   return Ant_Value_FromNumber((double)found);
 }
 
@@ -3828,7 +3828,7 @@ static ant_value_t js_buffer_lastIndexOf(ant_params_t) {
 static ant_value_t js_buffer_includes(ant_params_t) {
   ant_value_t result = buffer_index_of(js, args, nargs, call_this, true);
   if (is_err(result)) return result;
-  return js_bool(Ant_Value_AsNumberUnchecked(result) != -1);
+  return Ant_Value_FromBool(Ant_Value_AsNumberUnchecked(result) != -1);
 }
 
 static ant_value_t buffer_validate_offset(ant_t *js, ant_value_t value, const char *name, size_t max, size_t *out) {
@@ -4335,12 +4335,12 @@ static ant_value_t js_buffer_isBuffer(ant_params_t) {
   if (!is_special_object(args[0])) return Ant_Value_False;
   
   ant_value_t proto = js_get_proto(js, args[0]);
-  return js_bool(proto == js->builtins.buffer_proto);
+  return Ant_Value_FromBool(proto == js->builtins.buffer_proto);
 }
 
 // Buffer.isEncoding(encoding)
 static ant_value_t js_buffer_isEncoding(ant_params_t) {
-  return js_bool(nargs > 0 && Ant_Buffer_IsEncoding(js, args[0]));
+  return Ant_Value_FromBool(nargs > 0 && Ant_Buffer_IsEncoding(js, args[0]));
 }
 
 // Buffer.byteLength(string, encoding)
@@ -4454,11 +4454,11 @@ static ant_value_t js_buffer_proto_equals(ant_params_t) {
   TypedArrayData *ta1 = buffer_get_typedarray_data(call_this);
   TypedArrayData *ta2 = buffer_get_typedarray_data(args[0]);
   if (!ta1 || !ta2) return js_mkerr(js, "Arguments must be Buffers");
-  if (ta1->byte_length != ta2->byte_length) return js_bool(false);
+  if (ta1->byte_length != ta2->byte_length) return Ant_Value_FromBool(false);
 
   ant_value_t cmp = buffer_compare_arrays(js, ta1, ta2);
   if (is_err(cmp)) return cmp;
-  return js_bool(Ant_Value_AsNumberUnchecked(cmp) == 0);
+  return Ant_Value_FromBool(Ant_Value_AsNumberUnchecked(cmp) == 0);
 }
 
 // Buffer.compare(buf1, buf2)

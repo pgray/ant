@@ -1272,13 +1272,13 @@ static inline __attribute__((noinline)) ant_value_t sv_prop_in_value(ant_t *js, 
   if (!cache) return do_in(js, l, r);
   
   int kind = -1;
-  if (sv_gf_mega_lookup(js, cache, ptr, key, &kind)) return js_bool(kind != SV_GF_IC_MISSING);
+  if (sv_gf_mega_lookup(js, cache, ptr, key, &kind)) return Ant_Value_FromBool(kind != SV_GF_IC_MISSING);
   
   sv_probe_hit_t probe;
   if (!sv_ic_probe_get_chain(r, key, SV_PROBE_CACHE_MISS, &probe)) return do_in(js, l, r);
   
   sv_gf_mega_store(js, ptr, key, probe.holder, probe.index, false);
-  return js_bool(probe.holder != NULL);
+  return Ant_Value_FromBool(probe.holder != NULL);
 }
 
 static inline ant_value_t sv_prop_in_field_ic(ant_t *js, ant_value_t obj, sv_atom_t *a, sv_ic_entry_t *ic) {
@@ -1288,7 +1288,7 @@ static inline ant_value_t sv_prop_in_field_ic(ant_t *js, ant_value_t obj, sv_ato
   ant_value_t found;
   if (sv_ic_try_get_hit(js, ic, obj, ptr, a, &found, NULL)) {
     sv_gf_ic_note_success(ic);
-    return js_bool(ic->get_kind != SV_GF_IC_MISSING);
+    return Ant_Value_FromBool(ic->get_kind != SV_GF_IC_MISSING);
   }
   
   bool cache_miss = 
@@ -1300,7 +1300,7 @@ static inline ant_value_t sv_prop_in_field_ic(ant_t *js, ant_value_t obj, sv_ato
     return js_in_str(js, obj, a->str, a->len);
   
   if (ptr->shape) sv_gf_ic_fill(js, ic, ptr, probe.holder, probe.index, false);
-  return js_bool(probe.holder != NULL);
+  return Ant_Value_FromBool(probe.holder != NULL);
 }
 
 static inline ant_value_t sv_op_in_field(

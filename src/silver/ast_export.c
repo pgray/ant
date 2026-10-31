@@ -86,7 +86,7 @@ static void syntax_set_str(syntax_export_ctx_t *ctx, ant_value_t obj, const char
 }
 
 static void syntax_set_bool(syntax_export_ctx_t *ctx, ant_value_t obj, const char *key, bool value) {
-  syntax_set(ctx, obj, key, js_bool(value));
+  syntax_set(ctx, obj, key, Ant_Value_FromBool(value));
 }
 
 static syntax_exported_t syntax_none(void) {
@@ -418,7 +418,7 @@ static syntax_exported_t syntax_export_node(
     return out;
   }
   case N_BOOL:
-    syntax_set(ctx, out.value, "value", js_bool(node->num != 0));
+    syntax_set(ctx, out.value, "value", Ant_Value_FromBool(node->num != 0));
     syntax_add_common(ctx, &out, "Literal");
     return out;
   case N_NULL:

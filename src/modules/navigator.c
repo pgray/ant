@@ -15,15 +15,14 @@
 #endif
 
 #include "ant.h"
+#include "sync.h"
 #include "cfunc.h"
 #include "errors.h"
 #include "internal.h"
-#include "sync.h"
 #include "silver/call.h"
 #include "modules/abort.h"
 #include "modules/domexception.h"
 #include "modules/navigator.h"
-#include "modules/timer.h"
 #include "modules/worker_threads.h"
 #include "gc/modules.h"
 

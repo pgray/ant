@@ -669,7 +669,7 @@ static ant_value_t js_isolate_dispose(ant_params_t) {
 
 static ant_value_t js_isolate_is_disposed(ant_params_t) {
   ant_guest_t *g = isolate_this(js, call_this);
-  return js_bool(!g || g->disposed);
+  return Ant_Value_FromBool(!g || g->disposed);
 }
 
 static ant_value_t isolate_ns_bigint(ant_t *js, uint64_t ns) {

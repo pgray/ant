@@ -839,15 +839,15 @@ REQ_GETTER_START(integrity)
 REQ_GETTER_END
 
 REQ_GETTER_START(keepalive)
-  return js_bool(d->keepalive);
+  return Ant_Value_FromBool(d->keepalive);
 REQ_GETTER_END
 
 REQ_GETTER_START(is_reload_navigation)
-  return js_bool(d->reload_navigation);
+  return Ant_Value_FromBool(d->reload_navigation);
 REQ_GETTER_END
 
 REQ_GETTER_START(is_history_navigation)
-  return js_bool(d->history_navigation);
+  return Ant_Value_FromBool(d->history_navigation);
 REQ_GETTER_END
 
 REQ_GETTER_START(signal)
@@ -891,7 +891,7 @@ REQ_GETTER_START(body)
 REQ_GETTER_END
 
 REQ_GETTER_START(body_used)
-  return js_bool(d->body_used);
+  return Ant_Value_FromBool(d->body_used);
 REQ_GETTER_END
 
 #undef REQ_GETTER_START

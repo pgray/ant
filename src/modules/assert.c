@@ -40,7 +40,7 @@ static ant_value_t assertion_error_new(ant_t *js, ant_value_t message, bool gene
 
   ant_value_t props = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, props);
-  js_set(js, props, "generatedMessage", js_bool(generated));
+  js_set(js, props, "generatedMessage", Ant_Value_FromBool(generated));
   js_set(js, props, "code", js_mkstr(js, "ERR_ASSERTION", 13));
   js_set(js, props, "actual", info.actual);
   js_set(js, props, "expected", info.expected);
@@ -1224,7 +1224,7 @@ static ant_value_t assert_rejection(ant_native_params_t, bool expect_rejection) 
     js_set(js, state, "result", result);
     js_set(js, state, "expected", expected);
     js_set(js, state, "message", message);
-    js_set(js, state, "expect_rejection", js_bool(expect_rejection));
+    js_set(js, state, "expect_rejection", Ant_Value_FromBool(expect_rejection));
     
     ant_value_t on_settled = js_heavy_mkfun(js, assert_rejection_on_settled, state);
     GC_ROOT_PIN(js, on_settled);

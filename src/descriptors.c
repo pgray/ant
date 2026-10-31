@@ -1332,7 +1332,7 @@ static ant_value_t reflect_define_property(ant_t *js, ant_value_t obj, ant_value
   if (is_object_type(obj) && is_proxy(js_as_obj(obj))) {
     ant_value_t trapped = proxy_define_property(js, js_as_obj(obj), key_val, snapshot);
     GC_ROOT_RESTORE(js, mark);
-    return is_err(trapped) ? trapped : js_bool(js_truthy(js, trapped));
+    return is_err(trapped) ? trapped : Ant_Value_FromBool(js_truthy(js, trapped));
   }
   
   ant_value_t saved = Ant_Exception_Peek(js);
@@ -1561,8 +1561,8 @@ static ant_value_t from_property_descriptor(
   ant_object_t *obj = js_obj_ptr(desc);
   ant_object_prop_set_unchecked(obj, 0, first);
   ant_object_prop_set_unchecked(obj, 1, second);
-  ant_object_prop_set_unchecked(obj, 2, js_bool(enumerable));
-  ant_object_prop_set_unchecked(obj, 3, js_bool(configurable));
+  ant_object_prop_set_unchecked(obj, 2, Ant_Value_FromBool(enumerable));
+  ant_object_prop_set_unchecked(obj, 3, Ant_Value_FromBool(configurable));
   gc_write_barrier(js, obj, first);
   gc_write_barrier(js, obj, second);
   
@@ -1570,7 +1570,7 @@ static ant_value_t from_property_descriptor(
 }
 
 ant_value_t js_from_data_descriptor(ant_t *js, ant_value_t value, bool writable, bool enumerable, bool configurable) {
-  return from_property_descriptor(js, false, value, js_bool(writable), enumerable, configurable);
+  return from_property_descriptor(js, false, value, Ant_Value_FromBool(writable), enumerable, configurable);
 }
 
 ant_value_t js_from_accessor_descriptor(ant_t *js, ant_value_t getter, ant_value_t setter, bool enumerable, bool configurable) {

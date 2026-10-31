@@ -1,18 +1,17 @@
 #include <compat.h> // IWYU pragma: keep
+#include <stdatomic.h>
 
 #include "modules/sandbox.h"
 #include "modules/json.h"
-#include "modules/timer.h"
 
 #include "ant.h"
+#include "ptr.h"
 #include "cfunc.h"
 #include "errors.h"
 #include "gc/roots.h"
-#include <stdatomic.h>
 #include "list.h"
 #include "internal.h"
 #include "object.h"
-#include "ptr.h"
 #include "sandbox/host.h"
 #include "sandbox/sandbox.h"
 #include "sandbox/transport.h"

@@ -340,7 +340,7 @@ static ant_value_t temporal_zdt_get_in_leap_year(ant_params_t) {
   (void)nargs;
   ant_value_t err = Ant_Value_Undefined;
   ZonedDateTime *self = temporal_zdt_this(js, call_this, "Temporal.ZonedDateTime.prototype.inLeapYear", &err);
-  return self ? js_bool(temporal_rs_ZonedDateTime_in_leap_year(self)) : err;
+  return self ? Ant_Value_FromBool(temporal_rs_ZonedDateTime_in_leap_year(self)) : err;
 }
 static ant_value_t temporal_zdt_get_era(ant_params_t) {
   (void)args;
@@ -440,7 +440,7 @@ static ant_value_t temporal_zdt_equals(ant_params_t) {
   temporal_rs_ZonedDateTime_equals_with_provider_result r =
     temporal_rs_ZonedDateTime_equals_with_provider(self, other, temporal_provider(js));
   temporal_rs_ZonedDateTime_destroy(other);
-  return r.is_ok ? js_bool(r.ok) : temporal_error(js, r.err);
+  return r.is_ok ? Ant_Value_FromBool(r.ok) : temporal_error(js, r.err);
 }
 static ant_value_t temporal_zdt_difference(ant_native_params_t, ant_value_t call_this, bool since) {
   ant_value_t err = Ant_Value_Undefined;

@@ -416,7 +416,7 @@ static ant_value_t intl_segmenter_segment(ant_params_t) {
     
     if (word_granularity) js_set(
       js, record, "isWordLike",
-      js_bool(intl_ascii_is_word_byte(input_str + offset, segment_len))
+      Ant_Value_FromBool(intl_ascii_is_word_byte(input_str + offset, segment_len))
     );
     
     js_arr_push(js, segments, record);

@@ -162,5 +162,5 @@ bool tty_ctrl_build_move_cursor_axis(char *buf, size_t buf_size, int delta, bool
 }
 
 ant_value_t tty_ctrl_bool_result(ant_t *js, bool ok) {
-  return js_bool(ok);
+  return Ant_Value_FromBool(ok);
 }

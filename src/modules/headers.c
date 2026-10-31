@@ -815,7 +815,7 @@ static ant_value_t js_headers_has(ant_params_t) {
     if (strcmp(e->name, lower) == 0) { found = true; break; }
   }
   free(owned_lower);
-  return js_bool(found);
+  return Ant_Value_FromBool(found);
 }
 
 static ant_value_t js_headers_delete(ant_params_t) {
@@ -1046,7 +1046,7 @@ void headers_data_delete_literal(headers_data_t *data, const char *lower_name) {
 }
 
 void headers_set_immutable(ant_value_t hdrs, bool immutable) {
-  js_set_slot(hdrs, SLOT_HEADERS_GUARD, js_bool(immutable));
+  js_set_slot(hdrs, SLOT_HEADERS_GUARD, Ant_Value_FromBool(immutable));
 }
 
 bool headers_data_append_if_missing(

@@ -790,7 +790,7 @@ static ant_value_t process_plan_make_result(
   const char *signal_name = process_signal_name(signal);
   js_set(js, result, "signalCode", signal_name
     ? js_mkstr(js, signal_name, strlen(signal_name)) : Ant_Value_Null);
-  js_set(js, result, "exited", js_bool(exited));
+  js_set(js, result, "exited", Ant_Value_FromBool(exited));
   GC_ROOT_RESTORE(js, root_mark);
   return result;
 

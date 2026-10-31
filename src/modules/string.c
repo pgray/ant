@@ -950,7 +950,7 @@ static ant_value_t builtin_string_includes(ant_params_t) {
   ptrdiff_t found = string_find_utf16(
     (const char *)(uintptr_t)str_off, (size_t)str_len,
     (const char *)(uintptr_t)search_off, (size_t)search_len, start, false);
-  result = found == STRING_FIND_OOM ? js_mkerr(js, "oom") : js_bool(found >= 0);
+  result = found == STRING_FIND_OOM ? js_mkerr(js, "oom") : Ant_Value_FromBool(found >= 0);
 
 done:
   GC_ROOT_RESTORE(js, root_mark);
@@ -1799,7 +1799,7 @@ static ant_value_t builtin_string_isWellFormed(ant_params_t) {
   ant_value_t str = Ant_String_CoerceThis(js, call_this, "isWellFormed");
   if (vtype(str) != kTypeString) return str;
   ant_offset_t str_len, str_off = vstr(js, str, &str_len);
-  return js_bool(str_is_well_formed((const char *)(uintptr_t)str_off, (size_t)str_len));
+  return Ant_Value_FromBool(str_is_well_formed((const char *)(uintptr_t)str_off, (size_t)str_len));
 }
 
 static ant_value_t builtin_string_toWellFormed(ant_params_t) {

@@ -925,7 +925,7 @@ ant_value_t ffi_pointer_address(ant_params_t) {
 
 ant_value_t ffi_pointer_is_null(ant_params_t) {
   FFI_POINTER_RECEIVER(handle);
-  return js_bool(ffi_pointer_address_raw(handle) == NULL);
+  return Ant_Value_FromBool(ffi_pointer_address_raw(handle) == NULL);
 }
 
 ant_value_t ffi_pointer_read(ant_params_t) {

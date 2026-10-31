@@ -80,7 +80,7 @@ static ant_value_t js_raw_gc_mark_profile(ant_params_t) {
   gc_func_mark_profile_t p = gc_func_mark_profile_get(js);
   ant_value_t out = Ant_Object_Create(js);
   
-  js_set(js, out, "enabled", js_bool(p.enabled));
+  js_set(js, out, "enabled", Ant_Value_FromBool(p.enabled));
   js_set(js, out, "collections", Ant_Value_FromNumber((double)p.collections));
   js_set(js, out, "funcVisits", Ant_Value_FromNumber((double)p.func_visits));
   js_set(js, out, "childEdges", Ant_Value_FromNumber((double)p.child_edges));
@@ -95,7 +95,7 @@ static ant_value_t js_raw_gc_mark_profile_enable(ant_params_t) {
   bool enabled = true;
   if (nargs > 0) enabled = js_truthy(js, args[0]);
   gc_func_mark_profile_enable(js, enabled);
-  return js_bool(enabled);
+  return Ant_Value_FromBool(enabled);
 }
 
 static ant_value_t js_raw_gc_mark_profile_reset(ant_params_t) {

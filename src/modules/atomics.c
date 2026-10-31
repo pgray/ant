@@ -19,7 +19,6 @@
 #include "modules/bigint.h"
 #include "modules/buffer.h"
 #include "modules/atomics.h"
-#include "modules/timer.h"
 
 typedef enum {
   ASYNC_WAIT_SETTLE_NONE = 0,
@@ -500,7 +499,7 @@ static ant_value_t js_atomics_isLockFree(ant_params_t) {
       is_lock_free = false;
   }
   
-  return js_bool(is_lock_free);
+  return Ant_Value_FromBool(is_lock_free);
 }
 
 // Atomics.wait(typedArray, index, value, timeout)

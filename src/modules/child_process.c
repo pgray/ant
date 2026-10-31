@@ -29,7 +29,6 @@
 #include "list.h"
 #include "ptr.h"
 #include "errors.h"
-#include "modules/timer.h"
 #include "internal.h"
 #include "utils.h"
 
@@ -537,7 +536,7 @@ static ant_value_t child_kill(ant_params_t) {
   
   int result = ant_process_stage_kill(&cp->process, sig);
   if (result == 0) js_set(js, call_this, "killed", Ant_Value_True);
-  return js_bool(result == 0);
+  return Ant_Value_FromBool(result == 0);
 }
 
 static ant_value_t child_dispose(ant_params_t) {

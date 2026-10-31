@@ -16,7 +16,6 @@
 
 #include "gc.h"
 #include "gc/modules.h"
-#include "modules/timer.h"
 #include "modules/abort.h"
 #include "modules/events.h"
 #include "modules/domexception.h"

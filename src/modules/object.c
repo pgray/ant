@@ -635,7 +635,7 @@ static ant_value_t builtin_object_isFrozen(ant_params_t) {
   if (is_proxy(as_obj)) return proxy_test_integrity_level(js, as_obj, true);
   
   ant_object_t *ptr = js_obj_ptr(as_obj);
-  return js_bool(ptr && ptr->flags.frozen);
+  return Ant_Value_FromBool(ptr && ptr->flags.frozen);
 }
 
 static ant_value_t builtin_object_seal(ant_params_t) {
@@ -1149,7 +1149,7 @@ static ant_value_t builtin_object_isExtensible(ant_params_t) {
   ant_object_t *ptr = js_obj_ptr(as_obj);
   if (!ptr) return Ant_Value_True;
   if (ptr->flags.frozen || ptr->flags.sealed) return Ant_Value_False;
-  return js_bool(ptr->flags.extensible);
+  return Ant_Value_FromBool(ptr->flags.extensible);
 }
 
 static ant_value_t builtin_object_preventExtensions(ant_params_t) {

@@ -13,7 +13,6 @@
 #include "modules/symbol.h"
 #include "modules/iterator.h"
 #include "modules/promise.h"
-#include "modules/timer.h"
 #include "modules/promise.h"
 #include "sandbox/sandbox.h"
 #include "silver/call.h"
@@ -278,7 +277,7 @@ static void CheckAwaitValueRoots(ant_t *js) {
     js_promise_settlement_t state = js_promise_get_settlement(js, output, &resumed);
     assert(state == (cancel ? JS_PROMISE_PENDING :
       input_kind == 2 ? JS_PROMISE_REJECTED : JS_PROMISE_FULFILLED));
-    assert(js_get(js, js->global, "__awaitResumed") == js_bool(!cancel && input_kind != 2));
+    assert(js_get(js, js->global, "__awaitResumed") == Ant_Value_FromBool(!cancel && input_kind != 2));
     if (!cancel) assert(resumed == value && js_get(js, resumed, "answer") == Ant_Value_FromNumber(42));
     assert(coro->refcount == 1);
     coroutine_release(coro);

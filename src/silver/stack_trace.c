@@ -692,7 +692,7 @@ static ant_value_t callsite_getFileName(ant_params_t)     { return callsite_fiel
 static ant_value_t callsite_getLineNumber(ant_params_t)   { return callsite_field(js, call_this, CS_LINE); }
 static ant_value_t callsite_getColumnNumber(ant_params_t) { return callsite_field(js, call_this, CS_COL); }
 static ant_value_t callsite_getFunctionName(ant_params_t) { return callsite_field(js, call_this, CS_NAME); }
-static ant_value_t callsite_isConstructor(ant_params_t)   { return js_bool(js_truthy(js, callsite_field(js, call_this, CS_CONSTRUCT))); }
+static ant_value_t callsite_isConstructor(ant_params_t)   { return Ant_Value_FromBool(js_truthy(js, callsite_field(js, call_this, CS_CONSTRUCT))); }
 
 static ant_value_t callsite_null(ant_params_t)      { return Ant_Value_Null; }
 static ant_value_t callsite_false(ant_params_t)     { return Ant_Value_False; }
@@ -769,7 +769,7 @@ ant_value_t js_build_callsite_array(ant_t *js, ant_value_t call_func, ant_value_
     js_arr_push(js, data, Ant_Value_FromNumber((double)view.line));
     js_arr_push(js, data, Ant_Value_FromNumber((double)view.col));
     js_arr_push(js, data, js_mkstr(js, view.name, strlen(view.name)));
-    js_arr_push(js, data, js_bool(view.construct));
+    js_arr_push(js, data, Ant_Value_FromBool(view.construct));
 
     site = Ant_Object_CreateBare(js);
     js_set_proto_init(site, proto);

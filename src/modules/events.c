@@ -20,7 +20,6 @@
 #include "modules/abort.h"
 #include "modules/events.h"
 #include "modules/iterator.h"
-#include "modules/timer.h"
 
 typedef struct {
   ant_value_t type;
@@ -780,7 +779,7 @@ EVENT_VALUE_GETTER(time_stamp)
 #define EVENT_FLAG_GETTER(name, expr)                    \
   static ant_value_t event_get_##name(ant_params_t) {    \
     event_data_t *data = get_event_data(call_this); \
-    return data ? js_bool(expr) : event_this_error(js);  \
+    return data ? Ant_Value_FromBool(expr) : event_this_error(js);  \
   }
 
 EVENT_FLAG_GETTER(bubbles, data->bubbles)
@@ -792,7 +791,7 @@ EVENT_FLAG_GETTER(composed, false)
 
 static ant_value_t js_event_get_isTrusted(ant_params_t) {
   event_data_t *data = get_event_data(call_this);
-  return data ? js_bool(data->trusted) : event_this_error(js);
+  return data ? Ant_Value_FromBool(data->trusted) : event_this_error(js);
 }
 
 static ant_value_t event_set_return_value(ant_params_t) {
@@ -868,8 +867,8 @@ static ant_value_t js_event_inspect(ant_params_t) {
   
   bool ok = js_inspect_header(&builder, "%s", tag);
   if (ok) ok = js_inspect_field(&builder, "type", data->type);
-  if (ok) ok = js_inspect_field(&builder, "defaultPrevented", js_bool(data->canceled));
-  if (ok) ok = js_inspect_field(&builder, "cancelable", js_bool(data->cancelable));
+  if (ok) ok = js_inspect_field(&builder, "defaultPrevented", Ant_Value_FromBool(data->canceled));
+  if (ok) ok = js_inspect_field(&builder, "cancelable", Ant_Value_FromBool(data->cancelable));
   if (ok) ok = js_inspect_field(&builder, "timeStamp", data->time_stamp);
   if (ok) ok = js_inspect_close(&builder);
   
@@ -1224,7 +1223,7 @@ static ant_value_t dispatch_event_to(ant_t *js, ant_value_t event_obj, EventType
   Ant_Event_EndDispatch(js, event_obj);
 
   bool canceled = data && data->canceled;
-  return js_bool(!canceled);
+  return Ant_Value_FromBool(!canceled);
 }
 
 static ant_value_t js_add_event_listener_method(ant_params_t) {
@@ -1450,7 +1449,7 @@ static ant_value_t js_eventemitter_emit(ant_params_t) {
     nargs > 1 ? &args[1] : NULL, nargs - 1
   );
 
-  return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : js_bool(invoked);
+  return Ant_Exception_Pending(js) ? Ant_Exception_Current(js) : Ant_Value_FromBool(invoked);
 }
 
 bool eventemitter_emit_args(ant_t *js, ant_value_t target, const char *event_type, ant_args_t) {
@@ -1868,7 +1867,7 @@ static ant_value_t js_events_add_abort_listener(ant_params_t) {
   } else abort_signal_add_listener(js, args[0], args[1]);
 
   ant_value_t state = Ant_Object_CreateBare(js);
-  js_set_slot(state, SLOT_SETTLED, js_bool(already_aborted));
+  js_set_slot(state, SLOT_SETTLED, Ant_Value_FromBool(already_aborted));
   
   js_set(js, state, "signal", args[0]);
   js_set(js, state, "listener", args[1]);

@@ -6,7 +6,6 @@
 #include "list.h"
 #include "gc/roots.h"
 #include "silver/call.h"
-#include "modules/timer.h"
 #include "modules/process.h"
 #include "dns_internal.h"
 

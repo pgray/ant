@@ -48,7 +48,7 @@ static ant_value_t esm_hook_make_next(ant_t *js, ant_value_t next_fn, const esm_
   js_set(js, data, "level", Ant_Value_FromNumber((double)level));
   js_set(js, data, "ctx", chain->ctx);
   js_set(js, data, "base", chain->base ? js_mkstr(js, chain->base, strlen(chain->base)) : Ant_Value_Undefined);
-  js_set(js, data, "require", js_bool(chain->is_require));
+  js_set(js, data, "require", Ant_Value_FromBool(chain->is_require));
 
   ant_value_t obj = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, obj);

@@ -2437,7 +2437,7 @@ ant_value_t sv_execute_frame(sv_vm_t *vm, sv_func_t *func, ant_value_t this, ant
   }
   
   L_IS_PRIMITIVE_TYPE: {
-    vm->stack[vm->sp - 1] = js_bool(js_typeof_is(vm->stack[vm->sp - 1], ip[1]));
+    vm->stack[vm->sp - 1] = Ant_Value_FromBool(js_typeof_is(vm->stack[vm->sp - 1], ip[1]));
     NEXT(OP_IS_PRIMITIVE_TYPE);
   }
   

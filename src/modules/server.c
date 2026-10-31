@@ -39,7 +39,6 @@
 #include "modules/request.h"
 #include "modules/response.h"
 #include "modules/server.h"
-#include "modules/timer.h"
 #include "modules/domexception.h"
 #include "modules/websocket.h"
 

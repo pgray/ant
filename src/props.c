@@ -880,7 +880,7 @@ static ant_value_t check_frozen_sealed(ant_t *js, ant_value_t obj, const char *a
 ant_value_t js_delete_prop_ordinary(ant_t *js, ant_value_t obj, const char *key, size_t len) {
   if (vtype(obj) == kTypeString) {
     unsigned long idx = 0;
-    return js_bool(!is_length_key(key, len) && !parse_array_index(key, len, str_utf16_len(js, obj), &idx));
+    return Ant_Value_FromBool(!is_length_key(key, len) && !parse_array_index(key, len, str_utf16_len(js, obj), &idx));
   }
   
   if (vtype(obj) == kTypeSymbol || vtype(obj) == kTypeBigInt) return Ant_Value_True;
@@ -899,7 +899,7 @@ ant_value_t js_delete_prop_ordinary(ant_t *js, ant_value_t obj, const char *key,
   
   if (is_proxy(obj)) {
     ant_value_t result = proxy_delete(js, obj, key, len);
-    return is_err(result) ? result : js_bool(js_truthy(js, result));
+    return is_err(result) ? result : Ant_Value_FromBool(js_truthy(js, result));
   }
 
   if (string_wrapper_owns_key(js, obj, key, len)) return Ant_Value_False;
@@ -909,7 +909,7 @@ ant_value_t js_delete_prop_ordinary(ant_t *js, ant_value_t obj, const char *key,
       lkp(js, obj, key, len).obj || 
       arr_own_dense_element(js, original_obj, key, len, NULL) ||
       (real_array_obj_ptr(original_obj) && is_length_key(key, len));
-    return js_bool(!own);
+    return Ant_Value_FromBool(!own);
   }
 
   if (real_array_obj_ptr(original_obj) && is_length_key(key, len)) return Ant_Value_False;
@@ -926,10 +926,10 @@ ant_value_t js_delete_prop_ordinary(ant_t *js, ant_value_t obj, const char *key,
   }
 
   const char *interned = intern_string(js, key, len);
-  if (!interned) return js_bool(exotic_delete_allowed(js, obj, key, len));
+  if (!interned) return Ant_Value_FromBool(exotic_delete_allowed(js, obj, key, len));
 
   int32_t shape_slot = ant_shape_lookup_interned(ptr->shape, interned);
-  if (shape_slot < 0) return js_bool(exotic_delete_allowed(js, obj, key, len));
+  if (shape_slot < 0) return Ant_Value_FromBool(exotic_delete_allowed(js, obj, key, len));
 
   uint8_t attrs = ant_shape_get_attrs(ptr->shape, (uint32_t)shape_slot);
   if ((attrs & ANT_PROP_ATTR_CONFIGURABLE) == 0) return Ant_Value_False;
@@ -969,7 +969,7 @@ ant_value_t js_delete_sym_prop(ant_t *js, ant_value_t obj, ant_value_t sym) {
   if (!ptr) return Ant_Value_True;
   if (is_proxy(obj)) {
     ant_value_t result = proxy_delete_sym(js, obj, sym);
-    return is_err(result) ? result : js_bool(js_truthy(js, result));
+    return is_err(result) ? result : Ant_Value_FromBool(js_truthy(js, result));
   }
 
   ant_value_t err = check_frozen_sealed(js, obj, "delete");
@@ -1051,7 +1051,7 @@ ant_value_t object_has_own_key(ant_t *js, ant_value_t obj, property_key_view_t *
   ant_object_t *ptr = js_obj_ptr(as_obj);
   
   bool exotic = ptr && ptr->flags.is_exotic;
-  if (!exotic && !key->index_like) return js_bool(lkp_interned(as_obj, key->interned).obj);
+  if (!exotic && !key->index_like) return Ant_Value_FromBool(lkp_interned(as_obj, key->interned).obj);
   
   if (exotic && is_proxy(as_obj)) {
     ant_value_t materialized = property_key_view_materialize(js, key);
@@ -1205,7 +1205,7 @@ ant_value_t Ant_Object_PropertyIsEnumerable(ant_t *js, ant_value_t obj, ant_valu
     result = js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert undefined or null to object");
   else if (!is_err(error) && vtype(obj) == kTypeString && !key.is_symbol) {
     unsigned long idx = 0;
-    result = js_bool(parse_array_index(key.bytes, key.length, str_utf16_len(js, obj), &idx));
+    result = Ant_Value_FromBool(parse_array_index(key.bytes, key.length, str_utf16_len(js, obj), &idx));
   } else if (!is_err(error)) result = object_property_is_enumerable_key(js, obj, &key);
 
   property_key_view_dispose(&key);

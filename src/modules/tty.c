@@ -508,7 +508,7 @@ static ant_value_t get_process_stream(ant_t *js, const char *name) {
 static void ensure_stream_common_props(ant_t *js, ant_value_t stream, int fd) {
   if (!is_special_object(stream)) return;
   js_set(js, stream, "fd", Ant_Value_FromNumber((double)fd));
-  js_set(js, stream, "isTTY", js_bool(is_tty_fd(fd)));
+  js_set(js, stream, "isTTY", Ant_Value_FromBool(is_tty_fd(fd)));
 }
 
 static ant_value_t tty_isatty(ant_params_t) {
@@ -516,7 +516,7 @@ static ant_value_t tty_isatty(ant_params_t) {
 
   int fd = 0;
   if (!parse_fd(args[0], &fd)) return Ant_Value_False;
-  return js_bool(is_tty_fd(fd));
+  return Ant_Value_FromBool(is_tty_fd(fd));
 }
 
 static ant_value_t tty_stream_write(ant_params_t) {
@@ -730,7 +730,7 @@ static ant_value_t tty_write_stream_has_colors(ant_params_t) {
   int fd = stream_fd_from_this(js, call_this, ANT_STDOUT_FD);
   int depth = detect_color_depth(js, fd, env_obj);
   int max_colors = palette_size_for_depth(depth);
-  return js_bool(max_colors >= count);
+  return Ant_Value_FromBool(max_colors >= count);
 }
 
 static ant_value_t tty_read_stream_set_raw_mode(ant_params_t) {
@@ -743,7 +743,7 @@ static ant_value_t tty_read_stream_set_raw_mode(ant_params_t) {
   if (!tty_set_raw_mode(fd, enable)) {
     return js_mkerr_typed(js, JS_ERR_GENERIC, "Failed to set raw mode for fd %d", fd);
   }
-  js_set(js, call_this, "isRaw", js_bool(enable));
+  js_set(js, call_this, "isRaw", Ant_Value_FromBool(enable));
   return call_this;
 }
 

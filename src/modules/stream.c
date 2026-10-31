@@ -7,15 +7,14 @@
 #include <strings.h>
 
 #include "ant.h"
+#include "gc.h"
 #include "cfunc.h"
 #include "ptr.h"
 #include "errors.h"
 #include "descriptors.h"
-#include "modules/timer.h"
 #include "internal.h"
 #include "silver/call.h"
 #include "esm/loader.h"
-#include "gc.h"
 #include "gc/modules.h"
 #include "gc/roots.h"
 
@@ -524,7 +523,7 @@ void stream_clear_attached_state(ant_value_t stream_obj) {
 void stream_set_destroyed(ant_t *js, ant_value_t stream_obj, bool destroyed) {
   stream_private_state_t *priv = stream_private_state(stream_obj);
   if (priv) priv->destroyed = destroyed;
-  else if (is_object_type(stream_obj)) js_set(js, stream_obj, "destroyed", js_bool(destroyed));
+  else if (is_object_type(stream_obj)) js_set(js, stream_obj, "destroyed", Ant_Value_FromBool(destroyed));
 }
 
 bool stream_is_closed(ant_value_t stream_obj) {
@@ -548,7 +547,7 @@ void stream_set_auto_destroy(ant_value_t stream_obj, bool auto_destroy) {
 void stream_set_readable(ant_t *js, ant_value_t stream_obj, bool readable) {
   stream_private_state_t *priv = stream_private_state(stream_obj);
   if (priv) priv->is_readable = readable;
-  else if (is_object_type(stream_obj)) js_set(js, stream_obj, "readable", js_bool(readable));
+  else if (is_object_type(stream_obj)) js_set(js, stream_obj, "readable", Ant_Value_FromBool(readable));
 }
 
 static uint32_t stream_field_tag(stream_field_target_t target) {
@@ -701,7 +700,7 @@ static ant_value_t js_stream_writable_state_setter(ant_params_t) {
 
 static ant_value_t js_writable_writable_getter(ant_params_t) {
   stream_private_state_t *priv = stream_writable_of(call_this);
-  return js_bool(priv && !priv->destroyed && !priv->writable.ended);
+  return Ant_Value_FromBool(priv && !priv->destroyed && !priv->writable.ended);
 }
 
 static bool stream_key_is_cstr(ant_t *js, ant_value_t value, const char *expected) {
@@ -884,12 +883,12 @@ static ant_value_t stream_field_get(ant_params_t) {
 
   void *ptr = (char *)priv + field->offset;
   switch (field->kind) {
-    case STREAM_FIELD_BOOL: return js_bool(*(bool *)ptr);
+    case STREAM_FIELD_BOOL: return Ant_Value_FromBool(*(bool *)ptr);
     case STREAM_FIELD_NUM: return Ant_Value_FromNumber(*(double *)ptr);
     case STREAM_FIELD_VALUE: return *(ant_value_t *)ptr;
     case STREAM_FIELD_TRI: {
       stream_tristate_t tri = *(stream_tristate_t *)ptr;
-      return tri == STREAM_TRI_NULL ? Ant_Value_Null : js_bool(tri == STREAM_TRI_TRUE);
+      return tri == STREAM_TRI_NULL ? Ant_Value_Null : Ant_Value_FromBool(tri == STREAM_TRI_TRUE);
     }
     case STREAM_FIELD_BUFFER: {
       ant_value_t settled = stream_readable_settle_head(js, priv);
@@ -924,7 +923,7 @@ static ant_value_t js_readable_aborted_getter(ant_params_t) {
 
   stream_readable_state_t *rs = &priv->readable;
   bool errored = !is_undefined(rs->errored) && !is_null(rs->errored);
-  return js_bool((priv->destroyed || errored) && !rs->end_emitted);
+  return Ant_Value_FromBool((priv->destroyed || errored) && !rs->end_emitted);
 }
 
 static void stream_define_readable_accessors(ant_t *js, ant_value_t target) {
@@ -1303,7 +1302,7 @@ static void stream_init_duplex(ant_t *js, ant_value_t obj, ant_value_t options) 
 }
 
 static ant_value_t stream_emit_named(ant_t *js, ant_value_t stream_obj, const char *event_name) {
-  return js_bool(eventemitter_emit_args(js, stream_obj, event_name, NULL, 0));
+  return Ant_Value_FromBool(eventemitter_emit_args(js, stream_obj, event_name, NULL, 0));
 }
 
 static void stream_set_errored(ant_t *js, stream_private_state_t *priv, ant_value_t error) {
@@ -1345,7 +1344,7 @@ static ant_value_t js_stream_resume(ant_params_t) {
 static ant_value_t js_stream_is_paused(ant_params_t) {
   ant_value_t stream_obj = stream_require_this(js, call_this, "stream");
   if (is_err(stream_obj)) return stream_obj;
-  return js_bool(stream_private_state(stream_obj)->paused);
+  return Ant_Value_FromBool(stream_private_state(stream_obj)->paused);
 }
 
 static void stream_pipe_remove_state(ant_t *js, stream_private_state_t *priv, ant_value_t state) {
@@ -2123,7 +2122,7 @@ done:
   GC_ROOT_RESTORE(js, root_mark);
   if (is_err(result)) return result;
   if (refused) return Ant_Value_False;
-  return js_bool(!rs->ended && (rs->length < rs->high_water_mark || rs->length == 0));
+  return Ant_Value_FromBool(!rs->ended && (rs->length < rs->high_water_mark || rs->length == 0));
 }
 
 static inline double stream_plain_buffer_size(ant_t *js, ant_value_t chunk) {
@@ -2148,7 +2147,7 @@ static inline ant_value_t stream_rs_add(
   ant_value_t result = stream_rs_add_chunk(js, priv, chunk, size, false);
   if (is_err(result)) return result;
   
-  return js_bool(!rs->ended && (rs->length < rs->high_water_mark || rs->length == 0));
+  return Ant_Value_FromBool(!rs->ended && (rs->length < rs->high_water_mark || rs->length == 0));
 }
 
 ant_value_t stream_readable_push_value(
@@ -2397,8 +2396,8 @@ static ant_value_t js_readable_is_paused(ant_params_t) {
   if (is_err(stream_obj)) return stream_obj;
 
   stream_private_state_t *priv = stream_private_state(stream_obj);
-  if (!priv->has_readable) return js_bool(priv->paused);
-  return js_bool(priv->readable.paused == STREAM_TRI_TRUE || priv->readable.flowing == STREAM_TRI_FALSE);
+  if (!priv->has_readable) return Ant_Value_FromBool(priv->paused);
+  return Ant_Value_FromBool(priv->readable.paused == STREAM_TRI_TRUE || priv->readable.flowing == STREAM_TRI_FALSE);
 }
 
 static ant_value_t js_writable__write(ant_params_t) {
@@ -2673,7 +2672,7 @@ static stream_write_status_t stream_writable_start_writev(ant_t *js, stream_priv
     size += entry->size;
   }
 
-  setprop_cstr(js, chunks, "allBuffers", 10, js_bool(all_buffers));
+  setprop_cstr(js, chunks, "allBuffers", 10, Ant_Value_FromBool(all_buffers));
   ws->queue_head = ws->queue_len = 0;
 
   ant_value_t callback = all_noop ? Ant_Value_Undefined : stream_make_call(js, stream_writev_done, stream_obj, callbacks);
@@ -2839,7 +2838,7 @@ static ant_value_t stream_writable_write_impl(
   } else if (stream_writable_start(js, priv, chunk, encoding, callback, chunk_size) == STREAM_WRITE_THROWN)
     return Ant_Exception_Current(js);
 
-  return js_bool(accepted && !priv->destroyed);
+  return Ant_Value_FromBool(accepted && !priv->destroyed);
 }
 
 static ant_value_t js_writable_write(ant_params_t) {
@@ -4010,12 +4009,12 @@ static ant_value_t js_writable_has_instance(ant_params_t) {
   if (is_object_type(proto) && js_instance_of_proto(js, obj, proto)) return Ant_Value_True;
   if (call_this != js->builtins.writable_ctor) return Ant_Value_False;
   
-  return js_bool(js_instance_of_proto(js, obj, js->builtins.duplex_proto));
+  return Ant_Value_FromBool(js_instance_of_proto(js, obj, js->builtins.duplex_proto));
 }
 
 static ant_value_t stream_construct_duplex_like(ant_t *js, ant_value_t base_proto, ant_value_t options, ant_value_t new_target) {
   ant_value_t obj = stream_construct(js, base_proto, options, stream_init_duplex, new_target);
-  js_set(js, obj, "allowHalfOpen", js_bool(stream_get_option(js, options, "allowHalfOpen") != Ant_Value_False));
+  js_set(js, obj, "allowHalfOpen", Ant_Value_FromBool(stream_get_option(js, options, "allowHalfOpen") != Ant_Value_False));
   return obj;
 }
 
@@ -4364,7 +4363,7 @@ static bool stream_state_flag(ant_t *js, ant_value_t stream_obj, const char *sta
 static ant_value_t js_stream_is_destroyed(ant_params_t) {
   ant_value_t stream_obj = nargs > 0 ? args[0] : Ant_Value_Undefined;
   if (!is_object_type(stream_obj)) return Ant_Value_False;
-  return js_bool(stream_is_destroyed(js, stream_obj));
+  return Ant_Value_FromBool(stream_is_destroyed(js, stream_obj));
 }
 
 static ant_value_t js_stream_is_disturbed(ant_params_t) {
@@ -4374,14 +4373,14 @@ static ant_value_t js_stream_is_disturbed(ant_params_t) {
   if (stream_state_flag(js, stream_obj, "_readableState", "dataEmitted")) return Ant_Value_True;
   if (stream_state_flag(js, stream_obj, "_readableState", "endEmitted")) return Ant_Value_False;
   
-  return js_bool(stream_is_destroyed(js, stream_obj));
+  return Ant_Value_FromBool(stream_is_destroyed(js, stream_obj));
 }
 
 static ant_value_t js_stream_is_errored(ant_params_t) {
   ant_value_t stream_obj = nargs > 0 ? args[0] : Ant_Value_Undefined;
   if (!is_object_type(stream_obj)) return Ant_Value_False;
 
-  return js_bool(
+  return Ant_Value_FromBool(
     stream_state_flag(js, stream_obj, "_readableState", "errored") ||
     stream_state_flag(js, stream_obj, "_writableState", "errored")
   );
@@ -4398,7 +4397,7 @@ static ant_value_t js_stream_is_readable(ant_params_t) {
   if (stream_state_flag(js, stream_obj, "_readableState", "errored")) return Ant_Value_False;
   if (stream_state_flag(js, stream_obj, "_writableState", "errored")) return Ant_Value_False;
   
-  return js_bool(js_truthy(js, js_get(js, stream_obj, "readable")));
+  return Ant_Value_FromBool(js_truthy(js, js_get(js, stream_obj, "readable")));
 }
 
 static void stream_web_copy_global(ant_t *js, ant_value_t obj, const char *name) {

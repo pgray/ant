@@ -58,8 +58,8 @@ static ant_value_t http_parser_head_object(ant_t *js, const ant_http1_parsed_req
   js_set(js, out, "contentType", parsed->content_type ? js_mkstr(js, parsed->content_type, strlen(parsed->content_type)) : Ant_Value_Null);
   js_set(js, out, "rawHeaders", http_parser_raw_headers_array(js, parsed));
   js_set(js, out, "contentLength", Ant_Value_FromNumber((double)parsed->content_length));
-  js_set(js, out, "absoluteTarget", js_bool(parsed->absolute_target));
-  js_set(js, out, "keepAlive", js_bool(parsed->keep_alive));
+  js_set(js, out, "absoluteTarget", Ant_Value_FromBool(parsed->absolute_target));
+  js_set(js, out, "keepAlive", Ant_Value_FromBool(parsed->keep_alive));
   js_set(js, out, "httpVersionMajor", Ant_Value_FromNumber((double)parsed->http_major));
   js_set(js, out, "httpVersionMinor", Ant_Value_FromNumber((double)parsed->http_minor));
   js_set(js, out, "httpVersion", js_mkstr(js, version_buf, strlen(version_buf)));
@@ -177,7 +177,7 @@ static ant_value_t js_http_parser_feed_request_parser(ant_params_t) {
 
   ant_value_t out = Ant_Object_CreateBare(js);
   js_set(js, out, "consumed", Ant_Value_FromNumber((double)consumed));
-  js_set(js, out, "complete", js_bool(result == ANT_HTTP1_PARSE_OK));
+  js_set(js, out, "complete", Ant_Value_FromBool(result == ANT_HTTP1_PARSE_OK));
 
   if (head.method) {
     js_set(js, out, "head", http_parser_head_object(js, &head));

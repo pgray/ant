@@ -362,7 +362,7 @@ static inline ant_value_t sv_using_dispose_async(
   js_set_slot(state, SLOT_ENTRIES, work);
   js_set_slot(state, SLOT_DATA, result_promise);
   js_set_slot(state, SLOT_AUX, completion);
-  js_set_slot(state, SLOT_SETTLED, js_bool(has_completion));
+  js_set_slot(state, SLOT_SETTLED, Ant_Value_FromBool(has_completion));
   js_set_slot(state, SLOT_ITER_STATE, Ant_Value_FromNumber((double)js_arr_len(js, work)));
 
   ant_value_t result = sv_async_dispose_continue(js, state, false, Ant_Value_Undefined);

@@ -148,7 +148,7 @@ static ant_value_t temporal_plain_time_equals(ant_params_t) {
   if (!temporal_plain_time_from_value(js, args[0], &other, &err)) return err;
   bool equal = temporal_rs_PlainTime_equals(self, other);
   temporal_rs_PlainTime_destroy(other);
-  return js_bool(equal);
+  return Ant_Value_FromBool(equal);
 }
 
 static ant_value_t temporal_plain_time_difference(

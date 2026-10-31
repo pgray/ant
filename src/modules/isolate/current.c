@@ -6,7 +6,6 @@
 #include "handles.h"
 #include "internal.h"
 #include "reactor.h"
-#include "modules/timer.h"
 #include "isolate_internal.h"
 
 typedef struct {

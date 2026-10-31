@@ -177,7 +177,7 @@ static ant_value_t temporal_duration_get_blank(ant_params_t) {
   (void)args; (void)nargs;
   ant_value_t err = Ant_Value_Undefined;
   Duration *self = temporal_duration_this(js, call_this, "Temporal.Duration.prototype.blank", &err);
-  return self ? js_bool(temporal_rs_Duration_is_zero(self)) : err;
+  return self ? Ant_Value_FromBool(temporal_rs_Duration_is_zero(self)) : err;
 }
 
 static ant_value_t temporal_duration_abs(ant_params_t) {

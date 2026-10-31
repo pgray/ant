@@ -444,7 +444,7 @@ static inline __attribute__((noinline)) ant_value_t sv_instanceof_ic_miss(
     return Ant_Value_False;
   }
   
-  ant_value_t res = rhs_cacheable ? js_bool(js_instance_of_proto(js, l, ctor_proto)) : do_instanceof(js, l, r);
+  ant_value_t res = rhs_cacheable ? Ant_Value_FromBool(js_instance_of_proto(js, l, ctor_proto)) : do_instanceof(js, l, r);
   if (!rhs_cacheable) lhs_cacheable = sv_instanceof_lhs_cache_key(l, &lhs_ptr, &lhs_proto, &lhs_proto_ptr);
 
   if (!is_err(res) && rhs_cacheable && lhs_cacheable && vtype(res) == kTypeBool) {
@@ -489,7 +489,7 @@ static inline ant_value_t sv_instanceof_ic_eval(
   if (
     lhs_ptr->shape == ic->cached_shape && lhs_proto_ptr == ic->cached_holder &&
     ic->guard.comparison.object_epoch == js->ic.obj_epoch
-  ) return js_bool(ic->cached_index != 0);
+  ) return Ant_Value_FromBool(ic->cached_index != 0);
 
 miss:
   return sv_instanceof_ic_miss(js, l, r, ic);
@@ -524,7 +524,7 @@ static inline ant_value_t sv_isproto_ic_eval(
     ic->cached_holder == proto_ptr &&
     (ant_object_t *)(uintptr_t)ic->cached_shape == obj_ptr
   ) {
-    return js_bool(ic->cached_index != 0);
+    return Ant_Value_FromBool(ic->cached_index != 0);
   }
 
   bool cacheable = false;

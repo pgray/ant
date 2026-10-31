@@ -259,10 +259,10 @@ static bool inspector_safe_binary_numeric(
     case TOK_DIV: *out = Ant_Value_FromNumber(l / r); return true;
     case TOK_REM: *out = Ant_Value_FromNumber(fmod(l, r)); return true;
     case TOK_EXP: *out = Ant_Value_FromNumber(ant_math_js_pow(l, r)); return true;
-    case TOK_LT: *out = js_bool(l < r); return true;
-    case TOK_LE: *out = js_bool(l <= r); return true;
-    case TOK_GT: *out = js_bool(l > r); return true;
-    case TOK_GE: *out = js_bool(l >= r); return true;
+    case TOK_LT: *out = Ant_Value_FromBool(l < r); return true;
+    case TOK_LE: *out = Ant_Value_FromBool(l <= r); return true;
+    case TOK_GT: *out = Ant_Value_FromBool(l > r); return true;
+    case TOK_GE: *out = Ant_Value_FromBool(l >= r); return true;
     case TOK_SHL:
       *out = Ant_Value_FromNumber((double)(js_to_int32(l) << (js_to_uint32(r) & 31)));
       return true;
@@ -332,7 +332,7 @@ static bool inspector_safe_eval_ast(ant_t *js, sv_ast_t *node, ant_value_t *out)
       *out = js_mkstr(js, node->str ? node->str : "", node->len);
       return !is_err(*out);
     case N_BOOL:
-      *out = js_bool(node->num != 0);
+      *out = Ant_Value_FromBool(node->num != 0);
       return true;
     case N_NULL:
       *out = Ant_Value_Null;
@@ -352,7 +352,7 @@ static bool inspector_safe_eval_ast(ant_t *js, sv_ast_t *node, ant_value_t *out)
       if (!inspector_safe_eval_ast(js, node->right, &value)) return false;
       if (is_object_type(value)) return false;
       switch (node->op) {
-        case TOK_NOT: *out = js_bool(!js_truthy(js, value)); return true;
+        case TOK_NOT: *out = Ant_Value_FromBool(!js_truthy(js, value)); return true;
         case TOK_TILDA: *out = Ant_Value_FromNumber((double)(~js_to_int32(js_to_number(js, value)))); return true;
         case TOK_UPLUS: *out = Ant_Value_FromNumber(js_to_number(js, value)); return true;
         case TOK_UMINUS: *out = Ant_Value_FromNumber(-js_to_number(js, value)); return true;
@@ -412,14 +412,14 @@ static bool inspector_safe_eval_ast(ant_t *js, sv_ast_t *node, ant_value_t *out)
         case TOK_NE: {
           bool equal = false;
           if (!inspector_safe_abstract_eq(js, left, right, &equal)) return false;
-          *out = js_bool(node->op == TOK_EQ ? equal : !equal);
+          *out = Ant_Value_FromBool(node->op == TOK_EQ ? equal : !equal);
           return true;
         }
         case TOK_SEQ:
-          *out = js_bool(strict_eq_values(js, left, right));
+          *out = Ant_Value_FromBool(strict_eq_values(js, left, right));
           return true;
         case TOK_SNE:
-          *out = js_bool(!strict_eq_values(js, left, right));
+          *out = Ant_Value_FromBool(!strict_eq_values(js, left, right));
           return true;
         case TOK_IN:
         case TOK_INSTANCEOF:

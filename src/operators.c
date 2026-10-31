@@ -162,7 +162,7 @@ static bool instanceof_via_has_instance(ant_t *js, ant_value_t l, ant_value_t r,
   else if (hit == kTypeFunction || hit == kTypeBuiltin) {
     ant_value_t args[1] = { l };
     ant_value_t result = sv_vm_call(js->vm, js, has_instance, r, args, 1, NULL, Ant_Value_Undefined);
-    *out = is_err(result) ? result : js_bool(js_truthy(js, result));
+    *out = is_err(result) ? result : Ant_Value_FromBool(js_truthy(js, result));
   } else if (hit != kTypeUndefined && hit != kTypeNull)
     *out = js_mkerr_typed(js, JS_ERR_TYPE, "Symbol.hasInstance is not callable");
   else return false;
@@ -298,7 +298,7 @@ static inline bool array_index_in(ant_t *js, ant_value_t arr, double d, ant_valu
   if (!(d >= 0 && d < 4294967295.0) || d != (double)(uint32_t)d) return false;
   
   uint32_t idx = (uint32_t)d;
-  *out = js_bool(
+  *out = Ant_Value_FromBool(
     idx < dense_iterable_length(js, arr) && idx < get_array_length(js, arr) &&
     !is_empty_slot(dense_get(get_dense_buf(arr), idx))
   );
@@ -331,11 +331,11 @@ static ant_value_t in_lookup(ant_t *js, ant_value_t r, property_key_view_t *key)
       ant_value_t result = key->is_symbol
         ? proxy_has_val(js, js_as_obj(cur), key->js_key)
         : proxy_has(js, js_as_obj(cur), key->bytes, (ant_offset_t)key->length);
-      return is_err(result) ? result : js_bool(js_truthy(js, result));
+      return is_err(result) ? result : Ant_Value_FromBool(js_truthy(js, result));
     }
     
     ant_value_t exotic = key->is_symbol ? Ant_Value_Undefined : exotic_own_get(js, js_as_obj(cur), ptr, key->bytes, key->length);
-    if (vtype(exotic) != kTypeUndefined) return js_bool(exotic != T_EMPTY);
+    if (vtype(exotic) != kTypeUndefined) return Ant_Value_FromBool(exotic != T_EMPTY);
     
     ant_value_t own = object_has_own_key(js, js_object_view(cur), key);
     if (own != Ant_Value_False) return own;

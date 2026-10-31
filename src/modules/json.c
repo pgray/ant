@@ -355,7 +355,7 @@ static ant_value_t yyjson_to_jsval(
   
   switch (yyjson_get_type(val)) {
   case YYJSON_TYPE_NULL: return Ant_Value_Null;
-  case YYJSON_TYPE_BOOL: return js_bool(yyjson_get_bool(val));
+  case YYJSON_TYPE_BOOL: return Ant_Value_FromBool(yyjson_get_bool(val));
   
   case YYJSON_TYPE_STR: {
     ant_value_t str = js_mkstr(js, yyjson_get_str(val), yyjson_get_len(val));

@@ -667,7 +667,7 @@ ant_value_t js_rs_reader_ctor(ant_params_t) {
 static ant_value_t js_rs_get_locked(ant_params_t) {
   rs_stream_t *stream = rs_get_stream(call_this);
   if (!stream) return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid ReadableStream");
-  return js_bool(rs_is_reader(rs_stream_reader(call_this)));
+  return Ant_Value_FromBool(rs_is_reader(rs_stream_reader(call_this)));
 }
 
 static ant_value_t js_rs_cancel(ant_params_t) {

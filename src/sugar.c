@@ -2,7 +2,6 @@
 #include "sugar.h"
 
 #include "modules/generator.h"
-#include "modules/timer.h"
 #include "silver/engine.h"
 #include "modules/promise.h"
 

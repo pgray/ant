@@ -54,7 +54,7 @@ static ant_value_t js_subscription_get_closed(ant_params_t) {
   if (!is_special_object(call_this)) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Subscription.closed getter called on non-object");
   }
-  return js_bool(subscription_closed(js, call_this));
+  return Ant_Value_FromBool(subscription_closed(js, call_this));
 }
 
 static ant_value_t js_subscription_unsubscribe(ant_params_t) {
@@ -90,7 +90,7 @@ static ant_value_t js_subobs_get_closed(ant_params_t) {
     return js_mkerr_typed(js, JS_ERR_TYPE, "Invalid SubscriptionObserver");
   }
   
-  return js_bool(subscription_closed(js, subscription));
+  return Ant_Value_FromBool(subscription_closed(js, subscription));
 }
 
 static ant_value_t js_subobs_next(ant_params_t) {

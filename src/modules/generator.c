@@ -13,7 +13,6 @@
 #include "silver/call.h"
 #include "modules/generator.h"
 #include "modules/iterator.h"
-#include "modules/timer.h"
 
 static constexpr uint32_t GENERATOR_NATIVE_TAG = Ant_NativeTag("GENR");
 

@@ -31,7 +31,6 @@
 #include "modules/events.h"
 #include "modules/net.h"
 #include "modules/stream.h"
-#include "modules/timer.h"
 
 typedef struct net_connect_args_s net_connect_args_t;
 typedef struct net_write_args_s  net_write_args_t;
@@ -404,8 +403,8 @@ static void net_socket_sync_state(net_socket_t *socket) {
   else if (socket->connecting) ready_state = "opening";
   stream_set_destroyed(socket->js, obj, socket->destroyed);
   
-  js_set(socket->js, obj, "pending", js_bool(socket->connecting || (socket->conn == NULL && !socket->destroyed)));
-  js_set(socket->js, obj, "connecting", js_bool(socket->connecting));
+  js_set(socket->js, obj, "pending", Ant_Value_FromBool(socket->connecting || (socket->conn == NULL && !socket->destroyed)));
+  js_set(socket->js, obj, "connecting", Ant_Value_FromBool(socket->connecting));
   js_set(socket->js, obj, "readyState", js_mkstr(socket->js, ready_state, strlen(ready_state)));
   js_set(socket->js, obj, "bytesRead", Ant_Value_FromNumber((double)(socket->conn ? ant_conn_bytes_read(socket->conn) : 0)));
   js_set(socket->js, obj, "bytesWritten", Ant_Value_FromNumber((double)(socket->conn ? ant_conn_bytes_written(socket->conn) : 0)));
@@ -414,7 +413,7 @@ static void net_socket_sync_state(net_socket_t *socket) {
 
 static void net_server_sync_state(net_server_t *server) {
   if (!server || !is_object_type(server->obj)) return;
-  js_set(server->js, server->obj, "listening", js_bool(server->listening));
+  js_set(server->js, server->obj, "listening", Ant_Value_FromBool(server->listening));
   js_set(server->js, server->obj, "maxConnections", Ant_Value_FromNumber((double)server->max_connections));
   js_set(server->js, server->obj, "dropMaxConnection", Ant_Value_False);
 }
@@ -533,7 +532,7 @@ static net_socket_t *net_socket_create(ant_t *js, bool allow_half_open, ant_valu
   stream_init_duplex_object(js, obj, Ant_Value_Undefined);
   stream_set_end_hook(obj, net_socket_on_read_end);
   
-  js_set(js, obj, "allowHalfOpen", js_bool(allow_half_open));
+  js_set(js, obj, "allowHalfOpen", Ant_Value_FromBool(allow_half_open));
   js_set(js, obj, "remoteAddress", Ant_Value_Undefined);
   js_set(js, obj, "remotePort", Ant_Value_Undefined);
   js_set(js, obj, "remoteFamily", Ant_Value_Undefined);
@@ -697,7 +696,7 @@ static void net_server_on_conn_close(ant_conn_t *conn, void *user_data) {
   ant_value_t arg = 0;
 
   if (!socket) return;
-  arg = js_bool(socket->had_error);
+  arg = Ant_Value_FromBool(socket->had_error);
   socket->conn = NULL;
   socket->destroyed = true;
   
@@ -899,7 +898,7 @@ static ant_value_t js_net_socket_write(ant_params_t) {
   if (is_callable(parsed.callback)) sv_call_value(js, parsed.callback, Ant_Value_Undefined, NULL, 0);
   GC_ROOT_RESTORE(js, root_mark);
   
-  return js_bool(ok);
+  return Ant_Value_FromBool(ok);
 }
 
 static ant_value_t js_net_socket_end(ant_params_t) {
@@ -1275,7 +1274,7 @@ static ant_value_t js_net_connect(ant_params_t) {
 }
 
 static ant_value_t js_net_getDefaultAutoSelectFamily(ant_params_t) {
-  return js_bool(js->defaults.net_auto_select_family);
+  return Ant_Value_FromBool(js->defaults.net_auto_select_family);
 }
 
 static ant_value_t js_net_setDefaultAutoSelectFamily(ant_params_t) {

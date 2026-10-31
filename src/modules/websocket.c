@@ -19,7 +19,6 @@
 #include "errors.h"
 #include "inspector.h"
 #include "internal.h"
-#include "modules/timer.h"
 #include "descriptors.h"
 
 #include "http/websocket.h"
@@ -321,7 +320,7 @@ static void websocket_emit_close(ant_t *js, websocket_state_t *ws, uint16_t code
   
   Ant_Event_SetField(js, event, ANT_EVENT_FIELD_CLOSE_code, Ant_Value_FromNumber(code));
   Ant_Event_SetField(js, event, ANT_EVENT_FIELD_CLOSE_reason, js_mkstr(js, reason ? reason : "", reason ? strlen(reason) : 0));
-  Ant_Event_SetField(js, event, ANT_EVENT_FIELD_CLOSE_wasClean, js_bool(was_clean));
+  Ant_Event_SetField(js, event, ANT_EVENT_FIELD_CLOSE_wasClean, Ant_Value_FromBool(was_clean));
   
   Ant_EventTarget_Dispatch(js, ws->obj, event);
   js_maybe_drain_microtasks(js);
@@ -686,7 +685,7 @@ static ant_value_t websocket_event_init_field(
 }
 
 static ant_value_t websocket_to_bool(ant_t *js, ant_value_t value) {
-  return js_bool(js_truthy(js, value));
+  return Ant_Value_FromBool(js_truthy(js, value));
 }
 
 static ant_value_t websocket_to_number(ant_t *js, ant_value_t value) {

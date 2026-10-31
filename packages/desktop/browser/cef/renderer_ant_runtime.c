@@ -67,7 +67,7 @@ static ant_value_t Response(bool ok, ant_value_t value) {
   ant_value_t response = Ant_Object_CreateBare(js);
   GC_ROOT_PIN(js, response);
   if (!is_err(response)) {
-    js_set(js, response, "ok", js_bool(ok));
+    js_set(js, response, "ok", Ant_Value_FromBool(ok));
     js_set(js, response, ok ? "value" : "error", value);
   }
 
@@ -130,7 +130,7 @@ char *ant_renderer_runtime_describe(const char *specifier) {
 
     ant_value_t entry = Ant_Object_CreateBare(renderer_runtime);
     js_set(renderer_runtime, entry, "name", key);
-    js_set(renderer_runtime, entry, "callable", js_bool(is_callable(value)));
+    js_set(renderer_runtime, entry, "callable", Ant_Value_FromBool(is_callable(value)));
     if (!is_callable(value) && (vtype(value) == kTypeUndefined || vtype(value) == kTypeNull || vtype(value) == kTypeBool ||
                                 vtype(value) == kTypeNumber || vtype(value) == kTypeString)) {
       js_set(renderer_runtime, entry, "value", value);

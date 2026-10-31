@@ -158,10 +158,10 @@ static ant_value_t timer_inspect(ant_params_t) {
   bool destroyed = true;
   
   if (entry) {
-    refed = js_bool(uv_has_ref((const uv_handle_t *)&entry->handle));
+    refed = Ant_Value_FromBool(uv_has_ref((const uv_handle_t *)&entry->handle));
     destroyed = entry->closed || !entry->active;
   } else if (immediate && immediate->active) {
-    refed = js_bool(immediate->refed);
+    refed = Ant_Value_FromBool(immediate->refed);
     destroyed = false;
   }
 
@@ -178,7 +178,7 @@ static ant_value_t timer_inspect(ant_params_t) {
   
   if (ok) ok = js_inspect_object_body(&builder, call_this);
   if (ok) ok = js_inspect_field(&builder, "Symbol(refed)", refed);
-  if (ok) ok = js_inspect_field(&builder, "Symbol(destroyed)", js_bool(destroyed));
+  if (ok) ok = js_inspect_field(&builder, "Symbol(destroyed)", Ant_Value_FromBool(destroyed));
   if (ok) ok = js_inspect_close(&builder);
   
   if (!ok) {
@@ -216,7 +216,7 @@ static ant_value_t js_timer_unref(ant_params_t) {
 static ant_value_t js_timer_has_ref(ant_params_t) {
   timer_entry_t *entry = timer_open_entry_of(call_this);
   if (!entry) return Ant_Value_False;
-  return js_bool(uv_has_ref((const uv_handle_t *)&entry->handle) != 0);
+  return Ant_Value_FromBool(uv_has_ref((const uv_handle_t *)&entry->handle) != 0);
 }
 
 static void immediate_detach_handle(immediate_entry_t *entry) {
@@ -238,7 +238,7 @@ static ant_value_t js_immediate_unref(ant_params_t) {
 
 static ant_value_t js_immediate_has_ref(ant_params_t) {
   immediate_entry_t *entry = immediate_entry_of(call_this);
-  return js_bool(entry && entry->active && entry->refed);
+  return Ant_Value_FromBool(entry && entry->active && entry->refed);
 }
 
 static ant_value_t js_immediate_dispose(ant_params_t) {
@@ -665,7 +665,7 @@ static ant_value_t timers_promises_schedule(
   js_set(js, state, "abortListener", Ant_Value_Undefined);
   js_set(js, state, "handle", Ant_Value_Undefined);
   js_set(js, state, "settled", Ant_Value_False);
-  js_set(js, state, "isImmediate", js_bool(is_immediate));
+  js_set(js, state, "isImmediate", Ant_Value_FromBool(is_immediate));
 
   callback = js_heavy_mkfun(js, timers_promises_resolve, state);
   if (is_immediate) handle = js_set_immediate(js, &callback, 1, Ant_Value_Undefined, Ant_Value_Undefined, Ant_Value_Undefined);
@@ -890,7 +890,7 @@ static ant_value_t js_timers_promises_setInterval(ant_params_t) {
   js_set(js, state, "parked", js_mkarr(js));
   js_set(js, state, "parkedHead", Ant_Value_FromNumber(0));
   js_set(js, state, "started", Ant_Value_False);
-  js_set(js, state, "finished", js_bool(!is_undefined(error)));
+  js_set(js, state, "finished", Ant_Value_FromBool(!is_undefined(error)));
   js_set(js, state, "storedError", error);
 
   ant_value_t iter = Ant_Object_CreateBare(js);

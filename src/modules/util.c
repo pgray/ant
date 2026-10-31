@@ -643,7 +643,7 @@ static bool util_is_boxed_primitive(ant_value_t value, uint8_t *type_out) {
 static ant_value_t util_is_array(ant_params_t) {
   bool result = false;
   ant_value_t checked = js_is_array_value_checked(js, nargs > 0 ? args[0] : Ant_Value_Undefined, &result);
-  return is_err(checked) ? checked : js_bool(result);
+  return is_err(checked) ? checked : Ant_Value_FromBool(result);
 }
 
 static bool util_is_arguments_object_value(ant_value_t value) {
@@ -652,45 +652,45 @@ static bool util_is_arguments_object_value(ant_value_t value) {
 
 static ant_value_t util_types_is_any_array_buffer(ant_params_t) {
   ArrayBufferData *buffer = (nargs > 0) ? buffer_get_arraybuffer_data(args[0]) : NULL;
-  return js_bool(buffer != NULL);
+  return Ant_Value_FromBool(buffer != NULL);
 }
 
 static ant_value_t util_types_is_array_buffer(ant_params_t) {
   ArrayBufferData *buffer = (nargs > 0) ? buffer_get_arraybuffer_data(args[0]) : NULL;
-  return js_bool(buffer != NULL && !buffer->is_shared);
+  return Ant_Value_FromBool(buffer != NULL && !buffer->is_shared);
 }
 
 static ant_value_t util_types_is_shared_array_buffer(ant_params_t) {
   ArrayBufferData *buffer = (nargs > 0) ? buffer_get_arraybuffer_data(args[0]) : NULL;
-  return js_bool(buffer != NULL && buffer->is_shared);
+  return Ant_Value_FromBool(buffer != NULL && buffer->is_shared);
 }
 
 static ant_value_t util_types_is_array_buffer_view(ant_params_t) {
   if (nargs < 1) return Ant_Value_False;
-  return js_bool(buffer_is_dataview(args[0]) || buffer_get_typedarray_data(args[0]) != NULL);
+  return Ant_Value_FromBool(buffer_is_dataview(args[0]) || buffer_get_typedarray_data(args[0]) != NULL);
 }
 
 static ant_value_t util_types_is_data_view(ant_params_t) {
   if (nargs < 1) return Ant_Value_False;
-  return js_bool(buffer_is_dataview(args[0]));
+  return Ant_Value_FromBool(buffer_is_dataview(args[0]));
 }
 
 static ant_value_t util_types_is_typed_array(ant_params_t) {
   if (nargs < 1) return Ant_Value_False;
-  return js_bool(buffer_get_typedarray_data(args[0]) != NULL);
+  return Ant_Value_FromBool(buffer_get_typedarray_data(args[0]) != NULL);
 }
 
 static ant_value_t util_types_is_float16_array(ant_params_t) {
   TypedArrayData *typed_array = (nargs > 0) ? buffer_get_typedarray_data(args[0]) : NULL;
   if (!typed_array) return Ant_Value_False;
-  return js_bool(typed_array != NULL && typed_array->type == TYPED_ARRAY_FLOAT16);
+  return Ant_Value_FromBool(typed_array != NULL && typed_array->type == TYPED_ARRAY_FLOAT16);
 }
 
 #define DEFINE_TYPED_ARRAY_CHECK(fn_name, typed_array_kind)                                   \
   static ant_value_t fn_name(ant_params_t) {                       \
     TypedArrayData *typed_array = (nargs > 0) ? buffer_get_typedarray_data(args[0]) : NULL;   \
     if (!typed_array) return Ant_Value_False;                                                        \
-    return js_bool(typed_array != NULL && typed_array->type == typed_array_kind);             \
+    return Ant_Value_FromBool(typed_array != NULL && typed_array->type == typed_array_kind);             \
   }
 
 DEFINE_TYPED_ARRAY_CHECK(util_types_is_int8_array, TYPED_ARRAY_INT8)
@@ -707,50 +707,50 @@ DEFINE_TYPED_ARRAY_CHECK(util_types_is_uint8_clamped_array, TYPED_ARRAY_UINT8_CL
 
 static ant_value_t util_types_is_promise(ant_params_t) {
   if (nargs < 1) return Ant_Value_False;
-  return js_bool(vtype(args[0]) == kTypePromise);
+  return Ant_Value_FromBool(vtype(args[0]) == kTypePromise);
 }
 
 static ant_value_t util_types_is_proxy(ant_params_t) {
   if (nargs < 1 || !is_object_type(args[0])) return Ant_Value_False;
-  return js_bool(is_proxy(args[0]) && !js_proxy_is_host(args[0]));
+  return Ant_Value_FromBool(is_proxy(args[0]) && !js_proxy_is_host(args[0]));
 }
 
 static ant_value_t util_types_is_regexp(ant_params_t) {
   if (nargs < 1 || !is_object_type(args[0])) return Ant_Value_False;
   ant_object_t *obj = js_obj_ptr(js_as_obj(args[0]));
-  return js_bool(obj && obj->flags.regexp_brand);
+  return Ant_Value_FromBool(obj && obj->flags.regexp_brand);
 }
 
 static ant_value_t util_types_is_date(ant_params_t) {
   if (nargs < 1) return Ant_Value_False;
-  return js_bool(is_date_instance(args[0]));
+  return Ant_Value_FromBool(is_date_instance(args[0]));
 }
 
 static ant_value_t util_types_is_map(ant_params_t) {
   if (nargs < 1 || vtype(args[0]) != kTypeObject) return Ant_Value_False;
-  return js_bool(js_obj_ptr(args[0])->type_tag == kTypeMap);
+  return Ant_Value_FromBool(js_obj_ptr(args[0])->type_tag == kTypeMap);
 }
 
 static ant_value_t util_types_is_set(ant_params_t) {
   if (nargs < 1 || vtype(args[0]) != kTypeObject) return Ant_Value_False;
-  return js_bool(js_obj_ptr(args[0])->type_tag == kTypeSet);
+  return Ant_Value_FromBool(js_obj_ptr(args[0])->type_tag == kTypeSet);
 }
 
 static ant_value_t util_types_is_weak_map(ant_params_t) {
   if (nargs < 1 || vtype(args[0]) != kTypeObject) return Ant_Value_False;
-  return js_bool(js_obj_ptr(args[0])->type_tag == kTypeWeakMap);
+  return Ant_Value_FromBool(js_obj_ptr(args[0])->type_tag == kTypeWeakMap);
 }
 
 static ant_value_t util_types_is_weak_set(ant_params_t) {
   if (nargs < 1 || vtype(args[0]) != kTypeObject) return Ant_Value_False;
-  return js_bool(js_obj_ptr(args[0])->type_tag == kTypeWeakSet);
+  return Ant_Value_FromBool(js_obj_ptr(args[0])->type_tag == kTypeWeakSet);
 }
 
 static ant_value_t util_types_is_async_function(ant_params_t) {
   ant_value_t func_obj;
   if (nargs < 1 || vtype(args[0]) != kTypeFunction) return Ant_Value_False;
   func_obj = js_func_obj(args[0]);
-  return js_bool(js_get_slot(func_obj, SLOT_ASYNC) == Ant_Value_True);
+  return Ant_Value_FromBool(js_get_slot(func_obj, SLOT_ASYNC) == Ant_Value_True);
 }
 
 static ant_value_t util_types_is_generator_function(ant_params_t) {
@@ -759,66 +759,66 @@ static ant_value_t util_types_is_generator_function(ant_params_t) {
   if (nargs < 1 || vtype(args[0]) != kTypeFunction) return Ant_Value_False;
 
   closure = js_func_closure(args[0]);
-  return js_bool(closure != NULL && closure->func != NULL && closure->func->is_generator);
+  return Ant_Value_FromBool(closure != NULL && closure->func != NULL && closure->func->is_generator);
 }
 
 static ant_value_t util_types_is_generator_object(ant_params_t) {
   if (nargs < 1) return Ant_Value_False;
-  return js_bool(vtype(args[0]) == kTypeGenerator);
+  return Ant_Value_FromBool(vtype(args[0]) == kTypeGenerator);
 }
 
 static ant_value_t util_types_is_arguments_object(ant_params_t) {
   if (nargs < 1) return Ant_Value_False;
-  return js_bool(util_is_arguments_object_value(args[0]));
+  return Ant_Value_FromBool(util_is_arguments_object_value(args[0]));
 }
 
 static ant_value_t util_types_is_native_error(ant_params_t) {
   if (nargs < 1 || !is_object_type(args[0])) return Ant_Value_False;
-  return js_bool(js_get_slot(args[0], SLOT_ERROR_BRAND) == Ant_Value_True);
+  return Ant_Value_FromBool(js_get_slot(args[0], SLOT_ERROR_BRAND) == Ant_Value_True);
 }
 
 static ant_value_t util_types_is_boxed_primitive(ant_params_t) {
-  return js_bool(nargs > 0 && util_is_boxed_primitive(args[0], NULL));
+  return Ant_Value_FromBool(nargs > 0 && util_is_boxed_primitive(args[0], NULL));
 }
 
 static ant_value_t util_types_is_boolean_object(ant_params_t) {
   uint8_t type = kTypeUndefined;
-  return js_bool(nargs > 0 && util_is_boxed_primitive(args[0], &type) && type == kTypeBool);
+  return Ant_Value_FromBool(nargs > 0 && util_is_boxed_primitive(args[0], &type) && type == kTypeBool);
 }
 
 static ant_value_t util_types_is_number_object(ant_params_t) {
   uint8_t type = kTypeUndefined;
-  return js_bool(nargs > 0 && util_is_boxed_primitive(args[0], &type) && type == kTypeNumber);
+  return Ant_Value_FromBool(nargs > 0 && util_is_boxed_primitive(args[0], &type) && type == kTypeNumber);
 }
 
 static ant_value_t util_types_is_string_object(ant_params_t) {
   uint8_t type = kTypeUndefined;
-  return js_bool(nargs > 0 && util_is_boxed_primitive(args[0], &type) && type == kTypeString);
+  return Ant_Value_FromBool(nargs > 0 && util_is_boxed_primitive(args[0], &type) && type == kTypeString);
 }
 
 static ant_value_t util_types_is_symbol_object(ant_params_t) {
   uint8_t type = kTypeUndefined;
-  return js_bool(nargs > 0 && util_is_boxed_primitive(args[0], &type) && type == kTypeSymbol);
+  return Ant_Value_FromBool(nargs > 0 && util_is_boxed_primitive(args[0], &type) && type == kTypeSymbol);
 }
 
 static ant_value_t util_types_is_bigint_object(ant_params_t) {
   uint8_t type = kTypeUndefined;
-  return js_bool(nargs > 0 && util_is_boxed_primitive(args[0], &type) && type == kTypeBigInt);
+  return Ant_Value_FromBool(nargs > 0 && util_is_boxed_primitive(args[0], &type) && type == kTypeBigInt);
 }
 
 static ant_value_t util_types_is_map_iterator(ant_params_t) {
   if (nargs < 1 || !is_object_type(args[0])) return Ant_Value_False;
-  return js_bool(util_has_proto_in_chain(js, args[0], js->builtins.map_iter_proto));
+  return Ant_Value_FromBool(util_has_proto_in_chain(js, args[0], js->builtins.map_iter_proto));
 }
 
 static ant_value_t util_types_is_set_iterator(ant_params_t) {
   if (nargs < 1 || !is_object_type(args[0])) return Ant_Value_False;
-  return js_bool(util_has_proto_in_chain(js, args[0], js->builtins.set_iter_proto));
+  return Ant_Value_FromBool(util_has_proto_in_chain(js, args[0], js->builtins.set_iter_proto));
 }
 
 static ant_value_t util_types_is_module_namespace_object(ant_params_t) {
   if (nargs < 1) return Ant_Value_False;
-  return js_bool(js_check_brand(args[0], BRAND_MODULE_NAMESPACE));
+  return Ant_Value_FromBool(js_check_brand(args[0], BRAND_MODULE_NAMESPACE));
 }
 
 ant_value_t util_types_library(ant_t *js) {
@@ -1439,8 +1439,8 @@ static ant_value_t util_inherits(ant_params_t) {
 }
 
 static ant_value_t util_is_deep_strict_equal(ant_params_t) {
-  if (nargs < 2) return js_bool(true);
-  return js_bool(js_deep_equal(js, args[0], args[1], true));
+  if (nargs < 2) return Ant_Value_FromBool(true);
+  return Ant_Value_FromBool(js_deep_equal(js, args[0], args[1], true));
 }
 
 ant_value_t util_library(ant_t *js) {

@@ -1,14 +1,12 @@
 #include <compat.h> // IWYU pragma: keep
-
 #include <stdlib.h>
 #include <string.h>
 
 #include "ant.h"
 #include "errors.h"
-#include "interrupt.h"
+#include "isolate.h"
 #include "reactor.h"
 #include "modules/atomics.h"
-#include "modules/timer.h"
 #include "isolate_internal.h"
 
 static constexpr size_t GUEST_STACK_BYTES = 8u * 1024u * 1024u;

@@ -324,7 +324,7 @@ static inline ant_value_t sv_op_has_private(sv_vm_t *vm, ant_t *js) {
   
   if (!is_object_type(obj))
     return js_mkerr_typed(js, JS_ERR_TYPE, "Right operand of private brand check must be an object");
-  vm->stack[vm->sp++] = js_bool(sv_private_find_entry(obj, token) != NULL);
+  vm->stack[vm->sp++] = Ant_Value_FromBool(sv_private_find_entry(obj, token) != NULL);
   
   return Ant_Value_Undefined;
 }

@@ -315,7 +315,7 @@ static ant_value_t rpc_values_to_js_array(ant_t *js, const wirecall_value *value
         value = Ant_Value_Null;
         break;
       case WIRECALL_TYPE_BOOL:
-        value = js_bool(values[i].as.boolean);
+        value = Ant_Value_FromBool(values[i].as.boolean);
         break;
       case WIRECALL_TYPE_I64:
         value = bigint_from_int64(js, values[i].as.i64);

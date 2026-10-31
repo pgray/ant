@@ -8,9 +8,7 @@
 #include "internal.h"
 #include "worker_internal.h"
 #include "modules/events.h"
-#include "modules/timer.h"
 #include "modules/worker_threads.h"
-
 
 static ant_value_t web_worker_dispatch(ant_t *js, ant_worker_t *w, ant_value_t event) {
   if (!is_object_type(w->obj) || !is_object_type(event)) return event;
@@ -84,7 +82,7 @@ static void web_worker_exit(ant_t *js, ant_worker_t *w, int code) {
 
   Ant_Event_SetField(js, event, ANT_EVENT_FIELD_CLOSE_code, Ant_Value_FromNumber(code));
   Ant_Event_SetField(js, event, ANT_EVENT_FIELD_CLOSE_reason, js_mkstr(js, "", 0));
-  Ant_Event_SetField(js, event, ANT_EVENT_FIELD_CLOSE_wasClean, js_bool(code == 0));
+  Ant_Event_SetField(js, event, ANT_EVENT_FIELD_CLOSE_wasClean, Ant_Value_FromBool(code == 0));
 
   web_worker_dispatch(js, w, event);
 }

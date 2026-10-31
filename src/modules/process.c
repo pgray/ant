@@ -545,9 +545,9 @@ static void emit_keypress_event(
     js_set(js, key_obj, "name", Ant_Value_Undefined);
   }
 
-  js_set(js, key_obj, "ctrl", js_bool(ctrl));
-  js_set(js, key_obj, "meta", js_bool(meta));
-  js_set(js, key_obj, "shift", js_bool(shift));
+  js_set(js, key_obj, "ctrl", Ant_Value_FromBool(ctrl));
+  js_set(js, key_obj, "meta", Ant_Value_FromBool(meta));
+  js_set(js, key_obj, "shift", Ant_Value_FromBool(shift));
 
   if (sequence) {
     js_set(js, key_obj, "sequence", js_mkstr(js, sequence, sequence_len));
@@ -770,10 +770,10 @@ void process_set_sandbox_terminal(ant_t *js, uint32_t capabilities, uint16_t row
   if (!is_special_object(process_obj)) return;
 
   ant_value_t stdout_obj = js_get(js, process_obj, "stdout");
-  if (is_special_object(stdout_obj)) js_set(js, stdout_obj, "isTTY", js_bool(stdout_is_tty(js)));
+  if (is_special_object(stdout_obj)) js_set(js, stdout_obj, "isTTY", Ant_Value_FromBool(stdout_is_tty(js)));
 
   ant_value_t stderr_obj = js_get(js, process_obj, "stderr");
-  if (is_special_object(stderr_obj)) js_set(js, stderr_obj, "isTTY", js_bool(stderr_is_tty(js)));
+  if (is_special_object(stderr_obj)) js_set(js, stderr_obj, "isTTY", Ant_Value_FromBool(stderr_is_tty(js)));
 }
 
 static bool stdin_set_raw_mode(bool enable) {
@@ -1129,7 +1129,7 @@ void free_process_module(ant_t *js) {
 
 static ant_value_t js_stdin_set_raw_mode(ant_params_t) {
   bool enable = nargs > 0 ? js_truthy(js, args[0]) : true;
-  return js_bool(stdin_set_raw_mode(enable));
+  return Ant_Value_FromBool(stdin_set_raw_mode(enable));
 }
 
 static ant_value_t js_stdin__read(ant_params_t) {
@@ -1235,7 +1235,7 @@ static ant_value_t process_write_stream(ant_native_params_t, FILE *stream, int f
   }
   
   free(utf8);
-  return js_bool(ok);
+  return Ant_Value_FromBool(ok);
 }
 
 static ant_value_t js_stdout_write(ant_params_t) {
@@ -2505,7 +2505,7 @@ void init_process_module(ant_t *js) {
   ant_value_t stdin_obj = stream_construct_readable(js, stdin_proto, Ant_Value_Undefined, Ant_Value_Undefined);
   ps->stdin_obj = stdin_obj;
   eventemitter_set_listener_change_hook(js, stdin_obj, process_listener_change, ps);
-  js_set(js, stdin_obj, "isTTY", js_bool(stdin_is_tty()));
+  js_set(js, stdin_obj, "isTTY", Ant_Value_FromBool(stdin_is_tty()));
   js_set(js, process_obj, "stdin", stdin_obj);
   
   ant_value_t stdout_proto = Ant_Object_CreateBare(js);
@@ -2518,7 +2518,7 @@ void init_process_module(ant_t *js) {
   js_set_proto_init(stdout_obj, stdout_proto);
   ps->stdout_obj = stdout_obj;
   eventemitter_set_listener_change_hook(js, stdout_obj, process_listener_change, ps);
-  js_set(js, stdout_obj, "isTTY", js_bool(stdout_is_tty(js)));
+  js_set(js, stdout_obj, "isTTY", Ant_Value_FromBool(stdout_is_tty(js)));
   js_set_getter_desc(js, stdout_obj, "rows", 4, Ant_Function_Create(js_stdout_rows_getter), JS_DESC_E | JS_DESC_C);
   js_set_getter_desc(js, stdout_obj, "columns", 7, Ant_Function_Create(js_stdout_columns_getter), JS_DESC_E | JS_DESC_C);
   js_set(js, process_obj, "stdout", stdout_obj);
@@ -2532,7 +2532,7 @@ void init_process_module(ant_t *js) {
   js_set_proto_init(stderr_obj, stderr_proto);
   ps->stderr_obj = stderr_obj;
   eventemitter_set_listener_change_hook(js, stderr_obj, process_listener_change, ps);
-  js_set(js, stderr_obj, "isTTY", js_bool(stderr_is_tty(js)));
+  js_set(js, stderr_obj, "isTTY", Ant_Value_FromBool(stderr_is_tty(js)));
   js_set(js, process_obj, "stderr", stderr_obj);
   js_set_global_builtin(js, "process", process_obj);
 }

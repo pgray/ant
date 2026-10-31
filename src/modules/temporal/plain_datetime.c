@@ -298,7 +298,7 @@ static ant_value_t temporal_plain_datetime_get_in_leap_year(ant_params_t) {
   (void)nargs;
   ant_value_t err = Ant_Value_Undefined;
   PlainDateTime *self = temporal_plain_datetime_this(js, call_this, "Temporal.PlainDateTime.prototype.inLeapYear", &err);
-  return self ? js_bool(temporal_rs_PlainDateTime_in_leap_year(self)) : err;
+  return self ? Ant_Value_FromBool(temporal_rs_PlainDateTime_in_leap_year(self)) : err;
 }
 static ant_value_t temporal_plain_datetime_get_era(ant_params_t) {
   (void)args;
@@ -371,7 +371,7 @@ static ant_value_t temporal_plain_datetime_equals(ant_params_t) {
   if (!temporal_plain_datetime_from_value(js, args[0], &other, &err)) return err;
   bool equal = temporal_rs_PlainDateTime_equals(self, other);
   temporal_rs_PlainDateTime_destroy(other);
-  return js_bool(equal);
+  return Ant_Value_FromBool(equal);
 }
 static ant_value_t temporal_plain_datetime_difference(ant_native_params_t, ant_value_t call_this, bool since) {
   ant_value_t err = Ant_Value_Undefined;
