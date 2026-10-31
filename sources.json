@@ -136,8 +136,6 @@
       "src/modules/object.c",
       "src/modules/promise.c",
       "src/modules/proxy.c",
-      "src/modules/regex.c",
-      "src/modules/regex_syntax.c",
       "src/modules/string.c",
       "src/modules/symbol.c"
     ],
@@ -147,7 +145,8 @@
       "src/gc/*.c",
       "src/silver/*.c",
       "src/silver/parser/*.c",
-      "src/silver/compiler/*.c"
+      "src/silver/compiler/*.c",
+      "src/modules/regex/*.c"
     ],
     "exclude": [
       "src/bootstrap.c",

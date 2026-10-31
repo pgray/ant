@@ -203,7 +203,7 @@ void ant_object_set_proto(ant_t *js, ant_object_t *obj, ant_value_t proto) {
   }
   
   if (!next) next = ant_shape_with_proto(shape, proto);
-  ANT_ASSERT(next, "out of memory changing a prototype");
+  Ant_Assert(next, "out of memory changing a prototype");
   
   ant_shape_release(shape);
   obj->shape = next;
@@ -505,7 +505,7 @@ void set_slot(ant_value_t obj, internal_slot_t slot, ant_value_t val) {
   ant_object_t *ptr = js_obj_ptr(obj);
   if (!ptr || slot < 0 || slot > SLOT_MAX) return;
   
-  ANT_ASSERT(
+  Ant_Assert(
     slot != SLOT_PROTO,
     "prototype written without its isolate (use set_slot_wb)"
   );

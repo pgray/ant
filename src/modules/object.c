@@ -986,8 +986,8 @@ static ant_value_t builtin_object_getOwnPropertyNames(ant_params_t) {
     ant_offset_t idx = 0;
     arr_set(js, arr, idx++, js->length_str);
     
-    if (vtype(js_cfunc_name_value(js, obj)) == kTypeString) arr_set(js, arr, idx++, ANT_STRING("name"));
-    if (js_cfunc_has_prototype(obj)) arr_set(js, arr, idx++, ANT_STRING("prototype"));
+    if (vtype(js_cfunc_name_value(js, obj)) == kTypeString) arr_set(js, arr, idx++, Ant_String_FromLiteral(js, "name"));
+    if (js_cfunc_has_prototype(obj)) arr_set(js, arr, idx++, Ant_String_FromLiteral(js, "prototype"));
     
     return mkval(kTypeArray, vdata(arr));
   }

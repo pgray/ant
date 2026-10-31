@@ -1194,16 +1194,16 @@ ant_value_t builtin_string_charCodeAt(ant_params_t) {
   double idx_d = nargs < 1 ? 0.0 : js_to_number(js, args[0]);
   if (Ant_Exception_Pending(js)) return Ant_Exception_Current(js);
   if (isnan(idx_d)) idx_d = 0.0;
-  if (idx_d >= (double)LONG_MAX || idx_d <= (double)LONG_MIN) return Ant_Value_FromNumber(JS_NAN);
+  if (idx_d >= (double)LONG_MAX || idx_d <= (double)LONG_MIN) return Ant_Value_FromNumber(ANT_NAN);
   
   long idx_l = (long) idx_d;
-  if (idx_l < 0) return Ant_Value_FromNumber(JS_NAN);
+  if (idx_l < 0) return Ant_Value_FromNumber(ANT_NAN);
   
   ant_offset_t byte_len; ant_offset_t str_off = vstr(js, str, &byte_len);
   const char *str_data = (const char *)(uintptr_t)(str_off);
   
   uint32_t code_unit = utf16_code_unit_at(str_data, byte_len, idx_l);
-  if (code_unit == 0xFFFFFFFF) return Ant_Value_FromNumber(JS_NAN);
+  if (code_unit == 0xFFFFFFFF) return Ant_Value_FromNumber(ANT_NAN);
   
   return Ant_Value_FromNumber((double) code_unit);
 }
@@ -1239,7 +1239,7 @@ bool js_try_char_code_at(
   
   index = isnan(index) ? 0 : trunc(index);
   *result = index < 0 || index >= (double)length
-    ? Ant_Value_FromNumber(JS_NAN) : Ant_Value_FromNumber((double)(unsigned char)bytes[(size_t)index]);
+    ? Ant_Value_FromNumber(ANT_NAN) : Ant_Value_FromNumber((double)(unsigned char)bytes[(size_t)index]);
   
   return true;
 }
@@ -1635,7 +1635,7 @@ static __attribute__((noinline)) ant_value_t string_last_index_of_strings(
   const char *needle = (const char *)(uintptr_t)vstr(js, search, &search_len);
 
   size_t start = SIZE_MAX;
-  if (isnan(position)) position = JS_INF;
+  if (isnan(position)) position = ANT_INFINITY;
   if (position < 1.0) start = 0;
   else if (search_len == 0 || position < (double)str_len) {
     size_t str_units = (size_t)str_utf16_len(js, str);
@@ -1661,7 +1661,7 @@ ant_value_t string_last_index_of_slow(ant_t *js, ant_value_t str, ant_args_t) {
   GC_ROOT_PIN(js, search);
   if (is_err(search)) { result = search; goto done; }
 
-  double position = JS_NAN;
+  double position = ANT_NAN;
   if (vtype(position_arg) != kTypeUndefined) {
     ant_value_t status = string_to_number_arg(js, position_arg, &position);
     if (is_err(status)) { result = status; goto done; }
@@ -1685,7 +1685,7 @@ static ant_value_t builtin_string_lastIndexOf(ant_params_t) {
   ant_offset_t str_len, search_len;
   const char *hay = (const char *)(uintptr_t)vstr(js, str, &str_len);
   if (!str_is_ascii(hay))
-    return string_last_index_of_strings(js, str, hay, str_len, args[0], has_position ? Ant_Value_AsNumberUnchecked(args[1]) : JS_NAN);
+    return string_last_index_of_strings(js, str, hay, str_len, args[0], has_position ? Ant_Value_AsNumberUnchecked(args[1]) : ANT_NAN);
 
   size_t max_start = (size_t)str_len;
   if (has_position) {

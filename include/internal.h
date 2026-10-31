@@ -482,6 +482,9 @@ static inline size_t cpy(char *dst, size_t dstlen, const char *src, size_t srcle
   return srclen;
 }
 
+#define Ant_CopyLiteral(buf, len, s) cpy(buf, len, s, sizeof(s) - 1)
+#define Ant_Remaining(n, len)        ((n) >= (len) ? 0 : (len) - (n))
+
 static inline ant_module_t *js_active_tla_module_ctx(ant_t *js) {
   if (!js) return NULL;
   for (coroutine_t *coro = js->active_async_coro; coro; coro = coro->active_parent)

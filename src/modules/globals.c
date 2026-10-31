@@ -174,7 +174,7 @@ bool js_fire_unhandled_rejection(ant_t *js, ant_value_t promise_val, ant_value_t
   uint8_t ht = vtype(handler);
   if (ht != kTypeFunction && ht != kTypeBuiltin) return false;
 
-  ant_value_t event = globals_rejection_event(js, ANT_STRING("unhandledrejection"), promise_val, reason, true);
+  ant_value_t event = globals_rejection_event(js, Ant_String_FromLiteral(js, "unhandledrejection"), promise_val, reason, true);
   if (is_err(event)) return false;
   
   ant_value_t call_args[1] = { event };
@@ -190,7 +190,7 @@ void js_fire_rejection_handled(ant_t *js, ant_value_t promise_val, ant_value_t r
   uint8_t ht = vtype(handler);
   if (ht != kTypeFunction && ht != kTypeBuiltin) return;
 
-  ant_value_t event = globals_rejection_event(js, ANT_STRING("rejectionhandled"), promise_val, reason, false);
+  ant_value_t event = globals_rejection_event(js, Ant_String_FromLiteral(js, "rejectionhandled"), promise_val, reason, false);
   if (is_err(event)) return;
   
   ant_value_t call_args[1] = { event };

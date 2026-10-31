@@ -1900,7 +1900,7 @@ static ant_value_t process_set_exit_code(ant_t *js, ant_process_state_t *ps, ant
   
   double n = type == kTypeNumber 
     ? Ant_Value_AsNumberUnchecked(code) : len > 0 
-    ? Ant_Value_AsNumberUnchecked(js_to_numeric(js, code)) : JS_NAN;
+    ? Ant_Value_AsNumberUnchecked(js_to_numeric(js, code)) : ANT_NAN;
   
   if (isnan(n) && type != kTypeNumber) 
     return Ant_Error_CreateInvalidArgType(js, "code", "of type number", code);

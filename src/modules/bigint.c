@@ -1854,7 +1854,7 @@ void init_bigint_module(ant_t *js) {
   defmethod(js, bigint_proto, "toLocaleString", 14, Ant_Function_Create(builtin_bigint_toLocaleString));
   defmethod(js, bigint_proto, "toString", 8, Ant_Function_Create(builtin_bigint_toString));
   defmethod(js, bigint_proto, "valueOf", 7, Ant_Function_Create(builtin_bigint_valueOf));
-  js_set_tostringtag(js, bigint_proto, ANT_STRING("BigInt"));
+  js_set_tostringtag(js, bigint_proto, Ant_String_FromLiteral(js, "BigInt"));
 
   ant_value_t bigint_ctor = Ant_Function_CreateIntrinsicConstructor(js, builtin_BigInt, bigint_proto, "BigInt", 1);
   defmethod(js, bigint_ctor, "asIntN", 6, Ant_Function_CreateWithArity(builtin_BigInt_asIntN, 2));

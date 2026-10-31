@@ -325,7 +325,7 @@ static ant_value_t realm_console_object(ant_t *js) {
   if (is_err(proto)) { GC_ROOT_RESTORE(js, mark); return proto; }
   GC_ROOT_PIN(js, proto);
   js_set_proto_init(proto, js->sym.object_proto);
-  mkprop(js, proto, js->sym.toStringTag_sym, ANT_STRING("console"), ANT_PROP_ATTR_CONFIGURABLE);
+  mkprop(js, proto, js->sym.toStringTag_sym, Ant_String_FromLiteral(js, "console"), ANT_PROP_ATTR_CONFIGURABLE);
 
   ant_value_t console = Ant_Object_CreateBare(js);
   if (is_err(console)) { GC_ROOT_RESTORE(js, mark); return console; }
@@ -514,9 +514,9 @@ void realm_init_core(ant_t *js) {
   js_number_init_globals(js, glob);
   js_base64_init_globals(js, glob);
   
-  js_setprop(js, glob, js_mkstr(js, "NaN", 3), Ant_Value_FromNumber(JS_NAN));
+  js_setprop(js, glob, js_mkstr(js, "NaN", 3), Ant_Value_FromNumber(ANT_NAN));
   js_set_descriptor(js, glob, "NaN", 3, 0);
-  js_setprop(js, glob, js_mkstr(js, "Infinity", 8), Ant_Value_FromNumber(JS_INF));
+  js_setprop(js, glob, js_mkstr(js, "Infinity", 8), Ant_Value_FromNumber(ANT_INFINITY));
   js_set_descriptor(js, glob, "Infinity", 8, 0);
   js_setprop(js, glob, js_mkstr(js, "undefined", 9), js_mkundef());
   js_set_descriptor(js, glob, "undefined", 9, 0);
@@ -557,7 +557,7 @@ void realm_init_core(ant_t *js) {
 }
 
 void init_intrinsic_symbols(ant_t *js) {
-  mkprop(js, js->global, js->sym.toStringTag_sym, ANT_STRING("global"), ANT_PROP_ATTR_CONFIGURABLE);
+  mkprop(js, js->global, js->sym.toStringTag_sym, Ant_String_FromLiteral(js, "global"), ANT_PROP_ATTR_CONFIGURABLE);
   
   mkprop(
     js, js->sym.array_proto, js->sym.iterator_sym, 
@@ -587,10 +587,10 @@ void init_intrinsic_symbols(ant_t *js) {
   mkprop(js, js->sym.array_proto, js->sym.unscopables_sym, unscopables, ANT_PROP_ATTR_CONFIGURABLE);
   GC_ROOT_RESTORE(js, mark);
 
-  mkprop(js, js->sym.promise_proto, js->sym.toStringTag_sym, ANT_STRING("Promise"), ANT_PROP_ATTR_CONFIGURABLE);
+  mkprop(js, js->sym.promise_proto, js->sym.toStringTag_sym, Ant_String_FromLiteral(js, "Promise"), ANT_PROP_ATTR_CONFIGURABLE);
   ant_value_t async_proto = js_get_slot(js->global, SLOT_ASYNC_PROTO);
   
-  mkprop(js, async_proto, js->sym.toStringTag_sym, ANT_STRING("AsyncFunction"), ANT_PROP_ATTR_CONFIGURABLE);
+  mkprop(js, async_proto, js->sym.toStringTag_sym, Ant_String_FromLiteral(js, "AsyncFunction"), ANT_PROP_ATTR_CONFIGURABLE);
   js_define_species_getter(js, js->sym.promise_ctor);
   js_define_species_getter(js, js_get(js, js->global, "Array"));
   

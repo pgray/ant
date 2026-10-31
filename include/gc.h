@@ -123,7 +123,7 @@ static inline void gc_note_overflow_alloc(ant_t *js, size_t bytes) {
 }
 
 static inline void gc_note_overflow_free(ant_t *js, size_t bytes) {
-  ANT_ASSERT(js->gc.overflow_live >= bytes, "overflow slots released more bytes than were allocated");
+  Ant_Assert(js->gc.overflow_live >= bytes, "overflow slots released more bytes than were allocated");
   js->gc.overflow_live -= bytes;
 }
 

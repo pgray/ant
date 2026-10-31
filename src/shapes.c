@@ -376,7 +376,7 @@ static bool shape_prepare_append(ant_shape_t *shape) {
 }
 
 static bool shape_prepare_metadata_write(ant_shape_t *shape) {
-  ANT_ASSERT(!shape->jit_snapshot, "snapshotted shape metadata written in place");
+  Ant_Assert(!shape->jit_snapshot, "snapshotted shape metadata written in place");
   shape_reclaim_descriptor_tail(shape->descriptors);
   
   return (

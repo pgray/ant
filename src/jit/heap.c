@@ -100,7 +100,7 @@ static void jit_heap_map_remove(MIR_heap_t h, jit_heap_map_t *m) {
 
 static jit_heap_chunk_t *jit_heap_chunk_of(const void *p) {
   jit_heap_chunk_t *c = (jit_heap_chunk_t *)((uintptr_t)p & ~(uintptr_t)(JIT_HEAP_CHUNK_SIZE - 1));
-  ANT_ASSERT(c->magic == JIT_HEAP_MAGIC, "MIR heap: pointer is not from a live chunk");
+  Ant_Assert(c->magic == JIT_HEAP_MAGIC, "MIR heap: pointer is not from a live chunk");
   return c;
 }
 
@@ -176,7 +176,7 @@ static void jit_heap_free(void *p, void *ud) {
   }
   
   jit_heap_chunk_t *c = jit_heap_chunk_of(p);
-  ANT_ASSERT(c->live > 0, "MIR heap: free into a chunk with no live block");
+  Ant_Assert(c->live > 0, "MIR heap: free into a chunk with no live block");
   
   *(void **)p = c->free_list;
   c->free_list = p;
@@ -189,7 +189,7 @@ static void jit_heap_free(void *p, void *ud) {
   }
   
   if (c->live == 0) {
-    ANT_ASSERT(
+    Ant_Assert(
       c->cls < JIT_HEAP_CLASSES && !c->full
       && c->bump <= JIT_HEAP_CHUNK_SIZE && c->free_list != NULL,
       "MIR heap: chunk emptied in an inconsistent state"
@@ -243,7 +243,7 @@ void jit_heap_release(MIR_heap_t h) {
   jit_heap_chunk_t *c, *next;
   for (c = h->empty; c != NULL; c = next) {
     next = c->next;
-    ANT_ASSERT(
+    Ant_Assert(
       c->magic == JIT_HEAP_MAGIC && c->live == 0,
       "MIR heap: empty chunk list is inconsistent"
     );

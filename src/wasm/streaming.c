@@ -121,8 +121,8 @@ static ant_value_t wasm_streaming_start(ant_native_params_t, bool instantiate) {
   js_set_slot_wb(js, state, SLOT_DATA, promise);
   js_set_slot_wb(js, state, SLOT_AUX, instantiate && nargs > 1 ? args[1] : js_mkundef());
   js_set_slot_wb(js, state, SLOT_ENTRIES, instantiate
-    ? ANT_STRING("WebAssembly.instantiateStreaming()")
-    : ANT_STRING("WebAssembly.compileStreaming()"));
+    ? Ant_String_FromLiteral(js, "WebAssembly.instantiateStreaming()")
+    : Ant_String_FromLiteral(js, "WebAssembly.compileStreaming()"));
   js_set_slot(state, SLOT_MAP, js_bool(instantiate));
 
   ant_value_t source = js_mkpromise(js);

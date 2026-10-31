@@ -2419,13 +2419,13 @@ static void setup_typedarray_kind(ant_t *js, TypedArrayType type, ant_value_t ba
   js_set_slot(ctor_obj, SLOT_AUX, Ant_Value_FromNumber((double)type));
   
   mkprop(js, ctor_obj, js->length_str, Ant_Value_FromNumber(3), ANT_PROP_ATTR_CONFIGURABLE);
-  mkprop(js, ctor_obj, ANT_STRING("name"), js_mkstr(js, name, strlen(name)), ANT_PROP_ATTR_CONFIGURABLE);
-  mkprop_exact_attrs(js, ctor_obj, ANT_STRING("prototype"), proto, 0);
-  mkprop_exact_attrs(js, ctor_obj, ANT_STRING("BYTES_PER_ELEMENT"), elem_size, 0);
+  mkprop(js, ctor_obj, Ant_String_FromLiteral(js, "name"), js_mkstr(js, name, strlen(name)), ANT_PROP_ATTR_CONFIGURABLE);
+  mkprop_exact_attrs(js, ctor_obj, Ant_String_FromLiteral(js, "prototype"), proto, 0);
+  mkprop_exact_attrs(js, ctor_obj, Ant_String_FromLiteral(js, "BYTES_PER_ELEMENT"), elem_size, 0);
   
   ant_value_t ctor = js_obj_to_func(js, ctor_obj);
-  mkprop(js, proto, ANT_STRING("constructor"), ctor, ANT_PROP_ATTR_WRITABLE | ANT_PROP_ATTR_CONFIGURABLE);
-  mkprop_exact_attrs(js, proto, ANT_STRING("BYTES_PER_ELEMENT"), elem_size, 0);
+  mkprop(js, proto, Ant_String_FromLiteral(js, "constructor"), ctor, ANT_PROP_ATTR_WRITABLE | ANT_PROP_ATTR_CONFIGURABLE);
+  mkprop_exact_attrs(js, proto, Ant_String_FromLiteral(js, "BYTES_PER_ELEMENT"), elem_size, 0);
   js_set_global_builtin(js, name, ctor);
 }
 
@@ -4588,8 +4588,8 @@ void init_buffer_module(ant_t *js) {
   js_set_tostringtag(js, arraybuffer_proto, js_mkstr(js, "ArrayBuffer", 11));
   
   js_set_slot(arraybuffer_ctor_obj, SLOT_CFUNC, Ant_Function_CreateWithArity(js_arraybuffer_constructor, 1));
-  mkprop_exact_attrs(js, arraybuffer_ctor_obj, ANT_STRING("prototype"), arraybuffer_proto, 0);
-  mkprop_exact_attrs(js, arraybuffer_ctor_obj, ANT_STRING("name"), ANT_STRING("ArrayBuffer"), ANT_PROP_ATTR_CONFIGURABLE);
+  mkprop_exact_attrs(js, arraybuffer_ctor_obj, Ant_String_FromLiteral(js, "prototype"), arraybuffer_proto, 0);
+  mkprop_exact_attrs(js, arraybuffer_ctor_obj, Ant_String_FromLiteral(js, "name"), Ant_String_FromLiteral(js, "ArrayBuffer"), ANT_PROP_ATTR_CONFIGURABLE);
   defmethod(js, arraybuffer_ctor_obj, "isView", 6, Ant_Function_CreateWithArity(js_arraybuffer_isView, 1));
   js_define_species_getter(js, arraybuffer_ctor_obj);
   
@@ -4636,8 +4636,8 @@ void init_buffer_module(ant_t *js) {
   js_set_proto_init(typedarray_ctor_obj, function_proto);
   js_set_slot(typedarray_ctor_obj, SLOT_CFUNC, Ant_Function_Create(js_typedarray_base_constructor));
   mkprop(js, typedarray_ctor_obj, js->length_str, Ant_Value_FromNumber(0), ANT_PROP_ATTR_CONFIGURABLE);
-  mkprop(js, typedarray_ctor_obj, ANT_STRING("name"), ANT_STRING("TypedArray"), ANT_PROP_ATTR_CONFIGURABLE);
-  mkprop_exact_attrs(js, typedarray_ctor_obj, ANT_STRING("prototype"), typedarray_proto, 0);
+  mkprop(js, typedarray_ctor_obj, Ant_String_FromLiteral(js, "name"), Ant_String_FromLiteral(js, "TypedArray"), ANT_PROP_ATTR_CONFIGURABLE);
+  mkprop_exact_attrs(js, typedarray_ctor_obj, Ant_String_FromLiteral(js, "prototype"), typedarray_proto, 0);
   
   defmethod(js, typedarray_ctor_obj, "of", 2, Ant_Function_CreateWithArity(js_typedarray_static_of, 0));
   defmethod(js, typedarray_ctor_obj, "from", 4, Ant_Function_CreateWithArity(js_typedarray_static_from, 1));
@@ -4682,8 +4682,8 @@ void init_buffer_module(ant_t *js) {
   js_set_tostringtag(js, dataview_proto, js_mkstr(js, "DataView", 8));
 
   js_set_slot(dataview_ctor_obj, SLOT_CFUNC, Ant_Function_CreateWithArity(js_dataview_constructor, 1));
-  mkprop_exact_attrs(js, dataview_ctor_obj, ANT_STRING("prototype"), dataview_proto, 0);
-  mkprop_exact_attrs(js, dataview_ctor_obj, ANT_STRING("name"), ANT_STRING("DataView"), ANT_PROP_ATTR_CONFIGURABLE);
+  mkprop_exact_attrs(js, dataview_ctor_obj, Ant_String_FromLiteral(js, "prototype"), dataview_proto, 0);
+  mkprop_exact_attrs(js, dataview_ctor_obj, Ant_String_FromLiteral(js, "name"), Ant_String_FromLiteral(js, "DataView"), ANT_PROP_ATTR_CONFIGURABLE);
   
   ant_value_t dataview_ctor = js_obj_to_func(js, dataview_ctor_obj);
   defmethod(js, dataview_proto, "constructor", 11, dataview_ctor);
@@ -4702,8 +4702,8 @@ void init_buffer_module(ant_t *js) {
   js_set_tostringtag(js, sharedarraybuffer_proto, js_mkstr(js, "SharedArrayBuffer", 17));
   
   js_set_slot(sharedarraybuffer_ctor_obj, SLOT_CFUNC, Ant_Function_CreateWithArity(js_sharedarraybuffer_constructor, 1));
-  mkprop_exact_attrs(js, sharedarraybuffer_ctor_obj, ANT_STRING("prototype"), sharedarraybuffer_proto, 0);
-  mkprop_exact_attrs(js, sharedarraybuffer_ctor_obj, ANT_STRING("name"), ANT_STRING("SharedArrayBuffer"), ANT_PROP_ATTR_CONFIGURABLE);
+  mkprop_exact_attrs(js, sharedarraybuffer_ctor_obj, Ant_String_FromLiteral(js, "prototype"), sharedarraybuffer_proto, 0);
+  mkprop_exact_attrs(js, sharedarraybuffer_ctor_obj, Ant_String_FromLiteral(js, "name"), Ant_String_FromLiteral(js, "SharedArrayBuffer"), ANT_PROP_ATTR_CONFIGURABLE);
   js_define_species_getter(js, sharedarraybuffer_ctor_obj);
   
   ant_value_t sharedarraybuffer_ctor = js_obj_to_func(js, sharedarraybuffer_ctor_obj);
@@ -4766,8 +4766,8 @@ void init_buffer_module(ant_t *js) {
   js_define_species_getter(js, buffer_ctor_obj);
 
   js_set_slot(buffer_ctor_obj, SLOT_CFUNC, Ant_Function_CreateWithArity(js_buffer_from, 3));
-  mkprop_exact_attrs(js, buffer_ctor_obj, ANT_STRING("prototype"), buffer_proto, ANT_PROP_ATTR_WRITABLE);
-  mkprop_exact_attrs(js, buffer_ctor_obj, ANT_STRING("name"), ANT_STRING("Buffer"), ANT_PROP_ATTR_CONFIGURABLE);
+  mkprop_exact_attrs(js, buffer_ctor_obj, Ant_String_FromLiteral(js, "prototype"), buffer_proto, ANT_PROP_ATTR_WRITABLE);
+  mkprop_exact_attrs(js, buffer_ctor_obj, Ant_String_FromLiteral(js, "name"), Ant_String_FromLiteral(js, "Buffer"), ANT_PROP_ATTR_CONFIGURABLE);
   
   ant_value_t buffer_ctor = js_obj_to_func(js, buffer_ctor_obj);
   defmethod(js, buffer_proto, "constructor", 11, buffer_ctor);

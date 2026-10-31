@@ -221,7 +221,7 @@ static ant_value_t arguments_template(ant_t *js, bool is_strict, bool has_iterat
     return js_mkerr(js, "oom");
   }
   
-  ANT_ASSERT(
+  Ant_Assert(
     ant_shape_lookup_interned(ptr->shape, js->intern.length) == ANT_ARGUMENTS_SLOT_LENGTH &&
     ant_shape_lookup_interned(ptr->shape, intern_string(js, "callee", 6)) == ANT_ARGUMENTS_SLOT_CALLEE,
     "arguments template slots out of order"

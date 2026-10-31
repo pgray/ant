@@ -679,7 +679,7 @@ static inline void sv_ic_guard_absent_prefix(
 
 static inline uintptr_t sv_prim_neg_pack_shape(uintptr_t aux, const ant_shape_t *shape2) {
 #if UINTPTR_MAX > UINT32_MAX
-  ANT_ASSERT(
+  Ant_Assert(
     ((uintptr_t)shape2 >> 50) == 0,
     "primitive IC shape pointer exceeds the 50-bit packed representation"
   );

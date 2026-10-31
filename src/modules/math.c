@@ -21,10 +21,10 @@ static double math_to_number(ant_t *js, ant_value_t value) {
   if (vtype(value) == kTypeNumber) return Ant_Value_AsNumberUnchecked(value);
   ant_value_t numeric = js_to_numeric(js, value);
   
-  if (is_err(numeric)) return JS_NAN;
+  if (is_err(numeric)) return ANT_NAN;
   if (vtype(numeric) == kTypeBigInt) {
     js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert a BigInt value to a number");
-    return JS_NAN;
+    return ANT_NAN;
   }
   
   return Ant_Value_AsNumberUnchecked(numeric);
@@ -69,22 +69,22 @@ double ant_math_imul(double a, double b) {
 }
 
 double ant_math_max(double a, double b) {
-  if (isnan(a) || isnan(b)) return JS_NAN;
+  if (isnan(a) || isnan(b)) return ANT_NAN;
   if (b > a) return b;
   if (b == 0.0 && a == 0.0 && !signbit(b) && signbit(a)) return b;
   return a;
 }
 
 double ant_math_min(double a, double b) {
-  if (isnan(a) || isnan(b)) return JS_NAN;
+  if (isnan(a) || isnan(b)) return ANT_NAN;
   if (b < a) return b;
   if (b == 0.0 && a == 0.0 && signbit(b) && !signbit(a)) return b;
   return a;
 }
 
 double ant_math_js_pow(double base, double exponent) {
-  if (isnan(exponent)) return JS_NAN;
-  if (isinf(exponent) && fabs(base) == 1.0) return JS_NAN;
+  if (isnan(exponent)) return ANT_NAN;
+  if (isinf(exponent) && fabs(base) == 1.0) return ANT_NAN;
   return pow(base, exponent);
 }
 
@@ -94,8 +94,8 @@ double ant_math_js_pow(double base, double exponent) {
 
 static ant_value_t math_double_call(ant_native_params_t, ant_math_double_t id) {
   const ant_math_double_info_t *info = &ant_math_doubles[id];
-  double a = nargs < 1 ? JS_NAN : math_to_number(js, args[0]);
-  double b = info->argc < 2 ? 0.0 : nargs < 2 ? JS_NAN : math_to_number(js, args[1]);
+  double a = nargs < 1 ? ANT_NAN : math_to_number(js, args[0]);
+  double b = info->argc < 2 ? 0.0 : nargs < 2 ? ANT_NAN : math_to_number(js, args[1]);
   return Ant_Value_FromNumber(info->fn(a, b));
 }
 
@@ -122,14 +122,14 @@ int ant_math_double_of(ant_value_t func) {
 }
 
 static ant_value_t builtin_Math_abs(ant_params_t) {
-  double x = (nargs < 1) ? JS_NAN : math_to_number(js, args[0]);
-  if (isnan(x)) return Ant_Value_FromNumber(JS_NAN);
+  double x = (nargs < 1) ? ANT_NAN : math_to_number(js, args[0]);
+  if (isnan(x)) return Ant_Value_FromNumber(ANT_NAN);
   return Ant_Value_FromNumber(fabs(x));
 }
 
 static ant_value_t builtin_Math_ceil(ant_params_t) {
-  double x = (nargs < 1) ? JS_NAN : math_to_number(js, args[0]);
-  if (isnan(x)) return Ant_Value_FromNumber(JS_NAN);
+  double x = (nargs < 1) ? ANT_NAN : math_to_number(js, args[0]);
+  if (isnan(x)) return Ant_Value_FromNumber(ANT_NAN);
   return Ant_Value_FromNumber(ant_math_ceil(x));
 }
 
@@ -147,14 +147,14 @@ static ant_value_t builtin_Math_clz32(ant_params_t) {
 }
 
 static ant_value_t builtin_Math_floor(ant_params_t) {
-  double x = (nargs < 1) ? JS_NAN : math_to_number(js, args[0]);
-  if (isnan(x)) return Ant_Value_FromNumber(JS_NAN);
+  double x = (nargs < 1) ? ANT_NAN : math_to_number(js, args[0]);
+  if (isnan(x)) return Ant_Value_FromNumber(ANT_NAN);
   return Ant_Value_FromNumber(ant_math_floor(x));
 }
 
 static ant_value_t builtin_Math_fround(ant_params_t) {
-  double x = (nargs < 1) ? JS_NAN : math_to_number(js, args[0]);
-  if (isnan(x)) return Ant_Value_FromNumber(JS_NAN);
+  double x = (nargs < 1) ? ANT_NAN : math_to_number(js, args[0]);
+  if (isnan(x)) return Ant_Value_FromNumber(ANT_NAN);
   return Ant_Value_FromNumber((double)(float)x);
 }
 
@@ -172,8 +172,8 @@ static ant_value_t builtin_Math_hypot(ant_params_t) {
     else acc = hypot(acc, v);
   }
   
-  if (saw_inf) return Ant_Value_FromNumber(JS_INF);
-  if (saw_nan) return Ant_Value_FromNumber(JS_NAN);
+  if (saw_inf) return Ant_Value_FromNumber(ANT_INFINITY);
+  if (saw_nan) return Ant_Value_FromNumber(ANT_NAN);
   
   return Ant_Value_FromNumber(acc);
 }
@@ -189,7 +189,7 @@ static ant_value_t builtin_Math_imul(ant_params_t) {
 }
 
 static ant_value_t math_min_max(ant_native_params_t, bool max) {
-  double result = max ? JS_NEG_INF : JS_INF;
+  double result = max ? ANT_NEG_INFINITY : ANT_INFINITY;
   
   for (int i = 0; i < nargs; i++) {
     double v;
@@ -224,26 +224,26 @@ static ant_value_t builtin_Math_random(ant_params_t) {
 }
 
 static ant_value_t builtin_Math_round(ant_params_t) {
-  double x = (nargs < 1) ? JS_NAN : math_to_number(js, args[0]);
-  if (isnan(x)) return Ant_Value_FromNumber(JS_NAN);
+  double x = (nargs < 1) ? ANT_NAN : math_to_number(js, args[0]);
+  if (isnan(x)) return Ant_Value_FromNumber(ANT_NAN);
   return Ant_Value_FromNumber(ant_math_round(x));
 }
 
 static ant_value_t builtin_Math_sign(ant_params_t) {
-  double v = (nargs < 1) ? JS_NAN : math_to_number(js, args[0]);
-  if (isnan(v)) return Ant_Value_FromNumber(JS_NAN);
+  double v = (nargs < 1) ? ANT_NAN : math_to_number(js, args[0]);
+  if (isnan(v)) return Ant_Value_FromNumber(ANT_NAN);
   return Ant_Value_FromNumber(ant_math_sign(v));
 }
 
 static ant_value_t builtin_Math_sqrt(ant_params_t) {
-  double x = (nargs < 1) ? JS_NAN : math_to_number(js, args[0]);
-  if (isnan(x)) return Ant_Value_FromNumber(JS_NAN);
+  double x = (nargs < 1) ? ANT_NAN : math_to_number(js, args[0]);
+  if (isnan(x)) return Ant_Value_FromNumber(ANT_NAN);
   return Ant_Value_FromNumber(ant_math_sqrt(x));
 }
 
 static ant_value_t builtin_Math_trunc(ant_params_t) {
-  double x = (nargs < 1) ? JS_NAN : math_to_number(js, args[0]);
-  if (isnan(x)) return Ant_Value_FromNumber(JS_NAN);
+  double x = (nargs < 1) ? ANT_NAN : math_to_number(js, args[0]);
+  if (isnan(x)) return Ant_Value_FromNumber(ANT_NAN);
   return Ant_Value_FromNumber(ant_math_trunc(x));
 }
 

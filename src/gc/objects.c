@@ -1552,7 +1552,7 @@ void gc_array_storage_release(ant_t *js, ant_value_t *data, uint32_t cap) {
   gc_array_storage_cache_t *cache = &js->array_storage;
   size_t bytes = gc_array_storage_bytes(cap);
   
-  ANT_ASSERT(js->alloc_bytes.arrays >= bytes, "array storage released more bytes than were allocated");
+  Ant_Assert(js->alloc_bytes.arrays >= bytes, "array storage released more bytes than were allocated");
   js->alloc_bytes.arrays -= bytes;
   
   int cls = gc_array_storage_class(cap);
@@ -2053,7 +2053,7 @@ uint64_t gc_objects_run(ant_t *js, gc_extra_roots_fn extra_roots) {
     }
   }
 
-  ANT_ASSERT(
+  Ant_Assert(
     js->remembered_upvalue_len == 0,
     "upvalue remembered set mutated during collection"
   );

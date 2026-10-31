@@ -632,7 +632,7 @@ void jit_emit_inline_body(
        scan += sv_op_size[*scan]) {
     if (*scan != OP_PUT_ARG && *scan != OP_SET_ARG) continue;
     uint16_t idx = sv_get_u16(scan + 1);
-    ANT_ASSERT(idx < inl_n_args, "invalid inline parameter index");
+    Ant_Assert(idx < inl_n_args, "invalid inline parameter index");
     if (inl_params[idx]) continue;
     char rn[32];
     snprintf(rn, sizeof(rn), "inl%d_arg%u", id, (unsigned)idx);
@@ -748,7 +748,7 @@ void jit_emit_inline_body(
       case OP_SET_ARG: {
         INL_FLUSH_SLOT(isp - 1);
         uint16_t idx = sv_get_u16(ip + 1);
-        ANT_ASSERT(idx < inl_n_args && inl_params[idx], "invalid inline parameter store");
+        Ant_Assert(idx < inl_n_args && inl_params[idx], "invalid inline parameter store");
         MIR_append_insn(ctx, jit_func, MIR_new_insn(ctx, MIR_MOV,
             MIR_new_reg_op(ctx, inl_params[idx]), MIR_new_reg_op(ctx, inl_vs[isp - 1])));
         if (op == OP_PUT_ARG) inl_num[--isp] = 0;
@@ -801,7 +801,7 @@ void jit_emit_inline_body(
       }
       case OP_CONST: {
         uint32_t idx = sv_get_u32(ip + 1);
-        ANT_ASSERT(idx < (uint32_t)callee->const_count,
+        Ant_Assert(idx < (uint32_t)callee->const_count,
                    "invalid inline constant index");
         ant_value_t cv = callee->constants[idx];
         MIR_reg_t dst = inl_vs[isp++];
@@ -813,7 +813,7 @@ void jit_emit_inline_body(
       }
       case OP_CONST8: {
         uint8_t idx = sv_get_u8(ip + 1);
-        ANT_ASSERT((uint32_t)idx < (uint32_t)callee->const_count,
+        Ant_Assert((uint32_t)idx < (uint32_t)callee->const_count,
                    "invalid inline constant index");
         ant_value_t cv = callee->constants[idx];
         MIR_reg_t dst = inl_vs[isp++];
@@ -853,14 +853,14 @@ void jit_emit_inline_body(
 
       case OP_SET_LOCAL_UNDEF: {
         uint16_t idx = sv_get_u16(ip + 1);
-        ANT_ASSERT(idx < inl_n_locals, "invalid inline local initialization");
+        Ant_Assert(idx < inl_n_locals, "invalid inline local initialization");
         mir_load_imm(ctx, jit_func, inl_locals[idx], SV_TDZ);
         break;
       }
 
       case OP_GET_LOCAL: {
         uint16_t idx = sv_get_u16(ip + 1);
-        ANT_ASSERT((uint32_t)idx < (uint32_t)inl_n_locals,
+        Ant_Assert((uint32_t)idx < (uint32_t)inl_n_locals,
                    "invalid inline local index");
         MIR_append_insn(ctx, jit_func,
                         MIR_new_insn(ctx, MIR_MOV,
@@ -870,7 +870,7 @@ void jit_emit_inline_body(
       }
       case OP_GET_LOCAL8: {
         uint8_t idx = sv_get_u8(ip + 1);
-        ANT_ASSERT((uint32_t)idx < (uint32_t)inl_n_locals,
+        Ant_Assert((uint32_t)idx < (uint32_t)inl_n_locals,
                    "invalid inline local index");
         MIR_append_insn(ctx, jit_func,
                         MIR_new_insn(ctx, MIR_MOV,
@@ -881,7 +881,7 @@ void jit_emit_inline_body(
       case OP_PUT_LOCAL: {
         INL_FLUSH_SLOT(isp - 1);
         uint16_t idx = sv_get_u16(ip + 1);
-        ANT_ASSERT((uint32_t)idx < (uint32_t)inl_n_locals,
+        Ant_Assert((uint32_t)idx < (uint32_t)inl_n_locals,
                    "invalid inline local index");
         MIR_append_insn(ctx, jit_func,
                         MIR_new_insn(ctx, MIR_MOV,
@@ -892,7 +892,7 @@ void jit_emit_inline_body(
       case OP_PUT_LOCAL8: {
         INL_FLUSH_SLOT(isp - 1);
         uint8_t idx = sv_get_u8(ip + 1);
-        ANT_ASSERT((uint32_t)idx < (uint32_t)inl_n_locals,
+        Ant_Assert((uint32_t)idx < (uint32_t)inl_n_locals,
                    "invalid inline local index");
         MIR_append_insn(ctx, jit_func,
                         MIR_new_insn(ctx, MIR_MOV,
@@ -903,7 +903,7 @@ void jit_emit_inline_body(
       case OP_SET_LOCAL: {
         INL_FLUSH_SLOT(isp - 1);
         uint16_t idx = sv_get_u16(ip + 1);
-        ANT_ASSERT((uint32_t)idx < (uint32_t)inl_n_locals,
+        Ant_Assert((uint32_t)idx < (uint32_t)inl_n_locals,
                    "invalid inline local index");
         MIR_append_insn(ctx, jit_func,
                         MIR_new_insn(ctx, MIR_MOV,
@@ -914,7 +914,7 @@ void jit_emit_inline_body(
       case OP_SET_LOCAL8: {
         INL_FLUSH_SLOT(isp - 1);
         uint8_t idx = sv_get_u8(ip + 1);
-        ANT_ASSERT((uint32_t)idx < (uint32_t)inl_n_locals,
+        Ant_Assert((uint32_t)idx < (uint32_t)inl_n_locals,
                    "invalid inline local index");
         MIR_append_insn(ctx, jit_func,
                         MIR_new_insn(ctx, MIR_MOV,
@@ -924,7 +924,7 @@ void jit_emit_inline_body(
       }
 
       case OP_GET_UPVAL_VAL: {
-        ANT_ASSERT(r_inl_closure != 0,
+        Ant_Assert(r_inl_closure != 0,
                    "inline upvalue access requires a closure");
         uint16_t idx = sv_get_u16(ip + 1);
         int un = inl_upval_n++;
@@ -948,7 +948,7 @@ void jit_emit_inline_body(
       }
 
       case OP_GET_UPVAL: {
-        ANT_ASSERT(r_inl_closure != 0,
+        Ant_Assert(r_inl_closure != 0,
                    "inline upvalue access requires a closure");
         uint16_t idx = sv_get_u16(ip + 1);
         int un = inl_upval_n++;
@@ -1007,7 +1007,7 @@ void jit_emit_inline_body(
         break;
       }
       case OP_DUP2: {
-        ANT_ASSERT(isp >= 2, "invalid inline stack depth");
+        Ant_Assert(isp >= 2, "invalid inline stack depth");
         INL_FLUSH_SLOT(isp - 1);
         INL_FLUSH_SLOT(isp - 2);
         MIR_reg_t ra = inl_vs[isp - 2];
@@ -1025,7 +1025,7 @@ void jit_emit_inline_body(
       }
 
       case OP_NIP: {
-        ANT_ASSERT(isp >= 2, "invalid inline stack depth");
+        Ant_Assert(isp >= 2, "invalid inline stack depth");
         INL_FLUSH_SLOT(isp - 1);
         inl_num[isp - 2] = 0;
         MIR_append_insn(ctx, jit_func,
@@ -1037,7 +1037,7 @@ void jit_emit_inline_body(
       }
 
       case OP_INSERT2: {
-        ANT_ASSERT(isp >= 2, "invalid inline stack depth");
+        Ant_Assert(isp >= 2, "invalid inline stack depth");
         INL_FLUSH_ALL();
         char tn[32];
         snprintf(tn, sizeof(tn), "inl%d_ins2t_%d", id, inl_bc_off);
@@ -1064,7 +1064,7 @@ void jit_emit_inline_body(
         break;
       }
       case OP_INSERT3: {
-        ANT_ASSERT(isp >= 3, "invalid inline stack depth");
+        Ant_Assert(isp >= 3, "invalid inline stack depth");
         INL_FLUSH_ALL();
         char tn[32];
         snprintf(tn, sizeof(tn), "inl%d_ins3t_%d", id, inl_bc_off);
@@ -1525,7 +1525,7 @@ void jit_emit_inline_body(
         INL_FLUSH_ALL();
         int target = inl_bc_off + sz + sv_get_i32(ip + 1);
         MIR_label_t lbl = inl_label_for_offset(ctx, &inl_lm, target, isp);
-        ANT_ASSERT(lbl != NULL, "inline label map exhausted");
+        Ant_Assert(lbl != NULL, "inline label map exhausted");
         MIR_append_insn(ctx, jit_func,
                         MIR_new_insn(ctx, MIR_JMP, MIR_new_label_op(ctx, lbl)));
         break;
@@ -1536,7 +1536,7 @@ void jit_emit_inline_body(
         MIR_reg_t cond = inl_vs[isp - 1];
         int target = inl_bc_off + sz + sv_get_i32(ip + 1);
         MIR_label_t lbl = inl_label_for_offset(ctx, &inl_lm, target, isp);
-        ANT_ASSERT(lbl != NULL, "inline label map exhausted");
+        Ant_Assert(lbl != NULL, "inline label map exhausted");
         MIR_label_t done = MIR_new_label(ctx);
         MIR_append_insn(ctx, jit_func,
                         MIR_new_insn(ctx, MIR_BEQ,
@@ -1565,7 +1565,7 @@ void jit_emit_inline_body(
         bool is_false_branch = (op == OP_JMP_FALSE || op == OP_JMP_FALSE8 || op == OP_JMP_FALSE_PEEK);
         int target = inl_bc_off + sz + (short_op ? (int8_t)sv_get_i8(ip + 1) : sv_get_i32(ip + 1));
         MIR_label_t lbl = inl_label_for_offset(ctx, &inl_lm, target, isp);
-        ANT_ASSERT(lbl != NULL, "inline label map exhausted");
+        Ant_Assert(lbl != NULL, "inline label map exhausted");
 
         mir_emit_truthy_branch(ctx, jit_func, cond, r_bool, r_js,
             ext->truthy_proto, ext->imp_is_truthy, is_false_branch, lbl);
@@ -1575,7 +1575,7 @@ void jit_emit_inline_body(
       case OP_GET_FIELD: {
         INL_FLUSH_SLOT(isp - 1);
         uint32_t idx = sv_get_u32(ip + 1);
-        ANT_ASSERT(idx < (uint32_t)callee->atom_count,
+        Ant_Assert(idx < (uint32_t)callee->atom_count,
                    "invalid inline atom index");
         sv_atom_t *atom = &callee->atoms[idx];
         MIR_reg_t obj = inl_vs[--isp];
@@ -1611,7 +1611,7 @@ void jit_emit_inline_body(
       case OP_GET_FIELD_OPT: {
         INL_FLUSH_SLOT(isp - 1);
         uint32_t idx = sv_get_u32(ip + 1);
-        ANT_ASSERT(idx < (uint32_t)callee->atom_count,
+        Ant_Assert(idx < (uint32_t)callee->atom_count,
                    "invalid inline atom index");
         sv_atom_t *atom = &callee->atoms[idx];
         MIR_reg_t obj = inl_vs[--isp];
@@ -1664,7 +1664,7 @@ void jit_emit_inline_body(
       case OP_GET_FIELD2: {
         INL_FLUSH_SLOT(isp - 1);
         uint32_t idx = sv_get_u32(ip + 1);
-        ANT_ASSERT(idx < (uint32_t)callee->atom_count,
+        Ant_Assert(idx < (uint32_t)callee->atom_count,
                    "invalid inline atom index");
         sv_atom_t *atom = &callee->atoms[idx];
         MIR_reg_t obj = inl_vs[isp - 1];
@@ -1699,7 +1699,7 @@ void jit_emit_inline_body(
       }
       case OP_GET_GLOBAL: {
         uint32_t idx = sv_get_u32(ip + 1);
-        ANT_ASSERT(idx < (uint32_t)callee->atom_count,
+        Ant_Assert(idx < (uint32_t)callee->atom_count,
                    "invalid inline atom index");
         sv_atom_t *gg_atom = &callee->atoms[idx];
         MIR_reg_t dst = inl_vs[isp++];
@@ -1718,7 +1718,7 @@ void jit_emit_inline_body(
 
       case OP_LOAD_STABLE_BUILTIN: {
         uint8_t stable_kind = sv_get_u8(ip + 1);
-        ANT_ASSERT(
+        Ant_Assert(
             stable_kind == SV_STABLE_BUILTIN_PROMISE_RESOLVE,
             "invalid inline stable-builtin load");
         MIR_reg_t stable_this = inl_vs[isp++];
@@ -1741,7 +1741,7 @@ void jit_emit_inline_body(
         INL_FLUSH_SLOT(isp - 1);
         INL_FLUSH_SLOT(isp - 2);
         uint32_t pf_idx = sv_get_u32(ip + 1);
-        ANT_ASSERT(pf_idx < (uint32_t)callee->atom_count,
+        Ant_Assert(pf_idx < (uint32_t)callee->atom_count,
                    "invalid inline atom index");
         sv_atom_t *pf_atom = &callee->atoms[pf_idx];
         uint16_t pf_ic_idx = sv_get_u16(ip + 5);
@@ -1975,9 +1975,9 @@ void jit_emit_inline_body(
       case OP_CALL_STABLE_BUILTIN: {
         int stable_kind = ip[1];
         uint16_t stable_argc = sv_get_u16(ip + 2);
-        ANT_ASSERT(stable_argc <= SV_JIT_ARGS_BUF_CAP,
+        Ant_Assert(stable_argc <= SV_JIT_ARGS_BUF_CAP,
                    "nested stable-builtin call escaped feasibility");
-        ANT_ASSERT(isp >= (int)stable_argc + 2,
+        Ant_Assert(isp >= (int)stable_argc + 2,
                    "invalid inline stable-builtin call stack depth");
         INL_FLUSH_ALL();
 
@@ -2037,9 +2037,9 @@ void jit_emit_inline_body(
         bool nc_method = (op == OP_CALL_METHOD || op == OP_TAIL_CALL_METHOD);
         bool nc_tail = (op == OP_TAIL_CALL || op == OP_TAIL_CALL_METHOD);
         uint16_t nc_argc = sv_get_u16(ip + 1);
-        ANT_ASSERT(nc_argc <= SV_JIT_ARGS_BUF_CAP,
+        Ant_Assert(nc_argc <= SV_JIT_ARGS_BUF_CAP,
                    "nested inline call escaped feasibility");
-        ANT_ASSERT(isp >= (int)nc_argc + (nc_method ? 2 : 1),
+        Ant_Assert(isp >= (int)nc_argc + (nc_method ? 2 : 1),
                    "invalid inline call stack depth");
         INL_FLUSH_ALL();
 
@@ -2316,7 +2316,7 @@ void jit_emit_inline_body(
         break;
 
       default:
-        ANT_ASSERT(false, "inlineable opcode has no emitter");
+        Ant_Assert(false, "inlineable opcode has no emitter");
     }
     if (jit_op_inline_side_effect(op)) seen_effect = true;
     ip += sz;
@@ -2324,5 +2324,5 @@ void jit_emit_inline_body(
   
   free(inl_depth);
   if (tagging) tagging->inl.depth--;
-  ANT_ASSERT(!reuse_empty_objects || !seen_effect, "empty object reuse requires an effect-free inline body");
+  Ant_Assert(!reuse_empty_objects || !seen_effect, "empty object reuse requires an effect-free inline body");
 }

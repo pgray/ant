@@ -1059,7 +1059,7 @@ ant_value_t timers_promises_library(ant_t *js) {
 void cleanup_timer_module(ant_t *js) {
   ant_timer_state_t *t = &js->timers;
   
-  ANT_ASSERT(
+  Ant_Assert(
     !t->microtasks_processing && !t->next_ticks_processing && !t->immediates_processing,
     "cannot destroy an isolate while it runs a job batch"
   );

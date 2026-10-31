@@ -1713,7 +1713,7 @@ ant_value_t jit_helper_object_template(sv_vm_t *vm, ant_t *js, sv_func_t *func, 
     for (uint16_t i = 0; i < site->key_count; i++) {
       ant_value_t value;
       int size = sv_literal_constant_at(func, ip, &value);
-      ANT_ASSERT(size != 0, "invalid constant literal template");
+      Ant_Assert(size != 0, "invalid constant literal template");
       
       sv_atom_t *key = &func->atoms[site->key_atoms[i]];
       sv_define_slot(js, seed, value, key->str, key->len, i);

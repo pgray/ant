@@ -328,7 +328,7 @@ static uint8_t *jit_encode_sites(const jit_code_desc_t *desc, const uint32_t **o
   for (uint32_t i = 0; i < count; i++) {
     n_inline += sites[i].depth;
     if (i == 0) continue;
-    ANT_ASSERT(sites[i].ret_off >= sites[i - 1].ret_off, "jit call sites must be sorted by return offset");
+    Ant_Assert(sites[i].ret_off >= sites[i - 1].ret_off, "jit call sites must be sorted by return offset");
     if (i % JIT_SITE_CHECKPOINT == 0) continue;
     stream += jit_uleb_size(sites[i].ret_off - sites[i - 1].ret_off);
     stream += jit_uleb_size(jit_zigzag(sites[i].bc_off - sites[i - 1].bc_off));

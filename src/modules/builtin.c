@@ -433,10 +433,10 @@ static ant_value_t js_highlight_tags(ant_params_t) {
 
 void init_builtin_module(ant_t *js) {
   ant_value_t ant_obj = js->Ant;
-  js_set_sym(js, ant_obj, js->sym.toStringTag_sym, ANT_STRING("Ant"));
+  js_set_sym(js, ant_obj, js->sym.toStringTag_sym, Ant_String_FromLiteral(js, "Ant"));
 
-  js_set_exact(js, ant_obj, "version", ANT_STRING(ANT_VERSION));
-  js_set_exact(js, ant_obj, "channel", ANT_CANARY ? ANT_STRING("canary") : ANT_STRING("stable"));
+  js_set_exact(js, ant_obj, "version", Ant_String_FromLiteral(js, ANT_VERSION));
+  js_set_exact(js, ant_obj, "channel", ANT_CANARY ? Ant_String_FromLiteral(js, "canary") : Ant_String_FromLiteral(js, "stable"));
 
   js_set(js, ant_obj, "match", Ant_Function_Create(js_match));
   js_set(js, ant_obj, "serve", Ant_Function_CreateWithArity(js_serve, 1));

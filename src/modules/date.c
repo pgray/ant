@@ -96,7 +96,7 @@ static bool date_this_time_value(ant_t *js, ant_value_t this_val, double *out, a
   }
   
   ant_value_t t = js_get_slot(js_as_obj(this_val), SLOT_DATA);
-  *out = (vtype(t) == kTypeNumber) ? Ant_Value_AsNumberUnchecked(t) : JS_NAN;
+  *out = (vtype(t) == kTypeNumber) ? Ant_Value_AsNumberUnchecked(t) : ANT_NAN;
   return true;
 }
 
@@ -121,7 +121,7 @@ static int64_t floor_div_int64(int64_t a, int64_t b) {
 
 double date_timeclip(double t) {
   if (t >= -8.64e15 && t <= 8.64e15) return trunc(t) + 0.0;
-  return JS_NAN;
+  return ANT_NAN;
 }
 
 static int64_t days_in_year(int64_t y) {
@@ -264,7 +264,7 @@ static double date_make_fields(const date_fields_t *fields, int is_local) {
   int yi, mi, i;
   int64_t days;
   volatile double temp;
-  double d = JS_NAN;
+  double d = ANT_NAN;
 
   y = fields->year;
   m = fields->month;
@@ -274,7 +274,7 @@ static double date_make_fields(const date_fields_t *fields, int is_local) {
   mn = fmod(m, 12);
   if (mn < 0) mn += 12;
 
-  if (ym < -271821 || ym > 275760) return JS_NAN;
+  if (ym < -271821 || ym > 275760) return ANT_NAN;
 
   yi = (int)ym;
   mi = (int)mn;
@@ -297,7 +297,7 @@ static double date_make_fields(const date_fields_t *fields, int is_local) {
   time += milli;
 
   tv = (temp = day * 86400000) + time;
-  if (!isfinite(tv)) return JS_NAN;
+  if (!isfinite(tv)) return ANT_NAN;
 
   if (is_local) {
     int64_t ti;
@@ -757,7 +757,7 @@ static bool date_parse_string_to_ms(ant_t *js, ant_value_t arg, double *out_ms) 
 
   char *buf = (char *)malloc((size_t)len + 1);
   if (!buf) {
-    *out_ms = JS_NAN;
+    *out_ms = ANT_NAN;
     return true;
   }
 
@@ -775,7 +775,7 @@ static bool date_parse_string_to_ms(ant_t *js, ant_value_t arg, double *out_ms) 
   free(buf);
 
   if (!ok) {
-    *out_ms = JS_NAN;
+    *out_ms = ANT_NAN;
     return true;
   }
 
@@ -788,7 +788,7 @@ static bool date_parse_string_to_ms(ant_t *js, ant_value_t arg, double *out_ms) 
   if (fields[3] == 24 && (fields[4] | fields[5] | fields[6])) valid = false;
 
   if (!valid) {
-    *out_ms = JS_NAN;
+    *out_ms = ANT_NAN;
     return true;
   }
 
@@ -823,7 +823,7 @@ static ant_value_t builtin_Date(ant_params_t) {
     
     if (is_object_type(input) && is_date_instance(input)) {
       ant_value_t tv = js_get_slot(js_as_obj(input), SLOT_DATA);
-      val = (vtype(tv) == kTypeNumber) ? Ant_Value_AsNumberUnchecked(tv) : JS_NAN;
+      val = (vtype(tv) == kTypeNumber) ? Ant_Value_AsNumberUnchecked(tv) : ANT_NAN;
       val = date_timeclip(val);
     } else {
       ant_value_t prim = js_to_primitive(js, input, 0);
@@ -848,7 +848,7 @@ static ant_value_t builtin_Date(ant_params_t) {
       if (i == 0 && fields.year >= 0 && fields.year < 100) fields.year += 1900;
     }
 
-    val = (i == n) ? date_make_fields(&fields, 1) : JS_NAN;
+    val = (i == n) ? date_make_fields(&fields, 1) : ANT_NAN;
   }
 
   js_set_slot(js_as_obj(js->this_val), SLOT_DATA, Ant_Value_FromNumber(val));
@@ -858,7 +858,7 @@ static ant_value_t builtin_Date(ant_params_t) {
 }
 
 static ant_value_t builtin_Date_UTC(ant_params_t) {
-  if (nargs == 0) return Ant_Value_FromNumber(JS_NAN);
+  if (nargs == 0) return Ant_Value_FromNumber(ANT_NAN);
 
   date_fields_t fields = {0};
   fields.day = 1;
@@ -867,7 +867,7 @@ static ant_value_t builtin_Date_UTC(ant_params_t) {
 
   for (int i = 0; i < n; i++) {
     double a = js_to_number(js, args[i]);
-    if (!isfinite(a)) return Ant_Value_FromNumber(JS_NAN);
+    if (!isfinite(a)) return Ant_Value_FromNumber(ANT_NAN);
     double t = trunc(a);
     date_fields_set(&fields, (date_field_index_t)i, t);
     if (i == 0 && fields.year >= 0 && fields.year < 100) fields.year += 1900;
@@ -877,7 +877,7 @@ static ant_value_t builtin_Date_UTC(ant_params_t) {
 }
 
 static ant_value_t builtin_Date_parse(ant_params_t) {
-  if (nargs < 1) return Ant_Value_FromNumber(JS_NAN);
+  if (nargs < 1) return Ant_Value_FromNumber(ANT_NAN);
   double v;
   if (!date_parse_string_to_ms(js, args[0], &v)) {
     return js_mkerr_typed(js, JS_ERR_INTERNAL, "Date parse failed");
@@ -895,7 +895,7 @@ static ant_value_t date_get_field(ant_t *js, date_get_field_spec_t spec) {
 
   int res = date_extract_fields(js, js->this_val, &fields, spec.local_time, 0, &err);
   if (res < 0) return err;
-  if (!res) return Ant_Value_FromNumber(JS_NAN);
+  if (!res) return Ant_Value_FromNumber(ANT_NAN);
 
   if (spec.legacy_get_year) fields.year -= 1900;
   return Ant_Value_FromNumber(date_fields_get(&fields, spec.field));
@@ -904,7 +904,7 @@ static ant_value_t date_get_field(ant_t *js, date_get_field_spec_t spec) {
 static ant_value_t date_set_field(ant_native_params_t, date_set_field_spec_t spec) {
   date_fields_t fields;
   ant_value_t err;
-  double d = JS_NAN;
+  double d = ANT_NAN;
 
   int res = date_extract_fields(
     js, js->this_val,
@@ -917,11 +917,11 @@ static ant_value_t date_set_field(ant_native_params_t, date_set_field_spec_t spe
   
   for (int i = 0; i < n; i++) {
     double a = js_to_number(js, args[i]);
-    if (!isfinite(a)) return date_set_this_time_value(js, js->this_val, JS_NAN);
+    if (!isfinite(a)) return date_set_this_time_value(js, js->this_val, ANT_NAN);
     date_fields_set(&fields, (date_field_index_t)(spec.first_field + i), trunc(a));
   }
 
-  if (!res) return Ant_Value_FromNumber(JS_NAN);
+  if (!res) return Ant_Value_FromNumber(ANT_NAN);
   if (nargs > 0) d = date_make_fields(&fields, spec.local_time);
 
   return date_set_this_time_value(js, js->this_val, d);
@@ -982,7 +982,7 @@ static ant_value_t builtin_Date_getTimezoneOffset(ant_params_t) {
   double v;
   ant_value_t err;
   if (!date_this_time_value(js, js->this_val, &v, &err)) return err;
-  if (isnan(v)) return Ant_Value_FromNumber(JS_NAN);
+  if (isnan(v)) return Ant_Value_FromNumber(ANT_NAN);
   return Ant_Value_FromNumber((double)get_timezone_offset((int64_t)trunc(v)));
 }
 
@@ -991,7 +991,7 @@ static ant_value_t builtin_Date_setTime(ant_params_t) {
   ant_value_t err;
   if (!date_this_time_value(js, js->this_val, &cur, &err)) return err;
 
-  double v = (nargs > 0) ? js_to_number(js, args[0]) : JS_NAN;
+  double v = (nargs > 0) ? js_to_number(js, args[0]) : ANT_NAN;
   return date_set_this_time_value(js, js->this_val, date_timeclip(v));
 }
 
@@ -1155,7 +1155,7 @@ static ant_value_t builtin_Date_setYear(ant_params_t) {
   ant_value_t err;
   if (!date_this_time_value(js, js->this_val, &y, &err)) return err;
 
-  y = (nargs > 0) ? js_to_number(js, args[0]) : JS_NAN;
+  y = (nargs > 0) ? js_to_number(js, args[0]) : ANT_NAN;
   if (isnan(y)) return date_set_this_time_value(js, js->this_val, y);
 
   if (isfinite(y)) {

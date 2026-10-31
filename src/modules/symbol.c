@@ -133,7 +133,7 @@ void init_symbol_ctor(ant_t *js) {
   defmethod(js, proto, "valueOf", 7, Ant_Function_Create(builtin_Symbol_valueOf));
   
   mkprop(js, proto, js->sym.toPrimitive_sym, Ant_Function_CreateWithMeta(builtin_Symbol_valueOf, "[Symbol.toPrimitive]", 1, 0), ANT_PROP_ATTR_CONFIGURABLE);
-  mkprop(js, proto, js->sym.toStringTag_sym, ANT_STRING("Symbol"), ANT_PROP_ATTR_CONFIGURABLE);
+  mkprop(js, proto, js->sym.toStringTag_sym, Ant_String_FromLiteral(js, "Symbol"), ANT_PROP_ATTR_CONFIGURABLE);
   js_set_getter_desc(js, proto, "description", 11, Ant_Function_Create(builtin_Symbol_description), JS_DESC_C);
 
   ant_value_t ctor = Ant_Object_CreateBare(js);

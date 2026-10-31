@@ -243,14 +243,14 @@ const char *copy_name(ant_t *js, const char *name, uint32_t len) {
 
 sv_func_t *sv_func_new(ant_t *js) {
   sv_func_t *func = sv_code_bump(js, sizeof(*func));
-  ANT_ASSERT(func != NULL, "failed to allocate a function");
+  Ant_Assert(func != NULL, "failed to allocate a function");
   
   memset(func, 0, sizeof(*func));
   func->realm = js->realm;
   sv_code_unit_add_func(js, func);
   
   func->debug = sv_code_bump(js, sizeof(*func->debug));
-  ANT_ASSERT(func->debug != NULL, "failed to allocate function debug info");
+  Ant_Assert(func->debug != NULL, "failed to allocate function debug info");
   memset(func->debug, 0, sizeof(*func->debug));
   
   return func;

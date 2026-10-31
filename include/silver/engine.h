@@ -761,7 +761,7 @@ static inline sv_obj_site_cache_t *sv_obj_site_for_offset(
 
 static inline sv_func_metadata_t *sv_func_metadata(sv_func_t *func) {
   if (!func || !func->has_dynamic_eval) return NULL;
-  ANT_ASSERT(
+  Ant_Assert(
     func->type_data.metadata != NULL,
     "dynamic-eval function must have metadata"
   );
@@ -777,8 +777,8 @@ static inline sv_type_info_t *sv_func_local_types(sv_func_t *func) {
 
 static inline const sv_eval_scope_t *sv_func_eval_scope(sv_func_t *func, uint32_t index) {
   sv_func_metadata_t *metadata = sv_func_metadata(func);
-  ANT_ASSERT(metadata != NULL, "eval opcode requires function metadata");
-  ANT_ASSERT(
+  Ant_Assert(metadata != NULL, "eval opcode requires function metadata");
+  Ant_Assert(
     index < metadata->eval_scope_count,
     "eval opcode scope index is outside function metadata"
   );

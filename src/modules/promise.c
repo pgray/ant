@@ -71,7 +71,7 @@ static void promise_handlers_discard_processed_prefix(
   ant_promise_state_t *pd, uint32_t count
 ) {
   uint32_t total = promise_handler_count(pd);
-  ANT_ASSERT(count <= total, "invalid Promise handler prefix");
+  Ant_Assert(count <= total, "invalid Promise handler prefix");
   
   if (count == total) {
     promise_handlers_clear(pd);

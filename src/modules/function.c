@@ -224,12 +224,12 @@ static ant_value_t builtin_function_toString(ant_params_t) {
       free(buf);
       return result;
     }
-    return ANT_STRING("function() { [native code] }");
+    return Ant_String_FromLiteral(js, "function() { [native code] }");
   }
   
   sv_closure_t *bound = js_func_closure(func);
   if (bound && (bound->call_flags & SV_CALL_HAS_BOUND_THIS))
-    return ANT_STRING("function () { [native code] }");
+    return Ant_String_FromLiteral(js, "function () { [native code] }");
 
   ant_value_t func_obj = js_func_obj(func);
   ant_value_t cfunc_slot = get_slot(func_obj, SLOT_CFUNC);
@@ -250,7 +250,7 @@ static ant_value_t builtin_function_toString(ant_params_t) {
       free(buf);
       return result;
     }
-    return ANT_STRING("function() { [native code] }");
+    return Ant_String_FromLiteral(js, "function() { [native code] }");
   }
   
   ant_value_t code_val = get_slot(func_obj, SLOT_CODE);
@@ -279,10 +279,10 @@ static ant_value_t builtin_function_toString(ant_params_t) {
         char *buf = calloc(1, len);
         size_t n = 0;
         
-        if (is_async) n += cpy(buf + n, REMAIN(n, len), "async ", 6);
-        n += cpy(buf + n, REMAIN(n, len), code, params_len);
-        n += cpy(buf + n, REMAIN(n, len), " => ", 4);
-        n += cpy(buf + n, REMAIN(n, len), body, body_len);
+        if (is_async) n += cpy(buf + n, Ant_Remaining(n, len), "async ", 6);
+        n += cpy(buf + n, Ant_Remaining(n, len), code, params_len);
+        n += cpy(buf + n, Ant_Remaining(n, len), " => ", 4);
+        n += cpy(buf + n, Ant_Remaining(n, len), body, body_len);
         
         ant_value_t result = js_mkstr(js, buf, n);
         free(buf);
@@ -391,7 +391,7 @@ ant_value_t js_resolve_bound_target_slow(ant_value_t value) {
     fast = next;
     if (!js_bound_target_next(fast, &next)) break;
     fast = next;
-    ANT_ASSERT(slow != fast, "bound target chain contains a cycle");
+    Ant_Assert(slow != fast, "bound target chain contains a cycle");
   }
 
   while (js_bound_target_next(value, &next)) value = next;
@@ -711,15 +711,15 @@ static void init_function_kind(
   set_slot(ctor_obj, SLOT_CFUNC, cfunc);
   
   mkprop(js, ctor_obj, js->length_str, Ant_Value_FromNumber(1.0), ANT_PROP_ATTR_CONFIGURABLE);
-  mkprop(js, ctor_obj, ANT_STRING("name"), name, ANT_PROP_ATTR_CONFIGURABLE);
-  mkprop_exact_attrs(js, ctor_obj, ANT_STRING("prototype"), kind_proto, 0);
+  mkprop(js, ctor_obj, Ant_String_FromLiteral(js, "name"), name, ANT_PROP_ATTR_CONFIGURABLE);
+  mkprop_exact_attrs(js, ctor_obj, Ant_String_FromLiteral(js, "prototype"), kind_proto, 0);
   
   if (is_object_type(instance_proto)) {
-    mkprop(js, kind_proto, ANT_STRING("prototype"), instance_proto, ANT_PROP_ATTR_CONFIGURABLE);
-    mkprop(js, instance_proto, ANT_STRING("constructor"), kind_proto, ANT_PROP_ATTR_CONFIGURABLE);
+    mkprop(js, kind_proto, Ant_String_FromLiteral(js, "prototype"), instance_proto, ANT_PROP_ATTR_CONFIGURABLE);
+    mkprop(js, instance_proto, Ant_String_FromLiteral(js, "constructor"), kind_proto, ANT_PROP_ATTR_CONFIGURABLE);
   }
   
-  mkprop(js, kind_proto, ANT_STRING("constructor"), js_obj_to_func(js, ctor_obj), ANT_PROP_ATTR_CONFIGURABLE);
+  mkprop(js, kind_proto, Ant_String_FromLiteral(js, "constructor"), js_obj_to_func(js, ctor_obj), ANT_PROP_ATTR_CONFIGURABLE);
 }
 
 void js_function_init_prototype(ant_t *js, ant_value_t function_proto_obj) {
@@ -743,16 +743,16 @@ void js_function_init_kinds(ant_t *js, ant_value_t function_proto, ant_value_t f
   
   init_function_kind(
     js, function_proto, func_ctor_func, SLOT_ASYNC_PROTO, 
-    Ant_Function_Create(builtin_AsyncFunction), ANT_STRING("AsyncFunction"), js_mkundef(), true
+    Ant_Function_Create(builtin_AsyncFunction), Ant_String_FromLiteral(js, "AsyncFunction"), js_mkundef(), true
   );
   
   init_function_kind(
     js, function_proto, func_ctor_func, SLOT_GENERATOR_PROTO, 
-    Ant_Function_Create(builtin_GeneratorFunction), ANT_STRING("GeneratorFunction"), js->sym.generator_proto, false
+    Ant_Function_Create(builtin_GeneratorFunction), Ant_String_FromLiteral(js, "GeneratorFunction"), js->sym.generator_proto, false
   );
   
   init_function_kind(
     js, function_proto, func_ctor_func, SLOT_ASYNC_GENERATOR_PROTO, 
-    Ant_Function_Create(builtin_AsyncGeneratorFunction), ANT_STRING("AsyncGeneratorFunction"), js->sym.async_generator_proto, true
+    Ant_Function_Create(builtin_AsyncGeneratorFunction), Ant_String_FromLiteral(js, "AsyncGeneratorFunction"), js->sym.async_generator_proto, true
   );
 }

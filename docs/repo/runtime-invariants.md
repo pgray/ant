@@ -271,7 +271,7 @@ See [objects.c](../../src/gc/objects.c) and the
 Compiled RegExp data needs object ownership before named-group metadata
 allocation can trigger GC. Cache membership alone cannot protect it across
 multiple major collections. Preserve the attachment/error-path reference
-handling in [regex.c](../../src/modules/regex.c), covered by the
+handling in [compile.c](../../src/modules/regex/compile.c), covered by the
 [result regressions](../../tests/test_regexp_result_batch.cjs).
 
 Rope mark-table allocation failure must still allow collection to progress.

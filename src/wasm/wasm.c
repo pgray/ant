@@ -23,7 +23,7 @@ void init_wasm_module(ant_t *js) {
   if (!ensure_wasm_engine()) return;
 
   ant_value_t ns = Ant_Object_Create(js);
-  js_set_tostringtag(js, ns, ANT_STRING("WebAssembly"));
+  js_set_tostringtag(js, ns, Ant_String_FromLiteral(js, "WebAssembly"));
 
   js->builtins.wasm_module_proto = wasm_make_proto(js, "WebAssembly.Module");
   js->builtins.wasm_instance_proto = wasm_make_proto(js, "WebAssembly.Instance");

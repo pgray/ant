@@ -1430,7 +1430,7 @@ ant_value_t js_mkproxy(ant_t *js, ant_value_t target, ant_value_t handler) {
 }
 
 ant_value_t js_mkproxy_host(ant_t *js, ant_value_t target, const ant_host_proxy_ops_t *ops) {
-  ANT_ASSERT(ops && ops->name && ops->get && ops->set && ops->del && ops->keys, "host proxies need every hook");
+  Ant_Assert(ops && ops->name && ops->get && ops->set && ops->del && ops->keys, "host proxies need every hook");
   
   GC_ROOT_SAVE(root_mark, js);
   GC_ROOT_PIN(js, target);

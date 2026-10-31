@@ -187,7 +187,7 @@ static void jit_gen_init(sv_jit_ctx_t *jc, MIR_context_t ctx) {
 void sv_jit_init(ant_t *js) {
   if (js->jit_ctx) return;
 
-  ANT_ASSERT(
+  Ant_Assert(
     ant_object_flag_masks_match_layout(),
     "object flag bitfield layout does not match the JIT masks"
   );

@@ -263,7 +263,7 @@ ant_value_t builtin_number_toLocaleString(ant_params_t) {
 }
 
 static ant_value_t builtin_parseInt(ant_params_t) {
-  if (nargs < 1) return Ant_Value_FromNumber(JS_NAN);
+  if (nargs < 1) return Ant_Value_FromNumber(ANT_NAN);
   
   ant_value_t str_val = args[0];
   if (vtype(str_val) != kTypeString) {
@@ -277,13 +277,13 @@ static ant_value_t builtin_parseInt(ant_params_t) {
   int radix = 0;
   if (nargs >= 2 && vtype(args[1]) == kTypeNumber) {
     radix = (int) Ant_Value_AsNumberUnchecked(args[1]);
-    if (radix != 0 && (radix < 2 || radix > 36)) return Ant_Value_FromNumber(JS_NAN);
+    if (radix != 0 && (radix < 2 || radix > 36)) return Ant_Value_FromNumber(ANT_NAN);
   }
   
   ant_offset_t i = 0;
   while (i < str_len && is_space(str[i])) i++;
   
-  if (i >= str_len) return Ant_Value_FromNumber(JS_NAN);
+  if (i >= str_len) return Ant_Value_FromNumber(ANT_NAN);
   
   int sign = 1;
   if (str[i] == '-') {
@@ -322,13 +322,13 @@ static ant_value_t builtin_parseInt(ant_params_t) {
     i++;
   }
   
-  if (!found_digit) return Ant_Value_FromNumber(JS_NAN);
+  if (!found_digit) return Ant_Value_FromNumber(ANT_NAN);
   
   return Ant_Value_FromNumber(sign * result);
 }
 
 static ant_value_t builtin_parseFloat(ant_params_t) {
-  if (nargs < 1) return Ant_Value_FromNumber(JS_NAN);
+  if (nargs < 1) return Ant_Value_FromNumber(ANT_NAN);
   
   ant_value_t str_val = args[0];
   if (vtype(str_val) != kTypeString) {
@@ -342,9 +342,9 @@ static ant_value_t builtin_parseFloat(ant_params_t) {
   ant_offset_t i = 0;
   while (i < str_len && is_space(str[i])) i++;
   
-  if (i >= str_len) return Ant_Value_FromNumber(JS_NAN);
+  if (i >= str_len) return Ant_Value_FromNumber(ANT_NAN);
   
-  double result = JS_NAN;
+  double result = ANT_NAN;
   size_t processed = 0;
   
   if (!ant_number_parse(
@@ -352,19 +352,19 @@ static ant_value_t builtin_parseFloat(ant_params_t) {
     (size_t)(str_len - i),
     ANT_NUMBER_PARSE_FLOAT_PREFIX,
     &result, &processed
-  ) || processed == 0) return Ant_Value_FromNumber(JS_NAN);
+  ) || processed == 0) return Ant_Value_FromNumber(ANT_NAN);
 
   return Ant_Value_FromNumber(result);
 }
 
 double js_parse_int_value(ant_t *js, ant_value_t arg) {
   ant_value_t result = builtin_parseInt(js, &arg, 1, js_mkundef());
-  return vtype(result) == kTypeNumber ? Ant_Value_AsNumberUnchecked(result) : JS_NAN;
+  return vtype(result) == kTypeNumber ? Ant_Value_AsNumberUnchecked(result) : ANT_NAN;
 }
 
 double js_parse_float_value(ant_t *js, ant_value_t arg) {
   ant_value_t result = builtin_parseFloat(js, &arg, 1, js_mkundef());
-  return vtype(result) == kTypeNumber ? Ant_Value_AsNumberUnchecked(result) : JS_NAN;
+  return vtype(result) == kTypeNumber ? Ant_Value_AsNumberUnchecked(result) : ANT_NAN;
 }
 
 void js_number_init_prototype(ant_t *js, ant_value_t number_proto) {
@@ -391,9 +391,9 @@ void js_number_init_constructor(ant_t *js, ant_value_t number_ctor_obj, ant_valu
   js_setprop_readonly_nonconfigurable(js, number_ctor_obj, "MIN_VALUE", 9, Ant_Value_FromNumber(5e-324));
   js_setprop_readonly_nonconfigurable(js, number_ctor_obj, "MAX_SAFE_INTEGER", 16, Ant_Value_FromNumber(9007199254740991.0));
   js_setprop_readonly_nonconfigurable(js, number_ctor_obj, "MIN_SAFE_INTEGER", 16, Ant_Value_FromNumber(-9007199254740991.0));
-  js_setprop_readonly_nonconfigurable(js, number_ctor_obj, "POSITIVE_INFINITY", 17, Ant_Value_FromNumber(JS_INF));
-  js_setprop_readonly_nonconfigurable(js, number_ctor_obj, "NEGATIVE_INFINITY", 17, Ant_Value_FromNumber(JS_NEG_INF));
-  js_setprop_readonly_nonconfigurable(js, number_ctor_obj, "NaN", 3, Ant_Value_FromNumber(JS_NAN));
+  js_setprop_readonly_nonconfigurable(js, number_ctor_obj, "POSITIVE_INFINITY", 17, Ant_Value_FromNumber(ANT_INFINITY));
+  js_setprop_readonly_nonconfigurable(js, number_ctor_obj, "NEGATIVE_INFINITY", 17, Ant_Value_FromNumber(ANT_NEG_INFINITY));
+  js_setprop_readonly_nonconfigurable(js, number_ctor_obj, "NaN", 3, Ant_Value_FromNumber(ANT_NAN));
   js_setprop_readonly_nonconfigurable(js, number_ctor_obj, "EPSILON", 7, Ant_Value_FromNumber(2.220446049250313e-16));
   
   js_setprop_readonly_nonconfigurable(js, number_ctor_obj, "prototype", 9, number_proto);

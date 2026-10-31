@@ -22,10 +22,10 @@
 static size_t stringify_hex_bytes(const uint8_t *data, size_t count, bool lead_space, char *buf, size_t len) {
   size_t n = 0;
   for (size_t i = 0; i < count; i++) {
-    if (lead_space || i > 0) n += cpy(buf + n, REMAIN(n, len), " ", 1);
+    if (lead_space || i > 0) n += cpy(buf + n, Ant_Remaining(n, len), " ", 1);
     char hex[2];
     hex_encode(data + i, 1, hex);
-    n += cpy(buf + n, REMAIN(n, len), hex, 2);
+    n += cpy(buf + n, Ant_Remaining(n, len), hex, 2);
   }
   return n;
 }
@@ -50,9 +50,9 @@ static size_t stringify_more_bytes(size_t remaining, char *buf, size_t len) {
 static size_t stringify_node_buffer(const uint8_t *data, size_t byte_length, char *buf, size_t len) {
   size_t shown = byte_length < BUFFER_INSPECT_MAX_BYTES ? byte_length : BUFFER_INSPECT_MAX_BYTES;
   size_t n = cpy(buf, len, "<Buffer", 7);
-  n += stringify_hex_bytes(data, shown, true, buf + n, REMAIN(n, len));
-  if (shown < byte_length) n += stringify_more_bytes(byte_length - shown, buf + n, REMAIN(n, len));
-  return n + cpy(buf + n, REMAIN(n, len), shown == 0 ? " >" : ">", shown == 0 ? 2 : 1);
+  n += stringify_hex_bytes(data, shown, true, buf + n, Ant_Remaining(n, len));
+  if (shown < byte_length) n += stringify_more_bytes(byte_length - shown, buf + n, Ant_Remaining(n, len));
+  return n + cpy(buf + n, Ant_Remaining(n, len), shown == 0 ? " >" : ">", shown == 0 ? 2 : 1);
 }
 
 size_t stringify_typedarray(ant_t *js, ant_value_t obj, const TypedArrayData *ta, char *buf, size_t len) {
@@ -64,17 +64,17 @@ size_t stringify_typedarray(ant_t *js, ant_value_t obj, const TypedArrayData *ta
   
   const char *name = ta->type < TYPED_ARRAY_COUNT ? buffer_typedarray_type_name(ta->type) : "TypedArray";
   size_t n = cpy(buf, len, name, strlen(name));
-  n += (size_t)snprintf(buf + n, REMAIN(n, len), "(%zu) [", length);
-  if (length == 0) return n + cpy(buf + n, REMAIN(n, len), "]", 1);
+  n += (size_t)snprintf(buf + n, Ant_Remaining(n, len), "(%zu) [", length);
+  if (length == 0) return n + cpy(buf + n, Ant_Remaining(n, len), "]", 1);
   
   size_t shown = length < ANT_INSPECT_MAX_ENTRIES ? length : ANT_INSPECT_MAX_ENTRIES;
   for (size_t i = 0; i < shown; i++) {
-    n += cpy(buf + n, REMAIN(n, len), i ? ", " : " ", i ? 2 : 1);
-    n += stringify_typed_element(js, ta, i, buf + n, REMAIN(n, len));
+    n += cpy(buf + n, Ant_Remaining(n, len), i ? ", " : " ", i ? 2 : 1);
+    n += stringify_typed_element(js, ta, i, buf + n, Ant_Remaining(n, len));
   }
   
-  if (shown < length) n += cpy(buf + n, REMAIN(n, len), ", ...", 5);
-  return n + cpy(buf + n, REMAIN(n, len), " ]", 2);
+  if (shown < length) n += cpy(buf + n, Ant_Remaining(n, len), ", ...", 5);
+  return n + cpy(buf + n, Ant_Remaining(n, len), " ]", 2);
 }
 
 static size_t stringify_arraybuffer_body(const ArrayBufferData *ab, const char *indent, char *buf, size_t len) {
@@ -84,10 +84,10 @@ static size_t stringify_arraybuffer_body(const ArrayBufferData *ab, const char *
   size_t shown = ab->length < ANT_INSPECT_MAX_ENTRIES ? ab->length : ANT_INSPECT_MAX_ENTRIES;
   size_t n = (size_t)snprintf(buf, len, "%s {\n%s  [Uint8Contents]: <", name, indent);
   
-  if (ab->data) n += stringify_hex_bytes(ab->data, shown, false, buf + n, REMAIN(n, len));
-  if (shown < ab->length) n += stringify_more_bytes(ab->length - shown, buf + n, REMAIN(n, len));
+  if (ab->data) n += stringify_hex_bytes(ab->data, shown, false, buf + n, Ant_Remaining(n, len));
+  if (shown < ab->length) n += stringify_more_bytes(ab->length - shown, buf + n, Ant_Remaining(n, len));
   
-  return n + (size_t)snprintf(buf + n, REMAIN(n, len), ">,\n%s  [byteLength]: %zu\n%s}", indent, ab->length, indent);
+  return n + (size_t)snprintf(buf + n, Ant_Remaining(n, len), ">,\n%s  [byteLength]: %zu\n%s}", indent, ab->length, indent);
 }
 
 size_t stringify_arraybuffer(const ArrayBufferData *ab, char *buf, size_t len) {
@@ -102,18 +102,18 @@ size_t stringify_dataview(const DataViewData *dv, char *buf, size_t len) {
       dv->byte_length, dv->byte_offset
     );
   
-  n += stringify_arraybuffer_body(dv->buffer, "  ", buf + n, REMAIN(n, len));
-  return n + cpy(buf + n, REMAIN(n, len), "\n}", 2);
+  n += stringify_arraybuffer_body(dv->buffer, "  ", buf + n, Ant_Remaining(n, len));
+  return n + cpy(buf + n, Ant_Remaining(n, len), "\n}", 2);
 }
 
 size_t stringify_blob(const blob_data_t *bd, bool is_file, char *buf, size_t len) {
   size_t n = (size_t)snprintf(buf, len, "%s { size: %zu, type: '%s'", is_file ? "File" : "Blob", bd->size, bd->type ? bd->type : "");
   if (is_file) n += (size_t)snprintf(
-    buf + n, REMAIN(n, len), ", name: '%s', lastModified: %" PRId64,
+    buf + n, Ant_Remaining(n, len), ", name: '%s', lastModified: %" PRId64,
     bd->name ? bd->name : "", bd->last_modified
   );
   
-  return n + cpy(buf + n, REMAIN(n, len), " }", 2);
+  return n + cpy(buf + n, Ant_Remaining(n, len), " }", 2);
 }
 
 static int find_multiref(ant_t *js, ant_value_t obj) {
@@ -182,8 +182,8 @@ static size_t stringify_depth_marker(ant_t *js, ant_value_t obj, const char *fal
   const char *name = get_class_name(js, obj, &name_len, NULL);
   if (!name) { name = fallback; name_len = (ant_offset_t)strlen(fallback); }
   size_t n = cpy(buf, len, "[", 1);
-  n += cpy(buf + n, REMAIN(n, len), name, name_len);
-  return n + cpy(buf + n, REMAIN(n, len), "]", 1);
+  n += cpy(buf + n, Ant_Remaining(n, len), name, name_len);
+  return n + cpy(buf + n, Ant_Remaining(n, len), "]", 1);
 }
 
 static int get_circular_ref(ant_t *js, ant_value_t obj) {
@@ -428,16 +428,16 @@ static bool arr_print_entry(
   ant_offset_t holes, ant_value_t value, const char *accessor
 ) {
   arr_print_ctx_t *p = ctx;
-  if (p->printed_first) p->n += cpy(p->buf + p->n, REMAIN(p->n, p->len), p->inline_mode ? ", " : ",\n", 2);
-  if (!p->inline_mode) p->n += add_indent(p->buf + p->n, REMAIN(p->n, p->len), js->stringify->indent);
+  if (p->printed_first) p->n += cpy(p->buf + p->n, Ant_Remaining(p->n, p->len), p->inline_mode ? ", " : ",\n", 2);
+  if (!p->inline_mode) p->n += add_indent(p->buf + p->n, Ant_Remaining(p->n, p->len), js->stringify->indent);
   
   if (holes) p->n += (size_t) snprintf(
-    p->buf + p->n, REMAIN(p->n, p->len), "<%llu empty item%s>", 
+    p->buf + p->n, Ant_Remaining(p->n, p->len), "<%llu empty item%s>", 
     (unsigned long long)holes, holes == 1 ? "" : "s"
   );
   
-  else if (accessor) p->n += cpy(p->buf + p->n, REMAIN(p->n, p->len), accessor, strlen(accessor));
-  else p->n += tostr(js, value, p->buf + p->n, REMAIN(p->n, p->len));
+  else if (accessor) p->n += cpy(p->buf + p->n, Ant_Remaining(p->n, p->len), accessor, strlen(accessor));
+  else p->n += tostr(js, value, p->buf + p->n, Ant_Remaining(p->n, p->len));
     
   p->printed_first = true;
   return true;
@@ -459,28 +459,28 @@ static size_t strarr_body(ant_t *js, ant_value_t obj, char *buf, size_t len) {
   bool inline_mode = is_small_array(js, obj) && !hidden_nested;
   size_t n = 0;
   
-  if (arguments) n += cpy(buf + n, REMAIN(n, len), "[Arguments] ", 12);
+  if (arguments) n += cpy(buf + n, Ant_Remaining(n, len), "[Arguments] ", 12);
   if (class_name) {
-    n += cpy(buf + n, REMAIN(n, len), class_name, class_len);
-    n += (size_t) snprintf(buf + n, REMAIN(n, len), "(%u) ", (unsigned) length);
+    n += cpy(buf + n, Ant_Remaining(n, len), class_name, class_len);
+    n += (size_t) snprintf(buf + n, Ant_Remaining(n, len), "(%u) ", (unsigned) length);
   }
   
   char open = arguments ? '{' : '[';
   char close = arguments ? '}' : ']';
   if (length == 0 && hidden == 0 && !(arguments && stringify_has_shown_props(obj)))
-    return n + (size_t) snprintf(buf + n, REMAIN(n, len), "%c%c", open, close);
+    return n + (size_t) snprintf(buf + n, Ant_Remaining(n, len), "%c%c", open, close);
   
-  n += (size_t) snprintf(buf + n, REMAIN(n, len), inline_mode ? "%c " : "%c\n", open);
+  n += (size_t) snprintf(buf + n, Ant_Remaining(n, len), inline_mode ? "%c " : "%c\n", open);
   if (!inline_mode) js->stringify->indent++;
   
   bool printed_first = false;
   if (arguments) for (ant_offset_t i = 0; i < iter_len; i++) {
     if (!arr_has(js, obj, i)) continue;
-    if (printed_first) n += cpy(buf + n, REMAIN(n, len), inline_mode ? ", " : ",\n", 2);
-    if (!inline_mode) n += add_indent(buf + n, REMAIN(n, len), js->stringify->indent);
+    if (printed_first) n += cpy(buf + n, Ant_Remaining(n, len), inline_mode ? ", " : ",\n", 2);
+    if (!inline_mode) n += add_indent(buf + n, Ant_Remaining(n, len), js->stringify->indent);
 
-    n += (size_t) snprintf(buf + n, REMAIN(n, len), "'%u': ", (unsigned) i);
-    n += tostr(js, arr_get(js, obj, i), buf + n, REMAIN(n, len));
+    n += (size_t) snprintf(buf + n, Ant_Remaining(n, len), "'%u': ", (unsigned) i);
+    n += tostr(js, arr_get(js, obj, i), buf + n, Ant_Remaining(n, len));
     printed_first = true;
   } else {
     arr_print_ctx_t print = { buf, len, n, inline_mode, false };
@@ -502,17 +502,17 @@ static size_t strarr_body(ant_t *js, ant_value_t obj, char *buf, size_t len) {
       if (!(prop->attrs & ANT_PROP_ATTR_ENUMERABLE)) continue;
       if (!arguments && is_array_index(key, klen)) continue;
       
-      if (printed_first) n += cpy(buf + n, REMAIN(n, len), inline_mode ? ", " : ",\n", 2);
-      if (!inline_mode) n += add_indent(buf + n, REMAIN(n, len), js->stringify->indent);
+      if (printed_first) n += cpy(buf + n, Ant_Remaining(n, len), inline_mode ? ", " : ",\n", 2);
+      if (!inline_mode) n += add_indent(buf + n, Ant_Remaining(n, len), js->stringify->indent);
       
       ant_value_t val = (i < ptr->prop_count) ? ant_object_prop_get_unchecked(ptr, i) : js_mkundef();
       if (arguments && is_array_index(key, klen)) {
-        n += (size_t) snprintf(buf + n, REMAIN(n, len), "'%.*s': ", (int)klen, key);
-        n += tostr(js, val, buf + n, REMAIN(n, len));
+        n += (size_t) snprintf(buf + n, Ant_Remaining(n, len), "'%.*s': ", (int)klen, key);
+        n += tostr(js, val, buf + n, Ant_Remaining(n, len));
       } else {
-        n += cpy(buf + n, REMAIN(n, len), key, klen);
-        n += cpy(buf + n, REMAIN(n, len), ": ", 2);
-        n += tostr(js, val, buf + n, REMAIN(n, len));
+        n += cpy(buf + n, Ant_Remaining(n, len), key, klen);
+        n += cpy(buf + n, Ant_Remaining(n, len), ": ", 2);
+        n += tostr(js, val, buf + n, Ant_Remaining(n, len));
       }
       
       printed_first = true;
@@ -531,11 +531,11 @@ static size_t strarr_body(ant_t *js, ant_value_t obj, char *buf, size_t len) {
   
   if (!inline_mode) {
     js->stringify->indent--;
-    n += cpy(buf + n, REMAIN(n, len), "\n", 1);
-    n += add_indent(buf + n, REMAIN(n, len), js->stringify->indent);
+    n += cpy(buf + n, Ant_Remaining(n, len), "\n", 1);
+    n += add_indent(buf + n, Ant_Remaining(n, len), js->stringify->indent);
   }
   
-  return n + (size_t) snprintf(buf + n, REMAIN(n, len), inline_mode ? " %c" : "%c", close);
+  return n + (size_t) snprintf(buf + n, Ant_Remaining(n, len), inline_mode ? " %c" : "%c", close);
 }
 
 static size_t strarr(ant_t *js, ant_value_t obj, char *buf, size_t len) {
@@ -667,37 +667,37 @@ static size_t strregexp(ant_t *js, ant_value_t obj, char *buf, size_t len) {
   if (vtype(source) != kTypeString) source_len = 4;
 
   size_t n = cpy(buf, len, "/", 1);
-  n += cpy(buf + n, REMAIN(n, len), source_str, source_len);
-  n += cpy(buf + n, REMAIN(n, len), "/", 1);
+  n += cpy(buf + n, Ant_Remaining(n, len), source_str, source_len);
+  n += cpy(buf + n, Ant_Remaining(n, len), "/", 1);
   
-  return n + cpy(buf + n, REMAIN(n, len), flags_str, flags_len);
+  return n + cpy(buf + n, Ant_Remaining(n, len), flags_str, flags_len);
 }
 
 static size_t strobj_body(ant_t *js, ant_value_t obj, char *buf, size_t len, size_t n) {
   if (get_slot(obj, SLOT_ERROR_BRAND) == js_true || vtype(get_slot(obj, SLOT_ERR_TYPE)) == kTypeNumber)
     return strobj_error(js, obj, buf, len, n);
-  if (is_date_instance(obj)) return strobj_trailing_props(js, obj, buf, len, n + strdate(js, obj, buf + n, REMAIN(n, len)));
-  if (js_obj_ptr(obj)->flags.regexp_brand) return strobj_trailing_props(js, obj, buf, len, n + strregexp(js, obj, buf + n, REMAIN(n, len)));
+  if (is_date_instance(obj)) return strobj_trailing_props(js, obj, buf, len, n + strdate(js, obj, buf + n, Ant_Remaining(n, len)));
+  if (js_obj_ptr(obj)->flags.regexp_brand) return strobj_trailing_props(js, obj, buf, len, n + strregexp(js, obj, buf + n, Ant_Remaining(n, len)));
   
   TypedArrayData *ta = buffer_get_typedarray_data(obj);
-  if (ta && ta->buffer) return n + stringify_typedarray(js, obj, ta, buf + n, REMAIN(n, len));
+  if (ta && ta->buffer) return n + stringify_typedarray(js, obj, ta, buf + n, Ant_Remaining(n, len));
   
   ArrayBufferData *ab = buffer_get_arraybuffer_data(obj);
-  if (ab) return n + stringify_arraybuffer(ab, buf + n, REMAIN(n, len));
+  if (ab) return n + stringify_arraybuffer(ab, buf + n, Ant_Remaining(n, len));
   
   DataViewData *dv = buffer_get_dataview_data(obj);
-  if (dv && dv->buffer) return n + stringify_dataview(dv, buf + n, REMAIN(n, len));
+  if (dv && dv->buffer) return n + stringify_dataview(dv, buf + n, Ant_Remaining(n, len));
   
   blob_data_t *bd = blob_get_data(obj);
-  if (bd) return n + stringify_blob(bd, js_brand_id(obj) == BRAND_FILE, buf + n, REMAIN(n, len));
+  if (bd) return n + stringify_blob(bd, js_brand_id(obj) == BRAND_FILE, buf + n, Ant_Remaining(n, len));
   
   bool too_deep = stringify_too_deep(js);
   map_entry_t **map = get_map_from_obj(obj);
-  if (map) return too_deep && *map ? n + cpy(buf + n, REMAIN(n, len), "[Map]", 5) : strobj_map(js, obj, map, buf, len, n);
+  if (map) return too_deep && *map ? n + cpy(buf + n, Ant_Remaining(n, len), "[Map]", 5) : strobj_map(js, obj, map, buf, len, n);
   
   set_entry_t **set = get_set_from_obj(obj);
-  if (set) return too_deep && *set ? n + cpy(buf + n, REMAIN(n, len), "[Set]", 5) : strobj_set(js, obj, set, buf, len, n);
-  if (too_deep && stringify_has_shown_props(obj)) return n + stringify_depth_marker(js, obj, "Object", buf + n, REMAIN(n, len));
+  if (set) return too_deep && *set ? n + cpy(buf + n, Ant_Remaining(n, len), "[Set]", 5) : strobj_set(js, obj, set, buf, len, n);
+  if (too_deep && stringify_has_shown_props(obj)) return n + stringify_depth_marker(js, obj, "Object", buf + n, Ant_Remaining(n, len));
   
   return strobj_inspect(js, obj, buf, len, n);
 }
@@ -870,17 +870,17 @@ const char *func_code_text(ant_t *js, ant_value_t code_val) {
 static size_t strclass(ant_t *js, ant_value_t value, const char *name, ant_offset_t name_len, char *buf, size_t len) {
   size_t n = cpy(buf, len, "[class ", 7);
   n += name && name_len > 0
-    ? cpy(buf + n, REMAIN(n, len), name, name_len)
-    : cpy(buf + n, REMAIN(n, len), "(anonymous)", 11);
+    ? cpy(buf + n, Ant_Remaining(n, len), name, name_len)
+    : cpy(buf + n, Ant_Remaining(n, len), "(anonymous)", 11);
 
   ant_offset_t parent_len = 0;
   const char *parent = get_func_name(js, get_proto(js, value), &parent_len);
   if (parent && parent_len > 0) {
-    n += cpy(buf + n, REMAIN(n, len), " extends ", 9);
-    n += cpy(buf + n, REMAIN(n, len), parent, parent_len);
+    n += cpy(buf + n, Ant_Remaining(n, len), " extends ", 9);
+    n += cpy(buf + n, Ant_Remaining(n, len), parent, parent_len);
   }
 
-  return n + cpy(buf + n, REMAIN(n, len), "]", 1);
+  return n + cpy(buf + n, Ant_Remaining(n, len), "]", 1);
 }
 
 // todo: make it work with bytecode NAME
@@ -908,8 +908,8 @@ static size_t strfunc(ant_t *js, ant_value_t value, char *buf, size_t len) {
   if (vtype(builtin_slot) == kTypeNumber) {
     if (name && name_len > 0) {
       size_t n = cpy(buf, len, fmt->prefix, fmt->prefix_len);
-      n += cpy(buf + n, REMAIN(n, len), name, name_len);
-      n += cpy(buf + n, REMAIN(n, len), "]", 1);
+      n += cpy(buf + n, Ant_Remaining(n, len), name, name_len);
+      n += cpy(buf + n, Ant_Remaining(n, len), "]", 1);
       return n;
     }
     return cpy(buf, len, fmt->anon, fmt->anon_len);
@@ -922,8 +922,8 @@ static size_t strfunc(ant_t *js, ant_value_t value, char *buf, size_t len) {
     
     if (name && name_len > 0) {
       n = cpy(buf, len, fmt->prefix, fmt->prefix_len);
-      n += cpy(buf + n, REMAIN(n, len), name, name_len);
-      n += cpy(buf + n, REMAIN(n, len), "]", 1);
+      n += cpy(buf + n, Ant_Remaining(n, len), name, name_len);
+      n += cpy(buf + n, Ant_Remaining(n, len), "]", 1);
     } else {
       n = cpy(buf, len, fmt->anon, fmt->anon_len);
     }
@@ -941,16 +941,16 @@ static size_t strfunc(ant_t *js, ant_value_t value, char *buf, size_t len) {
     ant_offset_t ctor_name_len = 0;
     const char *ctor_name = get_func_name(js, ctor, &ctor_name_len);
     if (ctor_name && ctor_name_len > 0) {
-      n += cpy(buf + n, REMAIN(n, len), " ", 1);
-      n += cpy(buf + n, REMAIN(n, len), ctor_name, ctor_name_len);
+      n += cpy(buf + n, Ant_Remaining(n, len), " ", 1);
+      n += cpy(buf + n, Ant_Remaining(n, len), ctor_name, ctor_name_len);
     }
     return n;
   }
   
   if (name && name_len > 0) {
     size_t n = cpy(buf, len, fmt->prefix, fmt->prefix_len);
-    n += cpy(buf + n, REMAIN(n, len), name, name_len);
-    n += cpy(buf + n, REMAIN(n, len), "]", 1);
+    n += cpy(buf + n, Ant_Remaining(n, len), name, name_len);
+    n += cpy(buf + n, Ant_Remaining(n, len), "]", 1);
     return n;
   }
   
@@ -974,8 +974,8 @@ static size_t strcfunc(ant_t *js, ant_value_t value, char *buf, size_t len) {
 
   if (name && name_len > 0) {
     size_t n = cpy(buf, len, fmt->prefix, fmt->prefix_len);
-    n += cpy(buf + n, REMAIN(n, len), name, name_len);
-    n += cpy(buf + n, REMAIN(n, len), "]", 1);
+    n += cpy(buf + n, Ant_Remaining(n, len), name, name_len);
+    n += cpy(buf + n, Ant_Remaining(n, len), "]", 1);
     return n;
   }
 
@@ -996,15 +996,15 @@ static size_t strpromise(ant_t *js, ant_value_t value, char *buf, size_t len);
 
 size_t tostr(ant_t *js, ant_value_t value, char *buf, size_t len) {
   if (is_object_type(value) && sv_check_c_stack_overflow(js))
-    return ANT_COPY(buf, len, "[Object: Inspection interrupted prematurely. Maximum call stack size exceeded.]");
+    return Ant_CopyLiteral(buf, len, "[Object: Inspection interrupted prematurely. Maximum call stack size exceeded.]");
   
   switch (vtype(value)) {
-    case kTypeUndefined:   return ANT_COPY(buf, len, "undefined");
-    case kTypeNull:    return ANT_COPY(buf, len, "null");
+    case kTypeUndefined:   return Ant_CopyLiteral(buf, len, "undefined");
+    case kTypeNull:    return Ant_CopyLiteral(buf, len, "null");
     
     case kTypeBool: {
       bool b = vdata(value) & 1;
-      return b ? ANT_COPY(buf, len, "true") : ANT_COPY(buf, len, "false");
+      return b ? Ant_CopyLiteral(buf, len, "true") : Ant_CopyLiteral(buf, len, "false");
     }
     
     case kTypeArray:    return strarr(js, value, buf, len);
@@ -1015,13 +1015,13 @@ size_t tostr(ant_t *js, ant_value_t value, char *buf, size_t len) {
     case kTypeBuiltin:  return strcfunc_inspect(js, value, buf, len);
     
     case kTypeNumber: {
-      if (Ant_Value_AsNumberUnchecked(value) == 0 && signbit(Ant_Value_AsNumberUnchecked(value))) return ANT_COPY(buf, len, "-0");
+      if (Ant_Value_AsNumberUnchecked(value) == 0 && signbit(Ant_Value_AsNumberUnchecked(value))) return Ant_CopyLiteral(buf, len, "-0");
       return js_number_to_chars(value, buf, len);
     }
     
     case kTypeBigInt: {
       size_t n = strbigint(js, value, buf, len);
-      return n + cpy(buf + n, REMAIN(n, len), "n", 1);
+      return n + cpy(buf + n, Ant_Remaining(n, len), "n", 1);
     }
     
     case kTypeError: {
@@ -1033,13 +1033,13 @@ size_t tostr(ant_t *js, ant_value_t value, char *buf, size_t len) {
           return cpy(buf, len, (const char *)(uintptr_t)(off), slen);
         }
       }
-      return ANT_COPY(buf, len, "Error");
+      return Ant_CopyLiteral(buf, len, "Error");
     }
     
     case kTypeSymbol: {
       const char *desc = js_sym_desc(value);
       if (desc) return (size_t) snprintf(buf, len, "Symbol(%s)", desc);
-      return ANT_COPY(buf, len, "Symbol()");
+      return Ant_CopyLiteral(buf, len, "Symbol()");
     }
     
     case kTypeGenerator: return strobj(js, mkval(kTypeObject, vdata(value)), buf, len);

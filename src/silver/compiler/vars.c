@@ -185,7 +185,7 @@ static void emit_set_var_plain(sv_compiler_t *c, const char *name, uint32_t len,
   }
   int upval = resolve_upvalue(c, name, len);
   if (upval != -1) {
-    ANT_ASSERT(!c->upval_descs[upval].by_value, "assignment to a parameter captured by value");
+    Ant_Assert(!c->upval_descs[upval].by_value, "assignment to a parameter captured by value");
     if (c->upval_descs[upval].is_const) {
       if (c->upval_descs[upval].may_tdz) {
         emit_op(c, OP_GET_UPVAL);

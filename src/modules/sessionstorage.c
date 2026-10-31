@@ -187,6 +187,6 @@ void init_sessionstorage_module(ant_t *js) {
   ant_value_t length_getter = Ant_Function_Create(js_sessionstorage_length);
   js_set_getter_desc(js, storage_obj, "length", 6, length_getter, 0);
   
-  js_set_tostringtag(js, storage_obj, ANT_STRING("Storage"));
+  js_set_tostringtag(js, storage_obj, Ant_String_FromLiteral(js, "Storage"));
   js_set(js, glob, "sessionStorage", storage_obj);
 }

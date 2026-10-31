@@ -355,8 +355,8 @@ ELD_GETTER(js_eld_min_bigint, bigint_from_uint64(js, h->min))
 ELD_GETTER(js_eld_max_bigint, bigint_from_uint64(js, h->max))
 ELD_GETTER(js_eld_count_bigint, bigint_from_uint64(js, h->count))
 ELD_GETTER(js_eld_exceeds_bigint, bigint_from_uint64(js, 0))
-ELD_GETTER(js_eld_mean, Ant_Value_FromNumber(h->count ? h->sum / (double)h->count : JS_NAN))
-ELD_GETTER(js_eld_stddev, Ant_Value_FromNumber(h->count ? sqrt(fmax(0, h->sum_sq / (double)h->count - (h->sum / (double)h->count) * (h->sum / (double)h->count))) : JS_NAN))
+ELD_GETTER(js_eld_mean, Ant_Value_FromNumber(h->count ? h->sum / (double)h->count : ANT_NAN))
+ELD_GETTER(js_eld_stddev, Ant_Value_FromNumber(h->count ? sqrt(fmax(0, h->sum_sq / (double)h->count - (h->sum / (double)h->count) * (h->sum / (double)h->count))) : ANT_NAN))
 
 #undef ELD_GETTER
 
@@ -447,7 +447,7 @@ ant_value_t perf_hooks_library(ant_t *js) {
   ant_value_t lib = Ant_Object_CreateBare(js);
   js_set(js, lib, "performance", js_get(js, js_glob(js), "performance"));
   js_set(js, lib, "monitorEventLoopDelay", Ant_Function_CreateWithArity(js_monitor_event_loop_delay, 0));
-  js_set_tostringtag(js, lib, ANT_STRING("perf_hooks"));
+  js_set_tostringtag(js, lib, Ant_String_FromLiteral(js, "perf_hooks"));
   return lib;
 }
 
@@ -465,6 +465,6 @@ void init_performance_module(ant_t *js) {
   js_set(js, perf_obj, "eventLoopUtilization", Ant_Function_CreateWithArity(js_performance_elu, 2));
   js_set(js, perf_obj, "markResourceTiming", Ant_Function_CreateWithArity(js_cfunc_noop, 7));
   
-  js_set_tostringtag(js, perf_obj, ANT_STRING("Performance"));
+  js_set_tostringtag(js, perf_obj, Ant_String_FromLiteral(js, "Performance"));
   js_set(js, glob, "performance", perf_obj);
 }

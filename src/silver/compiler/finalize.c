@@ -15,8 +15,8 @@ static int sv_func_compute_max_stack(const sv_func_t *func);
 void sv_func_init_code_and_map_templates(
   const sv_compiler_t *c, sv_func_t *func
 ) {
-  ANT_ASSERT(c != NULL && func != NULL, "function code requires compiler state");
-  ANT_ASSERT(c->code_len > 0, "function bytecode cannot be empty");
+  Ant_Assert(c != NULL && func != NULL, "function code requires compiler state");
+  Ant_Assert(c->code_len > 0, "function bytecode cannot be empty");
 
   size_t table_size =
     (size_t)c->map_template_count * sizeof(sv_map_template_desc_t);
@@ -24,13 +24,13 @@ void sv_func_init_code_and_map_templates(
   size_t prefix_size = c->map_template_count > 0
     ? table_size + sizeof(sv_map_template_table_header_t) : 0;
   
-  ANT_ASSERT(
+  Ant_Assert(
     prefix_size <= SIZE_MAX - (size_t)c->code_len,
     "function bytecode sidecar size overflow"
   );
 
   uint8_t *storage = sv_code_bump(c->js, prefix_size + (size_t)c->code_len);
-  ANT_ASSERT(storage != NULL, "failed to allocate function bytecode");
+  Ant_Assert(storage != NULL, "failed to allocate function bytecode");
   
   if (c->map_template_count > 0) {
     memcpy(storage, c->map_templates, table_size);
@@ -113,12 +113,12 @@ void sv_func_init_obj_sites(const sv_compiler_t *c, sv_func_t *func) {
 void sv_func_finalize_type_data(
   sv_func_t *func, const sv_compiler_t *comp, int local_type_count
 ) {
-  ANT_ASSERT(func != NULL, "function metadata requires a function");
-  ANT_ASSERT(comp != NULL, "function metadata requires a compiler context");
-  ANT_ASSERT(local_type_count >= 0, "function local type count cannot be negative");
-  ANT_ASSERT(!func->has_dynamic_eval, "function metadata cannot be initialized twice");
+  Ant_Assert(func != NULL, "function metadata requires a function");
+  Ant_Assert(comp != NULL, "function metadata requires a compiler context");
+  Ant_Assert(local_type_count >= 0, "function local type count cannot be negative");
+  Ant_Assert(!func->has_dynamic_eval, "function metadata cannot be initialized twice");
   
-  ANT_ASSERT(
+  Ant_Assert(
     func->type_data.local_types == NULL,
     "function local types cannot be replaced"
   );
@@ -130,15 +130,15 @@ void sv_func_finalize_type_data(
     size_t metadata_size = offsetof(sv_func_metadata_t, local_types) +
       (size_t)local_type_count * sizeof(sv_type_info_t);
     sv_func_metadata_t *metadata = sv_code_bump(comp->js, metadata_size);
-    ANT_ASSERT(metadata != NULL, "failed to allocate function metadata");
-    ANT_ASSERT(
+    Ant_Assert(metadata != NULL, "failed to allocate function metadata");
+    Ant_Assert(
       ((uintptr_t)metadata % _Alignof(sv_func_metadata_t)) == 0,
       "code arena returned misaligned function metadata"
     );
     memset(metadata, 0, metadata_size);
     sv_eval_scope_t *eval_scopes = sv_code_bump(comp->js, 
       (size_t)comp->eval_scope_count * sizeof(sv_eval_scope_t));
-    ANT_ASSERT(eval_scopes != NULL, "failed to allocate eval scopes");
+    Ant_Assert(eval_scopes != NULL, "failed to allocate eval scopes");
     metadata->eval_scopes = eval_scopes;
     metadata->eval_scope_count = (uint32_t)comp->eval_scope_count;
     metadata->eval_var_count = comp->eval_var_count;
@@ -161,7 +161,7 @@ void sv_func_finalize_type_data(
     sv_runtime_binding_t *bindings = binding_count > 0
       ? sv_code_bump(comp->js, binding_count * sizeof(sv_runtime_binding_t))
       : NULL;
-    ANT_ASSERT(
+    Ant_Assert(
       binding_count == 0 || bindings != NULL,
       "failed to allocate eval bindings"
     );
@@ -179,7 +179,7 @@ void sv_func_finalize_type_data(
         for (uint32_t b = 0; b < src->count; b++) {
           sv_runtime_binding_t *binding = &bindings[binding_offset + b];
           const char *name = copy_name(comp->js, binding->name, binding->len);
-          ANT_ASSERT(name != NULL || binding->len == 0, "failed to copy eval binding name");
+          Ant_Assert(name != NULL || binding->len == 0, "failed to copy eval binding name");
           binding->name = name;
         }
         binding_offset += src->count;
@@ -200,7 +200,7 @@ void sv_func_finalize_type_data(
   if (local_type_count == 0) return;
   sv_type_info_t *local_types = sv_code_bump(comp->js, 
     (size_t)local_type_count * sizeof(sv_type_info_t));
-  ANT_ASSERT(local_types != NULL, "failed to allocate function local types");
+  Ant_Assert(local_types != NULL, "failed to allocate function local types");
   memset(local_types, 0, (size_t)local_type_count * sizeof(sv_type_info_t));
   if (comp->slot_types) {
     int ncopy = local_type_count < comp->slot_type_cap

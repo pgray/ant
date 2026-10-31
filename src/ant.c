@@ -87,7 +87,7 @@ static inline bool isolate_arenas_init(ant_t *js, const ant_isolate_options_t *o
 
 static ant_t *isolate_init(void *buf, size_t len, const ant_isolate_options_t *options) {
   #if UINTPTR_MAX > 9007199254740991ULL
-  ANT_ASSERT(
+  Ant_Assert(
     (uintptr_t)buf <= ((1ULL << 53) - 1),
     "pointer exceeds 53-bit double-precision integer limit"
   );
@@ -151,7 +151,7 @@ static ant_t *isolate_init(void *buf, size_t len, const ant_isolate_options_t *o
   js->modules.hooks = js_mkundef();
   js->modules.import_meta = js_mkundef();
   js->modules.state = NULL;
-  js->length_str = ANT_STRING("length");
+  js->length_str = Ant_String_FromLiteral(js, "length");
   
   realm_init_core(js);
   

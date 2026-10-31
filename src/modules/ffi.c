@@ -802,10 +802,10 @@ static ant_value_t ffi_make_proto(
 
 static void ffi_init_prototypes(ant_t *js) {
   if (js->builtins.ffi_library_proto) return;
-#define ANT_FFI_KIND(kind, tag, label, parent)          \
-  js->builtins.ffi_##kind##_proto = ffi_make_proto(     \
-    js, js->sym.parent, ANT_STRING(label),              \
-    ffi_##kind##_methods, countof(ffi_##kind##_methods) \
+#define ANT_FFI_KIND(kind, tag, label, parent)                \
+  js->builtins.ffi_##kind##_proto = ffi_make_proto(           \
+    js, js->sym.parent, Ant_String_FromLiteral(js, label),    \
+    ffi_##kind##_methods, countof(ffi_##kind##_methods)       \
   );
 #include "ffi/kinds.h"
 }
@@ -1041,14 +1041,14 @@ ant_value_t ffi_library(ant_t *js) {
 
   ant_value_t ffi_obj = Ant_Object_CreateBare(js);
   js_define_methods(js, ffi_obj, ffi_exports, countof(ffi_exports), ANT_PROP_ATTR_DEFAULT);
-  js_set(js, ffi_obj, "suffix", ANT_STRING(FFI_LIBRARY_SUFFIX));
+  js_set(js, ffi_obj, "suffix", Ant_String_FromLiteral(js, FFI_LIBRARY_SUFFIX));
 
   ant_value_t ffi_types = Ant_Object_CreateBare(js);
-#define ANT_FFI_TYPE(id, key, name, ffi, ctype, kind) js_set(js, ffi_types, #key, ANT_STRING(name));
+#define ANT_FFI_TYPE(id, key, name, ffi, ctype, kind) js_set(js, ffi_types, #key, Ant_String_FromLiteral(js, name));
 #include "ffi/types.h"
 
   js_set(js, ffi_obj, "FFIType", ffi_types);
-  js_set_tostringtag(js, ffi_obj, ANT_STRING("FFI"));
+  js_set_tostringtag(js, ffi_obj, Ant_String_FromLiteral(js, "FFI"));
 
   return ffi_obj;
 }

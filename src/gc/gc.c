@@ -305,7 +305,7 @@ void gc_run(ant_t *js) {
   js->gc.alloc_since_major += gc_young_alloc_bytes(js) + js->gc.pool_alloc + js->gc.code_alloc;
   
   gc_ropes_begin_result_t rope_begin = gc_ropes_begin(js, false);
-  ANT_ASSERT(
+  Ant_Assert(
     rope_begin != GC_ROPES_BEGIN_RETRY_MAJOR,
     "major rope marking cannot request another major"
   );

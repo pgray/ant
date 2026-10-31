@@ -206,10 +206,10 @@ double js_to_number(ant_t *js, ant_value_t arg) {
   
   if (vtype(arg) == kTypeSymbol) {
     js_mkerr_typed(js, JS_ERR_TYPE, "Cannot convert a Symbol value to a number");
-    return JS_NAN;
+    return ANT_NAN;
   }
   
-  if (vtype(arg) == kTypeUndefined) return JS_NAN;
+  if (vtype(arg) == kTypeUndefined) return ANT_NAN;
   if (vtype(arg) == kTypeNumber) return Ant_Value_AsNumberUnchecked(arg);
   if (vtype(arg) == kTypeBool) return vdata(arg) ? 1.0 : 0.0;
   if (vtype(arg) == kTypeBigInt) return bigint_to_double(js, arg);
@@ -229,12 +229,12 @@ double js_to_number(ant_t *js, ant_value_t arg) {
       end = base + len;
     }
     
-    double val = JS_NAN; if (
+    double val = ANT_NAN; if (
       ant_number_parse(base, (size_t)(end - base), 
       ANT_NUMBER_PARSE_JS_NUMBER, &val, NULL)
     ) return val;
     
-    return JS_NAN;
+    return ANT_NAN;
   }
 
   if (is_object_type(arg) || vtype(arg) == kTypeBuiltin) {
@@ -242,17 +242,17 @@ double js_to_number(ant_t *js, ant_value_t arg) {
       ? try_cached_ordinary_to_primitive_number(js, arg)
       : js_to_primitive(js, arg, 2);
     
-    if (is_err(primitive)) return JS_NAN;
+    if (is_err(primitive)) return ANT_NAN;
     if (vtype(primitive) == kTypeNumber) return Ant_Value_AsNumberUnchecked(primitive);
     if (vtype(primitive) == kTypeBool) return vdata(primitive) ? 1.0 : 0.0;
     if (vtype(primitive) == kTypeNull) return 0.0;
-    if (vtype(primitive) == kTypeUndefined) return JS_NAN;
+    if (vtype(primitive) == kTypeUndefined) return ANT_NAN;
     if (vtype(primitive) == kTypeBigInt) return bigint_to_double(js, primitive);
 
     return js_to_number(js, primitive);
   }
   
-  return JS_NAN;
+  return ANT_NAN;
 }
 
 ant_value_t js_to_numeric(ant_t *js, ant_value_t arg) {

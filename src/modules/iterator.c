@@ -182,7 +182,7 @@ static ant_value_t get_array_iterator_prototype(ant_t *js) {
   if (iteration_intact) ant_protector_rearm(js, ANT_PROTECTOR_ARRAY_ITERATION);
   ant_iterator_protector_holder_mark(js->sym.array_iterator_proto);
   
-  mkprop(js, js->sym.array_iterator_proto, js->sym.toStringTag_sym, ANT_STRING("Array Iterator"), ANT_PROP_ATTR_CONFIGURABLE);
+  mkprop(js, js->sym.array_iterator_proto, js->sym.toStringTag_sym, Ant_String_FromLiteral(js, "Array Iterator"), ANT_PROP_ATTR_CONFIGURABLE);
   js_set_proto_init(js->sym.array_iterator_proto, iterator_proto);
 
   return js->sym.array_iterator_proto;
@@ -225,7 +225,7 @@ static ant_value_t get_string_iterator_prototype(ant_t *js) {
   defmethod(js, js->sym.string_iterator_proto, "next", 4, Ant_Function_Create(str_iter_next));
   
   if (iteration_intact) ant_protector_rearm(js, ANT_PROTECTOR_STRING_ITERATION);
-  mkprop(js, js->sym.string_iterator_proto, js->sym.toStringTag_sym, ANT_STRING("String Iterator"), ANT_PROP_ATTR_CONFIGURABLE);
+  mkprop(js, js->sym.string_iterator_proto, js->sym.toStringTag_sym, Ant_String_FromLiteral(js, "String Iterator"), ANT_PROP_ATTR_CONFIGURABLE);
   
   js_set_proto_init(js->sym.string_iterator_proto, iterator_proto);
   ant_iterator_protector_holder_mark(js->sym.string_iterator_proto);
@@ -1755,7 +1755,7 @@ static ant_value_t async_iter_toArray(ant_params_t) {
 }
 
 static ant_value_t iterator_tag_get(ant_params_t) {
-  return ANT_STRING("Iterator");
+  return Ant_String_FromLiteral(js, "Iterator");
 }
 
 static ant_value_t iter_dispose(ant_params_t) {
@@ -1798,7 +1798,7 @@ static ant_value_t async_iter_async_dispose(ant_params_t) {
 }
 
 static ant_value_t async_iterator_tag_get(ant_params_t) {
-  return ANT_STRING("AsyncIterator");
+  return Ant_String_FromLiteral(js, "AsyncIterator");
 }
 
 static ant_value_t iterator_tag_set(ant_params_t) {

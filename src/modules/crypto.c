@@ -1078,16 +1078,16 @@ static ant_value_t crypto_new_key_record(ant_t *js, unsigned index) {
     GC_ROOT_SAVE(mark, js);
     GC_ROOT_PIN(js, seed);
     if (index == 0) {
-      mkprop(js, seed, ANT_STRING("type"), ANT_STRING("secret"), ANT_PROP_ATTR_ENUMERABLE);
-      mkprop(js, seed, ANT_STRING("extractable"), js_false, ANT_PROP_ATTR_ENUMERABLE);
-      mkprop(js, seed, ANT_STRING("algorithm"), js_mkundef(), ANT_PROP_ATTR_ENUMERABLE);
-      mkprop(js, seed, ANT_STRING("usages"), js_mkundef(), ANT_PROP_ATTR_ENUMERABLE);
-      js_set_tostringtag(js, seed, ANT_STRING("CryptoKey"));
+      mkprop(js, seed, Ant_String_FromLiteral(js, "type"), Ant_String_FromLiteral(js, "secret"), ANT_PROP_ATTR_ENUMERABLE);
+      mkprop(js, seed, Ant_String_FromLiteral(js, "extractable"), js_false, ANT_PROP_ATTR_ENUMERABLE);
+      mkprop(js, seed, Ant_String_FromLiteral(js, "algorithm"), js_mkundef(), ANT_PROP_ATTR_ENUMERABLE);
+      mkprop(js, seed, Ant_String_FromLiteral(js, "usages"), js_mkundef(), ANT_PROP_ATTR_ENUMERABLE);
+      js_set_tostringtag(js, seed, Ant_String_FromLiteral(js, "CryptoKey"));
     } else {
       static const char *const hashes[] = { "SHA-1", "SHA-256", "SHA-384", "SHA-512" };
-      ant_value_t name = index == CRYPTO_KEY_AES_GCM ? ANT_STRING("AES-GCM") :
-        index == CRYPTO_KEY_HMAC ? ANT_STRING("HMAC") :
-        index == CRYPTO_KEY_PBKDF2 ? ANT_STRING("PBKDF2") :
+      ant_value_t name = index == CRYPTO_KEY_AES_GCM ? Ant_String_FromLiteral(js, "AES-GCM") :
+        index == CRYPTO_KEY_HMAC ? Ant_String_FromLiteral(js, "HMAC") :
+        index == CRYPTO_KEY_PBKDF2 ? Ant_String_FromLiteral(js, "PBKDF2") :
         js_mkstr(js, hashes[index - 4], strlen(hashes[index - 4]));
       js_mkprop_fast(js, seed, "name", 4, name);
       if (index == CRYPTO_KEY_AES_GCM || index == CRYPTO_KEY_HMAC)

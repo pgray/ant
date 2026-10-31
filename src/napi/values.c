@@ -805,7 +805,7 @@ NAPI_EXTERN napi_status NAPI_CDECL napi_get_date_value(
   if (!is_date_instance((ant_value_t)value)) return napi_set_last(env, napi_date_expected, "date expected");
 
   ant_value_t time_val = js_get_slot((ant_value_t)value, SLOT_DATA);
-  *result = vtype(time_val) == kTypeNumber ? Ant_Value_AsNumberUnchecked(time_val) : JS_NAN;
+  *result = vtype(time_val) == kTypeNumber ? Ant_Value_AsNumberUnchecked(time_val) : ANT_NAN;
   return napi_set_last(env, napi_ok, NULL);
 }
 

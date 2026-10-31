@@ -401,7 +401,7 @@ void sv_code_units_sweep(ant_t *js, uint64_t epoch) {
 static void units_check_pins(ant_t *js) {
 #ifndef NDEBUG
   if (js->vm_exec_depth) return;
-  ANT_ASSERT(!js->code_units.pinned, "code unit still pinned at teardown (missing sv_code_unit_unpin)");
+  Ant_Assert(!js->code_units.pinned, "code unit still pinned at teardown (missing sv_code_unit_unpin)");
 #endif
 }
 

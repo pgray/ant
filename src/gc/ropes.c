@@ -265,7 +265,7 @@ void gc_ropes_sweep(ant_t *js, bool minor) {
   uint32_t young_blocks = 0;
   
   if (js->rope_gc.conservative_marking) {
-    ANT_ASSERT(!minor, "conservative rope sweep must be a major");
+    Ant_Assert(!minor, "conservative rope sweep must be a major");
     
     for (ant_pool_block_t *b = js->rope_gc.young.head; b;) {
       ant_pool_block_t *next = b->next;

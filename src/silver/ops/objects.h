@@ -309,7 +309,7 @@ static inline ant_value_t sv_op_define_class(
   ant_value_t ctor_obj = (vtype(ctor) == kTypeFunction) ? js_func_obj(ctor) : ctor;
   
   if (has_name || default_ctor) js_set_function_name(js, ctor, a ? a->str : "", a ? a->len : 0);
-  mkprop_exact_attrs(js, ctor_obj, ANT_STRING("prototype"), proto, 0);
+  mkprop_exact_attrs(js, ctor_obj, Ant_String_FromLiteral(js, "prototype"), proto, 0);
 
   vm->stack[vm->sp - 2] = ctor;
   vm->stack[vm->sp - 1] = proto;

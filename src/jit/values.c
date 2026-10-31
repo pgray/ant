@@ -1041,7 +1041,7 @@ void mir_emit_is_num_guard(MIR_context_t ctx, MIR_item_t fn,
 }
 
 int mir_next_reg_site(int *next_site) {
-  ANT_ASSERT(next_site != NULL, "missing MIR register site counter");
+  Ant_Assert(next_site != NULL, "missing MIR register site counter");
   return (*next_site)++;
 }
 

@@ -798,7 +798,7 @@ void js_errors_init(ant_t *js, ant_value_t object_proto, ant_value_t function_pr
   ant_value_t error_proto = Ant_Object_CreateBare(js);
   set_proto(js, error_proto, object_proto);
   
-  mkprop_bytes(js, error_proto, "name", 4, ANT_STRING("Error"), JS_DESC_W | JS_DESC_C);
+  mkprop_bytes(js, error_proto, "name", 4, Ant_String_FromLiteral(js, "Error"), JS_DESC_W | JS_DESC_C);
   mkprop_bytes(js, error_proto, "message", 7, js_mkstr(js, "", 0), JS_DESC_W | JS_DESC_C);
   defmethod(js, error_proto, "toString", 8, Ant_Function_Create(builtin_Error_toString));
   js->builtins.error_protos[JS_ERR_GENERIC] = error_proto;
@@ -815,7 +815,7 @@ void js_errors_init(ant_t *js, ant_value_t object_proto, ant_value_t function_pr
   defhidden(js, error_proto, "constructor", 11, err_ctor_func);
   defmethod(js, err_ctor_func, "isError", 7, Ant_Function_CreateWithArity(builtin_error_isError, 1));
   defmethod(js, err_ctor_func, "captureStackTrace", 17, Ant_Function_CreateWithArity(builtin_error_captureStackTrace, 2));
-  js_setprop(js, err_ctor_func, ANT_STRING("stackTraceLimit"), Ant_Value_FromNumber(10));
+  js_setprop(js, err_ctor_func, Ant_String_FromLiteral(js, "stackTraceLimit"), Ant_Value_FromNumber(10));
   
   #define REGISTER_ERROR_SUBTYPE(err_type, name_str) do { \
     ant_value_t ctor_func = Ant_Error_CreateConstructor(js, name_str, &js->builtins.error_protos[err_type]); \
@@ -834,7 +834,7 @@ void js_errors_init(ant_t *js, ant_value_t object_proto, ant_value_t function_pr
   
   ant_value_t aggregate_proto = Ant_Object_CreateBare(js);
   set_proto(js, aggregate_proto, error_proto);
-  mkprop_bytes(js, aggregate_proto, "name", 4, ANT_STRING("AggregateError"), JS_DESC_W | JS_DESC_C);
+  mkprop_bytes(js, aggregate_proto, "name", 4, Ant_String_FromLiteral(js, "AggregateError"), JS_DESC_W | JS_DESC_C);
   js->builtins.error_protos[JS_ERR_AGGREGATE] = aggregate_proto;
   
   ant_value_t aggregate_ctor = mkobj(js, 0);
@@ -849,7 +849,7 @@ void js_errors_init(ant_t *js, ant_value_t object_proto, ant_value_t function_pr
 
   ant_value_t suppressed_proto = Ant_Object_CreateBare(js);
   set_proto(js, suppressed_proto, error_proto);
-  mkprop_bytes(js, suppressed_proto, "name", 4, ANT_STRING("SuppressedError"), JS_DESC_W | JS_DESC_C);
+  mkprop_bytes(js, suppressed_proto, "name", 4, Ant_String_FromLiteral(js, "SuppressedError"), JS_DESC_W | JS_DESC_C);
   js->builtins.suppressed_error_proto = suppressed_proto;
   
   ant_value_t suppressed_ctor = mkobj(js, 0);
