@@ -116,9 +116,9 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   const char *syntax = regexp_syntax_error(src, len, unicode, unicode_sets);
 
   // JS strings are WTF-8, and PCRE2 has no lone surrogates (engine_limit).
-  // Known gaps, see docs/exec-plans/active/fuzz-and-property-testing.md:
-  // v-flag set operations whose operand is a class, and group names PCRE2
-  // cannot spell.
+  // Known translator gaps, skipped until fixed: v-flag set operations whose
+  // operand is itself a class (/[\p{L}--[a--z]]/v), and group names PCRE2
+  // cannot spell (/(?<a$>x)/).
   bool set_ops = unicode_sets && (has_pair(src, len, '-') || has_pair(src, len, '&'));
   bool known_gap = set_ops || has_pcre2_unsafe_group_name(src, len);
   if (!syntax && !known_gap && utf8_validate_bytes(src, len)) {
